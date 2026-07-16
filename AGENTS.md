@@ -23,7 +23,14 @@ Do not implement later-release filesystems, networking, GUI, agents, package sys
 
 The physical Mac is source/build storage only. Never execute RAR OS natively or modify macOS. Before explicit owner authorization of the first certified VM boot, do not execute RAR target code even in a VM. Follow `docs/host-safety.md` without exception.
 
-Routine repository work is intentionally autonomous. `.codex/config.toml` permits automatic review of Git/GitHub and repository-confined operations while denying effects outside this repository. Do not request manual approval merely for ordinary repository edits, tests, commits, pushes, or draft PRs.
+Routine repository work is intentionally autonomous. `.codex/config.toml` permits automatic review of Git/GitHub and repository-confined operations while denying effects outside this repository. Do not request manual approval merely for ordinary repository edits, tests, commits, pushes, PR readiness changes, or evidence-gated merges.
+
+The owner authorized automatic merging on 2026-07-16. Merge only at the final
+review/remediation or release-gate step for a change, after all required tests,
+independent reviews, acceptance evidence, and documentation pass with no
+blocking findings. Never merge an implementation PR early merely because its
+author believes it is ready. Stop if GitHub reports conflicts, failing required
+checks, missing evidence, or unresolved review findings.
 
 Use the specialist roles in `.codex/agents/` as assigned by the execution
 runbook. Parallel writers must have disjoint owned paths; reviewers remain

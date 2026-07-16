@@ -45,7 +45,7 @@ config=$(resolve_repository_file "$requested_config")
 rules=$(resolve_repository_file "$requested_rules")
 
 if [ "$config" = "$root/.codex/config.toml" ]; then
-    expected_config_sha256='790e7c9631245036ed6faf812dcaa0371d0bebce0e495e31e3b96614495d0358'
+    expected_config_sha256='33dff9ac3285812814a003f35ff36d328765fa189010e105edec6816d6285078'
     [ "$(sha256_file "$config")" = "$expected_config_sha256" ] || fail "canonical Codex configuration integrity mismatch"
 fi
 

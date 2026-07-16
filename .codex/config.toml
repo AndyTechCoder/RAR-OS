@@ -42,7 +42,7 @@ Approve when all side effects are confined to this repository, including:
   whose target code is not executed;
 - Git index, branch, worktree, commit, and repository metadata operations for
   this repository;
-- authenticated fetch, push, and draft-PR operations whose only remote target
+- authenticated fetch, push, PR readiness, and evidence-gated merge operations whose only remote target
   is https://github.com/AndyTechCoder/RAR-OS or its GitHub API representation.
 
 Deny every request that could affect anything outside the repository, except
