@@ -6,6 +6,7 @@ pub mod safety;
 
 use std::collections::BTreeSet;
 use std::env;
+use std::ffi::OsString;
 use std::fmt;
 use std::fs;
 use std::io::Read;
@@ -1287,6 +1288,8 @@ fn run_bounded_pinned_git(
     lock: &ToolLock,
     arguments: &[&str],
 ) -> BuildResult<Vec<u8>> {
+    let mut safe_directory = OsString::from("safe.directory=");
+    safe_directory.push(root.as_os_str());
     let mut command = Command::new(&lock.git_path);
     command
         .env_clear()
@@ -1301,6 +1304,8 @@ fn run_bounded_pinned_git(
         .arg("core.fsmonitor=false")
         .arg("-c")
         .arg("core.untrackedCache=false")
+        .arg("-c")
+        .arg(safe_directory)
         .arg("-C")
         .arg(root)
         .args(arguments)

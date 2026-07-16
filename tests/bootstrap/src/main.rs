@@ -398,14 +398,18 @@ fn wrong_byte_absolute_compiler_and_linker_roots_fail_before_canary_execution() 
     let script = r#"
 set -eu
 . "$RAR_BOOTSTRAP_LIBRARY"
-rar_load_selected_bootstrap_root "$RAR_ROOT"
+rar_preflight_policy_records "$RAR_ROOT" || exit 80
+rar_load_selected_bootstrap_root "$RAR_ROOT" || exit 81
 case "$RAR_REPLACED_ROOT" in
     rustc) bootstrap_rustc_path=$RAR_FAKE ;;
     linker) bootstrap_linker_path=$RAR_FAKE ;;
     *) exit 98 ;;
 esac
-rar_verify_selected_bootstrap_root
-"$RAR_FAKE"
+if rar_verify_selected_bootstrap_root; then
+    "$RAR_FAKE"
+    exit 90
+fi
+[ ! -e "$RAR_CANARY" ]
 "#;
     for replaced in ["rustc", "linker"] {
         let mut command = Command::new(&lock.bootstrap_shell_path);
@@ -422,8 +426,13 @@ rar_verify_selected_bootstrap_root
         if let Some(image) = std::env::var_os("RAR_CI_BOOTSTRAP_IMAGE") {
             command.env("RAR_CI_BOOTSTRAP_IMAGE", image);
         }
-        let status = command.status().expect("run wrong-byte bootstrap probe");
-        assert!(!status.success(), "wrong-byte {replaced} root passed");
+        let output = command.output().expect("run wrong-byte bootstrap probe");
+        assert!(
+            output.status.success(),
+            "wrong-byte {replaced} probe did not reach the expected verifier rejection: stdout={} stderr={}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
         assert!(!canary.exists(), "wrong-byte {replaced} root executed");
     }
     fs::remove_file(fake).expect("remove fake host tool");
@@ -466,7 +475,8 @@ fn altered_driver_and_stdlib_closure_bytes_fail_before_compiler_execution() {
     let script = r#"
 set -eu
 . "$RAR_BOOTSTRAP_LIBRARY"
-rar_load_selected_bootstrap_root "$RAR_ROOT"
+rar_preflight_policy_records "$RAR_ROOT" || exit 80
+rar_load_selected_bootstrap_root "$RAR_ROOT" || exit 81
 bootstrap_closure_kind=sha256-manifests
 bootstrap_rust_toolchain_root=$RAR_RUST_ROOT
 bootstrap_sdk_path=$RAR_SDK_ROOT
@@ -513,8 +523,15 @@ fi
     if let Some(image) = std::env::var_os("RAR_CI_BOOTSTRAP_IMAGE") {
         command.env("RAR_CI_BOOTSTRAP_IMAGE", image);
     }
-    let status = command.status().expect("verify synthetic closure mutation");
-    assert!(status.success());
+    let output = command
+        .output()
+        .expect("verify synthetic closure mutation");
+    assert!(
+        output.status.success(),
+        "synthetic closure probe failed before completing both expected verifier rejections: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(!canary.exists());
     fs::remove_dir_all(fixture).expect("remove synthetic closure fixture");
 }
