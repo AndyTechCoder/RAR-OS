@@ -34,7 +34,13 @@ Ultra coordinates; it does not give multiple agents permission to edit the same 
 - Author never self-approves security-sensitive work.
 - Review findings are fixed on the same branch, then re-reviewed.
 - Gate integration uses a separate `codex/rN-integration` branch.
-- Codex pushes branches and opens draft PRs; it never merges without gate evidence and owner policy.
+- Owner authorization dated 2026-07-16 permits automatic merges at the final
+  review/remediation or release-gate step only.
+- Before an automatic merge, required checks, independent reviews, acceptance
+  evidence, documentation, and base-branch synchronization must all pass with
+  no blocking findings or conflicts. Implementation authors do not self-approve.
+- Use squash merge for a single task packet and a merge commit for a reviewed
+  release integration unless repository history requires a documented exception.
 
 ## Required review levels
 
@@ -61,7 +67,7 @@ Use `docs/handoff-prompt.md` exactly.
 
 ### Prompt 4 — Bootstrap remediation
 
-> Address every accepted finding on the R0-000/R0-001 branch. Do not broaden scope. Rerun all host-only checks, update evidence and documentation, commit, push, and request re-review. Target code must still not execute.
+> Address every accepted finding on the R0-000/R0-001 branch. Do not broaden scope. Rerun all host-only checks, update evidence and documentation, commit, push, and obtain clean independent re-review. If every acceptance condition and required check passes with no blocking findings or conflicts, mark the PR ready and merge it automatically. Target code must still not execute.
 
 ### Prompt 5 — R0-002 contracts
 
@@ -69,7 +75,7 @@ Use `docs/handoff-prompt.md` exactly.
 
 ### Prompt 6 — R0-002 review/remediation
 
-> Independently review the R0-002 PR with architecture, correctness, and security agents. Fix accepted findings in the owning implementation thread, rerun conformance tests, push, and leave the PR ready for gate integration. Do not authorize VM execution.
+> Independently review the R0-002 PR with architecture, correctness, and security agents. Fix accepted findings in the owning implementation thread, rerun conformance tests, and push. If every acceptance condition and required check passes with no blocking findings or conflicts, mark the PR ready and merge it automatically. Do not authorize VM execution.
 
 ### Prompt 7 — First VM authorization checkpoint
 
@@ -87,7 +93,7 @@ The owner must explicitly authorize the first guest boot after Prompt 7. This is
 
 ### Prompt 10 — Platform remediation
 
-> Route accepted review findings to the owning platform worktrees, fix them without cross-ownership edits, rerun the complete authorized boot matrix, update evidence, commit, push, and request re-review.
+> Route accepted review findings to the owning platform worktrees, fix them without cross-ownership edits, rerun the complete authorized boot matrix, update evidence, commit, push, and obtain clean re-review. Merge each platform PR automatically only when its complete acceptance evidence passes with no blocking findings or conflicts.
 
 ### Prompt 11 — R0-006 Nucleus execution
 
@@ -95,19 +101,19 @@ The owner must explicitly authorize the first guest boot after Prompt 7. This is
 
 ### Prompt 12 — Nucleus independent review/remediation
 
-> Review R0-006 with correctness, security, and architecture agents. Trace every unsafe block and assembly boundary. Fix accepted findings in the owning branch, rerun both architectures, commit, push, and obtain clean re-review evidence.
+> Review R0-006 with correctness, security, and architecture agents. Trace every unsafe block and assembly boundary. Fix accepted findings in the owning branch, rerun both architectures, commit, push, and obtain clean re-review evidence. If every acceptance condition passes with no blocking findings or conflicts, mark the PR ready and merge it automatically.
 
 ### Prompt 13 — R0-007 capability and IPC proof
 
-> Implement R0-007 only. Prove handle forgery resistance, rights-reducing delegation, cancellation, timeouts, backpressure, peer crash, and endpoint replacement on x86-64 and ARM64. Use independent security review before marking ready. Commit, push, and open a draft PR.
+> Implement R0-007 only. Prove handle forgery resistance, rights-reducing delegation, cancellation, timeouts, backpressure, peer crash, and endpoint replacement on x86-64 and ARM64. Use independent correctness and security review before marking ready. Commit, push, and open a draft PR. Fix accepted findings and merge automatically only after clean re-review and complete acceptance evidence.
 
 ### Prompt 14 — R0-008 laboratory evidence
 
-> Implement R0-008 after R0-007 review passes. Add deterministic scenarios, structured evidence, first-divergence reporting, timeouts, fault injection, and containment demonstrations. Do not add networking, storage, or GUI. Commit, push, and open a draft PR with evidence.
+> Implement R0-008 after R0-007 review passes. Add deterministic scenarios, structured evidence, first-divergence reporting, timeouts, fault injection, and containment demonstrations. Do not add networking, storage, or GUI. Commit, push, and open a draft PR with evidence. Obtain independent correctness and security review, fix accepted findings, and merge automatically only after clean re-review and complete acceptance evidence.
 
 ### Prompt 15 — R0-009 gate closure and Release 1 packet
 
-> Act as `rar_release_manager`. Independently review and integrate all approved Release 0 PRs, run the entire matrix from a clean checkout, verify every Release 0 promise, close documentation and limitations, and create decision-complete Release 1 task packets based on actual evidence. Commit/push the integration branch and open a draft Release 0 gate PR. Do not begin Release 1 implementation.
+> Act as `rar_release_manager`. Independently review and integrate all approved Release 0 PRs, run the entire matrix from a clean checkout, verify every Release 0 promise, close documentation and limitations, and create decision-complete Release 1 task packets based on actual evidence. Commit/push the integration branch and open a draft Release 0 gate PR. If all gate evidence, required checks, and independent reviews pass with no blocking findings or conflicts, mark it ready and merge it automatically. Do not begin Release 1 implementation.
 
 ## Releases 1–6 loop
 
@@ -122,7 +128,8 @@ Never ask one task to “finish the rest of RAR OS.” The active task packet an
 
 ## User involvement
 
-Routine edits, tests, commits, pushes, and draft PRs use automatic review. Ask the owner only for:
+Routine edits, tests, commits, pushes, PR readiness changes, and evidence-gated
+merges use automatic review. Ask the owner only for:
 
 - Gate 0 approval.
 - First certified VM boot authorization.

@@ -1,0 +1,14 @@
+schema=rar-host-tool-manifest-v1
+rust_toolchain=1.95.0
+rust_commit=59807616e1fa2540724bfbac14d7976d7e4a3860
+rust_bundled_llvm_version=22.1.2
+rust_license=Apache-2.0-OR-MIT
+rust_provenance=official-rustup-distribution
+rust_components=rust-src,clippy,rustfmt
+rust_targets=aarch64-unknown-none,thumbv8m.main-none-eabi,x86_64-unknown-none
+clang_class=class-b-host-discovery-only
+lld_class=class-b-required-before-target-link
+qemu_class=class-b-required-before-profile-certification
+firmware_class=class-e-required-before-full-architecture-certification
+target_linked_dependencies=none
+host_code_dependencies=rust-std-only
