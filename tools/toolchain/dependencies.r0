@@ -1,0 +1,12 @@
+schema=rar-dependency-inventory-v1
+release=0
+target_owned_code=none-yet
+target_linked_third_party_code=none
+target_assets=none
+target_firmware=none
+dependency_exception_records=none
+host_rust_code=repository-owned-plus-rust-std
+host_shell=posix-sh
+host_tools=rustc-1.95.0,rust-bundled-llvm-22.1.2,cargo-1.95.0,rustup,git
+host_optional_discovery=clang,lld,qemu
+runtime_distribution=none

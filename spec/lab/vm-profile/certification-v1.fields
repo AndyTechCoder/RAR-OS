@@ -1,0 +1,14 @@
+schema
+profile_id
+profile_sha256
+command_sha256
+tool_lock_sha256
+emulator_id
+emulator_sha256
+firmware_id
+firmware_sha256
+artifact_sha256
+source_revision
+reviewer
+certified_at
+record_sha256
