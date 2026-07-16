@@ -1,0 +1,74 @@
+# RAR OS local Codex boundary.
+# Codex may freely modify this repository, but effects outside it fail closed
+# except for narrowly reviewed Git/GitHub publication for AndyTechCoder/RAR-OS.
+
+model = "gpt-5.6-sol"
+model_reasoning_effort = "ultra"
+
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"
+allow_login_shell = false
+
+[sandbox_workspace_write]
+writable_roots = []
+network_access = false
+exclude_tmpdir_env_var = true
+exclude_slash_tmp = true
+
+[shell_environment_policy]
+inherit = "core"
+ignore_default_excludes = false
+exclude = [
+    "AWS_*",
+    "AZURE_*",
+    "GOOGLE_*",
+    "*PASSWORD*",
+    "*SECRET*",
+    "*TOKEN*",
+]
+
+[auto_review]
+policy = """
+## RAR OS repository boundary
+
+The user authorizes autonomous work, including destructive edits, only inside
+the active AndyTechCoder/RAR-OS repository and its protected Git metadata.
+
+Approve when all side effects are confined to this repository, including:
+- editing, creating, moving, or deleting repository files;
+- repository-local build output under target/, out/, or evidence/;
+- host compiler, static-analysis, formatting, test, and documentation commands
+  whose target code is not executed;
+- Git index, branch, worktree, commit, and repository metadata operations for
+  this repository;
+- authenticated fetch, push, and draft-PR operations whose only remote target
+  is https://github.com/AndyTechCoder/RAR-OS or its GitHub API representation.
+
+Deny every request that could affect anything outside the repository, except
+the exact GitHub publication exception above. In particular deny:
+- writes, moves, deletion, permission changes, or persistence outside the repo;
+- sudo, administrator, root, login-shell, or broad unsandboxed execution;
+- macOS settings, applications, services, login items, launch agents/daemons,
+  keychain, privacy controls, system extensions, kernel extensions, firmware,
+  NVRAM, startup disk, recoveryOS, or boot policy changes;
+- raw disks, partitions, mounted volumes, physical devices, USB/PCI/GPU/camera/
+  microphone passthrough, or host filesystem sharing;
+- direct QEMU or other target/emulator execution before the separately recorded
+  owner authorization for a certified RAR Lab profile;
+- network access to any destination other than the canonical GitHub repository;
+- credential discovery, export, logging, or transmission;
+- changing .codex/config.toml, .codex/rules, AGENTS.md, docs/host-safety.md, or
+  the approval record to weaken this boundary;
+- requests to expand writable roots, enable general network access, disable the
+  sandbox, enable danger-full-access, or change the reviewer away from this
+  policy.
+
+If command parsing, destination, path ownership, or side effects are uncertain,
+deny the request. Do not convert a denial into a broader alternative.
+"""
+[agents]
+max_threads = 4
+max_depth = 1
+job_max_runtime_seconds = 1800
+interrupt_message = true

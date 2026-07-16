@@ -1,0 +1,42 @@
+# These rules block known macOS- and device-changing command families whenever
+# Codex asks to run them outside the sandbox. The workspace sandbox and automatic
+# reviewer policy remain the primary boundary.
+# Literal prefixes are defense in depth, not a complete executable-family parser.
+# The automatic reviewer must deny absolute paths, wrappers, unknown emulators,
+# and uncertain parsing; R0-000 separately validates every launcher process path.
+
+prefix_rule(pattern = ["sudo"], decision = "forbidden", justification = "RAR work never requires administrator access; keep all work inside the repository sandbox.")
+prefix_rule(pattern = ["diskutil"], decision = "forbidden", justification = "Never inspect or modify host disks from RAR implementation tasks.")
+prefix_rule(pattern = ["bless"], decision = "forbidden", justification = "Never change macOS boot configuration.")
+prefix_rule(pattern = ["nvram"], decision = "forbidden", justification = "Never read or change host NVRAM from RAR tasks.")
+prefix_rule(pattern = ["launchctl"], decision = "forbidden", justification = "Never create or change host services or persistence.")
+prefix_rule(pattern = ["osascript"], decision = "forbidden", justification = "Never automate macOS UI or applications from RAR tasks.")
+prefix_rule(pattern = ["defaults"], decision = "forbidden", justification = "Never change macOS or application preferences.")
+prefix_rule(pattern = ["security"], decision = "forbidden", justification = "Never access or modify the macOS keychain.")
+prefix_rule(pattern = ["dd"], decision = "forbidden", justification = "Never image host devices; use repository-local test fixtures.")
+prefix_rule(pattern = ["asr"], decision = "forbidden", justification = "Never restore or image host volumes.")
+prefix_rule(pattern = ["hdiutil"], decision = "forbidden", justification = "Do not attach or modify host disk images; certified RAR Lab tooling owns VM images later.")
+prefix_rule(pattern = ["mount"], decision = "forbidden", justification = "Never mount host or VM filesystems directly.")
+prefix_rule(pattern = ["umount"], decision = "forbidden", justification = "Never modify host mount state.")
+prefix_rule(pattern = ["installer"], decision = "forbidden", justification = "Do not install host packages from an implementation task.")
+prefix_rule(pattern = ["systemextensionsctl"], decision = "forbidden", justification = "Never change host system extensions.")
+prefix_rule(pattern = ["kmutil"], decision = "forbidden", justification = "Never change host kernel collections or extensions.")
+prefix_rule(pattern = ["kextload"], decision = "forbidden", justification = "Never load host kernel extensions.")
+prefix_rule(pattern = ["kextunload"], decision = "forbidden", justification = "Never modify loaded host kernel extensions.")
+prefix_rule(pattern = ["shutdown"], decision = "forbidden", justification = "Never shut down the host from RAR tasks.")
+prefix_rule(pattern = ["reboot"], decision = "forbidden", justification = "Never reboot the host from RAR tasks.")
+prefix_rule(pattern = ["pmset"], decision = "forbidden", justification = "Never change host power settings.")
+prefix_rule(pattern = ["scutil"], decision = "forbidden", justification = "Never change host network or system configuration.")
+prefix_rule(pattern = ["dscl"], decision = "forbidden", justification = "Never change host accounts or directory services.")
+prefix_rule(pattern = ["qemu-system-x86_64"], decision = "forbidden", justification = "Direct VM launch is forbidden; use an owner-authorized certified RAR Lab launcher later.")
+prefix_rule(pattern = ["qemu-system-aarch64"], decision = "forbidden", justification = "Direct VM launch is forbidden; use an owner-authorized certified RAR Lab launcher later.")
+prefix_rule(pattern = ["qemu-system-arm"], decision = "forbidden", justification = "Direct VM launch is forbidden; use an owner-authorized certified RAR Lab launcher later.")
+prefix_rule(pattern = ["qemu-system-i386"], decision = "forbidden", justification = "Direct VM launch is forbidden; use an owner-authorized certified RAR Lab launcher later.")
+prefix_rule(pattern = ["qemu-system-riscv32"], decision = "forbidden", justification = "Direct VM launch is forbidden; use an owner-authorized certified RAR Lab launcher later.")
+prefix_rule(pattern = ["qemu-system-riscv64"], decision = "forbidden", justification = "Direct VM launch is forbidden; use an owner-authorized certified RAR Lab launcher later.")
+prefix_rule(pattern = ["qemu-kvm"], decision = "forbidden", justification = "Direct VM launch is forbidden; use an owner-authorized certified RAR Lab launcher later.")
+prefix_rule(pattern = ["qemu"], decision = "forbidden", justification = "Direct VM launch is forbidden; use an owner-authorized certified RAR Lab launcher later.")
+prefix_rule(pattern = ["VBoxManage"], decision = "forbidden", justification = "Direct VM launch is forbidden; use an owner-authorized certified RAR Lab launcher later.")
+prefix_rule(pattern = ["vmrun"], decision = "forbidden", justification = "Direct VM launch is forbidden; use an owner-authorized certified RAR Lab launcher later.")
+prefix_rule(pattern = ["utmctl"], decision = "forbidden", justification = "Direct VM launch is forbidden; use an owner-authorized certified RAR Lab launcher later.")
+prefix_rule(pattern = ["prlctl"], decision = "forbidden", justification = "Direct VM launch is forbidden; use an owner-authorized certified RAR Lab launcher later.")
