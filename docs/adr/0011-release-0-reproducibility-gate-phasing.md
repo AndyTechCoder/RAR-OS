@@ -45,7 +45,7 @@ No RAR target artifact is executed or authorized by this decision. The certified
 
 ## Compatibility and migration
 
-Build-plan and evidence schemas move to version 2 so they can distinguish current deterministic planning from the deferred mandatory artifact gate and can report pinned tool states truthfully. Version 1 remains historical PR #2 evidence and is not accepted as Prompt 4 closure evidence.
+Build-plan and evidence schemas use version 3 so they can distinguish current deterministic planning from the deferred mandatory artifact gate, report pinned tool states truthfully, and bind one revalidated source snapshot. Versions 1 and 2 remain historical remediation inputs and are not accepted as Prompt 4 closure evidence.
 
 The owner-directed remediation grants coordinator write ownership only for the governance and CI paths required to record this correction: this ADR, `docs/README.md`, `docs/tasks/release-0.md`, `tools/ci/check-specs.sh`, and `.github/workflows/specifications.yml`. It also records the historical coordinator ownership basis for the four already-merged PR #2 governance files: `.codex/config.toml`, `AGENTS.md`, `docs/v1-alpha-execution.md`, and `tools/ci/check-host-policy.sh`. No later-release implementation ownership is transferred.
 

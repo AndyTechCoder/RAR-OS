@@ -143,6 +143,7 @@ for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012; do
 done
 
 grep -q 'ADRs 0001–0012' docs/tasks/release-0.md || fail "Release 0 approved ADR range is stale"
+grep -q 'Build-plan and evidence schemas use version 3' docs/adr/0011-release-0-reproducibility-gate-phasing.md || fail "ADR 0011 build-plan/evidence schema version is stale"
 for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012; do
     if grep -q "ADR $number" docs/tasks/release-0.md; then
         printf '%s\n' "$adr_files" | grep -q "/$number-" || fail "task-referenced ADR $number is not indexed and approved"
