@@ -1,48 +1,62 @@
-# R0-000 host-safety scaffold
+# R0-000 host-safety remediation
 
-Status: Implemented host-only scaffold; guest execution remains impossible
+Status: Prompt 4 host-only remediation implemented; guest execution remains impossible
 
 ## Boundary delivered
 
-The RAR Lab safety library owns a strict version-1 VM profile parser, a typed command
-plan, content-addressed certification and owner-authorization records, bounded resource
-limits, workspace-path validation, and the pre-resolution launch gate.
+The RAR Lab safety library owns the strict version-1 VM profile, certification, and owner-authorization parsers; typed command planning; bounded resource limits; workspace-path validation; and the pre-spawn launch gate.
 
-The repository root must be an already-canonical absolute path with regular, non-symlink
-`Cargo.toml`, `AGENTS.md`, approved Gate 0/Release 0 documents, and a real `.git` directory
-or worktree file. Checkout-name assumptions, root aliases, and symlinked markers are rejected.
-Profiles are bounded to 8 KiB, certifications to 4 KiB, authorizations to 2 KiB, and every
-record line to 512 bytes before field parsing.
+The shipped `LaunchPolicy` contains no approved certification or owner-authorization digest. `rarbuild run`, aliases, delegation names, arbitrary emulator arguments, and argument-bearing `rarbuild test` routes refuse before repository discovery, host-tool compilation, record parsing, executable resolution, or spawning. No real emulator resolver or process spawner is shipped.
 
-The shipped `LaunchPolicy` contains no approved certification digest and no approved
-owner-authorization digest. `rarbuild run`, execution aliases, delegation names, arbitrary
-emulator arguments, and every argument-bearing `rarbuild test` mode refuse before the
-wrapper discovers the repository root, compiles a host tool, reads a record, resolves an
-emulator, or calls a spawner. The compiled CLI independently classifies the same routes.
-No emulator process-spawning implementation is present.
+## Certification and authorization separation
 
-Certification and authorization are separate:
+1. Certification binds canonical profile and command bytes, tool lock, emulator, firmware, target artifact, and source revision.
+2. Owner authorization separately binds that certification, profile, and artifact to one permitted launch.
+3. Content-addressed files have no authority by themselves; future reviewed launcher policy must pin both exact record digests.
+4. The artifact, firmware, and disposable disk must be canonical regular non-symlink files in their class-scoped workspace locations before resolver delegation.
 
-1. A certification record binds the canonical profile, generated command, tool lock,
-   emulator, firmware, target artifact, and source revision. Its self-digest determines its
-   path below `out/r0/evidence/certifications/`.
-2. An owner record binds that certification, profile, and artifact for one launch. Its
-   self-digest determines its separate path below `out/r0/authorizations/`.
-3. Local files have no authority by themselves. A future reviewed policy must pin both
-   exact record digests before the resolver can be called.
+Profile input is bounded to 8 KiB, certification to 4 KiB, authorization to 2 KiB, and every record line to 512 bytes. Timestamps use actual Gregorian month lengths and leap-year rules.
 
-After both records bind successfully, but still before executable resolution, the gate
-requires regular non-symlink firmware, artifact, and disposable-disk files at their exact
-class-scoped `out/r0` paths. It freshly hashes firmware and artifact bytes and compares them
-to the pins, request, and certification. Missing files, symlink ancestors/finals, root
-aliases, and post-certification byte changes refuse with resolver/spawner counters at zero.
+## Self-verifying executable resolution
 
-The SHA-256 implementation provides deterministic host-side content addressing and is
-tested with public vectors. It is not a signature or proof of who approved a record.
+A resolver claim is no longer trusted as proof of an emulator. After all policy, record, and file bindings pass, the gate independently:
+
+- requires an absolute canonical path;
+- opens every path component with descriptor-relative no-follow operations;
+- requires a regular final file;
+- streams a fresh SHA-256 digest from the opened descriptor;
+- verifies device, inode, size, modification time, and change time remain stable during hashing;
+- compares the actual digest with the immutable emulator pin;
+- rewinds and passes that same verified open descriptor to the spawner boundary.
+
+The spawner therefore receives descriptor continuity, not a pathname and resolver-supplied hash assertion. Negative tests cover a lying claimed hash, nonexistent path, final symlink, wrong bytes, and mutation-sensitive metadata. The positive fixture creates non-executable synthetic bytes and reaches only mock resolver/spawner implementations.
+
+## Streaming and descriptor safety
+
+SHA-256 now uses fixed-memory streaming for files of any accepted size. Tool, firmware, artifact, source, and emulator inputs are never buffered in full by the hashing path.
+
+The Unix descriptor module uses RAR-owned bindings for `openat`, `mkdirat`, `renameat`, and `unlinkat`. Unsafe code is confined to that file and documents these invariants:
+
+- C pathnames are NUL-free single components;
+- directory descriptors remain live for each call;
+- returned descriptors transfer ownership exactly once to Rust `File` values;
+- pointer lifetimes cover each call;
+- flag constants are audited for the supported macOS and Linux ABIs.
+
+The same module provides descriptor-relative atomic output for R0-001. Focused tests replace an output parent during staging and prove no write follows the replacement symlink.
+
+## Acceptance mapping
+
+| R0-000 acceptance | Evidence | State |
+| --- | --- | --- |
+| No target artifact executes | Refusal output and all suites state `target_execution=not-attempted`; no real spawner exists | Pass |
+| Forbidden configuration classes are rejected | Typed profile, command, file, resource, and malformed-input negative corpus | Pass |
+| Generated command references only allowlisted pinned resources and bounded limits | `generated_command_contains_only_the_typed_isolated_model` and strict `CertificationPins` validation | Pass for static construction; no command is certified |
+| First guest execution is separately owner-gated | Independent certification and single-launch owner record schemas plus two immutable policy pins | Pass in implementation; later owner checkpoint remains mandatory |
+| Fully resolved emulator is validated before spawn | Fresh descriptor-backed byte hash, stable identity checks, same-handle continuity, and resolver-lie tests | Pass |
+| Unauthorized routes refuse before resolution or spawn | Resolver/spawner counters remain zero across all incomplete and mismatched states | Pass |
 
 ## Exact host-only validation
-
-From the repository checkout root:
 
 ```sh
 tests/host-safety/run.sh
@@ -50,65 +64,16 @@ tools/rarbuild/rarbuild run
 tools/rarbuild/rarbuild test vm
 ```
 
-Observed results on 2026-07-16:
+The remediation suite contains 21 tests. The two CLI refusal commands return 73 and report `resolver_invoked=false`, `spawner_invoked=false`, and `target_execution=not-attempted`.
 
-- `tests/host-safety/run.sh`: exit 0; 19 passed, 0 failed.
-- `tools/rarbuild/rarbuild run`: exit 73; certification and owner authorization not
-  approved; `resolver_invoked=false`; `spawner_invoked=false`.
-- `tools/rarbuild/rarbuild test vm`: exit 73; execution-capable test mode refused;
-  `resolver_invoked=false`; `spawner_invoked=false`.
+## Remaining risks
 
-The negative suite covers raw `/dev/disk*` and `/dev/rdisk*` paths, `/Volumes` and other
-host paths, traversal and symlink ancestors, persistent/raw disks, host devices, USB/VFIO
-passthrough, shared folders, clipboard, networking, native acceleration, graphical display,
-elevation, missing sandboxing, unsafe serial modes, unbounded CPU/memory/runtime/output,
-malformed/duplicate/unknown/reordered fields, emulator aliases, architecture mismatches,
-arbitrary arguments, absent/mismatched pins, altered certification, altered authorization,
-wrong content-addressed paths, mismatched artifact/source bindings, oversized records/lines,
-missing backing files, root aliases, file symlinks, and changed artifact/firmware bytes.
-
-## Acceptance mapping
-
-| R0-000 acceptance | Evidence | State |
-| --- | --- | --- |
-| No target artifact executes | Both suites and all CLI output state `target_execution=not-attempted`; no spawner exists | Pass |
-| Forbidden configuration classes are rejected | 19-test host-safety suite plus typed-command and file-backed gate inspection | Pass |
-| Command references only allowlisted pinned resources and bounded limits | `generated_command_contains_only_the_typed_isolated_model`; profile parser and `CertificationPins` | Pass for static construction; no command is certified |
-| First guest execution is separately owner-gated | Separate record schemas and two independently pinned policy digests | Pass in implementation; independent Prompt 3 review remains |
-| Unauthorized routes refuse before resolution/spawn | Resolver and spawner counters remain zero for every absent or mismatched state; wrapper order test covers aliases and test modes | Pass |
-
-## Security and unsafe review
-
-- `unsafe` is forbidden at crate and test roots; there are no unsafe blocks or assembly.
-- Host code uses Rust `std` only. There is no target code and no target dependency.
-- Profile fields cannot express shell fragments, environment wrappers, helper programs,
-  arbitrary QEMU arguments, devices, or delegation.
-- Relative paths are class-scoped below `out/r0`; absolute paths, traversal, malformed
-  components, root aliases, symlink ancestors/finals, and non-regular files are rejected.
-- Certification checks bind canonical bytes to pins and records; actual artifact and firmware
-  hashes and the disposable disk's regular-file status are checked before the resolver.
-- A synthetic all-valid unit fixture reaches only mock resolver/spawner implementations. It
-  creates bounded non-executable bytes under unique repository `out/r0` test directories,
-  removes them afterward, and never resolves or executes a host program.
-- SHA-256 tests cover empty, `abc`, and the standard long public vector.
-
-## Limitations and remaining risks
-
-- QEMU, external LLD, and x86-64/ARM64 firmware are absent and unpinned, so certification
-  is impossible. No digest was invented.
-- No certification or owner-authorization record exists, and the shipped policy pins none.
-- Content addressing detects changes but does not authenticate an owner. The future owner
-  checkpoint must pin the exact authorization digest through the approved governance path.
-- Single-use authorization consumption, timeout enforcement, and forced termination belong
-  beside a future reviewed spawner. No spawner is shipped now.
-- Static path validation cannot replace descriptor-based anti-race handling in that future
-  spawner; it must revalidate/open pinned files without following symlinks.
-- Prompt 3 independent correctness and security review is still required. This implementation
-  does not self-approve the safety boundary.
+- QEMU, external LLD, and x86-64/ARM64 firmware remain absent and unpinned, so certification is impossible.
+- No certification or owner-authorization record exists, and shipped policy pins neither.
+- SHA-256 content addressing detects changes but does not authenticate an owner.
+- Single-use authorization consumption, timeout enforcement, forced termination, and process-lifecycle cleanup belong beside a future reviewed real spawner.
+- Descriptor continuity is implemented at the API boundary, but no subprocess receives or executes that descriptor because no spawner exists.
 
 ## Target non-execution attestation
 
-During R0-000 implementation and validation, no QEMU command, firmware, target binary,
-boot image, VM image, or RAR target artifact was executed. Only host Rust compilation,
-host Rust tests, file hashing, static parsing, deterministic plan generation, Git revision
-inspection, and the pre-spawn refusal routes ran.
+No QEMU command, firmware, target linker, target binary, boot image, VM image, target artifact, emulator, or physical device was executed. Validation used only host Rust compilation, host unit tests, bounded file reads, streaming hashes, static command generation, deterministic plan/evidence output, and refusal paths. R0-002 and Prompt 5 have not begun.

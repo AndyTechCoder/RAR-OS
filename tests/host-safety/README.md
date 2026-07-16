@@ -8,4 +8,7 @@ Coverage includes strict profile parsing, command allowlisting, raw and host pat
 bounds, networking, host sharing, passthrough, clipboard, elevation, acceleration, aliases,
 malformed records, missing and mismatched pins, certification and authorization binding,
 bounded inputs, content-addressed paths, canonical-root enforcement, real-file and symlink
-refusal, fresh artifact/firmware hashing, and resolver/spawner call counts.
+refusal, streaming artifact/firmware hashing, actual Gregorian timestamp validation,
+resolver-lie/nonexistent/symlink/wrong-byte cases, stable descriptor identity, same-handle
+continuity into the mock spawner, and resolver/spawner call counts. The suite currently
+contains 21 tests.

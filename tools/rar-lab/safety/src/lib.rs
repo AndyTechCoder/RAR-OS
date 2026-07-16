@@ -1,9 +1,14 @@
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
+
+#[path = "unix_fs.rs"]
+mod unix_fs;
 
 use std::collections::BTreeSet;
 use std::fmt;
-use std::fs;
+use std::fs::{self, File};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub const PROFILE_SCHEMA: &str = "rar-vm-profile-v1";
 pub const CERTIFICATION_SCHEMA: &str = "rar-vm-certification-v1";
@@ -953,9 +958,19 @@ fn is_timestamp(value: &str) -> bool {
         return false;
     }
     let number = |start: usize, end: usize| value[start..end].parse::<u32>().ok();
-    matches!(number(0, 4), Some(1..=9999))
-        && matches!(number(5, 7), Some(1..=12))
-        && matches!(number(8, 10), Some(1..=31))
+    let (Some(year), Some(month), Some(day)) = (number(0, 4), number(5, 7), number(8, 10)) else {
+        return false;
+    };
+    let leap_year = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let maximum_day = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap_year => 29,
+        2 => 28,
+        _ => return false,
+    };
+    (1..=9999).contains(&year)
+        && (1..=maximum_day).contains(&day)
         && matches!(number(11, 13), Some(0..=23))
         && matches!(number(14, 16), Some(0..=59))
         && matches!(number(17, 19), Some(0..=59))
@@ -1014,10 +1029,23 @@ pub struct ResolvedExecutable {
     pub sha256: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Debug)]
+pub struct VerifiedExecutable {
+    pub path: PathBuf,
+    pub sha256: String,
+    file: File,
+}
+
+impl VerifiedExecutable {
+    pub fn file(&self) -> &File {
+        &self.file
+    }
+}
+
+#[derive(Debug)]
 pub struct ResolvedCommand {
     pub workspace_root: PathBuf,
-    pub executable: ResolvedExecutable,
+    pub executable: VerifiedExecutable,
     pub argv: Vec<String>,
     pub limits: ResourceLimits,
 }
@@ -1162,18 +1190,71 @@ pub fn authorize_then_delegate<R: ExecutableResolver, S: ProcessSpawner>(
         .emulator_sha256
         .as_deref()
         .expect("validated emulator pin must be present");
-    let executable = resolver.resolve(profile.emulator, expected_emulator_hash)?;
-    if !executable.path.is_absolute() || executable.sha256 != expected_emulator_hash {
-        return Err(SafetyError::new(
-            "resolved-emulator-mismatch",
-            "resolved executable is not the pinned emulator",
-        ));
-    }
+    let executable_claim = resolver.resolve(profile.emulator, expected_emulator_hash)?;
+    let executable = verify_resolved_executable(executable_claim, expected_emulator_hash)?;
     spawner.spawn(&ResolvedCommand {
         workspace_root,
         executable,
         argv: plan.argv(),
         limits: plan.limits,
+    })
+}
+
+fn verify_resolved_executable(
+    claim: ResolvedExecutable,
+    expected_sha256: &str,
+) -> SafetyResult<VerifiedExecutable> {
+    use std::os::unix::fs::MetadataExt;
+
+    if !claim.path.is_absolute() || claim.sha256 != expected_sha256 {
+        return Err(SafetyError::new(
+            "resolved-emulator-mismatch",
+            "resolver claim does not identify the pinned emulator",
+        ));
+    }
+    let canonical = fs::canonicalize(&claim.path)
+        .map_err(|error| SafetyError::new("resolved-emulator-unavailable", error.to_string()))?;
+    if canonical != claim.path {
+        return Err(SafetyError::new(
+            "resolved-emulator-alias",
+            "resolved emulator path is not canonical",
+        ));
+    }
+    let mut file = unix_fs::open_absolute_regular_nofollow(&claim.path)?;
+    let before = file
+        .metadata()
+        .map_err(|error| SafetyError::new("resolved-emulator-metadata", error.to_string()))?;
+    let actual_sha256 = sha256_reader(&mut file)?;
+    let after = file
+        .metadata()
+        .map_err(|error| SafetyError::new("resolved-emulator-metadata", error.to_string()))?;
+    let stable = before.dev() == after.dev()
+        && before.ino() == after.ino()
+        && before.len() == after.len()
+        && before.mtime() == after.mtime()
+        && before.mtime_nsec() == after.mtime_nsec()
+        && before.ctime() == after.ctime()
+        && before.ctime_nsec() == after.ctime_nsec();
+    if !stable {
+        return Err(SafetyError::new(
+            "resolved-emulator-changed",
+            "resolved emulator changed while it was being verified",
+        ));
+    }
+    let canonical_after = fs::canonicalize(&claim.path)
+        .map_err(|error| SafetyError::new("resolved-emulator-unavailable", error.to_string()))?;
+    if canonical_after != claim.path || actual_sha256 != expected_sha256 {
+        return Err(SafetyError::new(
+            "resolved-emulator-content-mismatch",
+            "fresh emulator bytes or canonical path do not match the pin",
+        ));
+    }
+    file.seek(SeekFrom::Start(0))
+        .map_err(|error| SafetyError::new("resolved-emulator-seek", error.to_string()))?;
+    Ok(VerifiedExecutable {
+        path: claim.path,
+        sha256: actual_sha256,
+        file,
     })
 }
 
@@ -1330,13 +1411,174 @@ pub fn validate_workspace_path(
     Ok(joined)
 }
 
+static OUTPUT_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+pub fn atomic_write_workspace_file(root: &Path, relative: &Path, bytes: &[u8]) -> SafetyResult<()> {
+    atomic_write_workspace_file_inner(root, relative, bytes, &mut || Ok(()))
+}
+
+#[cfg(test)]
+pub fn atomic_write_workspace_file_with_hook<F>(
+    root: &Path,
+    relative: &Path,
+    bytes: &[u8],
+    mut before_commit: F,
+) -> SafetyResult<()>
+where
+    F: FnMut() -> SafetyResult<()>,
+{
+    atomic_write_workspace_file_inner(root, relative, bytes, &mut before_commit)
+}
+
+fn atomic_write_workspace_file_inner(
+    root: &Path,
+    relative: &Path,
+    bytes: &[u8],
+    before_commit: &mut dyn FnMut() -> SafetyResult<()>,
+) -> SafetyResult<()> {
+    if relative.is_absolute()
+        || relative
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        return Err(SafetyError::new(
+            "unsafe-output-path",
+            "atomic output path must be canonical and relative",
+        ));
+    }
+    let parent = relative.parent().ok_or_else(|| {
+        SafetyError::new("unsafe-output-path", "atomic output path has no parent")
+    })?;
+    let destination_name = relative
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| {
+            SafetyError::new("unsafe-output-path", "atomic output filename must be UTF-8")
+        })?;
+    let directory = unix_fs::open_or_create_relative_directory(root, parent)?;
+    let (temporary_name, mut temporary) = (0..128)
+        .find_map(|_| {
+            let sequence = OUTPUT_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+            let name = format!(".rarbuild-{}-{sequence:016x}.tmp", std::process::id());
+            match unix_fs::create_new_file_at(&directory, &name) {
+                Ok(file) => Some(Ok((name, file))),
+                Err(error) if error.code == "descriptor-file-exists" => None,
+                Err(error) => Some(Err(error)),
+            }
+        })
+        .transpose()?
+        .ok_or_else(|| {
+            SafetyError::new(
+                "temporary-output-exhausted",
+                "could not allocate an exclusive output temporary file",
+            )
+        })?;
+
+    let mut committed = false;
+    let staged = (|| -> SafetyResult<()> {
+        temporary
+            .write_all(bytes)
+            .map_err(|error| SafetyError::new("output-write-failed", error.to_string()))?;
+        temporary
+            .sync_all()
+            .map_err(|error| SafetyError::new("output-sync-failed", error.to_string()))?;
+        before_commit()?;
+        unix_fs::rename_at(&directory, &temporary_name, destination_name)?;
+        committed = true;
+        directory
+            .sync_all()
+            .map_err(|error| SafetyError::new("output-directory-sync-failed", error.to_string()))?;
+        Ok(())
+    })();
+    if let Err(primary) = staged {
+        if committed {
+            let _ = unix_fs::unlink_at(&directory, destination_name);
+        } else {
+            let _ = unix_fs::unlink_at(&directory, &temporary_name);
+        }
+        return Err(primary);
+    }
+
+    let destination = root.join(relative);
+    let verified = (|| -> SafetyResult<()> {
+        let mut file = unix_fs::open_absolute_regular_nofollow(&destination)?;
+        let actual = sha256_reader(&mut file)?;
+        if actual != sha256_hex(bytes) {
+            return Err(SafetyError::new(
+                "output-verification-failed",
+                "committed output bytes differ from the staged bytes",
+            ));
+        }
+        Ok(())
+    })();
+    if let Err(primary) = verified {
+        let _ = unix_fs::unlink_at(&directory, destination_name);
+        let _ = directory.sync_all();
+        return Err(primary);
+    }
+    Ok(())
+}
+
+pub fn read_bounded_utf8_file(path: &Path, maximum_bytes: usize) -> SafetyResult<String> {
+    let mut file = unix_fs::open_absolute_regular_nofollow(path)?;
+    let metadata = file
+        .metadata()
+        .map_err(|error| SafetyError::new("bounded-read-metadata-failed", error.to_string()))?;
+    if metadata.len() > maximum_bytes as u64 {
+        return Err(SafetyError::new(
+            "bounded-read-too-large",
+            format!("file exceeds the {maximum_bytes}-byte limit"),
+        ));
+    }
+    let mut bytes = Vec::with_capacity(metadata.len() as usize);
+    Read::by_ref(&mut file)
+        .take(maximum_bytes as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| SafetyError::new("bounded-read-failed", error.to_string()))?;
+    if bytes.len() > maximum_bytes {
+        return Err(SafetyError::new(
+            "bounded-read-too-large",
+            format!("file exceeds the {maximum_bytes}-byte limit"),
+        ));
+    }
+    String::from_utf8(bytes)
+        .map_err(|_| SafetyError::new("bounded-read-not-utf8", "file is not valid UTF-8"))
+}
+
 pub fn sha256_file(path: &Path) -> SafetyResult<String> {
-    let bytes =
-        fs::read(path).map_err(|error| SafetyError::new("hash-read-failed", error.to_string()))?;
-    Ok(sha256_hex(&bytes))
+    let mut file = unix_fs::open_absolute_regular_nofollow(path)?;
+    sha256_reader(&mut file)
+}
+
+pub fn sha256_reader(reader: &mut impl Read) -> SafetyResult<String> {
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let count = reader
+            .read(&mut buffer)
+            .map_err(|error| SafetyError::new("hash-read-failed", error.to_string()))?;
+        if count == 0 {
+            break;
+        }
+        hasher.update(&buffer[..count]);
+    }
+    Ok(hasher.finish_hex())
 }
 
 pub fn sha256_hex(input: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(input);
+    hasher.finish_hex()
+}
+
+struct Sha256 {
+    state: [u32; 8],
+    block: [u8; 64],
+    block_len: usize,
+    total_bytes: u64,
+}
+
+impl Sha256 {
     const INITIAL: [u32; 8] = [
         0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
         0x5be0cd19,
@@ -1354,16 +1596,39 @@ pub fn sha256_hex(input: &[u8]) -> String {
         0xc67178f2,
     ];
 
-    let bit_length = (input.len() as u64).wrapping_mul(8);
-    let mut padded = input.to_vec();
-    padded.push(0x80);
-    while padded.len() % 64 != 56 {
-        padded.push(0);
+    fn new() -> Self {
+        Self {
+            state: Self::INITIAL,
+            block: [0; 64],
+            block_len: 0,
+            total_bytes: 0,
+        }
     }
-    padded.extend_from_slice(&bit_length.to_be_bytes());
 
-    let mut state = INITIAL;
-    for block in padded.chunks_exact(64) {
+    fn update(&mut self, mut input: &[u8]) {
+        self.total_bytes = self.total_bytes.wrapping_add(input.len() as u64);
+        if self.block_len != 0 {
+            let count = (64 - self.block_len).min(input.len());
+            self.block[self.block_len..self.block_len + count].copy_from_slice(&input[..count]);
+            self.block_len += count;
+            input = &input[count..];
+            if self.block_len == 64 {
+                let block = self.block;
+                self.compress(&block);
+                self.block_len = 0;
+            }
+        }
+        while input.len() >= 64 {
+            self.compress(&input[..64]);
+            input = &input[64..];
+        }
+        if !input.is_empty() {
+            self.block[..input.len()].copy_from_slice(input);
+            self.block_len = input.len();
+        }
+    }
+
+    fn compress(&mut self, block: &[u8]) {
         let mut schedule = [0_u32; 64];
         for (index, bytes) in block.chunks_exact(4).enumerate() {
             schedule[index] = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
@@ -1381,14 +1646,14 @@ pub fn sha256_hex(input: &[u8]) -> String {
                 .wrapping_add(s1);
         }
 
-        let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut h] = state;
+        let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut h] = self.state;
         for index in 0..64 {
             let sum1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
             let choice = (e & f) ^ ((!e) & g);
             let temporary1 = h
                 .wrapping_add(sum1)
                 .wrapping_add(choice)
-                .wrapping_add(K[index])
+                .wrapping_add(Self::K[index])
                 .wrapping_add(schedule[index]);
             let sum0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
             let majority = (a & b) ^ (a & c) ^ (b & c);
@@ -1402,15 +1667,32 @@ pub fn sha256_hex(input: &[u8]) -> String {
             b = a;
             a = temporary1.wrapping_add(temporary2);
         }
-        for (slot, value) in state.iter_mut().zip([a, b, c, d, e, f, g, h]) {
+        for (slot, value) in self.state.iter_mut().zip([a, b, c, d, e, f, g, h]) {
             *slot = slot.wrapping_add(value);
         }
     }
 
-    let mut output = String::with_capacity(64);
-    for word in state {
-        use fmt::Write as _;
-        write!(&mut output, "{word:08x}").expect("writing to String cannot fail");
+    fn finish_hex(mut self) -> String {
+        let bit_length = self.total_bytes.wrapping_mul(8);
+        self.block[self.block_len] = 0x80;
+        self.block_len += 1;
+        if self.block_len > 56 {
+            self.block[self.block_len..].fill(0);
+            let block = self.block;
+            self.compress(&block);
+            self.block = [0; 64];
+            self.block_len = 0;
+        }
+        self.block[self.block_len..56].fill(0);
+        self.block[56..64].copy_from_slice(&bit_length.to_be_bytes());
+        let block = self.block;
+        self.compress(&block);
+
+        let mut output = String::with_capacity(64);
+        for word in self.state {
+            use fmt::Write as _;
+            write!(&mut output, "{word:08x}").expect("writing to String cannot fail");
+        }
+        output
     }
-    output
 }

@@ -34,10 +34,13 @@ docs/host-safety.md
 docs/handoff-prompt.md
 docs/v1-alpha-execution.md
 docs/tasks/release-0.md
+docs/adr/0011-release-0-reproducibility-gate-phasing.md
+docs/release-0/build/prompt-4-remediation.md
 tools/ci/check-specs.sh
 tools/ci/check-host-policy.sh
 tools/ci/test-host-policy.sh
-tools/ci/fixtures/host-policy/README.md'
+tools/ci/fixtures/host-policy/README.md
+tools/rarbuild/bootstrap-lib.sh'
 
 printf '%s\n' "$required_files" | while IFS= read -r file; do
     [ -f "$file" ] || fail "missing regular required file: $file"
@@ -88,7 +91,7 @@ duplicates=$(printf '%s\n' "$index_targets" | sort | uniq -d)
 
 adr_files=$(sed -n 's/^- \[ADR [^]]*\](\(adr\/[^)]*\.md\))$/docs\/\1/p' docs/README.md)
 adr_count=$(printf '%s\n' "$adr_files" | awk 'NF { count++ } END { print count + 0 }')
-[ "$adr_count" -eq 10 ] || fail "expected exactly 10 indexed initial ADRs"
+[ "$adr_count" -eq 11 ] || fail "expected exactly 11 indexed ADRs"
 
 approval_date=$(sed -n 's/^Date: //p' docs/approval-record.md)
 case "$approval_date" in
@@ -126,7 +129,7 @@ grep -qx "Status: Ready — Gate 0 owner approval recorded $approval_date" docs/
 grep -qx 'Status: Approved for Prompt 2 after repository publication' docs/handoff-prompt.md || fail "handoff prompt status is inconsistent"
 grep -qx 'Status: Approved for execution; begins after repository publication and GitHub authentication' docs/v1-alpha-execution.md || fail "execution runbook status is inconsistent"
 
-for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010; do
+for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011; do
     matches=$(printf '%s\n' "$adr_files" | grep -c "/$number-")
     [ "$matches" -eq 1 ] || fail "expected one indexed ADR for $number"
 done

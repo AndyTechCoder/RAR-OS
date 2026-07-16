@@ -1,4 +1,4 @@
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 
 #[allow(dead_code)]
 #[path = "../../../tools/rar-lab/safety/src/lib.rs"]
@@ -12,7 +12,7 @@ use safety::{
     AUTHORIZATION_SCOPE, AuthorizationRecord, CertificationPins, CertificationRecord, CommandPlan,
     EmulatorId, ExecutableResolver, LaunchPolicy, LaunchRequest, ProcessSpawner, RecordInput,
     ResolvedCommand, ResolvedExecutable, SafetyError, VmProfile, authorization_record_path,
-    authorize_then_delegate, certification_record_path, sha256_hex,
+    authorize_then_delegate, certification_record_path, sha256_file, sha256_hex,
 };
 
 const X86_PROFILE: &str =
@@ -60,6 +60,24 @@ fn sha256_matches_public_vectors() {
         sha256_hex(b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"),
         "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
     );
+}
+
+#[test]
+fn file_hashing_streams_across_fixed_size_read_boundaries() {
+    let root = PathBuf::from(env!("RAR_REPO_ROOT"));
+    let directory = root.join(format!(
+        "out/r0/test-state/streaming-hash-{}",
+        std::process::id()
+    ));
+    fs::create_dir_all(&directory).expect("create streaming hash fixture directory");
+    let path = directory.join("input.bin");
+    let bytes = vec![b'a'; 1_000_000];
+    fs::write(&path, &bytes).expect("write streaming hash fixture");
+    let expected = "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0";
+    assert_eq!(sha256_file(&path).expect("stream file hash"), expected);
+    assert_eq!(sha256_hex(&bytes), expected);
+    fs::remove_file(path).expect("remove streaming hash fixture");
+    fs::remove_dir(directory).expect("remove streaming hash fixture directory");
 }
 
 #[test]
@@ -330,9 +348,30 @@ fn missing_and_mismatched_pins_keep_certification_impossible() {
     );
 }
 
-#[derive(Default)]
 struct CountingResolver {
     calls: usize,
+    path: PathBuf,
+    claimed_sha256: Option<String>,
+}
+
+impl Default for CountingResolver {
+    fn default() -> Self {
+        Self {
+            calls: 0,
+            path: PathBuf::from("/nonexistent/rar-emulator"),
+            claimed_sha256: None,
+        }
+    }
+}
+
+impl CountingResolver {
+    fn for_path(path: PathBuf) -> Self {
+        Self {
+            calls: 0,
+            path,
+            claimed_sha256: None,
+        }
+    }
 }
 
 impl ExecutableResolver for CountingResolver {
@@ -343,8 +382,11 @@ impl ExecutableResolver for CountingResolver {
     ) -> Result<ResolvedExecutable, SafetyError> {
         self.calls += 1;
         Ok(ResolvedExecutable {
-            path: PathBuf::from("/opt/rar-pinned/qemu-system-x86_64"),
-            sha256: expected_sha256.to_owned(),
+            path: self.path.clone(),
+            sha256: self
+                .claimed_sha256
+                .clone()
+                .unwrap_or_else(|| expected_sha256.to_owned()),
         })
     }
 }
@@ -352,11 +394,18 @@ impl ExecutableResolver for CountingResolver {
 #[derive(Default)]
 struct CountingSpawner {
     calls: usize,
+    received_verified_descriptor: bool,
 }
 
 impl ProcessSpawner for CountingSpawner {
-    fn spawn(&mut self, _command: &ResolvedCommand) -> Result<(), SafetyError> {
+    fn spawn(&mut self, command: &ResolvedCommand) -> Result<(), SafetyError> {
         self.calls += 1;
+        self.received_verified_descriptor = command
+            .executable
+            .file()
+            .metadata()
+            .map(|metadata| metadata.is_file())
+            .unwrap_or(false);
         Ok(())
     }
 }
@@ -377,6 +426,7 @@ struct ValidGateFixture {
     artifact_path: PathBuf,
     firmware_path: PathBuf,
     disk_path: PathBuf,
+    emulator_path: PathBuf,
     owned_directories: Vec<PathBuf>,
 }
 
@@ -390,6 +440,7 @@ impl ValidGateFixture {
         let firmware_relative =
             format!("out/r0/toolchain/firmware/test-state/{token}/synthetic.fd");
         let disk_relative = format!("out/r0/vm/test-state/{token}/disposable.qcow2");
+        let emulator_relative = format!("out/r0/host-tools/test-state/{token}/qemu-system-x86_64");
         let profile_text = replace_field(
             &replace_field(
                 &replace_field(X86_PROFILE, "artifact_path", &artifact_relative),
@@ -403,6 +454,7 @@ impl ValidGateFixture {
         let artifact_path = workspace_root.join(&artifact_relative);
         let firmware_path = workspace_root.join(&firmware_relative);
         let disk_path = workspace_root.join(&disk_relative);
+        let emulator_path = workspace_root.join(&emulator_relative);
         let owned_directories = vec![
             artifact_path
                 .parent()
@@ -413,6 +465,10 @@ impl ValidGateFixture {
                 .expect("firmware parent")
                 .to_path_buf(),
             disk_path.parent().expect("disk parent").to_path_buf(),
+            emulator_path
+                .parent()
+                .expect("emulator parent")
+                .to_path_buf(),
         ];
         for directory in &owned_directories {
             fs::create_dir_all(directory).expect("create repository-confined fixture directory");
@@ -427,16 +483,18 @@ impl ValidGateFixture {
         let artifact_bytes = b"RAR host-safety synthetic artifact bytes; never executable\n";
         let firmware_bytes = b"RAR host-safety synthetic firmware bytes; never executable\n";
         let disk_bytes = b"RAR host-safety synthetic disposable disk bytes\n";
+        let emulator_bytes = b"RAR host-safety synthetic emulator bytes; never executable\n";
         fs::write(&artifact_path, artifact_bytes).expect("write synthetic artifact");
         fs::write(&firmware_path, firmware_bytes).expect("write synthetic firmware");
         fs::write(&disk_path, disk_bytes).expect("write synthetic disk");
+        fs::write(&emulator_path, emulator_bytes).expect("write synthetic emulator input");
         let artifact_sha256 = sha256_hex(artifact_bytes);
         let firmware_sha256 = sha256_hex(firmware_bytes);
         let source_revision = "b".repeat(40);
         let pins = CertificationPins {
             tool_lock_sha256: "c".repeat(64),
             emulator_id: EmulatorId::QemuX86_64,
-            emulator_sha256: Some("d".repeat(64)),
+            emulator_sha256: Some(sha256_hex(emulator_bytes)),
             firmware_id: "r0-x86_64-uefi".to_owned(),
             firmware_sha256: Some(firmware_sha256),
         };
@@ -491,6 +549,7 @@ impl ValidGateFixture {
             artifact_path,
             firmware_path,
             disk_path,
+            emulator_path,
             owned_directories,
         }
     }
@@ -700,6 +759,26 @@ fn malformed_revision_and_timestamp_metadata_is_rejected_before_resolution() {
             .code,
         "invalid-authorization-metadata"
     );
+    for invalid in [
+        "2026-02-29T12:00:00Z",
+        "2024-04-31T12:00:00Z",
+        "1900-02-29T12:00:00Z",
+    ] {
+        let candidate = fixture.certification.replace(
+            "certified_at=2026-07-16T12:00:00Z",
+            &format!("certified_at={invalid}"),
+        );
+        assert_eq!(
+            CertificationRecord::parse(&candidate)
+                .expect_err("non-calendar timestamp passed")
+                .code,
+            "invalid-certification-metadata"
+        );
+    }
+    let mut leap = CertificationRecord::parse(&fixture.certification).expect("fixture parses");
+    leap.certified_at = "2000-02-29T12:00:00Z".to_owned();
+    leap.record_sha256 = sha256_hex(leap.payload().as_bytes());
+    CertificationRecord::parse(&leap.canonical()).expect("valid Gregorian leap day parses");
 }
 
 #[test]
@@ -814,7 +893,7 @@ fn final_symlinks_symlink_ancestors_and_root_aliases_refuse_before_resolution() 
 #[test]
 fn only_complete_matching_records_can_reach_mock_resolver_and_mock_spawner() {
     let fixture = ValidGateFixture::new();
-    let mut resolver = CountingResolver::default();
+    let mut resolver = CountingResolver::for_path(fixture.emulator_path.clone());
     let mut spawner = CountingSpawner::default();
     authorize_then_delegate(
         &fixture.policy,
@@ -825,6 +904,80 @@ fn only_complete_matching_records_can_reach_mock_resolver_and_mock_spawner() {
     .expect("fully matching synthetic records should reach mocks");
     assert_eq!(resolver.calls, 1);
     assert_eq!(spawner.calls, 1);
+    assert!(spawner.received_verified_descriptor);
+}
+
+#[cfg(unix)]
+#[test]
+fn resolver_claims_are_independently_verified_before_spawn() {
+    use std::os::unix::fs::symlink;
+
+    let fixture = ValidGateFixture::new();
+    let expected = fixture
+        .pins
+        .emulator_sha256
+        .clone()
+        .expect("fixture emulator pin");
+
+    let mut wrong_claim = CountingResolver::for_path(fixture.emulator_path.clone());
+    wrong_claim.claimed_sha256 = Some("f".repeat(64));
+    let mut spawner = CountingSpawner::default();
+    let error = authorize_then_delegate(
+        &fixture.policy,
+        &fixture.request(),
+        &mut wrong_claim,
+        &mut spawner,
+    )
+    .expect_err("resolver hash lie reached spawner");
+    assert_eq!(error.code, "resolved-emulator-mismatch");
+    assert_eq!(spawner.calls, 0);
+
+    let mut nonexistent = CountingResolver::for_path(
+        fixture
+            .emulator_path
+            .with_file_name("nonexistent-qemu-system-x86_64"),
+    );
+    let mut spawner = CountingSpawner::default();
+    let error = authorize_then_delegate(
+        &fixture.policy,
+        &fixture.request(),
+        &mut nonexistent,
+        &mut spawner,
+    )
+    .expect_err("nonexistent resolver path reached spawner");
+    assert_eq!(error.code, "resolved-emulator-unavailable");
+    assert_eq!(spawner.calls, 0);
+
+    let wrong_bytes = fixture.emulator_path.with_file_name("wrong-bytes-qemu");
+    fs::write(&wrong_bytes, b"wrong emulator bytes\n").expect("write wrong-byte emulator");
+    let mut resolver = CountingResolver::for_path(wrong_bytes.clone());
+    let mut spawner = CountingSpawner::default();
+    let error = authorize_then_delegate(
+        &fixture.policy,
+        &fixture.request(),
+        &mut resolver,
+        &mut spawner,
+    )
+    .expect_err("wrong emulator bytes reached spawner");
+    assert_eq!(error.code, "resolved-emulator-content-mismatch");
+    assert_eq!(spawner.calls, 0);
+    fs::remove_file(wrong_bytes).expect("remove wrong-byte emulator");
+
+    let emulator_link = fixture.emulator_path.with_file_name("linked-qemu");
+    symlink(&fixture.emulator_path, &emulator_link).expect("create emulator symlink");
+    let mut resolver = CountingResolver::for_path(emulator_link.clone());
+    resolver.claimed_sha256 = Some(expected);
+    let mut spawner = CountingSpawner::default();
+    let error = authorize_then_delegate(
+        &fixture.policy,
+        &fixture.request(),
+        &mut resolver,
+        &mut spawner,
+    )
+    .expect_err("emulator symlink reached spawner");
+    assert_eq!(error.code, "resolved-emulator-alias");
+    assert_eq!(spawner.calls, 0);
+    fs::remove_file(emulator_link).expect("remove emulator symlink");
 }
 
 #[cfg(unix)]

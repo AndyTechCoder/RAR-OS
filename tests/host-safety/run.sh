@@ -34,35 +34,38 @@ if [ -L "$root/.git" ] || { [ ! -d "$root/.git" ] && [ ! -f "$root/.git" ]; }; t
     echo "host-safety tests require a regular .git directory or worktree file" >&2
     exit 2
 fi
-grep -q '^Status: Approved$' "$root/docs/approval-record.md" || exit 2
-grep -q '^Approval: approved$' "$root/docs/approval-record.md" || exit 2
-grep -q '^Status: Ready — Gate 0 owner approval recorded ' "$root/docs/tasks/release-0.md" || exit 2
-grep -q '^Status: Mandatory and effective immediately$' "$root/docs/host-safety.md" || exit 2
+bootstrap_library=$root/tools/rarbuild/bootstrap-lib.sh
+[ -f "$bootstrap_library" ] && [ ! -L "$bootstrap_library" ] || exit 2
+. "$bootstrap_library"
+rar_file_has_exact_line "$root/docs/approval-record.md" 'Status: Approved' || exit 2
+rar_file_has_exact_line "$root/docs/approval-record.md" 'Approval: approved' || exit 2
+rar_file_has_exact_line "$root/docs/tasks/release-0.md" 'Status: Ready — Gate 0 owner approval recorded 2026-07-16' || exit 2
+rar_file_has_exact_line "$root/docs/host-safety.md" 'Status: Mandatory and effective immediately' || exit 2
+rar_load_test_bootstrap_root "$root" || exit 2
 cd "$root"
 
-for path in out out/r0 out/r0/host-tests out/r0/tmp out/r0/host-tests/host-safety-tests; do
+for path in out out/r0 out/r0/host-tests out/r0/tmp; do
     if [ -L "$path" ]; then
         echo "host-safety test output must not be a symbolic link: $path" >&2
         exit 2
     fi
 done
 
-mkdir -p out/r0/host-tests out/r0/tmp
-resolved_host_tests=$(CDPATH= cd -- out/r0/host-tests && pwd -P)
-[ "$resolved_host_tests" = "$root/out/r0/host-tests" ] || {
-    echo "host-safety test output escaped the repository checkout" >&2
-    exit 2
-}
-TMPDIR="$root/out/r0/tmp"
-export TMPDIR
-if [ -d /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk ]; then
-    SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
-    export SDKROOT
-fi
-RAR_REPO_ROOT="$root" rustc \
-    --edition 2024 \
-    --test \
-    --deny unsafe_code \
+rar_root=$root
+rar_prepare_output_parent "$root/out/r0" || exit 2
+rar_prepare_output_parent "$root/out/r0/host-tests" || exit 2
+rar_prepare_output_parent "$root/out/r0/tmp" || exit 2
+test_directory=$root/out/r0/host-tests/host-safety-$PPID-$$
+"$bootstrap_mkdir_path" -m 700 "$test_directory" || exit 2
+[ ! -L "$test_directory" ] || exit 2
+resolved_test_directory=$(CDPATH= cd -- "$test_directory" && pwd -P)
+[ "$resolved_test_directory" = "$test_directory" ] || exit 2
+RAR_REPO_ROOT=$root
+export RAR_REPO_ROOT
+rar_compile_host_rust \
     tests/host-safety/src/main.rs \
-    -o out/r0/host-tests/host-safety-tests
-RAR_REPO_ROOT="$root" out/r0/host-tests/host-safety-tests
+    "$test_directory/host-safety-tests" \
+    --test
+RAR_BOOTSTRAP_BOUNDARY=$bootstrap_boundary
+export RAR_BOOTSTRAP_BOUNDARY
+exec "$test_directory/host-safety-tests" --test-threads=1

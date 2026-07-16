@@ -1,23 +1,13 @@
 # Release 0 host toolchain lock
 
-`host-tools.manifest` declares the permitted Class B bootstrap surface.
-`host-tools.lock` records only values observed in the current repository checkout's
-`aarch64-apple-darwin` host toolchain. The Rust executable and installed-component
-manifest hashes were measured locally; they are not inferred release hashes.
+`host-tools.manifest` declares the Class B host surface. `host-tools.lock` is the canonical `rar-host-tool-lock-v2` record measured on the current `aarch64-apple-darwin` host. `dependencies.r0` separates host inputs from target dependencies.
 
-The canonical lock also pins Rust-bundled LLVM 22.1.2 and verifies it through verbose
-`rustc` output. External LLD, each QEMU backend, and both firmware inputs have separate
-status, version/identity, and SHA-256 fields. Version 1 permits either consistent
-`unavailable/none/none` records or complete reviewed `pinned/<identity>/<sha256>` records.
-`certifiable=true` is valid only when every required external record is pinned and target
-dependencies remain `none`.
+Version 2 pins absolute paths and SHA-256 identities for the bootstrap shell, mkdir, Rust 1.95.0 compiler, Rust-bundled `rust-lld`, macOS SDK settings, and Cargo. It also pins Rust component manifests and represents external LLD, QEMU backends, and firmware as either complete `pinned` records or consistent `unavailable/none/none` records. `certifiable=true` is valid only when every required external record is pinned and target-linked dependencies remain `none`.
 
-The lock deliberately records external LLD, QEMU, and firmware as `unavailable` and
-contains no digest for them. A discovered but unpinned replacement remains unusable for
-certification. Discovery hashes pinned candidates without launching QEMU. `dependencies.r0`
-is the complete current dependency inventory: standalone
-host Rust uses only `std`, and no target code or target-linked third-party dependency exists.
+The bootstrap wrapper reads only the required root fields with shell builtins, rejects missing, duplicate, malformed, relative, aliased, or symlink paths, and invokes absolute roots. Because an executable cannot prove itself before first execution, the reviewed path/hash record is the explicit bootstrap axiom. The compiled verifier then streams and compares every pinned byte sequence before performing later subprocess work. No command downloads, installs, or invokes `rustup` or `git`.
 
-The lock is host-specific. Linux or another macOS architecture must receive a separately
-measured, reviewed lock entry before it is supported; copying these binary hashes to another
-platform is invalid. No command in this directory installs or downloads tools.
+The lock deliberately keeps external LLD, every QEMU backend, and both firmware inputs unavailable. A discovered but unpinned candidate remains unusable for certification and is never executed.
+
+The official Rust 1.95.0 OCI image is pinned for portable CI host tests at `sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3`. That image is a CI test root only. Linux `rarbuild check` remains unsupported until a separately measured, reviewed Linux lock records exact host paths, executable/component hashes, linker and SDK/sysroot inputs, plus the required LLD/QEMU/firmware pins.
+
+No Cargo package, third-party crate, target code, target-linked dependency, binary blob, target asset, firmware payload, or Dependency Exception Record is present.
