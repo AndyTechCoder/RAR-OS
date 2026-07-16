@@ -5,14 +5,16 @@
 mod safety;
 
 use std::fs;
+use std::io::{self, Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use safety::{
     AUTHORIZATION_SCOPE, AuthorizationRecord, CertificationPins, CertificationRecord, CommandPlan,
     EmulatorId, ExecutableResolver, LaunchPolicy, LaunchRequest, ProcessSpawner, RecordInput,
-    ResolvedCommand, ResolvedExecutable, SafetyError, VmProfile, authorization_record_path,
-    authorize_then_delegate, certification_record_path, sha256_file, sha256_hex,
+    ResolvedCommand, ResolvedExecutable, SafetyError, SpawnArgument, VmProfile,
+    authorization_record_path, authorize_then_delegate, authorize_then_delegate_with_hook,
+    certification_record_path, sha256_file, sha256_hex, sha256_reader,
 };
 
 const X86_PROFILE: &str =
@@ -22,6 +24,15 @@ const ARM_PROFILE: &str =
 const TIER0_PROFILE: &str =
     include_str!("../../../spec/lab/vm-profile/examples/thumbv8m-static.profile");
 const OVERSIZED_PROFILE_LINE: &str = include_str!("../fixtures/oversized-line.profile");
+const ARTIFACT_BYTES: &[u8] = b"RAR host-safety synthetic artifact bytes; never executable\n";
+const FIRMWARE_BYTES: &[u8] = b"RAR host-safety synthetic firmware bytes; never executable\n";
+const DISK_BYTES: &[u8] = b"RAR host-safety synthetic disposable disk bytes\n";
+const EMULATOR_BYTES: &[u8] = b"RAR host-safety synthetic emulator bytes; never executable\n";
+const SUBSTITUTED_BYTES: &[u8] = b"substituted pathname object; never authorized or executed\n";
+
+fn repository_root() -> PathBuf {
+    PathBuf::from(std::env::var("RAR_REPO_ROOT").expect("RAR_REPO_ROOT must be set by run.sh"))
+}
 
 fn replace_field(input: &str, key: &str, value: &str) -> String {
     let prefix = format!("{key}=");
@@ -62,9 +73,158 @@ fn sha256_matches_public_vectors() {
     );
 }
 
+struct FixedChunkReader<'a> {
+    bytes: &'a [u8],
+    offset: usize,
+    chunk_size: usize,
+}
+
+impl Read for FixedChunkReader<'_> {
+    fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+        if self.offset == self.bytes.len() || output.is_empty() {
+            return Ok(0);
+        }
+        let count = self
+            .chunk_size
+            .min(output.len())
+            .min(self.bytes.len() - self.offset);
+        output[..count].copy_from_slice(&self.bytes[self.offset..self.offset + count]);
+        self.offset += count;
+        Ok(count)
+    }
+}
+
+struct RandomShortReader<'a> {
+    bytes: &'a [u8],
+    offset: usize,
+    state: u64,
+}
+
+impl Read for RandomShortReader<'_> {
+    fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+        if self.offset == self.bytes.len() || output.is_empty() {
+            return Ok(0);
+        }
+        self.state = self
+            .state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        let short_limit = ((self.state >> 32) as usize % 97) + 1;
+        let count = short_limit
+            .min(output.len())
+            .min(self.bytes.len() - self.offset);
+        output[..count].copy_from_slice(&self.bytes[self.offset..self.offset + count]);
+        self.offset += count;
+        Ok(count)
+    }
+}
+
+struct FaultingReader<'a> {
+    bytes: &'a [u8],
+    offset: usize,
+    fault_at: usize,
+}
+
+impl Read for FaultingReader<'_> {
+    fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+        if self.offset >= self.fault_at {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "deterministic injected read fault",
+            ));
+        }
+        let count = output
+            .len()
+            .min(self.fault_at - self.offset)
+            .min(self.bytes.len() - self.offset);
+        output[..count].copy_from_slice(&self.bytes[self.offset..self.offset + count]);
+        self.offset += count;
+        Ok(count)
+    }
+}
+
+#[test]
+fn streaming_sha256_matches_official_vector_across_differential_chunk_sizes() {
+    let vector = b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
+    let expected = "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1";
+    for chunk_size in [1, 7, 63, 65] {
+        let mut reader = FixedChunkReader {
+            bytes: vector,
+            offset: 0,
+            chunk_size,
+        };
+        assert_eq!(
+            sha256_reader(&mut reader).expect("hash differential chunk stream"),
+            expected,
+            "chunk size {chunk_size}"
+        );
+    }
+}
+
+#[test]
+fn streaming_sha256_covers_padding_boundaries_and_randomized_short_reads() {
+    for (length, expected) in [
+        (
+            55,
+            "9f4390f8d30c2dd92ec9f095b65e2b9ae9b0a925a5258e241c9f1e910f734318",
+        ),
+        (
+            56,
+            "b35439a4ac6f0948b6d6f9e3c6af0f5f590ce20f1bde7090ef7970686ec6738a",
+        ),
+        (
+            63,
+            "7d3e74a05d7db15bce4ad9ec0658ea98e3f06eeecf16b4c6fff2da457ddc2f34",
+        ),
+        (
+            64,
+            "ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb",
+        ),
+        (
+            65,
+            "635361c48bb9eab14198e76ea8ab7f1a41685d6ad62aa9146d301d4f17eb0ae0",
+        ),
+    ] {
+        let bytes = vec![b'a'; length];
+        let mut reader = FixedChunkReader {
+            bytes: &bytes,
+            offset: 0,
+            chunk_size: 7,
+        };
+        assert_eq!(
+            sha256_reader(&mut reader).expect("hash padding-boundary stream"),
+            expected,
+            "padding boundary length {length}"
+        );
+    }
+
+    let million_a = vec![b'a'; 1_000_000];
+    let mut randomized = RandomShortReader {
+        bytes: &million_a,
+        offset: 0,
+        state: 0x5241_522d_5348_4132,
+    };
+    assert_eq!(
+        sha256_reader(&mut randomized).expect("hash deterministic randomized short reads"),
+        "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0"
+    );
+}
+
+#[test]
+fn streaming_sha256_propagates_read_faults() {
+    let mut reader = FaultingReader {
+        bytes: b"bytes before and after the injected reader fault",
+        offset: 0,
+        fault_at: 17,
+    };
+    let error = sha256_reader(&mut reader).expect_err("reader fault unexpectedly hashed");
+    assert_eq!(error.code, "hash-read-failed");
+    assert!(error.detail.contains("deterministic injected read fault"));
+}
+
 #[test]
 fn file_hashing_streams_across_fixed_size_read_boundaries() {
-    let root = PathBuf::from(env!("RAR_REPO_ROOT"));
+    let root = repository_root();
     let directory = root.join(format!(
         "out/r0/test-state/streaming-hash-{}",
         std::process::id()
@@ -398,14 +558,20 @@ struct CountingSpawner {
 }
 
 impl ProcessSpawner for CountingSpawner {
-    fn spawn(&mut self, command: &ResolvedCommand) -> Result<(), SafetyError> {
+    fn spawn(&mut self, command: ResolvedCommand) -> Result<(), SafetyError> {
         self.calls += 1;
-        self.received_verified_descriptor = command
-            .executable
-            .file()
-            .metadata()
-            .map(|metadata| metadata.is_file())
-            .unwrap_or(false);
+        self.received_verified_descriptor = [
+            command.executable.file(),
+            command.artifact.file(),
+            command.disk.file(),
+            command.firmware.as_ref().expect("x86 firmware").file(),
+        ]
+        .iter()
+        .all(|file| {
+            file.metadata()
+                .map(|metadata| metadata.is_file())
+                .unwrap_or(false)
+        });
         Ok(())
     }
 }
@@ -432,7 +598,7 @@ struct ValidGateFixture {
 
 impl ValidGateFixture {
     fn new() -> Self {
-        let workspace_root = PathBuf::from(env!("RAR_REPO_ROOT"));
+        let workspace_root = repository_root();
         safety::validate_repository_root(&workspace_root).expect("canonical repository root");
         let sequence = FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let token = format!("gate-{}-{sequence}", std::process::id());
@@ -480,21 +646,17 @@ impl ValidGateFixture {
                     .is_symlink()
             );
         }
-        let artifact_bytes = b"RAR host-safety synthetic artifact bytes; never executable\n";
-        let firmware_bytes = b"RAR host-safety synthetic firmware bytes; never executable\n";
-        let disk_bytes = b"RAR host-safety synthetic disposable disk bytes\n";
-        let emulator_bytes = b"RAR host-safety synthetic emulator bytes; never executable\n";
-        fs::write(&artifact_path, artifact_bytes).expect("write synthetic artifact");
-        fs::write(&firmware_path, firmware_bytes).expect("write synthetic firmware");
-        fs::write(&disk_path, disk_bytes).expect("write synthetic disk");
-        fs::write(&emulator_path, emulator_bytes).expect("write synthetic emulator input");
-        let artifact_sha256 = sha256_hex(artifact_bytes);
-        let firmware_sha256 = sha256_hex(firmware_bytes);
+        fs::write(&artifact_path, ARTIFACT_BYTES).expect("write synthetic artifact");
+        fs::write(&firmware_path, FIRMWARE_BYTES).expect("write synthetic firmware");
+        fs::write(&disk_path, DISK_BYTES).expect("write synthetic disk");
+        fs::write(&emulator_path, EMULATOR_BYTES).expect("write synthetic emulator input");
+        let artifact_sha256 = sha256_hex(ARTIFACT_BYTES);
+        let firmware_sha256 = sha256_hex(FIRMWARE_BYTES);
         let source_revision = "b".repeat(40);
         let pins = CertificationPins {
             tool_lock_sha256: "c".repeat(64),
             emulator_id: EmulatorId::QemuX86_64,
-            emulator_sha256: Some(sha256_hex(emulator_bytes)),
+            emulator_sha256: Some(sha256_hex(EMULATOR_BYTES)),
             firmware_id: "r0-x86_64-uefi".to_owned(),
             firmware_sha256: Some(firmware_sha256),
         };
@@ -907,6 +1069,117 @@ fn only_complete_matching_records_can_reach_mock_resolver_and_mock_spawner() {
     assert!(spawner.received_verified_descriptor);
 }
 
+fn read_opened_bytes(file: &fs::File) -> Vec<u8> {
+    let mut file = file.try_clone().expect("clone verified descriptor");
+    file.seek(SeekFrom::Start(0))
+        .expect("rewind verified descriptor");
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)
+        .expect("read verified descriptor");
+    bytes
+}
+
+#[derive(Default)]
+struct OriginalResourceSpawner {
+    calls: usize,
+}
+
+impl ProcessSpawner for OriginalResourceSpawner {
+    fn spawn(&mut self, command: ResolvedCommand) -> Result<(), SafetyError> {
+        self.calls += 1;
+        assert_eq!(read_opened_bytes(command.executable.file()), EMULATOR_BYTES);
+        assert_eq!(read_opened_bytes(command.artifact.file()), ARTIFACT_BYTES);
+        assert_eq!(
+            read_opened_bytes(command.firmware.as_ref().expect("x86 firmware").file()),
+            FIRMWARE_BYTES
+        );
+        assert_eq!(read_opened_bytes(command.disk.file()), DISK_BYTES);
+        assert_eq!(command.executable.sha256, sha256_hex(EMULATOR_BYTES));
+        assert_eq!(
+            command.artifact.sha256(),
+            Some(sha256_hex(ARTIFACT_BYTES).as_str())
+        );
+        assert_eq!(
+            command
+                .firmware
+                .as_ref()
+                .and_then(safety::VerifiedResource::sha256),
+            Some(sha256_hex(FIRMWARE_BYTES).as_str())
+        );
+        assert_eq!(command.disk.sha256(), None);
+        assert!(command.arguments.contains(&SpawnArgument::FirmwareHandle));
+        assert!(
+            command
+                .arguments
+                .contains(&SpawnArgument::DisposableDiskHandle)
+        );
+        assert!(
+            command
+                .arguments
+                .contains(&SpawnArgument::TargetArtifactHandle)
+        );
+        Ok(())
+    }
+}
+
+fn assert_path_replacement_cannot_substitute(selected: &str) {
+    let fixture = ValidGateFixture::new();
+    let selected_path = match selected {
+        "artifact" => fixture.artifact_path.clone(),
+        "firmware" => fixture.firmware_path.clone(),
+        "disk" => fixture.disk_path.clone(),
+        "emulator" => fixture.emulator_path.clone(),
+        _ => unreachable!(),
+    };
+    let replacement_path = selected_path.with_file_name(format!("replacement-{selected}"));
+    fs::write(&replacement_path, SUBSTITUTED_BYTES).expect("write replacement object");
+    let mut resolver = CountingResolver::for_path(fixture.emulator_path.clone());
+    let mut spawner = OriginalResourceSpawner::default();
+    authorize_then_delegate_with_hook(
+        &fixture.policy,
+        &fixture.request(),
+        &mut resolver,
+        &mut spawner,
+        || {
+            fs::rename(&replacement_path, &selected_path)
+                .expect("replace verified resource pathname");
+            assert_eq!(
+                fs::read(&selected_path).expect("read substituted pathname"),
+                SUBSTITUTED_BYTES
+            );
+            Ok(())
+        },
+    )
+    .expect("verified handles should survive pathname replacement");
+    assert_eq!(resolver.calls, 1, "resolver count for {selected}");
+    assert_eq!(spawner.calls, 1, "spawner count for {selected}");
+    assert_eq!(
+        fs::read(&selected_path).expect("read replacement after mock spawn"),
+        SUBSTITUTED_BYTES,
+        "mock spawner must not reopen the {selected} pathname"
+    );
+}
+
+#[test]
+fn artifact_replacement_after_verification_cannot_reach_spawner() {
+    assert_path_replacement_cannot_substitute("artifact");
+}
+
+#[test]
+fn firmware_replacement_after_verification_cannot_reach_spawner() {
+    assert_path_replacement_cannot_substitute("firmware");
+}
+
+#[test]
+fn disk_replacement_after_verification_cannot_reach_spawner() {
+    assert_path_replacement_cannot_substitute("disk");
+}
+
+#[test]
+fn emulator_replacement_after_verification_cannot_reach_spawner() {
+    assert_path_replacement_cannot_substitute("emulator");
+}
+
 #[cfg(unix)]
 #[test]
 fn resolver_claims_are_independently_verified_before_spawn() {
@@ -986,7 +1259,7 @@ fn existing_symlink_ancestor_is_rejected_without_following_it() {
     use std::fs;
     use std::os::unix::fs::symlink;
 
-    let root = PathBuf::from(env!("RAR_REPO_ROOT"));
+    let root = repository_root();
     let test_root = root.join(format!(
         "out/r0/test-state/host-safety-{}",
         std::process::id()
@@ -1003,4 +1276,180 @@ fn existing_symlink_ancestor_is_rejected_without_following_it() {
     assert_eq!(error.code, "symlink-path-forbidden");
     fs::remove_file(link).expect("remove test symlink");
     fs::remove_dir(test_root).expect("remove empty test directory");
+}
+
+fn assert_no_atomic_temporaries(directory: &std::path::Path) {
+    assert!(
+        fs::read_dir(directory)
+            .expect("list atomic output directory")
+            .all(|entry| !entry
+                .expect("read atomic output entry")
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".rarbuild-")),
+        "atomic output left a staging file"
+    );
+}
+
+fn assert_injected_precommit_failure_cleans_staging(
+    failure: safety::AtomicWriteInjectedFailure,
+    label: &str,
+) {
+    let root = repository_root();
+    let token = format!(
+        "atomic-{label}-{}-{}",
+        std::process::id(),
+        FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+    );
+    let relative = PathBuf::from(format!("out/r0/test-state/{token}/result.txt"));
+    let destination = root.join(&relative);
+    let error = safety::atomic_write_workspace_file_with_injected_failure(
+        &root,
+        &relative,
+        b"must not commit\n",
+        failure,
+    )
+    .expect_err("injected atomic output failure unexpectedly passed");
+    assert_eq!(error.code, "injected-atomic-output-failure");
+    assert!(!destination.exists(), "failed writer committed {label}");
+    let parent = destination.parent().expect("atomic fault output parent");
+    assert_no_atomic_temporaries(parent);
+    fs::remove_dir(parent).expect("remove atomic fault output directory");
+}
+
+#[test]
+fn injected_atomic_write_failure_cleans_staging() {
+    assert_injected_precommit_failure_cleans_staging(
+        safety::AtomicWriteInjectedFailure::Write,
+        "write-failure",
+    );
+}
+
+#[test]
+fn injected_atomic_fsync_failure_cleans_staging() {
+    assert_injected_precommit_failure_cleans_staging(
+        safety::AtomicWriteInjectedFailure::FileSync,
+        "fsync-failure",
+    );
+}
+
+#[test]
+fn injected_atomic_rename_failure_cleans_staging() {
+    assert_injected_precommit_failure_cleans_staging(
+        safety::AtomicWriteInjectedFailure::Rename,
+        "rename-failure",
+    );
+}
+
+#[test]
+fn injected_atomic_unlink_failure_is_propagated_and_never_deletes_destination() {
+    let root = repository_root();
+    let token = format!(
+        "atomic-unlink-failure-{}-{}",
+        std::process::id(),
+        FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+    );
+    let relative = PathBuf::from(format!("out/r0/test-state/{token}/result.txt"));
+    let destination = root.join(&relative);
+    let error = safety::atomic_write_workspace_file_with_injected_failure(
+        &root,
+        &relative,
+        b"must remain staged\n",
+        safety::AtomicWriteInjectedFailure::Unlink,
+    )
+    .expect_err("injected unlink failure unexpectedly passed");
+    assert_eq!(error.code, "output-cleanup-failed");
+    assert!(error.detail.contains("injected-precommit-failure"));
+    assert!(error.detail.contains("injected-atomic-output-failure"));
+    assert!(!destination.exists());
+
+    let parent = destination.parent().expect("unlink fault output parent");
+    let staged = fs::read_dir(parent)
+        .expect("list failed unlink staging directory")
+        .map(|entry| entry.expect("read failed unlink staging entry").path())
+        .collect::<Vec<_>>();
+    assert_eq!(staged.len(), 1, "failed unlink must report its residue");
+    assert!(
+        staged[0]
+            .file_name()
+            .expect("staging filename")
+            .to_string_lossy()
+            .starts_with(".rarbuild-")
+    );
+    fs::remove_file(&staged[0]).expect("remove intentionally retained staging file");
+    fs::remove_dir(parent).expect("remove unlink fault output directory");
+}
+
+#[test]
+fn competing_writer_output_survives_prior_writer_post_commit_failure() {
+    let root = repository_root();
+    let token = format!(
+        "atomic-competitor-{}-{}",
+        std::process::id(),
+        FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+    );
+    let relative = PathBuf::from(format!("out/r0/test-state/{token}/result.txt"));
+    let destination = root.join(&relative);
+    let error = safety::atomic_write_workspace_file_with_hooks(
+        &root,
+        &relative,
+        b"first writer bytes\n",
+        || Ok(()),
+        || {
+            safety::atomic_write_workspace_file(&root, &relative, b"competing writer bytes\n")?;
+            Err(SafetyError {
+                code: "synthetic-post-commit-failure",
+                detail: "first writer fails after the competitor commits".to_owned(),
+            })
+        },
+    )
+    .expect_err("synthetic post-commit failure unexpectedly passed");
+    assert_eq!(error.code, "synthetic-post-commit-failure");
+    assert_eq!(
+        fs::read(&destination).expect("read competing writer output"),
+        b"competing writer bytes\n"
+    );
+    let parent = destination.parent().expect("atomic output parent");
+    assert_no_atomic_temporaries(parent);
+    fs::remove_file(&destination).expect("remove competing writer output");
+    fs::remove_dir(parent).expect("remove competing writer directory");
+}
+
+#[test]
+fn replacement_after_commit_survives_writer_failure_without_destination_unlink() {
+    let root = repository_root();
+    let token = format!(
+        "atomic-replacement-{}-{}",
+        std::process::id(),
+        FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+    );
+    let relative = PathBuf::from(format!("out/r0/test-state/{token}/result.txt"));
+    let destination = root.join(&relative);
+    let parent = destination.parent().expect("atomic output parent");
+    fs::create_dir_all(parent).expect("create replacement output directory");
+    let replacement = parent.join("replacement.txt");
+    fs::write(&replacement, b"replacement after commit\n").expect("write replacement output");
+
+    let error = safety::atomic_write_workspace_file_with_hooks(
+        &root,
+        &relative,
+        b"committed writer bytes\n",
+        || Ok(()),
+        || {
+            fs::rename(&replacement, &destination).expect("replace committed destination");
+            Err(SafetyError {
+                code: "synthetic-replace-after-commit",
+                detail: "writer fails after pathname replacement".to_owned(),
+            })
+        },
+    )
+    .expect_err("synthetic replacement failure unexpectedly passed");
+    assert_eq!(error.code, "synthetic-replace-after-commit");
+    assert_eq!(
+        fs::read(&destination).expect("read replacement after failed writer"),
+        b"replacement after commit\n"
+    );
+    assert_no_atomic_temporaries(parent);
+    fs::remove_file(&destination).expect("remove replacement output");
+    fs::remove_dir(parent).expect("remove replacement output directory");
 }

@@ -100,6 +100,11 @@ bootstrap_library=$root/tools/rarbuild/bootstrap-lib.sh
 }
 . "$bootstrap_library"
 
+rar_preflight_policy_records "$root" || {
+    echo "rarbuild policy or lock input is oversized, malformed, or outside the approved preparser axiom" >&2
+    exit 2
+}
+
 rar_file_has_exact_line "$root/docs/approval-record.md" 'Status: Approved' || {
     echo "rarbuild approval marker mismatch" >&2
     exit 2
@@ -116,8 +121,21 @@ rar_file_has_exact_line "$root/docs/host-safety.md" 'Status: Mandatory and effec
     echo "rarbuild host-safety marker mismatch" >&2
     exit 2
 }
-rar_load_local_bootstrap_root "$root" || {
+rar_load_selected_bootstrap_root "$root" || {
     echo "rarbuild bootstrap trust root is absent, malformed, or unsafe" >&2
+    exit 2
+}
+rar_verify_selected_bootstrap_root || {
+    echo "rarbuild bootstrap trust root bytes do not match the selected lock" >&2
+    exit 2
+}
+[ "${RAR_CI_BOOTSTRAP_IMAGE-}" = sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 ] || {
+    printf '%s\n' \
+        'rarbuild-invalid-v1' \
+        'reason=local-bootstrap-execution-awaits-descriptor-bound-launcher' \
+        'resolver_invoked=false' \
+        'spawner_invoked=false' \
+        'target_execution=not-attempted'
     exit 2
 }
 cd "$root"
@@ -133,17 +151,33 @@ rar_root=$root
 rar_prepare_output_parent "$root/out/r0" || exit 2
 rar_prepare_output_parent "$root/out/r0/host-tools" || exit 2
 rar_prepare_output_parent "$root/out/r0/tmp" || exit 2
-bootstrap_directory=$root/out/r0/host-tools/rarbuild-bootstrap-$PPID-$$
-"$bootstrap_mkdir_path" -m 700 "$bootstrap_directory" || {
+rar_allocate_private_directory "$root/out/r0/host-tools" rarbuild-bootstrap || {
     echo "rarbuild refused a non-exclusive bootstrap output directory" >&2
     exit 2
 }
+bootstrap_directory=$rar_private_directory
 [ ! -L "$bootstrap_directory" ] || exit 2
 resolved_bootstrap_directory=$(CDPATH= cd -- "$bootstrap_directory" && pwd -P)
 [ "$resolved_bootstrap_directory" = "$bootstrap_directory" ] || exit 2
+rarbuild_cleanup() {
+    [ -n "${bootstrap_directory-}" ] || return 0
+    rar_cleanup_private_directory "$bootstrap_directory" || return 1
+    bootstrap_directory=
+}
+trap 'rarbuild_cleanup' 0
+trap 'exit 129' 1
+trap 'exit 130' 2
+trap 'exit 143' 15
 rar_compile_host_rust \
     tools/rarbuild/src/main.rs \
     "$bootstrap_directory/rarbuild"
 RAR_BOOTSTRAP_BOUNDARY=$bootstrap_boundary
 export RAR_BOOTSTRAP_BOUNDARY
-exec "$bootstrap_directory/rarbuild" "$@"
+if rar_execute_generated_host_binary "$bootstrap_directory/rarbuild" "$@"; then
+    rarbuild_status=0
+else
+    rarbuild_status=$?
+fi
+rarbuild_cleanup || exit 2
+trap - 0 1 2 15
+exit "$rarbuild_status"

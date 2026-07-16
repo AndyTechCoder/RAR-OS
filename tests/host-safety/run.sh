@@ -37,11 +37,14 @@ fi
 bootstrap_library=$root/tools/rarbuild/bootstrap-lib.sh
 [ -f "$bootstrap_library" ] && [ ! -L "$bootstrap_library" ] || exit 2
 . "$bootstrap_library"
+rar_preflight_policy_records "$root" || exit 2
 rar_file_has_exact_line "$root/docs/approval-record.md" 'Status: Approved' || exit 2
 rar_file_has_exact_line "$root/docs/approval-record.md" 'Approval: approved' || exit 2
 rar_file_has_exact_line "$root/docs/tasks/release-0.md" 'Status: Ready — Gate 0 owner approval recorded 2026-07-16' || exit 2
 rar_file_has_exact_line "$root/docs/host-safety.md" 'Status: Mandatory and effective immediately' || exit 2
-rar_load_test_bootstrap_root "$root" || exit 2
+rar_load_selected_bootstrap_root "$root" || exit 2
+rar_verify_selected_bootstrap_root || exit 2
+[ "${RAR_CI_BOOTSTRAP_IMAGE-}" = sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 ] || exit 2
 cd "$root"
 
 for path in out out/r0 out/r0/host-tests out/r0/tmp; do
@@ -55,11 +58,20 @@ rar_root=$root
 rar_prepare_output_parent "$root/out/r0" || exit 2
 rar_prepare_output_parent "$root/out/r0/host-tests" || exit 2
 rar_prepare_output_parent "$root/out/r0/tmp" || exit 2
-test_directory=$root/out/r0/host-tests/host-safety-$PPID-$$
-"$bootstrap_mkdir_path" -m 700 "$test_directory" || exit 2
+rar_allocate_private_directory "$root/out/r0/host-tests" host-safety || exit 2
+test_directory=$rar_private_directory
 [ ! -L "$test_directory" ] || exit 2
 resolved_test_directory=$(CDPATH= cd -- "$test_directory" && pwd -P)
 [ "$resolved_test_directory" = "$test_directory" ] || exit 2
+host_safety_test_cleanup() {
+    [ -n "${test_directory-}" ] || return 0
+    rar_cleanup_private_directory "$test_directory" || return 1
+    test_directory=
+}
+trap 'host_safety_test_cleanup' 0
+trap 'exit 129' 1
+trap 'exit 130' 2
+trap 'exit 143' 15
 RAR_REPO_ROOT=$root
 export RAR_REPO_ROOT
 rar_compile_host_rust \
@@ -68,4 +80,11 @@ rar_compile_host_rust \
     --test
 RAR_BOOTSTRAP_BOUNDARY=$bootstrap_boundary
 export RAR_BOOTSTRAP_BOUNDARY
-exec "$test_directory/host-safety-tests" --test-threads=1
+if rar_execute_generated_host_binary "$test_directory/host-safety-tests" --test-threads=1; then
+    host_safety_test_status=0
+else
+    host_safety_test_status=$?
+fi
+host_safety_test_cleanup || exit 2
+trap - 0 1 2 15
+exit "$host_safety_test_status"

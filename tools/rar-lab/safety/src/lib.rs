@@ -504,6 +504,26 @@ pub enum VmArgument {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SpawnArgument {
+    Machine(Machine),
+    CpuModelMax,
+    CpuCount(u32),
+    MemoryMiB(u32),
+    NoUserConfig,
+    NoDefaults,
+    NoReboot,
+    NoShutdown,
+    NoDisplay,
+    SerialStdio,
+    NoMonitor,
+    NoNetwork,
+    Sandbox,
+    FirmwareHandle,
+    DisposableDiskHandle,
+    TargetArtifactHandle,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ResourceLimits {
     pub runtime_seconds: u32,
     pub output_bytes: u32,
@@ -550,6 +570,30 @@ impl CommandPlan {
 
     pub fn emulator(&self) -> EmulatorId {
         self.emulator
+    }
+
+    fn spawn_arguments(&self) -> Vec<SpawnArgument> {
+        self.arguments
+            .iter()
+            .map(|argument| match argument {
+                VmArgument::Machine(machine) => SpawnArgument::Machine(*machine),
+                VmArgument::CpuModelMax => SpawnArgument::CpuModelMax,
+                VmArgument::CpuCount(count) => SpawnArgument::CpuCount(*count),
+                VmArgument::MemoryMiB(memory) => SpawnArgument::MemoryMiB(*memory),
+                VmArgument::NoUserConfig => SpawnArgument::NoUserConfig,
+                VmArgument::NoDefaults => SpawnArgument::NoDefaults,
+                VmArgument::NoReboot => SpawnArgument::NoReboot,
+                VmArgument::NoShutdown => SpawnArgument::NoShutdown,
+                VmArgument::NoDisplay => SpawnArgument::NoDisplay,
+                VmArgument::SerialStdio => SpawnArgument::SerialStdio,
+                VmArgument::NoMonitor => SpawnArgument::NoMonitor,
+                VmArgument::NoNetwork => SpawnArgument::NoNetwork,
+                VmArgument::Sandbox => SpawnArgument::Sandbox,
+                VmArgument::Firmware(_) => SpawnArgument::FirmwareHandle,
+                VmArgument::DisposableDisk(_) => SpawnArgument::DisposableDiskHandle,
+                VmArgument::TargetArtifact(_) => SpawnArgument::TargetArtifactHandle,
+            })
+            .collect()
     }
 
     pub fn argv(&self) -> Vec<String> {
@@ -1031,7 +1075,6 @@ pub struct ResolvedExecutable {
 
 #[derive(Debug)]
 pub struct VerifiedExecutable {
-    pub path: PathBuf,
     pub sha256: String,
     file: File,
 }
@@ -1043,10 +1086,28 @@ impl VerifiedExecutable {
 }
 
 #[derive(Debug)]
+pub struct VerifiedResource {
+    sha256: Option<String>,
+    file: File,
+}
+
+impl VerifiedResource {
+    pub fn file(&self) -> &File {
+        &self.file
+    }
+
+    pub fn sha256(&self) -> Option<&str> {
+        self.sha256.as_deref()
+    }
+}
+
+#[derive(Debug)]
 pub struct ResolvedCommand {
-    pub workspace_root: PathBuf,
     pub executable: VerifiedExecutable,
-    pub argv: Vec<String>,
+    pub artifact: VerifiedResource,
+    pub firmware: Option<VerifiedResource>,
+    pub disk: VerifiedResource,
+    pub arguments: Vec<SpawnArgument>,
     pub limits: ResourceLimits,
 }
 
@@ -1059,7 +1120,7 @@ pub trait ExecutableResolver {
 }
 
 pub trait ProcessSpawner {
-    fn spawn(&mut self, command: &ResolvedCommand) -> SafetyResult<()>;
+    fn spawn(&mut self, command: ResolvedCommand) -> SafetyResult<()>;
 }
 
 pub fn authorize_then_delegate<R: ExecutableResolver, S: ProcessSpawner>(
@@ -1067,6 +1128,31 @@ pub fn authorize_then_delegate<R: ExecutableResolver, S: ProcessSpawner>(
     request: &LaunchRequest<'_>,
     resolver: &mut R,
     spawner: &mut S,
+) -> SafetyResult<()> {
+    authorize_then_delegate_inner(policy, request, resolver, spawner, &mut || Ok(()))
+}
+
+#[cfg(test)]
+pub fn authorize_then_delegate_with_hook<
+    R: ExecutableResolver,
+    S: ProcessSpawner,
+    F: FnMut() -> SafetyResult<()>,
+>(
+    policy: &LaunchPolicy,
+    request: &LaunchRequest<'_>,
+    resolver: &mut R,
+    spawner: &mut S,
+    mut before_spawn: F,
+) -> SafetyResult<()> {
+    authorize_then_delegate_inner(policy, request, resolver, spawner, &mut before_spawn)
+}
+
+fn authorize_then_delegate_inner<R: ExecutableResolver, S: ProcessSpawner>(
+    policy: &LaunchPolicy,
+    request: &LaunchRequest<'_>,
+    resolver: &mut R,
+    spawner: &mut S,
+    before_spawn: &mut dyn FnMut() -> SafetyResult<()>,
 ) -> SafetyResult<()> {
     let expected_certification = policy
         .expected_certification_sha256
@@ -1160,30 +1246,50 @@ pub fn authorize_then_delegate<R: ExecutableResolver, S: ProcessSpawner>(
     }
 
     let workspace_root = validate_repository_root(request.workspace_root)?;
-    let artifact_path =
-        validate_workspace_path(&workspace_root, profile.artifact_path.as_str(), true)?;
-    let actual_artifact_sha256 = sha256_file(&artifact_path)?;
-    if actual_artifact_sha256 != request.artifact_sha256
-        || actual_artifact_sha256 != certification.artifact_sha256
-    {
+    let artifact = verify_workspace_resource(
+        &workspace_root,
+        profile.artifact_path.as_str(),
+        Some(request.artifact_sha256),
+        "artifact-content-mismatch",
+        "artifact bytes do not match the request and certification digest",
+    )?;
+    if artifact.sha256() != Some(certification.artifact_sha256.as_str()) {
         return Err(SafetyError::new(
             "artifact-content-mismatch",
             "artifact bytes do not match the request and certification digest",
         ));
     }
-    if let Some(firmware_path) = &profile.firmware_path {
-        let firmware_path = validate_workspace_path(&workspace_root, firmware_path.as_str(), true)?;
-        let actual_firmware_sha256 = sha256_file(&firmware_path)?;
-        if actual_firmware_sha256 != firmware_hash
-            || actual_firmware_sha256 != certification.firmware_sha256
-        {
-            return Err(SafetyError::new(
+    let firmware = profile
+        .firmware_path
+        .as_ref()
+        .map(|firmware_path| {
+            verify_workspace_resource(
+                &workspace_root,
+                firmware_path.as_str(),
+                Some(firmware_hash),
                 "firmware-content-mismatch",
                 "firmware bytes do not match the pin and certification digest",
-            ));
-        }
+            )
+        })
+        .transpose()?;
+    if firmware.as_ref().and_then(VerifiedResource::sha256)
+        != profile
+            .firmware_path
+            .as_ref()
+            .map(|_| certification.firmware_sha256.as_str())
+    {
+        return Err(SafetyError::new(
+            "firmware-content-mismatch",
+            "firmware bytes do not match the pin and certification digest",
+        ));
     }
-    validate_workspace_path(&workspace_root, profile.disk_path.as_str(), true)?;
+    let disk = verify_workspace_resource(
+        &workspace_root,
+        profile.disk_path.as_str(),
+        None,
+        "disk-content-mismatch",
+        "disposable disk bytes changed while being opened",
+    )?;
 
     let expected_emulator_hash = request
         .pins
@@ -1192,20 +1298,84 @@ pub fn authorize_then_delegate<R: ExecutableResolver, S: ProcessSpawner>(
         .expect("validated emulator pin must be present");
     let executable_claim = resolver.resolve(profile.emulator, expected_emulator_hash)?;
     let executable = verify_resolved_executable(executable_claim, expected_emulator_hash)?;
-    spawner.spawn(&ResolvedCommand {
-        workspace_root,
+    let command = ResolvedCommand {
         executable,
-        argv: plan.argv(),
+        artifact,
+        firmware,
+        disk,
+        arguments: plan.spawn_arguments(),
         limits: plan.limits,
+    };
+    before_spawn()?;
+    spawner.spawn(command)
+}
+
+fn verify_workspace_resource(
+    workspace_root: &Path,
+    relative: &str,
+    expected_sha256: Option<&str>,
+    mismatch_code: &'static str,
+    mismatch_detail: &'static str,
+) -> SafetyResult<VerifiedResource> {
+    use std::os::unix::fs::MetadataExt;
+
+    let path = validate_workspace_path(workspace_root, relative, true)?;
+    let mut file = unix_fs::open_absolute_regular_nofollow(&path)?;
+    let before = file
+        .metadata()
+        .map_err(|error| SafetyError::new("launch-resource-metadata", error.to_string()))?;
+    let actual_sha256 = expected_sha256.map(|expected| {
+        let actual = sha256_reader(&mut file)?;
+        if actual != expected {
+            return Err(SafetyError::new(mismatch_code, mismatch_detail));
+        }
+        Ok(actual)
+    });
+    let actual_sha256 = actual_sha256.transpose()?;
+    let after = file
+        .metadata()
+        .map_err(|error| SafetyError::new("launch-resource-metadata", error.to_string()))?;
+    if !same_metadata_identity(&before, &after) {
+        return Err(SafetyError::new(
+            "launch-resource-changed",
+            "launch resource changed while its opened descriptor was being verified",
+        ));
+    }
+
+    let rebound_path = validate_workspace_path(workspace_root, relative, true)?;
+    let rebound = fs::symlink_metadata(rebound_path)
+        .map_err(|error| SafetyError::new("launch-resource-metadata", error.to_string()))?;
+    if before.dev() != rebound.dev() || before.ino() != rebound.ino() {
+        return Err(SafetyError::new(
+            "launch-resource-path-changed",
+            "launch resource pathname changed while its descriptor was being opened",
+        ));
+    }
+    file.seek(SeekFrom::Start(0))
+        .map_err(|error| SafetyError::new("launch-resource-seek", error.to_string()))?;
+    Ok(VerifiedResource {
+        sha256: actual_sha256,
+        file,
     })
+}
+
+#[cfg(unix)]
+fn same_metadata_identity(before: &fs::Metadata, after: &fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    before.dev() == after.dev()
+        && before.ino() == after.ino()
+        && before.len() == after.len()
+        && before.mtime() == after.mtime()
+        && before.mtime_nsec() == after.mtime_nsec()
+        && before.ctime() == after.ctime()
+        && before.ctime_nsec() == after.ctime_nsec()
 }
 
 fn verify_resolved_executable(
     claim: ResolvedExecutable,
     expected_sha256: &str,
 ) -> SafetyResult<VerifiedExecutable> {
-    use std::os::unix::fs::MetadataExt;
-
     if !claim.path.is_absolute() || claim.sha256 != expected_sha256 {
         return Err(SafetyError::new(
             "resolved-emulator-mismatch",
@@ -1228,14 +1398,7 @@ fn verify_resolved_executable(
     let after = file
         .metadata()
         .map_err(|error| SafetyError::new("resolved-emulator-metadata", error.to_string()))?;
-    let stable = before.dev() == after.dev()
-        && before.ino() == after.ino()
-        && before.len() == after.len()
-        && before.mtime() == after.mtime()
-        && before.mtime_nsec() == after.mtime_nsec()
-        && before.ctime() == after.ctime()
-        && before.ctime_nsec() == after.ctime_nsec();
-    if !stable {
+    if !same_metadata_identity(&before, &after) {
         return Err(SafetyError::new(
             "resolved-emulator-changed",
             "resolved emulator changed while it was being verified",
@@ -1252,7 +1415,6 @@ fn verify_resolved_executable(
     file.seek(SeekFrom::Start(0))
         .map_err(|error| SafetyError::new("resolved-emulator-seek", error.to_string()))?;
     Ok(VerifiedExecutable {
-        path: claim.path,
         sha256: actual_sha256,
         file,
     })
@@ -1413,8 +1575,44 @@ pub fn validate_workspace_path(
 
 static OUTPUT_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AtomicWriteStage {
+    Write,
+    FileSync,
+    Rename,
+    Unlink,
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AtomicWriteInjectedFailure {
+    Write,
+    FileSync,
+    Rename,
+    Unlink,
+}
+
+#[cfg(test)]
+impl AtomicWriteInjectedFailure {
+    fn stage(self) -> AtomicWriteStage {
+        match self {
+            Self::Write => AtomicWriteStage::Write,
+            Self::FileSync => AtomicWriteStage::FileSync,
+            Self::Rename => AtomicWriteStage::Rename,
+            Self::Unlink => AtomicWriteStage::Unlink,
+        }
+    }
+}
+
 pub fn atomic_write_workspace_file(root: &Path, relative: &Path, bytes: &[u8]) -> SafetyResult<()> {
-    atomic_write_workspace_file_inner(root, relative, bytes, &mut || Ok(()))
+    atomic_write_workspace_file_inner(
+        root,
+        relative,
+        bytes,
+        &mut || Ok(()),
+        &mut || Ok(()),
+        &mut |_| Ok(()),
+    )
 }
 
 #[cfg(test)]
@@ -1427,7 +1625,75 @@ pub fn atomic_write_workspace_file_with_hook<F>(
 where
     F: FnMut() -> SafetyResult<()>,
 {
-    atomic_write_workspace_file_inner(root, relative, bytes, &mut before_commit)
+    atomic_write_workspace_file_inner(
+        root,
+        relative,
+        bytes,
+        &mut before_commit,
+        &mut || Ok(()),
+        &mut |_| Ok(()),
+    )
+}
+
+#[cfg(test)]
+pub fn atomic_write_workspace_file_with_hooks<F, G>(
+    root: &Path,
+    relative: &Path,
+    bytes: &[u8],
+    mut before_commit: F,
+    mut after_commit: G,
+) -> SafetyResult<()>
+where
+    F: FnMut() -> SafetyResult<()>,
+    G: FnMut() -> SafetyResult<()>,
+{
+    atomic_write_workspace_file_inner(
+        root,
+        relative,
+        bytes,
+        &mut before_commit,
+        &mut after_commit,
+        &mut |_| Ok(()),
+    )
+}
+
+#[cfg(test)]
+pub fn atomic_write_workspace_file_with_injected_failure(
+    root: &Path,
+    relative: &Path,
+    bytes: &[u8],
+    failure: AtomicWriteInjectedFailure,
+) -> SafetyResult<()> {
+    let failure_stage = failure.stage();
+    let mut injected = false;
+    let mut inject_failure = |stage| {
+        if !injected && stage == failure_stage {
+            injected = true;
+            return Err(SafetyError::new(
+                "injected-atomic-output-failure",
+                format!("injected failure at {stage:?}"),
+            ));
+        }
+        Ok(())
+    };
+    let mut before_commit = || {
+        if failure == AtomicWriteInjectedFailure::Unlink {
+            Err(SafetyError::new(
+                "injected-precommit-failure",
+                "force temporary-file cleanup before the injected unlink failure",
+            ))
+        } else {
+            Ok(())
+        }
+    };
+    atomic_write_workspace_file_inner(
+        root,
+        relative,
+        bytes,
+        &mut before_commit,
+        &mut || Ok(()),
+        &mut inject_failure,
+    )
 }
 
 fn atomic_write_workspace_file_inner(
@@ -1435,6 +1701,8 @@ fn atomic_write_workspace_file_inner(
     relative: &Path,
     bytes: &[u8],
     before_commit: &mut dyn FnMut() -> SafetyResult<()>,
+    after_commit: &mut dyn FnMut() -> SafetyResult<()>,
+    inject_failure: &mut dyn FnMut(AtomicWriteStage) -> SafetyResult<()>,
 ) -> SafetyResult<()> {
     if relative.is_absolute()
         || relative
@@ -1476,44 +1744,51 @@ fn atomic_write_workspace_file_inner(
 
     let mut committed = false;
     let staged = (|| -> SafetyResult<()> {
+        inject_failure(AtomicWriteStage::Write)?;
         temporary
             .write_all(bytes)
             .map_err(|error| SafetyError::new("output-write-failed", error.to_string()))?;
+        inject_failure(AtomicWriteStage::FileSync)?;
         temporary
             .sync_all()
             .map_err(|error| SafetyError::new("output-sync-failed", error.to_string()))?;
+        temporary
+            .seek(SeekFrom::Start(0))
+            .map_err(|error| SafetyError::new("output-seek-failed", error.to_string()))?;
+        let actual = sha256_reader(&mut temporary)?;
+        if actual != sha256_hex(bytes) {
+            return Err(SafetyError::new(
+                "output-verification-failed",
+                "staged output bytes differ from the requested bytes",
+            ));
+        }
         before_commit()?;
+        unix_fs::verify_open_directory_binding(&directory, &root.join(parent))?;
+        inject_failure(AtomicWriteStage::Rename)?;
         unix_fs::rename_at(&directory, &temporary_name, destination_name)?;
         committed = true;
+        after_commit()?;
         directory
             .sync_all()
             .map_err(|error| SafetyError::new("output-directory-sync-failed", error.to_string()))?;
         Ok(())
     })();
     if let Err(primary) = staged {
-        if committed {
-            let _ = unix_fs::unlink_at(&directory, destination_name);
-        } else {
-            let _ = unix_fs::unlink_at(&directory, &temporary_name);
+        if !committed {
+            let cleanup = inject_failure(AtomicWriteStage::Unlink)
+                .and_then(|()| unix_fs::unlink_at(&directory, &temporary_name))
+                .and_then(|()| {
+                    directory.sync_all().map_err(|error| {
+                        SafetyError::new("output-cleanup-sync-failed", error.to_string())
+                    })
+                });
+            if let Err(cleanup) = cleanup {
+                return Err(SafetyError::new(
+                    "output-cleanup-failed",
+                    format!("primary failure: {primary}; temporary cleanup failure: {cleanup}"),
+                ));
+            }
         }
-        return Err(primary);
-    }
-
-    let destination = root.join(relative);
-    let verified = (|| -> SafetyResult<()> {
-        let mut file = unix_fs::open_absolute_regular_nofollow(&destination)?;
-        let actual = sha256_reader(&mut file)?;
-        if actual != sha256_hex(bytes) {
-            return Err(SafetyError::new(
-                "output-verification-failed",
-                "committed output bytes differ from the staged bytes",
-            ));
-        }
-        Ok(())
-    })();
-    if let Err(primary) = verified {
-        let _ = unix_fs::unlink_at(&directory, destination_name);
-        let _ = directory.sync_all();
         return Err(primary);
     }
     Ok(())

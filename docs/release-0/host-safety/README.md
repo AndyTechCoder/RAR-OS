@@ -13,27 +13,35 @@ The shipped `LaunchPolicy` contains no approved certification or owner-authoriza
 1. Certification binds canonical profile and command bytes, tool lock, emulator, firmware, target artifact, and source revision.
 2. Owner authorization separately binds that certification, profile, and artifact to one permitted launch.
 3. Content-addressed files have no authority by themselves; future reviewed launcher policy must pin both exact record digests.
-4. The artifact, firmware, and disposable disk must be canonical regular non-symlink files in their class-scoped workspace locations before resolver delegation.
+4. The artifact, firmware, and disposable disk must be canonical regular non-symlink files in their class-scoped workspace locations before resolver delegation, and their no-follow descriptors remain open through delegation.
 
 Profile input is bounded to 8 KiB, certification to 4 KiB, authorization to 2 KiB, and every record line to 512 bytes. Timestamps use actual Gregorian month lengths and leap-year rules.
 
-## Self-verifying executable resolution
+## Descriptor-bound launch resolution
 
-A resolver claim is no longer trusted as proof of an emulator. After all policy, record, and file bindings pass, the gate independently:
+A resolver claim is not trusted as proof of an emulator. After all policy and record bindings pass, the gate independently opens the artifact, firmware, disposable disk, and emulator with descriptor-relative no-follow traversal. It hashes artifact, firmware, and emulator bytes from those same descriptors, checks stable descriptor metadata and pathname identity during opening, and rewinds the verified handles.
+
+The `ProcessSpawner` boundary consumes a command by value containing:
+
+- the four opened verified resources (firmware is optional for Tier 0);
+- pathless typed argument markers that require the spawner to bind those exact handles;
+- fixed resource limits.
+
+It receives no workspace root, artifact path, firmware path, disk path, emulator path, or pre-rendered pathname argument vector. The static `CommandPlan` still renders canonical paths only for profile certification; it is not the spawn authority. Four deterministic race tests replace each pathname after every descriptor is verified and before mock delegation. The pathname then contains substituted bytes while the mock spawner reads the original verified bytes from every handle, proving the substituted object cannot enter the authorized command.
+
+For the emulator, the gate additionally:
 
 - requires an absolute canonical path;
-- opens every path component with descriptor-relative no-follow operations;
 - requires a regular final file;
-- streams a fresh SHA-256 digest from the opened descriptor;
 - verifies device, inode, size, modification time, and change time remain stable during hashing;
 - compares the actual digest with the immutable emulator pin;
-- rewinds and passes that same verified open descriptor to the spawner boundary.
+- rejects resolver hash assertions, aliases, missing files, symlinks, wrong bytes, and metadata changes.
 
-The spawner therefore receives descriptor continuity, not a pathname and resolver-supplied hash assertion. Negative tests cover a lying claimed hash, nonexistent path, final symlink, wrong bytes, and mutation-sensitive metadata. The positive fixture creates non-executable synthetic bytes and reaches only mock resolver/spawner implementations.
+The positive fixtures are non-executable synthetic byte strings and reach only mock resolver/spawner implementations.
 
 ## Streaming and descriptor safety
 
-SHA-256 now uses fixed-memory streaming for files of any accepted size. Tool, firmware, artifact, source, and emulator inputs are never buffered in full by the hashing path.
+SHA-256 uses fixed-memory streaming for files of any accepted size. Tool, firmware, artifact, source, and emulator inputs are never buffered in full by the hashing path. Tests cover public SHA-256 outputs, padding boundaries at 55, 56, 63, 64, and 65 bytes, fixed short reads of 1, 7, 63, and 65 bytes, deterministic randomized short reads over the million-`a` vector, and injected read faults.
 
 The Unix descriptor module uses RAR-owned bindings for `openat`, `mkdirat`, `renameat`, and `unlinkat`. Unsafe code is confined to that file and documents these invariants:
 
@@ -41,9 +49,13 @@ The Unix descriptor module uses RAR-owned bindings for `openat`, `mkdirat`, `ren
 - directory descriptors remain live for each call;
 - returned descriptors transfer ownership exactly once to Rust `File` values;
 - pointer lifetimes cover each call;
-- flag constants are audited for the supported macOS and Linux ABIs.
+- Darwin fixed `mkdirat` mode uses 16-bit `mode_t`, and variadic `openat` mode uses default-promoted `c_int`;
+- Linux fixed and variadic modes use `c_uint`;
+- compile-time type/size checks and platform-gated runtime mode/failure tests cover the supported ABIs.
 
-The same module provides descriptor-relative atomic output for R0-001. Focused tests replace an output parent during staging and prove no write follows the replacement symlink.
+The same module provides descriptor-relative atomic output for R0-001. A temporary file is opened read/write, written and synchronized, rewound, and hashed through that same descriptor before rename. Every directory component created by `mkdirat` is synchronized through its parent descriptor. The parent binding is rechecked before rename, and the renamed directory is synchronized after commit.
+
+Pre-commit failures remove and directory-sync the temporary entry; unlink or cleanup-sync failures are returned as `output-cleanup-failed`. After rename, failure paths never unlink the destination because another writer may already own that pathname. Injected write, file-fsync, rename, and unlink failures cover cleanup and propagation. Competing-writer and replace-after-commit tests prove an earlier writer cannot delete a later valid output.
 
 ## Acceptance mapping
 
@@ -53,7 +65,7 @@ The same module provides descriptor-relative atomic output for R0-001. Focused t
 | Forbidden configuration classes are rejected | Typed profile, command, file, resource, and malformed-input negative corpus | Pass |
 | Generated command references only allowlisted pinned resources and bounded limits | `generated_command_contains_only_the_typed_isolated_model` and strict `CertificationPins` validation | Pass for static construction; no command is certified |
 | First guest execution is separately owner-gated | Independent certification and single-launch owner record schemas plus two immutable policy pins | Pass in implementation; later owner checkpoint remains mandatory |
-| Fully resolved emulator is validated before spawn | Fresh descriptor-backed byte hash, stable identity checks, same-handle continuity, and resolver-lie tests | Pass |
+| Fully resolved launch resources are validated before spawn | Fresh descriptor-backed hashes, stable identity checks, four pathname replacement races, pathless typed arguments, and same-handle continuity | Pass |
 | Unauthorized routes refuse before resolution or spawn | Resolver/spawner counters remain zero across all incomplete and mismatched states | Pass |
 
 ## Exact host-only validation
@@ -64,15 +76,19 @@ tools/rarbuild/rarbuild run
 tools/rarbuild/rarbuild test vm
 ```
 
-The remediation suite contains 21 tests. The two CLI refusal commands return 73 and report `resolver_invoked=false`, `spawner_invoked=false`, and `target_execution=not-attempted`.
+The remediation suite contains 36 tests on macOS. The two CLI refusal commands return 73 and report `resolver_invoked=false`, `spawner_invoked=false`, and `target_execution=not-attempted`.
 
 ## Remaining risks
 
 - QEMU, external LLD, and x86-64/ARM64 firmware remain absent and unpinned, so certification is impossible.
 - No certification or owner-authorization record exists, and shipped policy pins neither.
 - SHA-256 content addressing detects changes but does not authenticate an owner.
+- The approved schema does not content-pin the disposable disk; this remediation preserves the exact opened disk handle but does not invent a new stable certification field.
+- Open descriptors defeat pathname replacement, but they do not prevent an independently writable same inode from being modified in place; ownership and immutability of future certified inputs still require launcher/profile review.
 - Single-use authorization consumption, timeout enforcement, forced termination, and process-lifecycle cleanup belong beside a future reviewed real spawner.
-- Descriptor continuity is implemented at the API boundary, but no subprocess receives or executes that descriptor because no spawner exists.
+- Descriptor continuity is implemented at the API boundary, but no subprocess receives or executes those descriptors because no spawner exists.
+- Linux ABI assertions and tests are cfg-valid but were not executed on this macOS host; Linux CI remains required evidence.
+- If the final directory sync fails after rename, the writer returns failure while preserving the destination; callers must treat commit state as uncertain and inspect evidence instead of deleting the path.
 
 ## Target non-execution attestation
 

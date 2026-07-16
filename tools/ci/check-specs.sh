@@ -35,12 +35,20 @@ docs/handoff-prompt.md
 docs/v1-alpha-execution.md
 docs/tasks/release-0.md
 docs/adr/0011-release-0-reproducibility-gate-phasing.md
+docs/adr/0012-release-0-host-bootstrap-trust-and-snapshot.md
 docs/release-0/build/prompt-4-remediation.md
 tools/ci/check-specs.sh
 tools/ci/check-host-policy.sh
 tools/ci/test-host-policy.sh
 tools/ci/fixtures/host-policy/README.md
-tools/rarbuild/bootstrap-lib.sh'
+tools/rarbuild/bootstrap-lib.sh
+tools/rarbuild/contracts/rar-host-check-v2.fields
+tools/rarbuild/contracts/rar-host-test-v2.fields
+tools/rarbuild/contracts/rar-build-plan-v3.fields
+tools/rarbuild/contracts/rar-build-evidence-v3.fields
+tools/toolchain/host-tools.x86_64-unknown-linux-gnu-ci.lock
+tools/toolchain/rust-host-closure.aarch64-apple-darwin.sha256
+tools/toolchain/sdk-link-closure.aarch64-apple-darwin.sha256'
 
 printf '%s\n' "$required_files" | while IFS= read -r file; do
     [ -f "$file" ] || fail "missing regular required file: $file"
@@ -91,7 +99,7 @@ duplicates=$(printf '%s\n' "$index_targets" | sort | uniq -d)
 
 adr_files=$(sed -n 's/^- \[ADR [^]]*\](\(adr\/[^)]*\.md\))$/docs\/\1/p' docs/README.md)
 adr_count=$(printf '%s\n' "$adr_files" | awk 'NF { count++ } END { print count + 0 }')
-[ "$adr_count" -eq 11 ] || fail "expected exactly 11 indexed ADRs"
+[ "$adr_count" -eq 12 ] || fail "expected exactly 12 indexed ADRs"
 
 approval_date=$(sed -n 's/^Date: //p' docs/approval-record.md)
 case "$approval_date" in
@@ -129,9 +137,16 @@ grep -qx "Status: Ready — Gate 0 owner approval recorded $approval_date" docs/
 grep -qx 'Status: Approved for Prompt 2 after repository publication' docs/handoff-prompt.md || fail "handoff prompt status is inconsistent"
 grep -qx 'Status: Approved for execution; begins after repository publication and GitHub authentication' docs/v1-alpha-execution.md || fail "execution runbook status is inconsistent"
 
-for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011; do
+for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012; do
     matches=$(printf '%s\n' "$adr_files" | grep -c "/$number-")
     [ "$matches" -eq 1 ] || fail "expected one indexed ADR for $number"
+done
+
+grep -q 'ADRs 0001–0012' docs/tasks/release-0.md || fail "Release 0 approved ADR range is stale"
+for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012; do
+    if grep -q "ADR $number" docs/tasks/release-0.md; then
+        printf '%s\n' "$adr_files" | grep -q "/$number-" || fail "task-referenced ADR $number is not indexed and approved"
+    fi
 done
 
 printf '%s\n' "$adr_files" | while IFS= read -r adr; do
