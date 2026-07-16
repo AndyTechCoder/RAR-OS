@@ -12,6 +12,7 @@ implementation yet.
 - [Release roadmap](docs/release-roadmap.md)
 - [Release 0 implementation tasks](docs/tasks/release-0.md)
 - [Owner approval record](docs/approval-record.md)
+- [Initial publication record](docs/publication-record.md)
 - [Host Mac safety policy](docs/host-safety.md)
 - [V1 alpha execution runbook](docs/v1-alpha-execution.md)
 

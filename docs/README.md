@@ -25,6 +25,7 @@ Status: Gate 0 approved on 2026-07-16
 - [Documentation Policy](documentation-policy.md)
 - [Implementation Handoff](handoff.md)
 - [Gate 0 Approval Record](approval-record.md)
+- [Initial Publication Record](publication-record.md)
 - [Release 0 Task Packets](tasks/release-0.md)
 - [Initial Codex Handoff Prompt](handoff-prompt.md)
 - [V1 Alpha Codex Execution Runbook](v1-alpha-execution.md)

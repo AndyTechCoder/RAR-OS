@@ -29,6 +29,7 @@ rustfmt.toml
 .codex/agents/security_reviewer.toml
 docs/README.md
 docs/approval-record.md
+docs/publication-record.md
 docs/host-safety.md
 docs/handoff-prompt.md
 docs/v1-alpha-execution.md
@@ -100,6 +101,8 @@ grep -qx 'Approval: approved' docs/approval-record.md || fail "approval statemen
 grep -q '^Approver: .\+' docs/approval-record.md || fail "approval record has no approver"
 grep -qx "Status: Gate 0 approved on $approval_date" docs/README.md || fail "index approval date disagrees with approval record"
 grep -q "Gate 0 was approved on $approval_date" README.md || fail "root README approval date disagrees with approval record"
+grep -qx 'Status: Draft PR open' docs/publication-record.md || fail "initial publication record status is inconsistent"
+grep -q 'https://github.com/AndyTechCoder/RAR-OS/pull/1' docs/publication-record.md || fail "initial publication PR is not recorded"
 
 approved_direction_files='docs/constitution.md
 docs/glossary.md
