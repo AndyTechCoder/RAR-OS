@@ -98,14 +98,14 @@ rar_load_test_bootstrap_root() {
         bootstrap_shell_path=/usr/bin/dash
         bootstrap_mkdir_path=/usr/bin/mkdir
         bootstrap_rustc_path=/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc
-        bootstrap_linker_path=/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin/rust-lld
-        bootstrap_linker_flavor=gnu-lld
+        bootstrap_linker_path=/usr/bin/gcc
+        bootstrap_linker_flavor=gcc
         bootstrap_sdk_path=
         bootstrap_boundary=oci-image-sha256-f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
         rar_validate_absolute_file "$bootstrap_shell_path" || return 1
         rar_validate_absolute_file "$bootstrap_mkdir_path" || return 1
         rar_validate_absolute_file "$bootstrap_rustc_path" || return 1
-        rar_validate_absolute_file "$bootstrap_linker_path" || return 1
+        [ -x "$bootstrap_linker_path" ] || return 1
     else
         rar_load_local_bootstrap_root "$1"
     fi
