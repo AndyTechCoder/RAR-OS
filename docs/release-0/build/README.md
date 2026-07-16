@@ -1,18 +1,16 @@
 # R0-001 reproducible host bootstrap remediation
 
-Status: Prompt 4 host-only remediation implemented; independent re-review required before merge
+Status: Prompt 4 remediation implemented; exact-head CI and independent review remain mandatory PR merge gates
 
 ## Historical correction
 
-PR #2 (`codex/r0-host-safety-bootstrap`) merged as commit `2678a91996fbcbb1666fb008ecc1a347d7ba49e7` before Prompt 3 review and Prompt 4 remediation. Its own description said review had not begun and the PR must not merge. The post-merge audit therefore records PR #2 as not satisfying the Prompt 3/4 or R0 acceptance gate. That merge does not authorize R0-002, target execution, profile certification, VM boot, physical-device access, or later Release 0 progression.
+PR #2 (`codex/r0-host-safety-bootstrap`) merged as `2678a91996fbcbb1666fb008ecc1a347d7ba49e7` before Prompt 3 review, Prompt 4 remediation, and currently applicable acceptance evidence. Its description explicitly said review had not begun and it must not merge. The post-merge audit therefore remains a recorded process failure; that merge did not authorize R0-002, target execution, VM certification, physical-device access, or later Release 0 progression.
 
-This remediation starts from that exact current `main` commit. It fixes every accepted audit finding and preserves all RAR OS requirements. ADR 0011 corrects only the evidence schedule: deterministic build planning is proved now, while two clean builds producing byte-identical unsigned target artifacts remain a blocking requirement after target artifacts exist and before R0-009 closes Release 0.
+This branch remediates only R0-000/R0-001. ADR 0011 changes only timing: deterministic build planning is proved while no target artifact exists, and two clean builds producing byte-identical unsigned target artifacts remain mandatory after artifacts exist and before R0-009 closes Release 0. ADR 0012 records the corrected host trust roots, platform lock separation, clean Git snapshot, and versioned host receipts.
 
-The finding-by-finding closure and ownership evidence is recorded in [Prompt 4 Bootstrap Remediation Record](prompt-4-remediation.md).
+## Command surface and execution hosts
 
-## Command surface
-
-The public host-only surface remains closed:
+The host command names remain:
 
 ```sh
 tools/rarbuild/rarbuild check
@@ -23,85 +21,70 @@ tools/rarbuild/rarbuild test
 tools/rarbuild/rarbuild evidence
 ```
 
-`run`, execution aliases, arbitrary absolute commands, delegation names, and every argument-bearing `test` route refuse before repository discovery or host-tool execution. Accepted routes use no ambient `rustc`, `rustup`, `git`, linker, or shell lookup.
+`run`, aliases, delegation names, arbitrary commands, and argument-bearing `test` modes return 73 before root discovery or host-tool execution.
 
-## Bootstrap trust root
+Executable accepted routes run only in the official Rust 1.95.0 OCI image pinned by index digest `sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3`. CI checks out the exact PR head, selects the separately measured Linux lock, runs every accepted route under a poisoned caller `PATH`, and executes generated host binaries through `/proc/self/fd`.
 
-The unavoidable first host execution boundary is explicit in `rar-host-tool-lock-v2`:
+The physical Mac verifies the bounded policy records, proposed macOS roots, and both closure manifests, then returns exit 2 with `reason=local-bootstrap-execution-awaits-descriptor-bound-launcher`. macOS does not provide the required descriptor-execution primitive for generated Mach-O files, so Release 0 does not reopen a mutable generated pathname and overstate its safety. This is a deliberate fail-closed limitation, not target non-execution alone.
 
-- `/bin/sh` interprets the reviewed wrapper.
-- `/bin/mkdir` creates repository-confined bootstrap directories.
-- the exact Rust 1.95.0 compiler and Rust-bundled `rust-lld` paths compile host-only RAR tools;
-- the linker flavor and macOS SDK settings identity are fixed;
-- every root path is absolute, canonical, regular, and non-symlink;
-- every root file or settings record has a reviewed SHA-256 pin.
+## Bootstrap trust and closure
 
-The shell cannot cryptographically verify the executables that constitute its own root of trust. It reads the reviewed path/hash record with shell builtins, rejects malformed or aliased paths, and invokes only those absolute roots. The compiled verifier then independently streams and checks every pinned byte sequence before it performs any later subprocess action. This is the documented bootstrap axiom, not ambient `PATH` trust.
+`rar-host-tool-lock-v3` separates the local diagnostic lock from the executable Linux CI lock.
 
-`rustup` and `git` are not executed. Rust and Cargo paths come directly from the lock. Source revision is read with bounded parsing of `.git/HEAD`, loose references, packed references, and worktree `commondir` metadata.
+Before shell parsing can allocate an unbounded record, the reviewed preparser axiom verifies exact hasher, byte-count, and line-bound helpers. It limits the lock to 16 KiB and 512-byte lines, limits approval/task/safety records, and rejects unknown fields. Before any selected non-root executable can run, the wrapper hashes its exact canonical path.
 
-## Output and input safety
+The macOS closure manifests pin:
 
-Version 2 plan and evidence writers use descriptor-relative Unix operations:
+- `rustc`, the compiler driver dylib, codegen backend, and Rust linker tools;
+- host Rust standard/test libraries;
+- the selected AArch64, x86-64, and Tier 0 target libraries and component manifests;
+- Cargo;
+- SDK settings and every SDK `.tbd` link stub in the selected closure.
 
-- every path component is opened with no-follow semantics;
-- missing output directories are created relative to an already-open directory descriptor;
-- temporary files use exclusive creation and mode `0600`;
-- bytes and the containing directory are synchronized;
-- commit uses same-directory `renameat`;
-- failed staging and failed post-commit verification remove the temporary or destination entry through the held descriptor;
-- committed bytes are reopened without following links and freshly hashed.
+The CI image digest is its complete transitive closure. The Linux lock additionally records exact hashes for Dash, SHA-256, bounds helpers, `mkdir`, `rm`, `env`, Rust, GCC 14, the sysroot marker, Cargo, and Git. `rustup` is never invoked and no command downloads or installs a dependency.
 
-Focused tests replace the parent directory between staging and rename and prove that no file reaches the replacement target. Interruption hooks prove temporary cleanup. A hard process kill can leave an inert uniquely named temporary file in the original descriptor-bound output directory; it is never accepted as evidence and later writes never reuse it.
+Wrong-byte fixtures prove that compiler, linker, compiler-driver, and standard-library changes fail before a canary can execute. Normal-exit traps remove private bootstrap/test directories; unique exclusive names avoid stale PID collisions.
 
-The initial shell-to-Rust bootstrap uses exclusive, mode-`0700` per-process directories under `out/r0/host-tools/` or `out/r0/host-tests/`. The shell stage cannot provide the same descriptor-relative guarantee as the compiled writer; its claim is deliberately narrower and depends on the reviewed bootstrap root plus a private repository checkout. All durable plan/evidence output uses the descriptor-relative writer.
+## Clean source snapshot and versioned receipts
 
-Tool-lock loading is bounded before allocation. Artifact, firmware, tool, source, and emulator hashing is streaming with fixed memory. Source-input identity hashes path, byte length, and a streaming content digest rather than buffering the complete source tree.
+Pinned Git runs only after the compiled verifier has authenticated it. Planning and evidence require:
 
-## Pinned local inputs
+1. `HEAD^{commit}` and `HEAD^{tree}` resolve to existing objects;
+2. tracked and untracked source state is clean;
+3. one lock/probe/Git/source-input/manifest/inventory snapshot is captured;
+4. the same lock, commit, tree, and source hashes still match before publication.
 
-Observed on `aarch64-apple-darwin` on 2026-07-16:
+An archive containing only a claimed `.git/HEAD` value cannot emit evidence. Tests cover nonexistent objects, dirty source, lock replacement, and source mutation.
 
-| Input | Identity | SHA-256 |
-| --- | --- | --- |
-| Bootstrap shell | `/bin/sh` | `523408f21ffe09778e70c2b6dce65904cde0d326bfb5bd4134a382fcd425c274` |
-| Bootstrap mkdir | `/bin/mkdir` | `04400c35f60e7a27db6560e32e85f85a4921c0b7b1900f26759157f7eb6eae3d` |
-| Rust compiler | 1.95.0, commit `59807616e1fa2540724bfbac14d7976d7e4a3860` | `b829b733131d4e1673eeebd1f34d06ae1e9ff4977b051313cf42e2a9e79ecf1c` |
-| Rust-bundled linker | LLVM 22.1.2, `ld64.lld` flavor | `96df7b3559f741be99cc2047cfaff84eeb5367dc9268a87c22ac9d376d98c60b` |
-| macOS SDK settings | Xcode `MacOSX.sdk/SDKSettings.json` | `2fa5c0ce1bbcd261b132b572b1a9eece3b5905b04640a44deae1a6a8812928fb` |
-| Cargo | 1.95.0, commit `f2d3ce0bd7f24a49f8f72d9000448f8838c4e850` | `c512bff73c86143b557463f021d0c3d5b0490d97d65040ba59ea2b3427784758` |
-| `rust-src` manifest | Rust 1.95.0 | `47b629523343fa73b4436080f660b510e0cd1c2553a94ba90ef8bdcc2e025ec1` |
-| AArch64 target manifest | `aarch64-unknown-none` | `d2c67d85ffb386328781b6300ddfde93c9a500072a9e6e08eb3ff1fb0017375c` |
-| Tier 0 target manifest | `thumbv8m.main-none-eabi` | `c12a52d6b268e44baf79e6ec56fe0f82b53587d2dee6b1694fda3ffb94720f2b` |
-| x86-64 target manifest | `x86_64-unknown-none` | `a1c0aed6cf079827ac9ebc82faeea2b517aba581c240dfe84a31761a99068c75` |
+Corrected host schemas are `rar-host-check-v2`, `rar-host-test-v2`, `rar-build-plan-v3`, and `rar-build-evidence-v3`. Their field-order contracts are test fixtures under `tools/rarbuild/contracts/`; strict consumers do not reinterpret older schemas.
 
-External LLD, QEMU x86-64/ARM64/ARM, and both firmware inputs remain explicitly unavailable and unpinned. `certifiable=false` remains mandatory. No target-linked third-party code, target artifact, firmware blob, VM image, or Dependency Exception Record exists.
+## Output and host-script safety
 
-## Durable CI
+Durable plan/evidence output uses descriptor-relative no-follow directory traversal, exclusive mode-`0600` staging, file synchronization, same-descriptor rewind/hash verification, atomic rename, and directory synchronization. Newly created directory entries synchronize their parents. Pre-commit cleanup failures propagate. After rename, no failure path unlinks the destination because another writer may already have replaced it with valid evidence.
 
-`.github/workflows/specifications.yml` runs both Rust host suites in the official Rust 1.95.0 OCI image pinned by index digest `sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3`. The image digest is the CI test bootstrap root. CI runs no target build or emulator and separately proves the execution routes remain refusal-only.
+Competing-writer, parent-replacement, interruption, write/fsync/rename/unlink fault, and post-commit replacement tests cover those semantics.
 
-The canonical R0 host lock remains the measured ARM64 macOS lock. Passing portable unit tests in the pinned Linux container is not a Linux host-support claim; a supported Linux `rarbuild check` still requires a separately measured and reviewed Linux lock.
+`rarbuild test` reads each bounded test script once through a no-follow descriptor, hashes those captured bytes, and passes the exact text to the pinned shell using `-c` with the canonical script path as `$0`. Replacing the pathname after capture cannot change executed script bytes.
 
 ## Acceptance mapping
 
 | R0-001 acceptance | Current evidence | State |
 | --- | --- | --- |
-| One command reports missing tools without host installation or mutation | `rarbuild check` hashes locked roots and reports unavailable LLD/QEMU/firmware; no downloader or installer exists | Pass |
-| Every unauthorized execution-capable route refuses before resolution or spawn | Wrapper and compiled route matrices; poisoned-`PATH` canaries; resolver/spawner counters | Pass |
-| Deterministic planning while no target artifact exists | Two clean regenerations produce byte-identical `rar-build-plan-v2` bytes and explicitly state `target_artifacts=not-produced` and `execution=forbidden` | Pass |
-| Two clean builds produce identical unsigned target artifacts | ADR 0011 retains this exact requirement after artifacts exist and before R0-009 closes Release 0 | Deferred-mandatory; not yet applicable and not passed |
-| Evidence records tools, hashes, target, configuration, and source | `rar-build-evidence-v2` derives tool and certification state from the validated lock/probe | Pass for the host scaffold |
+| Report unavailable prerequisites without installation or host mutation | CI `rarbuild check` emits `rar-host-check-v2`; external LLD/QEMU/firmware remain unavailable | Applicable CI gate |
+| Refuse every unauthorized execution route before resolution/spawn | Wrapper/compiled route matrices and poisoned-path canaries | Applicable CI gate |
+| Deterministic planning while no target artifact exists | Two clean `rar-build-plan-v3` generations compare byte-for-byte and state `target_artifacts=not-produced`, `worktree_state=clean`, and `execution=forbidden` | Applicable CI gate |
+| Bind evidence to tools, source, target, and configuration | `rar-build-evidence-v3` derives all values from one revalidated snapshot | Applicable CI gate |
+| Two clean builds produce identical unsigned target artifacts | ADR 0011 requires exact byte comparison after artifacts exist and before R0-009 closes Release 0 | Deferred-mandatory; not passed |
 
 ## Unsafe and dependency review
 
-There is no unsafe target code or assembly. Host-only unsafe is isolated to `tools/rar-lab/safety/src/unix_fs.rs`, which binds `openat`, `mkdirat`, `renameat`, and `unlinkat`. Its invariants require NUL-free single-component names, live owned directory descriptors, exact one-time descriptor ownership transfer to `File`, valid pointer lifetimes, and audited macOS/Linux flag values. Focused tests cover no-follow emulator opens, descriptor continuity into the spawner boundary, exclusive output creation, parent replacement, cleanup, and atomic replacement.
+No unsafe target code or assembly exists. Host-only unsafe remains isolated to `tools/rar-lab/safety/src/unix_fs.rs`. Platform-specific `mode_t` and variadic promotions have compile-time assertions; descriptor ownership, pointer lifetime, no-follow traversal, synchronization, and injected syscall failures have focused tests on supported CI/macOS configurations.
 
-No third-party crate, package, host runtime library, target dependency, binary blob, target asset, or firmware was added. Host Rust uses `std`; the Unix calls are RAR-owned bindings to host system interfaces.
+No third-party crate, Cargo package, target-linked dependency, binary payload, target asset, firmware, VM image, or Dependency Exception Record was added. Closure manifests contain hashes and paths only.
 
-## Exact host-only validation
+## Validation and remaining gates
 
-Run from the repository root:
+Durable executable validation is the exact-head GitHub workflow:
 
 ```sh
 tests/host-safety/run.sh
@@ -114,14 +97,6 @@ tools/rarbuild/rarbuild evidence
 tools/ci/check-specs.sh
 ```
 
-The remediation suites currently contain 21 R0-000 tests and 23 R0-001 tests. All commands are host-only. Expected nonzero statuses are `check=3`, `image=4`, `evidence=4`, and refusal routes `=73`.
+Local host-only validation is limited to shell syntax, specification/policy checks, closure verification, and the expected fail-closed wrapper refusal. No RAR target artifact, QEMU process, firmware, VM, networked guest, physical device, or target linker is executed.
 
-## Remaining gates and non-execution attestation
-
-- No target source or artifact exists; Prompt 4 does not compile or link one.
-- The identical target-artifact gate remains mandatory before Release 0 closes.
-- External LLD, QEMU, firmware, profile certification, and owner boot authorization remain absent.
-- Single-use authorization consumption, timeout enforcement, and forced termination remain attached to a future reviewed real spawner; no spawner is shipped.
-- Fresh independent correctness and security reviews must be clean before this remediation PR can merge.
-
-No QEMU executable, firmware, target linker, target binary, boot image, VM image, physical device, or RAR target artifact was resolved for execution, loaded, launched, or executed during this remediation. Prompt 5 and R0-002 have not begun.
+The PR may merge only after exact-head CI succeeds, current `main` is conflict-free, and fresh independent correctness and security reviews report no blocking findings. Even after merge, external LLD, QEMU, firmware, profile certification, owner boot authorization, real-spawner lifecycle controls, and target-artifact reproducibility remain unsatisfied gates. Prompt 5 and R0-002 do not begin here.

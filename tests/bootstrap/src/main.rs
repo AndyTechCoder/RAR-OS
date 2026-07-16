@@ -19,7 +19,7 @@ use rarbuild::{
 const OVERSIZED_LOCK_LINE: &str = include_str!("../fixtures/oversized-line.lock");
 
 fn root() -> PathBuf {
-    PathBuf::from(env!("RAR_REPO_ROOT"))
+    PathBuf::from(std::env::var_os("RAR_REPO_ROOT").expect("RAR_REPO_ROOT is set at runtime"))
 }
 
 fn args(values: &[&str]) -> Vec<String> {
@@ -636,8 +636,11 @@ fn captured_host_script_bytes_survive_path_replacement_before_spawn() {
     let token = format!("captured-host-script-{}", std::process::id());
     let relative = format!("out/r0/test-state/{token}/script.sh");
     let path = repository_root.join(&relative);
-    let parent = path.parent().expect("captured script parent");
-    fs::create_dir_all(parent).expect("create captured script fixture");
+    let parent = path
+        .parent()
+        .expect("captured script parent")
+        .to_path_buf();
+    fs::create_dir_all(&parent).expect("create captured script fixture");
     let original = b"set -eu\nexit 0\n";
     fs::write(&path, original).expect("write original captured script");
     let canary_relative = format!("out/r0/test-state/{token}/replacement-executed");
@@ -653,7 +656,7 @@ fn captured_host_script_bytes_survive_path_replacement_before_spawn() {
     .expect("execute captured original script bytes");
     assert_eq!(digest, rarbuild::safety::sha256_hex(original));
     assert!(!repository_root.join(canary_relative).exists());
-    fs::remove_file(path).expect("remove captured script fixture");
+    fs::remove_file(&path).expect("remove captured script fixture");
     fs::remove_dir(parent).expect("remove captured script parent");
 }
 
@@ -1250,9 +1253,7 @@ fn image_is_plan_only_and_cannot_claim_an_artifact() {
     );
     assert!(outcome.output.contains("target_execution=not-attempted"));
     assert!(
-        !Path::new(env!("RAR_REPO_ROOT"))
-            .join("out/r0/images")
-            .exists()
+        !root().join("out/r0/images").exists()
     );
 }
 

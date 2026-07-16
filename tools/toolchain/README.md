@@ -1,13 +1,14 @@
-# Release 0 host toolchain lock
+# Release 0 host toolchain locks
 
-`host-tools.manifest` declares the Class B host surface. `host-tools.lock` is the canonical `rar-host-tool-lock-v2` record measured on the current `aarch64-apple-darwin` host. `dependencies.r0` separates host inputs from target dependencies.
+`host-tools.manifest` declares the Class B host surface and `dependencies.r0` separates host inputs from target dependencies. The versioned `rar-host-tool-lock-v3` records are platform-specific:
 
-Version 2 pins absolute paths and SHA-256 identities for the bootstrap shell, mkdir, Rust 1.95.0 compiler, Rust-bundled `rust-lld`, macOS SDK settings, and Cargo. It also pins Rust component manifests and represents external LLD, QEMU backends, and firmware as either complete `pinned` records or consistent `unavailable/none/none` records. `certifiable=true` is valid only when every required external record is pinned and target-linked dependencies remain `none`.
+- `host-tools.lock` records the proposed `aarch64-apple-darwin` inputs on the physical development Mac.
+- `host-tools.x86_64-unknown-linux-gnu-ci.lock` records the executable test roots inside the Rust 1.95.0 OCI image pinned by digest `sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3`.
 
-The bootstrap wrapper reads only the required root fields with shell builtins, rejects missing, duplicate, malformed, relative, aliased, or symlink paths, and invokes absolute roots. Because an executable cannot prove itself before first execution, the reviewed path/hash record is the explicit bootstrap axiom. The compiled verifier then streams and compares every pinned byte sequence before performing later subprocess work. No command downloads, installs, or invokes `rustup` or `git`.
+The macOS preparser uses the sealed-system shell, SHA-256 utility, and bounded-input helpers as the documented irreducible axiom. It bounds policy and lock files before shell `read`, rejects unknown fields, and hashes every selected non-root executable. The two closure manifests then pin the compiler driver, codegen backend, host standard/test libraries, selected bare-metal target libraries, Rust linker tools, component manifests, and SDK link stubs. They contain hashes and relative paths only—no compiler, SDK, target, firmware, or other binary payload.
 
-The lock deliberately keeps external LLD, every QEMU backend, and both firmware inputs unavailable. A discovered but unpinned candidate remains unusable for certification and is never executed.
+macOS cannot execute the generated Mach-O through an already-open descriptor. Therefore Release 0 does not execute this local compiler closure: local accepted compile/test/planning/evidence routes refuse after verification and before `mkdir`, Rust, or linker execution. The Mac remains source/build storage. A future local route requires a separately reviewed descriptor-bound launcher or an equivalently immutable execution environment.
 
-The official Rust 1.95.0 OCI image is pinned for portable CI host tests at `sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3`. That image is a CI test root only. Linux `rarbuild check` remains unsupported until a separately measured, reviewed Linux lock records exact host paths, executable/component hashes, linker and SDK/sysroot inputs, plus the required LLD/QEMU/firmware pins.
+The Linux CI image digest is the complete transitive execution closure for CI. The Linux lock additionally records exact in-image paths and hashes for the shell, hasher, bounded-input tools, directory/cleanup tools, environment sanitizer, compiler, GCC driver, sysroot marker, Cargo, and Git. Generated host binaries execute from `/proc/self/fd`; captured host test script bytes are passed directly to the pinned shell.
 
-No Cargo package, third-party crate, target code, target-linked dependency, binary blob, target asset, firmware payload, or Dependency Exception Record is present.
+Both locks keep external LLD, every QEMU backend, and both firmware inputs unavailable. `certifiable=false` remains mandatory. No command downloads or installs a tool, and no Cargo package, third-party crate, target-linked dependency, target artifact, target asset, firmware payload, or Dependency Exception Record is present.

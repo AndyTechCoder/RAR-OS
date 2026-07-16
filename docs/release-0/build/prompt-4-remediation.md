@@ -1,6 +1,6 @@
 # Prompt 4 Bootstrap Remediation Record
 
-Status: Implementation and host-only tests complete; independent re-review pending
+Status: Implementation record; exact-head CI and independent review evidence are external PR #3 merge gates
 
 Base: GitHub `main` commit `2678a91996fbcbb1666fb008ecc1a347d7ba49e7`
 
@@ -18,12 +18,31 @@ PR #2 merged before its mandatory Prompt 3 review, remediation, clean re-review,
 | --- | --- | --- |
 | Review and acceptance gate bypassed | This record and ADR 0011 preserve the failure history; the remediation uses a new branch/PR and requires fresh correctness/security review before merge | GitHub PR #2 audit; new review receipts on the remediation PR |
 | Resolver trusted claimed emulator hash/path | Gate independently opens the canonical regular non-symlink executable, streams fresh bytes, checks stable identity, and passes the same descriptor to the spawner boundary | Resolver lie, nonexistent, symlink, wrong-byte, stable-handle, and positive mock tests |
-| Accepted commands executed ambient tools | Version-2 lock defines the bootstrap axiom; wrapper uses builtins plus absolute pinned roots; compiled code hashes roots and parses Git metadata directly; `rustup`/`git` subprocesses are removed | Accepted-route poisoned-`PATH` canaries and closed route tests |
-| Output creation was pathname check-then-use | Durable writers traverse/create/open/rename/unlink relative to held descriptors with exclusive no-follow temporary files and post-commit hashing; shell bootstrap claim is narrowed to unique private directories | Atomic replacement, parent replacement, interruption cleanup, and unsafe-invariant tests |
+| Accepted commands executed ambient tools | Version-3 platform locks, bounded preparser roots, pre-execution hashes, complete closure evidence, and an immutable CI image replace ambient lookup; pinned Git runs only after verification | Every accepted route, including `test`, runs under poisoned caller `PATH`; wrong-byte root/closure canaries |
+| Output creation was pathname check-then-use | Durable writers use held descriptors and verify staging before rename; generated CI host binaries execute through `/proc/self/fd`; macOS refuses because equivalent descriptor execution is unavailable | Concurrent writers, parent replacement, interruption/fault cleanup, private-directory cleanup, and descriptor execution |
 | Governance ownership evidence missing | ADR 0011 records the owner-directed coordinator write set and historical basis for the four already-merged governance files | ADR index and specification checks |
-| Build/evidence state was hard-coded | Version-2 renderers derive unavailable/pinned and certification state from validated lock/probe values | Fully pinned synthetic plan/evidence tests |
+| Build/evidence state was hard-coded | Versioned renderers derive state from one verified clean commit/tree, lock, probe, and source snapshot | Contract conformance plus nonexistent-object, dirtiness, lock-swap, and source-mutation tests |
 | File bounds and timestamps were incomplete | Tool-lock file reads are bounded before allocation; hashing streams; dates use Gregorian month/leap rules | Oversized on-disk lock, multi-buffer hash, invalid month-day, century, and valid leap-day tests |
 | CI omitted host suites and artifact criterion was physically premature | Pinned OCI CI runs both host suites; ADR 0011 proves deterministic planning now and retains identical unsigned artifacts as a blocking pre-R0-close gate | Workflow, two-plan equality, and deferred-mandatory evidence marker |
+
+## First re-review remediation
+
+The first correctness and security re-reviews examined head `5df49b052f2e2e4e99750ee448c3111145765f34` and returned changes-required. Their accepted findings are closed in the later PR head as follows:
+
+| Re-review finding | Closure |
+| --- | --- |
+| CI used unstable `gnu-lld` flavor | Separately measured Linux lock uses stable GCC 14 in the digest-pinned image; exact-head CI must pass |
+| Artifact/firmware/disk/emulator pathname races | The pathless spawner boundary consumes all four verified no-follow handles by value; four replacement-race tests preserve original bytes |
+| Compiler/linker executed before verification; closure incomplete | Bounded preparser hashes every non-root executable and checks Rust/SDK closure manifests; CI transitive closure is the immutable image digest |
+| Linux accepted-route and `test` poison coverage missing | CI has a platform lock and exercises check/build/image/evidence/test under poisoned caller `PATH` without a platform skip |
+| Concurrent output deletion and leaked private directories | Same-descriptor pre-rename verification, no post-commit unlink, propagated cleanup errors, competing-writer tests, traps, and unique cleanup directories |
+| Darwin FFI mode ABI mismatch | Platform `mode_t` aliases, promoted variadic types, compile-time size assertions, and mode/failure tests |
+| Versioned CLI contracts changed in place | New check/test/plan/evidence schema identities and field-order conformance files |
+| ADR 0011 absent from approved specification set | Task packet approves ADRs 0001–0012 and CI checks the indexed approved range |
+| Claimed Git revision could be nonexistent or mixed with mutable state | Pinned Git verifies commit/tree objects and cleanliness; one snapshot is captured and revalidated before output |
+| Host tests reopened a hashed script pathname | Bounded captured script text is passed directly to the pinned shell; pathname replacement test proves byte continuity |
+| Shell records were unbounded before Rust | Verified byte/line helpers bound lock and policy files before shell `read`; oversized/unknown record tests fail before compilation |
+| Incremental SHA-256 short-read coverage incomplete | Boundary, fixed chunk, deterministic randomized chunk, official vector, and read-fault tests cover the streaming carry path |
 
 ## Owned paths and coordinator handoff
 
