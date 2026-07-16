@@ -58,11 +58,11 @@ rar_select_preparser_axiom() {
         sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3)
             rar_preparser_hasher_path=/usr/bin/sha256sum
             rar_preparser_hasher_kind=sha256sum
-            rar_preparser_hasher_sha256=0000000000000000000000000000000000000000000000000000000000000000
+            rar_preparser_hasher_sha256=89f8c1d1ba3c76138f3771e1a91e2796ade6180b1c1e4258c04698ff32787c97
             rar_preparser_wc_path=/usr/bin/wc
-            rar_preparser_wc_sha256=0000000000000000000000000000000000000000000000000000000000000000
+            rar_preparser_wc_sha256=e8fe45a85ebdb0dade6dabf96f21dfd686c6414ff2a4a8980727076a5981d2af
             rar_preparser_grep_path=/usr/bin/grep
-            rar_preparser_grep_sha256=0000000000000000000000000000000000000000000000000000000000000000
+            rar_preparser_grep_sha256=bd6686bf7a650a9717fd7e73fdb07dc63b70547a1da41bce093c56df937a66eb
             ;;
         *) return 1 ;;
     esac
@@ -414,11 +414,16 @@ rar_compile_host_rust() {
     rar_hash_matches "$bootstrap_env_path" "$bootstrap_env_sha256" || return 1
     rar_hash_matches "$bootstrap_sdk_path/$bootstrap_sdk_marker_relative" "$bootstrap_sdk_settings_sha256" || return 1
     rar_verify_selected_bootstrap_closure || return 1
+    if [ "$bootstrap_closure_kind" = oci-image ]; then
+        rar_compiler_path=/usr/bin
+    else
+        rar_compiler_path=/nonexistent-rar-bootstrap-path
+    fi
     "$bootstrap_env_path" -i \
         HOME="$rar_root/out/r0/tmp" \
         LANG=C \
         LC_ALL=C \
-        PATH=/nonexistent-rar-bootstrap-path \
+        PATH="$rar_compiler_path" \
         SDKROOT="${SDKROOT-}" \
         TMPDIR="$TMPDIR" \
         "$bootstrap_rustc_path" \
