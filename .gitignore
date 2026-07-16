@@ -1,0 +1,26 @@
+# Build output
+/target/
+/out/
+/evidence/
+
+# Host tools and editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+local-config.*
+
+# VM output
+*.qcow2
+*.img
+*.iso
+*.log
+*.trace
