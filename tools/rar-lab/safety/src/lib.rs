@@ -18,6 +18,7 @@ pub const PROFILE_MAX_BYTES: usize = 8 * 1024;
 pub const CERTIFICATION_MAX_BYTES: usize = 4 * 1024;
 pub const AUTHORIZATION_MAX_BYTES: usize = 2 * 1024;
 pub const RECORD_MAX_LINE_BYTES: usize = 512;
+pub const REPOSITORY_MARKER_MAX_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SafetyError {
@@ -1111,6 +1112,53 @@ pub struct ResolvedCommand {
     pub limits: ResourceLimits,
 }
 
+/// Gate-validated identity supplied to the single-use authorization boundary.
+///
+/// The record digest and nonce are the atomic replay key. The remaining digests retain the
+/// already-validated certification, profile, and artifact bindings for durable consumers.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AuthorizationConsumptionKey<'a> {
+    authorization_record_sha256: &'a str,
+    nonce: &'a str,
+    certification_sha256: &'a str,
+    profile_sha256: &'a str,
+    artifact_sha256: &'a str,
+}
+
+impl AuthorizationConsumptionKey<'_> {
+    pub fn authorization_record_sha256(&self) -> &str {
+        self.authorization_record_sha256
+    }
+
+    pub fn nonce(&self) -> &str {
+        self.nonce
+    }
+
+    pub fn certification_sha256(&self) -> &str {
+        self.certification_sha256
+    }
+
+    pub fn profile_sha256(&self) -> &str {
+        self.profile_sha256
+    }
+
+    pub fn artifact_sha256(&self) -> &str {
+        self.artifact_sha256
+    }
+}
+
+pub trait AuthorizationConsumer {
+    /// Atomically checks and irreversibly consumes one validated authorization.
+    ///
+    /// Returning `Ok(())` commits the digest-and-nonce key permanently, including when a
+    /// later resolver or spawner operation fails. Replays, storage failures, and uncertain
+    /// commit outcomes must return `Err` and fail closed without restoring launch authority.
+    /// A production implementation must use monotonic state controlled by an authority outside
+    /// the writable repository. This R0 scaffold deliberately ships no production consumer;
+    /// without that authority, no real resolver or spawner may be installed.
+    fn consume_once(&self, key: &AuthorizationConsumptionKey<'_>) -> SafetyResult<()>;
+}
+
 pub trait ExecutableResolver {
     fn resolve(
         &mut self,
@@ -1123,33 +1171,59 @@ pub trait ProcessSpawner {
     fn spawn(&mut self, command: ResolvedCommand) -> SafetyResult<()>;
 }
 
-pub fn authorize_then_delegate<R: ExecutableResolver, S: ProcessSpawner>(
+pub fn authorize_then_delegate<
+    C: AuthorizationConsumer,
+    R: ExecutableResolver,
+    S: ProcessSpawner,
+>(
     policy: &LaunchPolicy,
     request: &LaunchRequest<'_>,
+    authorization_consumer: &C,
     resolver: &mut R,
     spawner: &mut S,
 ) -> SafetyResult<()> {
-    authorize_then_delegate_inner(policy, request, resolver, spawner, &mut || Ok(()))
+    authorize_then_delegate_inner(
+        policy,
+        request,
+        authorization_consumer,
+        resolver,
+        spawner,
+        &mut || Ok(()),
+    )
 }
 
 #[cfg(test)]
 pub fn authorize_then_delegate_with_hook<
+    C: AuthorizationConsumer,
     R: ExecutableResolver,
     S: ProcessSpawner,
     F: FnMut() -> SafetyResult<()>,
 >(
     policy: &LaunchPolicy,
     request: &LaunchRequest<'_>,
+    authorization_consumer: &C,
     resolver: &mut R,
     spawner: &mut S,
     mut before_spawn: F,
 ) -> SafetyResult<()> {
-    authorize_then_delegate_inner(policy, request, resolver, spawner, &mut before_spawn)
+    authorize_then_delegate_inner(
+        policy,
+        request,
+        authorization_consumer,
+        resolver,
+        spawner,
+        &mut before_spawn,
+    )
 }
 
-fn authorize_then_delegate_inner<R: ExecutableResolver, S: ProcessSpawner>(
+fn authorize_then_delegate_inner<
+    C: AuthorizationConsumer,
+    R: ExecutableResolver,
+    S: ProcessSpawner,
+>(
     policy: &LaunchPolicy,
     request: &LaunchRequest<'_>,
+    authorization_consumer: &C,
     resolver: &mut R,
     spawner: &mut S,
     before_spawn: &mut dyn FnMut() -> SafetyResult<()>,
@@ -1291,6 +1365,15 @@ fn authorize_then_delegate_inner<R: ExecutableResolver, S: ProcessSpawner>(
         "disposable disk bytes changed while being opened",
     )?;
 
+    let consumption_key = AuthorizationConsumptionKey {
+        authorization_record_sha256: &authorization.record_sha256,
+        nonce: &authorization.nonce,
+        certification_sha256: &authorization.certification_sha256,
+        profile_sha256: &authorization.profile_sha256,
+        artifact_sha256: &authorization.artifact_sha256,
+    };
+    authorization_consumer.consume_once(&consumption_key)?;
+
     let expected_emulator_hash = request
         .pins
         .emulator_sha256
@@ -1421,6 +1504,13 @@ fn verify_resolved_executable(
 }
 
 pub fn validate_repository_root(root: &Path) -> SafetyResult<PathBuf> {
+    validate_repository_root_inner(root, &mut || Ok(()))
+}
+
+fn validate_repository_root_inner(
+    root: &Path,
+    before_marker_read: &mut dyn FnMut() -> SafetyResult<()>,
+) -> SafetyResult<PathBuf> {
     if !root.is_absolute() {
         return Err(SafetyError::new(
             "unsafe-root",
@@ -1479,6 +1569,8 @@ pub fn validate_repository_root(root: &Path) -> SafetyResult<PathBuf> {
         ));
     }
 
+    before_marker_read()?;
+
     for (document, required_text) in [
         ("docs/approval-record.md", "Status: Approved"),
         ("docs/approval-record.md", "Approval: approved"),
@@ -1491,9 +1583,8 @@ pub fn validate_repository_root(root: &Path) -> SafetyResult<PathBuf> {
             "Status: Mandatory and effective immediately",
         ),
     ] {
-        let content = fs::read_to_string(root.join(document)).map_err(|error| {
-            SafetyError::new("repository-marker-read-failed", error.to_string())
-        })?;
+        let content = read_bounded_utf8_file(&root.join(document), REPOSITORY_MARKER_MAX_BYTES)
+            .map_err(|error| SafetyError::new(error.code, error.detail))?;
         if !content.lines().any(|line| line.starts_with(required_text)) {
             return Err(SafetyError::new(
                 "repository-approval-marker-mismatch",
@@ -1502,6 +1593,22 @@ pub fn validate_repository_root(root: &Path) -> SafetyResult<PathBuf> {
         }
     }
     Ok(canonical)
+}
+
+#[cfg(test)]
+pub fn validate_repository_root_with_hook_for_test<F>(
+    root: &Path,
+    mut before_marker_read: F,
+) -> SafetyResult<PathBuf>
+where
+    F: FnMut() -> SafetyResult<()>,
+{
+    validate_repository_root_inner(root, &mut before_marker_read)
+}
+
+#[cfg(test)]
+pub fn create_fifo_for_test(path: &Path) -> SafetyResult<()> {
+    unix_fs::create_fifo_for_test(path)
 }
 
 pub fn validate_workspace_path(
@@ -1610,6 +1717,25 @@ pub fn atomic_write_workspace_file(root: &Path, relative: &Path, bytes: &[u8]) -
         relative,
         bytes,
         &mut || Ok(()),
+        &mut || Ok(()),
+        &mut |_| Ok(()),
+    )
+}
+
+pub fn atomic_write_workspace_file_with_precommit<F>(
+    root: &Path,
+    relative: &Path,
+    bytes: &[u8],
+    mut before_commit: F,
+) -> SafetyResult<()>
+where
+    F: FnMut() -> SafetyResult<()>,
+{
+    atomic_write_workspace_file_inner(
+        root,
+        relative,
+        bytes,
+        &mut before_commit,
         &mut || Ok(()),
         &mut |_| Ok(()),
     )

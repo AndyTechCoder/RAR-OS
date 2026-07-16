@@ -8,6 +8,8 @@
 //! - each non-negative descriptor returned by `openat` is transferred exactly once to
 //!   `File::from_raw_fd`, so Rust becomes its sole closer;
 //! - `renameat`, `mkdirat`, and `unlinkat` receive valid pointers for the duration of each call;
+//! - the test-only `mkfifoat` probe receives the same live directory descriptor and validated
+//!   single-component C string;
 //! - fixed `mkdirat` mode values use each platform's `mode_t` width (Darwin `u16`, Linux
 //!   `c_uint`); variadic `openat` receives Darwin's required default promotion to `c_int` and
 //!   Linux's unpromoted `c_uint`;
@@ -41,6 +43,8 @@ const O_CLOEXEC: c_int = 0o2000000;
 const O_CREAT: c_int = 0o100;
 #[cfg(target_os = "linux")]
 const O_EXCL: c_int = 0o200;
+#[cfg(target_os = "linux")]
+const O_NONBLOCK: c_int = 0o4000;
 
 #[cfg(target_os = "macos")]
 const O_DIRECTORY: c_int = 0x0010_0000;
@@ -52,6 +56,8 @@ const O_CLOEXEC: c_int = 0x0100_0000;
 const O_CREAT: c_int = 0x0000_0200;
 #[cfg(target_os = "macos")]
 const O_EXCL: c_int = 0x0000_0800;
+#[cfg(target_os = "macos")]
+const O_NONBLOCK: c_int = 0x0000_0004;
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 compile_error!("R0 descriptor-relative host I/O is implemented only for macOS and Linux");
@@ -97,6 +103,8 @@ unsafe extern "C" {
         newpath: *const c_char,
     ) -> c_int;
     fn unlinkat(dirfd: c_int, path: *const c_char, flags: c_int) -> c_int;
+    #[cfg(test)]
+    fn mkfifoat(dirfd: c_int, path: *const c_char, mode: ModeT) -> c_int;
 }
 
 fn error(code: &'static str, action: &str, source: io::Error) -> SafetyError {
@@ -232,7 +240,7 @@ pub fn open_absolute_regular_nofollow(path: &Path) -> SafetyResult<File> {
         openat(
             directory.as_raw_fd(),
             name.as_ptr(),
-            O_RDONLY | O_NOFOLLOW | O_CLOEXEC,
+            O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK,
         )
     };
     let file = file_from_fd(fd, "open regular file without following links")?;
@@ -390,6 +398,35 @@ pub fn unlink_at(directory: &File, name: &str) -> SafetyResult<()> {
 }
 
 #[cfg(test)]
+pub fn create_fifo_for_test(path: &Path) -> SafetyResult<()> {
+    if !path.is_absolute() {
+        return Err(SafetyError::new(
+            "descriptor-path-not-absolute",
+            "FIFO test path must be absolute",
+        ));
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| SafetyError::new("unsafe-path", "FIFO test path has no parent directory"))?;
+    let name = path
+        .file_name()
+        .ok_or_else(|| SafetyError::new("unsafe-path", "FIFO test path has no final component"))?;
+    let directory = open_absolute_directory_nofollow(parent)?;
+    let name = component_name(name)?;
+    // SAFETY: the live directory descriptor and validated NUL-terminated component remain valid
+    // for this call, and the fixed mode uses the audited platform `mode_t` width.
+    let result = unsafe { mkfifoat(directory.as_raw_fd(), name.as_ptr(), 0o600 as ModeT) };
+    if result != 0 {
+        return Err(error(
+            "descriptor-mkfifo-failed",
+            "create FIFO test fixture",
+            io::Error::last_os_error(),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
 mod tests {
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
@@ -493,5 +530,36 @@ mod tests {
         fs::remove_file(directory_path.join("not-a-directory"))
             .expect("remove non-directory FFI fixture");
         fs::remove_dir(directory_path).expect("remove FFI test directory");
+    }
+
+    #[test]
+    fn regular_file_open_rejects_fifo_without_waiting_for_a_writer() {
+        let root = PathBuf::from(
+            std::env::var("RAR_REPO_ROOT").expect("RAR_REPO_ROOT must be set for FIFO test"),
+        );
+        let sequence = FFI_TEST_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let relative = PathBuf::from(format!(
+            "out/r0/test-state/ffi-fifo-{}-{sequence}",
+            std::process::id()
+        ));
+        let directory_path = root.join(&relative);
+        let directory = open_or_create_relative_directory(&root, &relative)
+            .expect("create descriptor-relative FIFO test directory");
+        let name =
+            component_name(std::ffi::OsStr::new("nonblocking.fifo")).expect("canonical FIFO name");
+        // SAFETY: `directory` owns a live descriptor, `name` is a validated NUL-terminated
+        // component, and the fixed mode uses the audited platform `mode_t` width.
+        let result = unsafe { mkfifoat(directory.as_raw_fd(), name.as_ptr(), 0o600 as ModeT) };
+        assert_eq!(result, 0, "create FIFO: {}", io::Error::last_os_error());
+
+        let error = open_absolute_regular_nofollow(&directory_path.join("nonblocking.fifo"))
+            .expect_err("FIFO unexpectedly opened as a regular file");
+        assert!(matches!(
+            error.code,
+            "descriptor-not-regular" | "descriptor-open-failed"
+        ));
+
+        fs::remove_file(directory_path.join("nonblocking.fifo")).expect("remove FIFO fixture");
+        fs::remove_dir(directory_path).expect("remove FIFO test directory");
     }
 }

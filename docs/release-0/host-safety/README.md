@@ -4,9 +4,9 @@ Status: Prompt 4 host-only remediation implemented; guest execution remains impo
 
 ## Boundary delivered
 
-The RAR Lab safety library owns the strict version-1 VM profile, certification, and owner-authorization parsers; typed command planning; bounded resource limits; workspace-path validation; and the pre-spawn launch gate.
+The RAR Lab safety library owns the strict version-1 VM profile, certification, and owner-authorization parsers; typed command planning; bounded resource limits; workspace-path validation; the atomic authorization-consumption boundary; and the pre-spawn launch gate.
 
-The shipped `LaunchPolicy` contains no approved certification or owner-authorization digest. `rarbuild run`, aliases, delegation names, arbitrary emulator arguments, and argument-bearing `rarbuild test` routes refuse before repository discovery, host-tool compilation, record parsing, executable resolution, or spawning. No real emulator resolver or process spawner is shipped.
+The shipped `LaunchPolicy` contains no approved certification or owner-authorization digest. `rarbuild run`, aliases, delegation names, arbitrary emulator arguments, and argument-bearing `rarbuild test` routes refuse before repository discovery, host-tool compilation, record parsing, authorization consumption, executable resolution, or spawning. No production authorization consumer, real emulator resolver, or process spawner is shipped.
 
 ## Certification and authorization separation
 
@@ -14,12 +14,15 @@ The shipped `LaunchPolicy` contains no approved certification or owner-authoriza
 2. Owner authorization separately binds that certification, profile, and artifact to one permitted launch.
 3. Content-addressed files have no authority by themselves; future reviewed launcher policy must pin both exact record digests.
 4. The artifact, firmware, and disposable disk must be canonical regular non-symlink files in their class-scoped workspace locations before resolver delegation, and their no-follow descriptors remain open through delegation.
+5. After all policy, record, pin, path, and resource checks pass, `AuthorizationConsumer::consume_once` atomically consumes a key containing the validated authorization digest and nonce plus certification/profile/artifact bindings. Only then may the resolver run.
 
-Profile input is bounded to 8 KiB, certification to 4 KiB, authorization to 2 KiB, and every record line to 512 bytes. Timestamps use actual Gregorian month lengths and leap-year rules.
+An authorization-consumer success is an irreversible commit. Resolver failure, emulator verification failure, spawner failure, launcher crash, or uncertain downstream state must never restore that authorization. Replay, consumer storage failure, and uncertain consumer commit state fail before resolver or spawner delegation. Repository-local marker files cannot meet that promise because the writable repository can be rolled back. The boundary therefore has only hostile-state test doubles. A future real launch path requires an owner-reviewed monotonic authority outside repository state; without it, a real resolver or spawner is forbidden.
+
+Profile input is bounded to 8 KiB, certification to 4 KiB, authorization to 2 KiB, repository approval markers to 1 MiB, and every record line to 512 bytes. Root validation reads markers through nonblocking descriptor-relative no-follow traversal, so a post-metadata FIFO replacement refuses without waiting for a writer. Timestamps use actual Gregorian month lengths and leap-year rules.
 
 ## Descriptor-bound launch resolution
 
-A resolver claim is not trusted as proof of an emulator. After all policy and record bindings pass, the gate independently opens the artifact, firmware, disposable disk, and emulator with descriptor-relative no-follow traversal. It hashes artifact, firmware, and emulator bytes from those same descriptors, checks stable descriptor metadata and pathname identity during opening, and rewinds the verified handles.
+A resolver claim is not trusted as proof of an emulator. After all policy and record bindings pass, the gate independently opens the artifact, firmware, and disposable disk with descriptor-relative no-follow traversal and verifies their bindings. It then irreversibly consumes the authorization before invoking the resolver. The resolved emulator is independently opened with the same no-follow discipline. The gate hashes artifact, firmware, and emulator bytes from those same descriptors, checks stable descriptor metadata and pathname identity during opening, and rewinds the verified handles.
 
 The `ProcessSpawner` boundary consumes a command by value containing:
 
@@ -67,6 +70,7 @@ Pre-commit failures remove and directory-sync the temporary entry; unlink or cle
 | First guest execution is separately owner-gated | Independent certification and single-launch owner record schemas plus two immutable policy pins | Pass in implementation; later owner checkpoint remains mandatory |
 | Fully resolved launch resources are validated before spawn | Fresh descriptor-backed hashes, stable identity checks, four pathname replacement races, pathless typed arguments, and same-handle continuity | Pass |
 | Unauthorized routes refuse before resolution or spawn | Resolver/spawner counters remain zero across all incomplete and mismatched states | Pass |
+| One-launch authorization is enforced at delegation | Required consumer call occurs before resolver; sequential/concurrent replay, consumer failure, and irreversible post-consumption resolver/spawner failure tests cover the protocol | Boundary implemented; monotonic production authority remains a blocking first-launch gate |
 
 ## Exact host-only validation
 
@@ -76,7 +80,7 @@ tools/rarbuild/rarbuild run
 tools/rarbuild/rarbuild test vm
 ```
 
-The remediation suite contains 36 tests on macOS. The two CLI refusal commands return 73 and report `resolver_invoked=false`, `spawner_invoked=false`, and `target_execution=not-attempted`.
+The suite count is reported by exact-head CI. Under ADR 0012, local macOS invocation intentionally returns 2 before Rust compilation because generated Mach-O execution awaits a descriptor-bound launcher. The suite therefore requires the pinned Linux CI bootstrap for executable evidence. The two CLI refusal commands return 73 and report `resolver_invoked=false`, `spawner_invoked=false`, and `target_execution=not-attempted`.
 
 ## Remaining risks
 
@@ -85,11 +89,12 @@ The remediation suite contains 36 tests on macOS. The two CLI refusal commands r
 - SHA-256 content addressing detects changes but does not authenticate an owner.
 - The approved schema does not content-pin the disposable disk; this remediation preserves the exact opened disk handle but does not invent a new stable certification field.
 - Open descriptors defeat pathname replacement, but they do not prevent an independently writable same inode from being modified in place; ownership and immutability of future certified inputs still require launcher/profile review.
-- Single-use authorization consumption, timeout enforcement, forced termination, and process-lifecycle cleanup belong beside a future reviewed real spawner.
+- No repository-confined implementation can provide rollback-resistant one-shot authority. A monotonic external authority requires separate owner review before any real launcher exists; this requirement is not waived or reported as passed.
+- Timeout enforcement, forced termination, and process-lifecycle cleanup belong beside a future reviewed real spawner.
 - Descriptor continuity is implemented at the API boundary, but no subprocess receives or executes those descriptors because no spawner exists.
 - Linux ABI assertions and tests are cfg-valid but were not executed on this macOS host; Linux CI remains required evidence.
 - If the final directory sync fails after rename, the writer returns failure while preserving the destination; callers must treat commit state as uncertain and inspect evidence instead of deleting the path.
 
 ## Target non-execution attestation
 
-No QEMU command, firmware, target linker, target binary, boot image, VM image, target artifact, emulator, or physical device was executed. Validation used only host Rust compilation, host unit tests, bounded file reads, streaming hashes, static command generation, deterministic plan/evidence output, and refusal paths. R0-002 and Prompt 5 have not begun.
+No QEMU command, firmware, target linker, target binary, boot image, VM image, target artifact, emulator, or physical device was executed. Pinned Linux CI may compile and execute only the host Rust tests; local macOS validation is limited to shell/specification/policy checks, bounded closure verification, and refusal paths. R0-002 and Prompt 5 have not begun.

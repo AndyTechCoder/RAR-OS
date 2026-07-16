@@ -138,7 +138,18 @@ rar_verify_selected_bootstrap_root || {
         'target_execution=not-attempted'
     exit 2
 }
+rar_verify_ci_execution_boundary || {
+    echo "rarbuild CI execution boundary is not the reviewed read-only environment" >&2
+    exit 2
+}
+rar_verify_ci_source_snapshot || {
+    echo "rarbuild source is not the exact clean workflow-selected Git snapshot" >&2
+    exit 2
+}
+RAR_BOOTSTRAP_LOCK_SHA256=$bootstrap_lock_sha256
+export RAR_BOOTSTRAP_LOCK_SHA256
 cd "$root"
+umask 077
 
 for path in out out/r0 out/r0/host-tools out/r0/tmp; do
     if [ -L "$path" ]; then
@@ -151,26 +162,35 @@ rar_root=$root
 rar_prepare_output_parent "$root/out/r0" || exit 2
 rar_prepare_output_parent "$root/out/r0/host-tools" || exit 2
 rar_prepare_output_parent "$root/out/r0/tmp" || exit 2
-rar_allocate_private_directory "$root/out/r0/host-tools" rarbuild-bootstrap || {
+bootstrap_directory=$(rar_allocate_private_directory "$root/out/r0/host-tools" rarbuild-bootstrap) || {
     echo "rarbuild refused a non-exclusive bootstrap output directory" >&2
     exit 2
 }
-bootstrap_directory=$rar_private_directory
 [ ! -L "$bootstrap_directory" ] || exit 2
 resolved_bootstrap_directory=$(CDPATH= cd -- "$bootstrap_directory" && pwd -P)
 [ "$resolved_bootstrap_directory" = "$bootstrap_directory" ] || exit 2
 rarbuild_cleanup() {
     [ -n "${bootstrap_directory-}" ] || return 0
-    rar_cleanup_private_directory "$bootstrap_directory" || return 1
+    rar_cleanup_private_directory \
+        "$bootstrap_directory" \
+        rarbuild main.rs rarbuild.rs safety.rs unix_fs.rs || return 1
     bootstrap_directory=
 }
 trap 'rarbuild_cleanup' 0
 trap 'exit 129' 1
 trap 'exit 130' 2
 trap 'exit 143' 15
+rar_materialize_git_sources \
+    "$bootstrap_directory" \
+    tools/rarbuild/src/main.rs main.rs \
+    tools/rarbuild/src/lib.rs rarbuild.rs \
+    tools/rar-lab/safety/src/lib.rs safety.rs \
+    tools/rar-lab/safety/src/unix_fs.rs unix_fs.rs || exit 2
 rar_compile_host_rust \
-    tools/rarbuild/src/main.rs \
-    "$bootstrap_directory/rarbuild"
+    "$bootstrap_directory" \
+    main.rs \
+    rarbuild \
+    --cfg rar_flat_bootstrap
 RAR_BOOTSTRAP_BOUNDARY=$bootstrap_boundary
 export RAR_BOOTSTRAP_BOUNDARY
 if rar_execute_generated_host_binary "$bootstrap_directory/rarbuild" "$@"; then

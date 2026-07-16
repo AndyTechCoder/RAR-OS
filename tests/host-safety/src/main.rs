@@ -1,29 +1,49 @@
 #![deny(unsafe_code)]
 
 #[allow(dead_code)]
-#[path = "../../../tools/rar-lab/safety/src/lib.rs"]
+#[cfg_attr(rar_flat_bootstrap, path = "safety.rs")]
+#[cfg_attr(
+    not(rar_flat_bootstrap),
+    path = "../../../tools/rar-lab/safety/src/lib.rs"
+)]
 mod safety;
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Barrier, Mutex};
 
 use safety::{
-    AUTHORIZATION_SCOPE, AuthorizationRecord, CertificationPins, CertificationRecord, CommandPlan,
-    EmulatorId, ExecutableResolver, LaunchPolicy, LaunchRequest, ProcessSpawner, RecordInput,
+    AUTHORIZATION_SCOPE, AuthorizationConsumer, AuthorizationConsumptionKey, AuthorizationRecord,
+    CertificationPins, CertificationRecord, CommandPlan, EmulatorId, ExecutableResolver,
+    LaunchPolicy, LaunchRequest, ProcessSpawner, REPOSITORY_MARKER_MAX_BYTES, RecordInput,
     ResolvedCommand, ResolvedExecutable, SafetyError, SpawnArgument, VmProfile,
     authorization_record_path, authorize_then_delegate, authorize_then_delegate_with_hook,
-    certification_record_path, sha256_file, sha256_hex, sha256_reader,
+    certification_record_path, create_fifo_for_test, sha256_file, sha256_hex, sha256_reader,
+    validate_repository_root_with_hook_for_test,
 };
 
+#[cfg(not(rar_flat_bootstrap))]
 const X86_PROFILE: &str =
     include_str!("../../../spec/lab/vm-profile/examples/x86_64-static.profile");
+#[cfg(rar_flat_bootstrap)]
+const X86_PROFILE: &str = include_str!("x86_64-static.profile");
+#[cfg(not(rar_flat_bootstrap))]
 const ARM_PROFILE: &str =
     include_str!("../../../spec/lab/vm-profile/examples/aarch64-static.profile");
+#[cfg(rar_flat_bootstrap)]
+const ARM_PROFILE: &str = include_str!("aarch64-static.profile");
+#[cfg(not(rar_flat_bootstrap))]
 const TIER0_PROFILE: &str =
     include_str!("../../../spec/lab/vm-profile/examples/thumbv8m-static.profile");
+#[cfg(rar_flat_bootstrap)]
+const TIER0_PROFILE: &str = include_str!("thumbv8m-static.profile");
+#[cfg(not(rar_flat_bootstrap))]
 const OVERSIZED_PROFILE_LINE: &str = include_str!("../fixtures/oversized-line.profile");
+#[cfg(rar_flat_bootstrap)]
+const OVERSIZED_PROFILE_LINE: &str = include_str!("oversized-line.profile");
 const ARTIFACT_BYTES: &[u8] = b"RAR host-safety synthetic artifact bytes; never executable\n";
 const FIRMWARE_BYTES: &[u8] = b"RAR host-safety synthetic firmware bytes; never executable\n";
 const DISK_BYTES: &[u8] = b"RAR host-safety synthetic disposable disk bytes\n";
@@ -576,6 +596,128 @@ impl ProcessSpawner for CountingSpawner {
     }
 }
 
+type ConsumedAuthorization = (String, String, String, String, String);
+
+#[derive(Default)]
+struct InMemoryAuthorizationConsumer {
+    attempts: AtomicUsize,
+    consumed: Mutex<BTreeSet<ConsumedAuthorization>>,
+    fail: bool,
+}
+
+impl InMemoryAuthorizationConsumer {
+    fn failing() -> Self {
+        Self {
+            fail: true,
+            ..Self::default()
+        }
+    }
+
+    fn attempts(&self) -> usize {
+        self.attempts.load(Ordering::SeqCst)
+    }
+
+    fn consumed(&self) -> BTreeSet<ConsumedAuthorization> {
+        self.consumed
+            .lock()
+            .expect("test authorization consumer lock")
+            .clone()
+    }
+}
+
+impl AuthorizationConsumer for InMemoryAuthorizationConsumer {
+    fn consume_once(&self, key: &AuthorizationConsumptionKey<'_>) -> Result<(), SafetyError> {
+        self.attempts.fetch_add(1, Ordering::SeqCst);
+        if self.fail {
+            return Err(SafetyError {
+                code: "authorization-consumer-failed",
+                detail: "synthetic authorization consumer failure".to_owned(),
+            });
+        }
+        let identity = (
+            key.authorization_record_sha256().to_owned(),
+            key.nonce().to_owned(),
+            key.certification_sha256().to_owned(),
+            key.profile_sha256().to_owned(),
+            key.artifact_sha256().to_owned(),
+        );
+        let mut consumed = self.consumed.lock().map_err(|_| SafetyError {
+            code: "authorization-consumer-failed",
+            detail: "test authorization consumer lock was poisoned".to_owned(),
+        })?;
+        if !consumed.insert(identity) {
+            return Err(SafetyError {
+                code: "authorization-already-consumed",
+                detail: "authorization digest and nonce were already consumed".to_owned(),
+            });
+        }
+        Ok(())
+    }
+}
+
+fn repository_marker_fixture(label: &str) -> PathBuf {
+    let root = repository_root().join(format!(
+        "out/r0/test-state/{label}-{}-{}",
+        std::process::id(),
+        FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+    ));
+    fs::create_dir_all(root.join("docs")).expect("create marker fixture docs");
+    fs::create_dir(root.join(".git")).expect("create marker fixture Git directory");
+    fs::write(root.join("Cargo.toml"), b"[workspace]\nmembers = []\n")
+        .expect("write marker fixture Cargo file");
+    fs::write(root.join("AGENTS.md"), b"fixture\n").expect("write marker fixture agent file");
+    fs::write(
+        root.join("docs/approval-record.md"),
+        b"Status: Approved\nApproval: approved\n",
+    )
+    .expect("write marker fixture approval");
+    fs::write(
+        root.join("docs/host-safety.md"),
+        b"Status: Mandatory and effective immediately\n",
+    )
+    .expect("write marker fixture host safety");
+    fs::write(
+        root.join("docs/tasks/release-0.md"),
+        "Status: Ready — Gate 0 owner approval recorded\n",
+    )
+    .expect("write marker fixture task packet");
+    root
+}
+
+#[test]
+fn oversized_repository_approval_marker_is_bounded_before_allocation() {
+    let fixture = repository_marker_fixture("oversized-approval-marker");
+    fs::write(
+        fixture.join("docs/approval-record.md"),
+        vec![b'x'; REPOSITORY_MARKER_MAX_BYTES + 1],
+    )
+    .expect("write oversized approval marker");
+    let error = safety::validate_repository_root(&fixture)
+        .expect_err("oversized approval marker passed root validation");
+    assert_eq!(error.code, "bounded-read-too-large");
+    fs::remove_dir_all(fixture).expect("remove oversized approval marker fixture");
+}
+
+#[test]
+fn approval_marker_fifo_replacement_refuses_without_waiting_for_a_writer() {
+    let fixture = repository_marker_fixture("fifo-approval-marker");
+    let approval = fixture.join("docs/approval-record.md");
+    let result = validate_repository_root_with_hook_for_test(&fixture, || {
+        fs::remove_file(&approval).map_err(|error| SafetyError {
+            code: "test-fixture-failed",
+            detail: error.to_string(),
+        })?;
+        create_fifo_for_test(&approval)
+    });
+    let error = result.expect_err("FIFO approval marker passed root validation");
+    assert!(matches!(
+        error.code,
+        "descriptor-not-regular" | "descriptor-open-failed"
+    ));
+    fs::remove_file(&approval).expect("remove approval FIFO fixture");
+    fs::remove_dir_all(fixture).expect("remove approval FIFO root fixture");
+}
+
 static FIXTURE_SEQUENCE: AtomicUsize = AtomicUsize::new(0);
 
 struct ValidGateFixture {
@@ -750,11 +892,23 @@ fn assert_refused_before_resolution(
     request: &LaunchRequest<'_>,
     expected_code: &str,
 ) {
+    let authorization_consumer = InMemoryAuthorizationConsumer::default();
     let mut resolver = CountingResolver::default();
     let mut spawner = CountingSpawner::default();
-    let error = authorize_then_delegate(policy, request, &mut resolver, &mut spawner)
-        .expect_err("unsafe launch unexpectedly delegated");
+    let error = authorize_then_delegate(
+        policy,
+        request,
+        &authorization_consumer,
+        &mut resolver,
+        &mut spawner,
+    )
+    .expect_err("unsafe launch unexpectedly delegated");
     assert_eq!(error.code, expected_code, "unexpected error: {error}");
+    assert_eq!(
+        authorization_consumer.attempts(),
+        0,
+        "authorization consumed before complete verification"
+    );
     assert_eq!(
         resolver.calls, 0,
         "resolver called before complete authorization"
@@ -1022,11 +1176,13 @@ fn final_symlinks_symlink_ancestors_and_root_aliases_refuse_before_resolution() 
     let real_directory = artifact_directory.with_file_name(format!("{directory_name}-real"));
     fs::rename(&artifact_directory, &real_directory).expect("move artifact fixture directory");
     symlink(&real_directory, &artifact_directory).expect("create ancestor symlink");
+    let authorization_consumer = InMemoryAuthorizationConsumer::default();
     let mut resolver = CountingResolver::default();
     let mut spawner = CountingSpawner::default();
     let result = authorize_then_delegate(
         &fixture.policy,
         &fixture.request(),
+        &authorization_consumer,
         &mut resolver,
         &mut spawner,
     );
@@ -1034,6 +1190,7 @@ fn final_symlinks_symlink_ancestors_and_root_aliases_refuse_before_resolution() 
     fs::rename(&real_directory, &artifact_directory).expect("restore fixture directory");
     let error = result.expect_err("symlink ancestor unexpectedly delegated");
     assert_eq!(error.code, "symlink-path-forbidden");
+    assert_eq!(authorization_consumer.attempts(), 0);
     assert_eq!(resolver.calls, 0);
     assert_eq!(spawner.calls, 0);
 
@@ -1055,11 +1212,13 @@ fn final_symlinks_symlink_ancestors_and_root_aliases_refuse_before_resolution() 
 #[test]
 fn only_complete_matching_records_can_reach_mock_resolver_and_mock_spawner() {
     let fixture = ValidGateFixture::new();
+    let authorization_consumer = InMemoryAuthorizationConsumer::default();
     let mut resolver = CountingResolver::for_path(fixture.emulator_path.clone());
     let mut spawner = CountingSpawner::default();
     authorize_then_delegate(
         &fixture.policy,
         &fixture.request(),
+        &authorization_consumer,
         &mut resolver,
         &mut spawner,
     )
@@ -1067,6 +1226,258 @@ fn only_complete_matching_records_can_reach_mock_resolver_and_mock_spawner() {
     assert_eq!(resolver.calls, 1);
     assert_eq!(spawner.calls, 1);
     assert!(spawner.received_verified_descriptor);
+}
+
+#[test]
+fn sequential_replay_is_rejected_before_resolver_or_spawner() {
+    let fixture = ValidGateFixture::new();
+    let authorization =
+        AuthorizationRecord::parse(&fixture.authorization).expect("fixture authorization parses");
+    let authorization_consumer = InMemoryAuthorizationConsumer::default();
+    let mut first_resolver = CountingResolver::for_path(fixture.emulator_path.clone());
+    let mut first_spawner = CountingSpawner::default();
+    authorize_then_delegate(
+        &fixture.policy,
+        &fixture.request(),
+        &authorization_consumer,
+        &mut first_resolver,
+        &mut first_spawner,
+    )
+    .expect("first authorization use should reach mocks");
+
+    let mut replay_resolver = CountingResolver::for_path(fixture.emulator_path.clone());
+    let mut replay_spawner = CountingSpawner::default();
+    let replay = authorize_then_delegate(
+        &fixture.policy,
+        &fixture.request(),
+        &authorization_consumer,
+        &mut replay_resolver,
+        &mut replay_spawner,
+    )
+    .expect_err("sequential authorization replay reached delegation");
+
+    assert_eq!(replay.code, "authorization-already-consumed");
+    assert_eq!(first_resolver.calls, 1);
+    assert_eq!(first_spawner.calls, 1);
+    assert_eq!(replay_resolver.calls, 0);
+    assert_eq!(replay_spawner.calls, 0);
+    assert_eq!(authorization_consumer.attempts(), 2);
+    let consumed = authorization_consumer.consumed();
+    assert_eq!(consumed.len(), 1);
+    assert!(consumed.contains(&(
+        authorization.record_sha256,
+        authorization.nonce,
+        authorization.certification_sha256,
+        authorization.profile_sha256,
+        authorization.artifact_sha256,
+    )));
+}
+
+struct SharedCountingResolver {
+    calls: Arc<AtomicUsize>,
+    path: PathBuf,
+}
+
+impl ExecutableResolver for SharedCountingResolver {
+    fn resolve(
+        &mut self,
+        _emulator: EmulatorId,
+        expected_sha256: &str,
+    ) -> Result<ResolvedExecutable, SafetyError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Ok(ResolvedExecutable {
+            path: self.path.clone(),
+            sha256: expected_sha256.to_owned(),
+        })
+    }
+}
+
+struct SharedCountingSpawner {
+    calls: Arc<AtomicUsize>,
+}
+
+impl ProcessSpawner for SharedCountingSpawner {
+    fn spawn(&mut self, command: ResolvedCommand) -> Result<(), SafetyError> {
+        assert!(command.executable.file().metadata().is_ok());
+        assert!(command.artifact.file().metadata().is_ok());
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+#[test]
+fn concurrent_replay_allows_exactly_one_mock_delegation() {
+    let fixture = Arc::new(ValidGateFixture::new());
+    let authorization_consumer = Arc::new(InMemoryAuthorizationConsumer::default());
+    let resolver_calls = Arc::new(AtomicUsize::new(0));
+    let spawner_calls = Arc::new(AtomicUsize::new(0));
+    let start = Arc::new(Barrier::new(2));
+    let mut workers = Vec::new();
+
+    for _ in 0..2 {
+        let fixture = Arc::clone(&fixture);
+        let authorization_consumer = Arc::clone(&authorization_consumer);
+        let resolver_calls = Arc::clone(&resolver_calls);
+        let spawner_calls = Arc::clone(&spawner_calls);
+        let start = Arc::clone(&start);
+        workers.push(std::thread::spawn(move || {
+            let mut resolver = SharedCountingResolver {
+                calls: resolver_calls,
+                path: fixture.emulator_path.clone(),
+            };
+            let mut spawner = SharedCountingSpawner {
+                calls: spawner_calls,
+            };
+            start.wait();
+            authorize_then_delegate(
+                &fixture.policy,
+                &fixture.request(),
+                authorization_consumer.as_ref(),
+                &mut resolver,
+                &mut spawner,
+            )
+        }));
+    }
+
+    let results = workers
+        .into_iter()
+        .map(|worker| worker.join().expect("concurrent gate worker"))
+        .collect::<Vec<_>>();
+    assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+    assert_eq!(
+        results
+            .iter()
+            .filter(|result| {
+                matches!(
+                    result,
+                    Err(error) if error.code == "authorization-already-consumed"
+                )
+            })
+            .count(),
+        1
+    );
+    assert_eq!(authorization_consumer.attempts(), 2);
+    assert_eq!(authorization_consumer.consumed().len(), 1);
+    assert_eq!(resolver_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(spawner_calls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn production_consumer_requires_external_monotonic_authority() {
+    let source = fs::read_to_string(repository_root().join("tools/rar-lab/safety/src/lib.rs"))
+        .expect("read host-safety source");
+    assert!(source.contains("monotonic state controlled by an authority outside"));
+    assert!(!source.contains("struct RepositoryAuthorizationConsumer"));
+    assert!(!source.contains("AUTHORIZATION_LEDGER_RELATIVE"));
+}
+
+#[test]
+fn authorization_consumer_failure_refuses_before_resolver_or_spawner() {
+    let fixture = ValidGateFixture::new();
+    let authorization_consumer = InMemoryAuthorizationConsumer::failing();
+    let mut resolver = CountingResolver::for_path(fixture.emulator_path.clone());
+    let mut spawner = CountingSpawner::default();
+    let error = authorize_then_delegate(
+        &fixture.policy,
+        &fixture.request(),
+        &authorization_consumer,
+        &mut resolver,
+        &mut spawner,
+    )
+    .expect_err("consumer failure reached delegation");
+
+    assert_eq!(error.code, "authorization-consumer-failed");
+    assert_eq!(authorization_consumer.attempts(), 1);
+    assert!(authorization_consumer.consumed().is_empty());
+    assert_eq!(resolver.calls, 0);
+    assert_eq!(spawner.calls, 0);
+}
+
+#[test]
+fn resolver_failure_does_not_restore_consumed_authorization() {
+    let fixture = ValidGateFixture::new();
+    let authorization_consumer = InMemoryAuthorizationConsumer::default();
+    let mut failing_resolver = CountingResolver::for_path(
+        fixture
+            .emulator_path
+            .with_file_name("missing-after-authorization-consumption"),
+    );
+    let mut first_spawner = CountingSpawner::default();
+    let failure = authorize_then_delegate(
+        &fixture.policy,
+        &fixture.request(),
+        &authorization_consumer,
+        &mut failing_resolver,
+        &mut first_spawner,
+    )
+    .expect_err("missing resolved executable unexpectedly spawned");
+    assert_eq!(failure.code, "resolved-emulator-unavailable");
+    assert_eq!(failing_resolver.calls, 1);
+    assert_eq!(first_spawner.calls, 0);
+
+    let mut replay_resolver = CountingResolver::for_path(fixture.emulator_path.clone());
+    let mut replay_spawner = CountingSpawner::default();
+    let replay = authorize_then_delegate(
+        &fixture.policy,
+        &fixture.request(),
+        &authorization_consumer,
+        &mut replay_resolver,
+        &mut replay_spawner,
+    )
+    .expect_err("resolver failure restored consumed authorization");
+    assert_eq!(replay.code, "authorization-already-consumed");
+    assert_eq!(replay_resolver.calls, 0);
+    assert_eq!(replay_spawner.calls, 0);
+    assert_eq!(authorization_consumer.consumed().len(), 1);
+}
+
+#[derive(Default)]
+struct FailingSpawner {
+    calls: usize,
+}
+
+impl ProcessSpawner for FailingSpawner {
+    fn spawn(&mut self, _command: ResolvedCommand) -> Result<(), SafetyError> {
+        self.calls += 1;
+        Err(SafetyError {
+            code: "synthetic-spawner-failure",
+            detail: "synthetic downstream spawner failure".to_owned(),
+        })
+    }
+}
+
+#[test]
+fn spawner_failure_does_not_restore_consumed_authorization() {
+    let fixture = ValidGateFixture::new();
+    let authorization_consumer = InMemoryAuthorizationConsumer::default();
+    let mut first_resolver = CountingResolver::for_path(fixture.emulator_path.clone());
+    let mut failing_spawner = FailingSpawner::default();
+    let failure = authorize_then_delegate(
+        &fixture.policy,
+        &fixture.request(),
+        &authorization_consumer,
+        &mut first_resolver,
+        &mut failing_spawner,
+    )
+    .expect_err("synthetic spawner failure unexpectedly passed");
+    assert_eq!(failure.code, "synthetic-spawner-failure");
+    assert_eq!(first_resolver.calls, 1);
+    assert_eq!(failing_spawner.calls, 1);
+
+    let mut replay_resolver = CountingResolver::for_path(fixture.emulator_path.clone());
+    let mut replay_spawner = CountingSpawner::default();
+    let replay = authorize_then_delegate(
+        &fixture.policy,
+        &fixture.request(),
+        &authorization_consumer,
+        &mut replay_resolver,
+        &mut replay_spawner,
+    )
+    .expect_err("spawner failure restored consumed authorization");
+    assert_eq!(replay.code, "authorization-already-consumed");
+    assert_eq!(replay_resolver.calls, 0);
+    assert_eq!(replay_spawner.calls, 0);
+    assert_eq!(authorization_consumer.consumed().len(), 1);
 }
 
 fn read_opened_bytes(file: &fs::File) -> Vec<u8> {
@@ -1133,11 +1544,13 @@ fn assert_path_replacement_cannot_substitute(selected: &str) {
     };
     let replacement_path = selected_path.with_file_name(format!("replacement-{selected}"));
     fs::write(&replacement_path, SUBSTITUTED_BYTES).expect("write replacement object");
+    let authorization_consumer = InMemoryAuthorizationConsumer::default();
     let mut resolver = CountingResolver::for_path(fixture.emulator_path.clone());
     let mut spawner = OriginalResourceSpawner::default();
     authorize_then_delegate_with_hook(
         &fixture.policy,
         &fixture.request(),
+        &authorization_consumer,
         &mut resolver,
         &mut spawner,
         || {
@@ -1194,10 +1607,12 @@ fn resolver_claims_are_independently_verified_before_spawn() {
 
     let mut wrong_claim = CountingResolver::for_path(fixture.emulator_path.clone());
     wrong_claim.claimed_sha256 = Some("f".repeat(64));
+    let authorization_consumer = InMemoryAuthorizationConsumer::default();
     let mut spawner = CountingSpawner::default();
     let error = authorize_then_delegate(
         &fixture.policy,
         &fixture.request(),
+        &authorization_consumer,
         &mut wrong_claim,
         &mut spawner,
     )
@@ -1210,10 +1625,12 @@ fn resolver_claims_are_independently_verified_before_spawn() {
             .emulator_path
             .with_file_name("nonexistent-qemu-system-x86_64"),
     );
+    let authorization_consumer = InMemoryAuthorizationConsumer::default();
     let mut spawner = CountingSpawner::default();
     let error = authorize_then_delegate(
         &fixture.policy,
         &fixture.request(),
+        &authorization_consumer,
         &mut nonexistent,
         &mut spawner,
     )
@@ -1224,10 +1641,12 @@ fn resolver_claims_are_independently_verified_before_spawn() {
     let wrong_bytes = fixture.emulator_path.with_file_name("wrong-bytes-qemu");
     fs::write(&wrong_bytes, b"wrong emulator bytes\n").expect("write wrong-byte emulator");
     let mut resolver = CountingResolver::for_path(wrong_bytes.clone());
+    let authorization_consumer = InMemoryAuthorizationConsumer::default();
     let mut spawner = CountingSpawner::default();
     let error = authorize_then_delegate(
         &fixture.policy,
         &fixture.request(),
+        &authorization_consumer,
         &mut resolver,
         &mut spawner,
     )
@@ -1240,10 +1659,12 @@ fn resolver_claims_are_independently_verified_before_spawn() {
     symlink(&fixture.emulator_path, &emulator_link).expect("create emulator symlink");
     let mut resolver = CountingResolver::for_path(emulator_link.clone());
     resolver.claimed_sha256 = Some(expected);
+    let authorization_consumer = InMemoryAuthorizationConsumer::default();
     let mut spawner = CountingSpawner::default();
     let error = authorize_then_delegate(
         &fixture.policy,
         &fixture.request(),
+        &authorization_consumer,
         &mut resolver,
         &mut spawner,
     )

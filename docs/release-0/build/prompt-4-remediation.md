@@ -43,6 +43,21 @@ The first correctness and security re-reviews examined head `5df49b052f2e2e4e997
 | Host tests reopened a hashed script pathname | Bounded captured script text is passed directly to the pinned shell; pathname replacement test proves byte continuity |
 | Shell records were unbounded before Rust | Verified byte/line helpers bound lock and policy files before shell `read`; oversized/unknown record tests fail before compilation |
 | Incremental SHA-256 short-read coverage incomplete | Boundary, fixed chunk, deterministic randomized chunk, official vector, and read-fault tests cover the streaming carry path |
+| Build/evidence could publish a stale captured tool probe | Every revalidation reruns and compares the complete locked probe; the atomic writer invokes the full snapshot guard after staging and immediately before rename |
+| Class B license/provenance/setup evidence was incomplete | A strict 15-entry inventory covers selected platform tools, SDK/image/action inputs, and external CI boundaries; shell and Rust checks enforce canonical complete records |
+| Git object validation assumed SHA-1 only | Source snapshot validation accepts canonical lowercase 40- or 64-hex Git object IDs and tests both formats |
+| Single-launch authorization could be replayed | Consumption is now a mandatory pre-resolver boundary with replay/failure semantics; rollbackable repository markers were rejected, no production consumer is shipped, and a monotonic owner-reviewed authority remains a blocking first-launch prerequisite |
+| Lock-selected matching executable path/hash pairs were self-authorizing | The preparser binds each complete platform lock to a reviewed whole-file SHA-256; the compiled verifier requires the same digest handoff before any lock-controlled process use |
+| Host Rust sources could change before compiler reads | The shell authenticates pinned Git, verifies the exact clean workflow head, and materializes every compiler input from commit blobs into an exclusive directory before Rust runs |
+| CI image identity could be spoofed by an environment string | The workflow pins the OCI digest, mounts userland read-only, verifies protected tool mounts and runner evidence, and keeps runner/kernel/container layers explicitly non-certifying |
+| Bootstrap directory creation and recursive cleanup followed mutable ancestors | Creation traverses one component at a time from bound current directories; private allocation is parent-relative; cleanup removes an exact regular-file allowlist and never recursively deletes |
+| Generated check certifiability omitted verified bootstrap statuses | Hasher, cleanup tool, environment sanitizer, closure, and Git now participate in the same all-required status predicate with one-at-a-time negative coverage |
+| Commit and tree could observe different `HEAD` values | Tree identity is resolved from the already captured commit object, never from a second `HEAD` observation |
+| Host scripts could swap before capture | Production test scripts and their bootstrap library are loaded from the captured Git commit and supplied as exact text to the pinned shell |
+| Special-file opens could block before type rejection | Final regular-file opens use nonblocking no-follow flags and a FIFO test proves bounded refusal without a writer |
+| Image-plan grammar lacked a versioned contract | `rar-image-plan-v3` has a canonical field-order contract and renderer conformance coverage |
+| Git index flags could hide workspace changes | `assume-unchanged`/`skip-worktree` are rejected; source, manifest, and inventory hashes derive from captured commit objects; compiler inputs use the same commit blobs |
+| Approval-marker reads could block or allocate without bound after a path race | Root validation now uses the bounded nonblocking no-follow reader; oversized and post-check FIFO replacement tests fail closed |
 
 ## Owned paths and coordinator handoff
 

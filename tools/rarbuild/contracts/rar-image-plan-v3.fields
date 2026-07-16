@@ -1,0 +1,8 @@
+schema=rar-image-plan-v3
+build_plan_sha256=<lowercase-sha256>
+image_output=out/r0/images
+target_artifact=unavailable
+firmware_x86_64=<pin-state>
+firmware_aarch64=<pin-state>
+status=blocked-target-artifact-unavailable
+target_execution=not-attempted

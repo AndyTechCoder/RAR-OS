@@ -1,7 +1,8 @@
 #![deny(unsafe_code)]
 
 #[allow(dead_code)]
-#[path = "../../../tools/rarbuild/src/lib.rs"]
+#[cfg_attr(rar_flat_bootstrap, path = "rarbuild.rs")]
+#[cfg_attr(not(rar_flat_bootstrap), path = "../../../tools/rarbuild/src/lib.rs")]
 mod rarbuild;
 
 use std::fs;
@@ -10,13 +11,19 @@ use std::process::Command;
 
 use rarbuild::{
     BUILD_CONFIGURATION, BUILD_TARGETS, ExternalPin, HostCommand, ProbeReport, Route, ToolLock,
-    classify_route, evaluate_pinned_file, execute_host_command, refusal_outcome,
-    render_build_evidence, render_build_plan, render_host_test_report,
-    run_captured_host_script_with_replacement_for_test, snapshot_revalidation_with_hook,
+    certifiable_probe_statuses_for_test, classify_route, committed_host_input_for_test,
+    committed_source_inputs_sha256_for_test, evaluate_pinned_file, execute_host_command,
+    refusal_outcome, render_build_evidence, render_build_plan, render_host_test_report,
+    render_image_plan, run_captured_host_script_with_replacement_for_test, set_index_flag_for_test,
+    snapshot_output_precommit_with_hook, snapshot_revalidation_with_changed_probe_for_test,
+    snapshot_revalidation_with_hook, validate_source_revision_for_test,
     verify_git_snapshot_for_test, write_repository_output,
 };
 
+#[cfg(not(rar_flat_bootstrap))]
 const OVERSIZED_LOCK_LINE: &str = include_str!("../fixtures/oversized-line.lock");
+#[cfg(rar_flat_bootstrap)]
+const OVERSIZED_LOCK_LINE: &str = include_str!("oversized-line.lock");
 
 fn root() -> PathBuf {
     PathBuf::from(std::env::var_os("RAR_REPO_ROOT").expect("RAR_REPO_ROOT is set at runtime"))
@@ -307,6 +314,9 @@ fn production_bootstrap_contains_no_ambient_rustup_git_or_path_compiler_invocati
     assert!(!wrapper.contains("\nrustc "));
     assert!(bootstrap.contains("\"$bootstrap_rustc_path\""));
     assert!(bootstrap.contains("\"$bootstrap_mkdir_path\""));
+    assert!(bootstrap.contains("rar_materialize_git_sources"));
+    assert!(!bootstrap.contains("\"$bootstrap_rm_path\" -rf"));
+    assert!(wrapper.contains("--cfg rar_flat_bootstrap"));
 }
 
 #[cfg(unix)]
@@ -373,6 +383,42 @@ fn pinned_linux_ci_lock_is_distinct_canonical_and_non_certifiable() {
     assert!(!lock.certifiable);
 }
 
+#[test]
+fn matching_path_and_digest_lock_substitution_is_rejected_by_external_lock_identity() {
+    let repository_root = root();
+    let lock_relative = if std::env::var("RAR_CI_BOOTSTRAP_IMAGE").is_ok() {
+        "tools/toolchain/host-tools.x86_64-unknown-linux-gnu-ci.lock"
+    } else {
+        "tools/toolchain/host-tools.lock"
+    };
+    let lock_path = repository_root.join(lock_relative);
+    let original = fs::read_to_string(&lock_path).expect("read immutable lock fixture");
+    let lock = ToolLock::parse(&original).expect("parse immutable lock fixture");
+    let substituted = original
+        .replace(
+            &format!("rustc_path={}", lock.rustc_path.display()),
+            &format!("rustc_path={}", lock.bootstrap_env_path.display()),
+        )
+        .replace(
+            &format!("rustc_sha256={}", lock.rustc_sha256),
+            &format!("rustc_sha256={}", lock.bootstrap_env_sha256),
+        );
+    assert_ne!(substituted, original);
+    ToolLock::parse(&substituted).expect("matching path/digest substitution remains canonical");
+    fs::write(&lock_path, substituted).expect("install matching path/digest substitution");
+    let output = Command::new(repository_root.join("tools/rarbuild/rarbuild"))
+        .arg("check")
+        .current_dir(&repository_root)
+        .output()
+        .expect("run externally bound lock refusal");
+    fs::write(&lock_path, original).expect("restore immutable lock fixture");
+    assert_eq!(output.status.code(), Some(2));
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("bootstrap trust root is absent, malformed, or unsafe")
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn wrong_byte_absolute_compiler_and_linker_roots_fail_before_canary_execution() {
@@ -417,7 +463,10 @@ fi
             .arg("-c")
             .arg(script)
             .env_clear()
-            .env("RAR_BOOTSTRAP_LIBRARY", repository_root.join("tools/rarbuild/bootstrap-lib.sh"))
+            .env(
+                "RAR_BOOTSTRAP_LIBRARY",
+                repository_root.join("tools/rarbuild/bootstrap-lib.sh"),
+            )
             .env("RAR_ROOT", &repository_root)
             .env("RAR_REPLACED_ROOT", replaced)
             .env("RAR_FAKE", &fake)
@@ -463,12 +512,12 @@ fn altered_driver_and_stdlib_closure_bytes_fail_before_compiler_execution() {
         rarbuild::safety::sha256_hex(driver),
         rarbuild::safety::sha256_hex(stdlib)
     );
-    let sdk_manifest = format!(
-        "{}  libSystem.tbd\n",
-        rarbuild::safety::sha256_hex(sdk)
-    );
-    fs::write(repository_root.join(&rust_manifest_relative), &rust_manifest)
-        .expect("write synthetic Rust manifest");
+    let sdk_manifest = format!("{}  libSystem.tbd\n", rarbuild::safety::sha256_hex(sdk));
+    fs::write(
+        repository_root.join(&rust_manifest_relative),
+        &rust_manifest,
+    )
+    .expect("write synthetic Rust manifest");
     fs::write(repository_root.join(&sdk_manifest_relative), &sdk_manifest)
         .expect("write synthetic SDK manifest");
     let canary = fixture.join("compiler-executed");
@@ -502,7 +551,10 @@ fi
         .arg("-c")
         .arg(script)
         .env_clear()
-        .env("RAR_BOOTSTRAP_LIBRARY", repository_root.join("tools/rarbuild/bootstrap-lib.sh"))
+        .env(
+            "RAR_BOOTSTRAP_LIBRARY",
+            repository_root.join("tools/rarbuild/bootstrap-lib.sh"),
+        )
         .env("RAR_ROOT", &repository_root)
         .env("RAR_RUST_ROOT", &rust_root)
         .env("RAR_SDK_ROOT", &sdk_root)
@@ -523,9 +575,7 @@ fi
     if let Some(image) = std::env::var_os("RAR_CI_BOOTSTRAP_IMAGE") {
         command.env("RAR_CI_BOOTSTRAP_IMAGE", image);
     }
-    let output = command
-        .output()
-        .expect("verify synthetic closure mutation");
+    let output = command.output().expect("verify synthetic closure mutation");
     assert!(
         output.status.success(),
         "synthetic closure probe failed before completing both expected verifier rejections: stdout={} stderr={}",
@@ -644,7 +694,92 @@ fn snapshot_revalidation_detects_source_mutation_and_lock_swap() {
     })
     .expect_err("lock swap passed snapshot revalidation");
     fs::write(&lock_path, &original_lock).expect("restore lock fixture");
-    assert_eq!(lock_error.code, "tool-lock-changed");
+    assert!(matches!(
+        lock_error.code,
+        "tool-lock-changed" | "unapproved-tool-lock"
+    ));
+}
+
+#[test]
+fn changed_tool_probe_is_rejected_as_snapshot_drift() {
+    let error = snapshot_revalidation_with_changed_probe_for_test(&root())
+        .expect_err("changed tool probe passed full snapshot revalidation");
+    assert_eq!(error.code, "tool-probe-changed");
+}
+
+#[test]
+fn every_required_probe_status_participates_in_certifiability() {
+    let ok = "ok-synthetic";
+    let mut statuses = vec![ok; 22];
+    assert!(certifiable_probe_statuses_for_test(&statuses));
+    for index in 0..statuses.len() {
+        statuses[index] = "hash-mismatch";
+        assert!(
+            !certifiable_probe_statuses_for_test(&statuses),
+            "required probe status {index} was omitted from certifiability"
+        );
+        statuses[index] = ok;
+    }
+}
+
+#[test]
+fn publication_precommit_revalidates_the_complete_snapshot() {
+    let repository_root = root();
+    let source_path = repository_root.join("tools/rarbuild/README.md");
+    let original_source = fs::read(&source_path).expect("read precommit source fixture");
+    let token = format!("snapshot-precommit-{}", std::process::id());
+    let relative = format!("out/r0/test-state/{token}/evidence.txt");
+    let result = snapshot_output_precommit_with_hook(
+        &repository_root,
+        &relative,
+        b"must not commit\n",
+        || {
+            let mut changed = original_source.clone();
+            changed.extend_from_slice(b"\nsynthetic precommit mutation\n");
+            fs::write(&source_path, changed).map_err(|error| rarbuild::BuildError {
+                code: "test-source-mutation-failed",
+                detail: error.to_string(),
+            })
+        },
+    );
+    fs::write(&source_path, &original_source).expect("restore precommit source fixture");
+    let error = result.expect_err("precommit source mutation was published");
+    assert!(matches!(
+        error.code,
+        "dirty-source-tree" | "source-inputs-changed"
+    ));
+    assert!(!repository_root.join(&relative).exists());
+    let fixture = repository_root.join(format!("out/r0/test-state/{token}"));
+    assert!(
+        fs::read_dir(&fixture)
+            .expect("list precommit fixture")
+            .all(|entry| !entry
+                .expect("read precommit entry")
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".rarbuild-"))
+    );
+    fs::remove_dir(fixture).expect("remove precommit fixture");
+}
+
+#[test]
+fn source_revision_validation_accepts_sha1_and_sha256_git_object_ids() {
+    assert_eq!(
+        validate_source_revision_for_test(&"a".repeat(40)).expect("accept SHA-1 object ID"),
+        "a".repeat(40)
+    );
+    assert_eq!(
+        validate_source_revision_for_test(&"b".repeat(64)).expect("accept SHA-256 object ID"),
+        "b".repeat(64)
+    );
+    for invalid in ["c".repeat(39), "d".repeat(65), "A".repeat(40)] {
+        assert_eq!(
+            validate_source_revision_for_test(&invalid)
+                .expect_err("invalid Git object ID passed")
+                .code,
+            "invalid-source-revision"
+        );
+    }
 }
 
 #[test]
@@ -653,10 +788,7 @@ fn captured_host_script_bytes_survive_path_replacement_before_spawn() {
     let token = format!("captured-host-script-{}", std::process::id());
     let relative = format!("out/r0/test-state/{token}/script.sh");
     let path = repository_root.join(&relative);
-    let parent = path
-        .parent()
-        .expect("captured script parent")
-        .to_path_buf();
+    let parent = path.parent().expect("captured script parent").to_path_buf();
     fs::create_dir_all(&parent).expect("create captured script fixture");
     let original = b"set -eu\nexit 0\n";
     fs::write(&path, original).expect("write original captured script");
@@ -675,6 +807,68 @@ fn captured_host_script_bytes_survive_path_replacement_before_spawn() {
     assert!(!repository_root.join(canary_relative).exists());
     fs::remove_file(&path).expect("remove captured script fixture");
     fs::remove_dir(parent).expect("remove captured script parent");
+}
+
+#[test]
+fn committed_host_input_ignores_transient_workspace_replacement() {
+    let repository_root = root();
+    let (lock, _) = ToolLock::load(&repository_root).expect("load selected lock");
+    let (revision, _) = verify_git_snapshot_for_test(&repository_root, &lock)
+        .expect("capture committed source revision");
+    let relative = "tests/host-safety/run.sh";
+    let path = repository_root.join(relative);
+    let original = fs::read_to_string(&path).expect("read committed host input");
+    fs::write(&path, "#!/bin/sh\nexit 97\n").expect("replace workspace host input");
+    let committed = committed_host_input_for_test(&repository_root, &revision, relative)
+        .expect("read host input from immutable Git object");
+    fs::write(&path, &original).expect("restore workspace host input");
+    assert_eq!(committed, original);
+}
+
+#[test]
+fn hidden_index_flags_are_rejected_and_cannot_change_commit_derived_source_hash() {
+    let repository_root = root();
+    let (lock, _) = ToolLock::load(&repository_root).expect("load selected lock");
+    let (revision, _) = verify_git_snapshot_for_test(&repository_root, &lock)
+        .expect("capture clean source revision");
+    let baseline = committed_source_inputs_sha256_for_test(&repository_root, &lock, &revision)
+        .expect("hash committed source tree");
+    let relative = "tools/rarbuild/README.md";
+    let path = repository_root.join(relative);
+    let original = fs::read(&path).expect("read hidden-index fixture");
+
+    set_index_flag_for_test(&repository_root, &lock, "--assume-unchanged", relative)
+        .expect("set assume-unchanged fixture");
+    let mut changed = original.clone();
+    changed.extend_from_slice(b"\nsynthetic hidden index mutation\n");
+    fs::write(&path, changed).expect("write hidden-index mutation");
+    let observed = committed_source_inputs_sha256_for_test(&repository_root, &lock, &revision);
+    let verification = verify_git_snapshot_for_test(&repository_root, &lock);
+    fs::write(&path, &original).expect("restore hidden-index fixture");
+    set_index_flag_for_test(&repository_root, &lock, "--no-assume-unchanged", relative)
+        .expect("clear assume-unchanged fixture");
+    assert_eq!(
+        observed.expect("hash committed source with hidden mutation"),
+        baseline
+    );
+    assert_eq!(
+        verification
+            .expect_err("assume-unchanged index state passed verification")
+            .code,
+        "hidden-index-state"
+    );
+
+    set_index_flag_for_test(&repository_root, &lock, "--skip-worktree", relative)
+        .expect("set skip-worktree fixture");
+    let skip_verification = verify_git_snapshot_for_test(&repository_root, &lock);
+    set_index_flag_for_test(&repository_root, &lock, "--no-skip-worktree", relative)
+        .expect("clear skip-worktree fixture");
+    assert_eq!(
+        skip_verification
+            .expect_err("skip-worktree index state passed verification")
+            .code,
+        "hidden-index-state"
+    );
 }
 
 fn fully_pinned_lock(input: &str, hash: &str) -> String {
@@ -933,8 +1127,8 @@ fn field_names(input: &str) -> Vec<&str> {
 
 #[test]
 fn versioned_host_cli_contracts_match_canonical_renderers() {
-    let input = fs::read_to_string(root().join("tools/toolchain/host-tools.lock"))
-        .expect("read tool lock");
+    let input =
+        fs::read_to_string(root().join("tools/toolchain/host-tools.lock")).expect("read tool lock");
     let lock = ToolLock::parse(&input).expect("parse local lock");
     let ok = "ok-synthetic-sha256-".to_owned() + &"a".repeat(64);
     let report = ProbeReport {
@@ -966,10 +1160,9 @@ fn versioned_host_cli_contracts_match_canonical_renderers() {
         certifiable: false,
     };
     let check = report.canonical(&"b".repeat(64));
-    let check_contract = fs::read_to_string(
-        root().join("tools/rarbuild/contracts/rar-host-check-v2.fields"),
-    )
-    .expect("read check contract");
+    let check_contract =
+        fs::read_to_string(root().join("tools/rarbuild/contracts/rar-host-check-v2.fields"))
+            .expect("read check contract");
     assert_eq!(field_names(&check), field_names(&check_contract));
 
     let suites = vec![
@@ -977,10 +1170,9 @@ fn versioned_host_cli_contracts_match_canonical_renderers() {
         ("tests/bootstrap/run.sh".to_owned(), "d".repeat(64)),
     ];
     let test_report = render_host_test_report(&suites);
-    let test_contract = fs::read_to_string(
-        root().join("tools/rarbuild/contracts/rar-host-test-v2.fields"),
-    )
-    .expect("read test contract");
+    let test_contract =
+        fs::read_to_string(root().join("tools/rarbuild/contracts/rar-host-test-v2.fields"))
+            .expect("read test contract");
     assert_eq!(field_names(&test_report), field_names(&test_contract));
 
     let plan = render_build_plan(
@@ -990,11 +1182,16 @@ fn versioned_host_cli_contracts_match_canonical_renderers() {
         &"1".repeat(40),
         &"2".repeat(64),
     );
-    let plan_contract = fs::read_to_string(
-        root().join("tools/rarbuild/contracts/rar-build-plan-v3.fields"),
-    )
-    .expect("read build-plan contract");
+    let plan_contract =
+        fs::read_to_string(root().join("tools/rarbuild/contracts/rar-build-plan-v3.fields"))
+            .expect("read build-plan contract");
     assert_eq!(field_names(&plan), field_names(&plan_contract));
+
+    let image_plan = render_image_plan(&lock, &"7".repeat(64));
+    let image_contract =
+        fs::read_to_string(root().join("tools/rarbuild/contracts/rar-image-plan-v3.fields"))
+            .expect("read image-plan contract");
+    assert_eq!(field_names(&image_plan), field_names(&image_contract));
 
     let evidence = render_build_evidence(
         &report,
@@ -1006,10 +1203,9 @@ fn versioned_host_cli_contracts_match_canonical_renderers() {
         &"5".repeat(64),
         &"6".repeat(64),
     );
-    let evidence_contract = fs::read_to_string(
-        root().join("tools/rarbuild/contracts/rar-build-evidence-v3.fields"),
-    )
-    .expect("read build-evidence contract");
+    let evidence_contract =
+        fs::read_to_string(root().join("tools/rarbuild/contracts/rar-build-evidence-v3.fields"))
+            .expect("read build-evidence contract");
     assert_eq!(field_names(&evidence), field_names(&evidence_contract));
 }
 
@@ -1078,14 +1274,94 @@ fn cargo_workspace_remains_empty_and_dependency_inventory_is_explicit() {
 }
 
 #[test]
+fn class_b_host_inventory_is_complete_canonical_and_traceable() {
+    let input = fs::read_to_string(root().join("tools/toolchain/class-b-host-tools.v1"))
+        .expect("read Class B host inventory");
+    let mut lines = input.lines();
+    assert_eq!(
+        lines.next(),
+        Some("schema=rar-class-b-host-tool-inventory-v1")
+    );
+    assert_eq!(
+        lines.next(),
+        Some("id|platform|version|integrity|license|provenance|setup|status")
+    );
+    let expected = [
+        "macos-sealed-bootstrap",
+        "macos-apple-git",
+        "macos-rust-toolchain",
+        "xcode-macos-sdk",
+        "rust-official-oci-image",
+        "ci-rust-toolchain",
+        "ci-dash",
+        "ci-coreutils",
+        "ci-grep",
+        "ci-gcc",
+        "ci-git",
+        "ci-linux-sysroot",
+        "actions-checkout",
+        "github-hosted-runner",
+        "github-runner-container-engine",
+    ]
+    .into_iter()
+    .collect::<std::collections::BTreeSet<_>>();
+    let mut observed = std::collections::BTreeSet::new();
+    for line in lines {
+        assert!(line.len() <= 512, "oversized Class B inventory row");
+        let fields = line.split('|').collect::<Vec<_>>();
+        assert_eq!(fields.len(), 8, "malformed Class B inventory row: {line}");
+        assert!(fields.iter().all(|field| !field.is_empty()));
+        assert!(observed.insert(fields[0]), "duplicate Class B inventory ID");
+        assert!(fields[5].starts_with("https://"));
+        assert!(matches!(
+            fields[7],
+            "diagnostic-only"
+                | "pinned-executable"
+                | "pinned-orchestrator"
+                | "external-attested-noncertifying"
+        ));
+    }
+    assert_eq!(observed, expected);
+    assert!(input.contains(
+        "oci-index-sha256-f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3"
+    ));
+    assert!(input.contains("git-sha1-11bd71901bbe5b1630ceea73d27597364c9af683"));
+    assert!(input.contains("ubuntu-24.04-20260714.240.1"));
+
+    let manifest = fs::read_to_string(root().join("tools/toolchain/host-tools.manifest"))
+        .expect("read host tool manifest");
+    assert!(manifest.starts_with("schema=rar-host-tool-manifest-v4\n"));
+    assert!(manifest.contains("class_b_inventory=tools/toolchain/class-b-host-tools.v1\n"));
+    let inventory_sha256 =
+        rarbuild::safety::sha256_file(&root().join("tools/toolchain/class-b-host-tools.v1"))
+            .expect("hash Class B host inventory");
+    assert!(manifest.contains(&format!("class_b_inventory_sha256={inventory_sha256}\n")));
+    assert!(manifest.contains(
+        "macos_lock_sha256=f7e9baf24aaff9eaa2a2032cf0a9919568cca817d6b5d0c7e6891bce05ec979a\n"
+    ));
+    assert!(manifest.contains(
+        "ci_lock_sha256=6752b1b21ac8fa93a671ff9444173e4c3bbc4cdcbe4cf5cd39820371dc79aa24\n"
+    ));
+    assert!(manifest.contains("ci_tool_root=read-only-container-filesystem\n"));
+}
+
+#[test]
 fn check_reports_observed_rust_and_missing_execution_prerequisites() {
     let outcome = execute_host_command(&root(), HostCommand::Check).expect("host check executes");
     assert_eq!(outcome.exit_code, 3);
     if cfg!(target_os = "macos") && cfg!(target_arch = "aarch64") {
         assert!(outcome.output.contains("schema=rar-host-check-v2"));
-        assert!(outcome.output.contains("bootstrap_trust=owner-approved-macos"));
+        assert!(
+            outcome
+                .output
+                .contains("bootstrap_trust=owner-approved-macos")
+        );
         assert!(outcome.output.contains("bootstrap_shell=ok-shell-sha256-"));
-        assert!(outcome.output.contains("bootstrap_hasher=ok-shasum-256-sha256-"));
+        assert!(
+            outcome
+                .output
+                .contains("bootstrap_hasher=ok-shasum-256-sha256-")
+        );
         assert!(outcome.output.contains("bootstrap_mkdir=ok-mkdir-sha256-"));
         assert!(outcome.output.contains("bootstrap_rm=ok-rm-sha256-"));
         assert!(outcome.output.contains("rustc=ok-rustc-sha256-"));
@@ -1101,7 +1377,11 @@ fn check_reports_observed_rust_and_missing_execution_prerequisites() {
     } else {
         assert!(outcome.output.contains("platform=x86_64-unknown-linux-gnu"));
         assert!(outcome.output.contains("bootstrap_trust=oci-image-sha256-"));
-        assert!(outcome.output.contains("bootstrap_hasher=ok-sha256sum-sha256-"));
+        assert!(
+            outcome
+                .output
+                .contains("bootstrap_hasher=ok-sha256sum-sha256-")
+        );
         assert!(outcome.output.contains("rustc=ok-rustc-sha256-"));
         assert!(outcome.output.contains("host_linker=ok-gcc-sha256-"));
     }
@@ -1269,9 +1549,7 @@ fn image_is_plan_only_and_cannot_claim_an_artifact() {
             .contains("status=blocked-target-artifact-unavailable")
     );
     assert!(outcome.output.contains("target_execution=not-attempted"));
-    assert!(
-        !root().join("out/r0/images").exists()
-    );
+    assert!(!root().join("out/r0/images").exists());
 }
 
 #[test]

@@ -1,7 +1,8 @@
 #![deny(unsafe_code)]
 
 #[allow(dead_code)]
-#[path = "../../rar-lab/safety/src/lib.rs"]
+#[cfg_attr(rar_flat_bootstrap, path = "safety.rs")]
+#[cfg_attr(not(rar_flat_bootstrap), path = "../../rar-lab/safety/src/lib.rs")]
 pub mod safety;
 
 use std::collections::BTreeSet;
@@ -14,14 +15,17 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use self::safety::{
-    atomic_write_workspace_file, read_bounded_utf8_file, sha256_file, sha256_hex,
-    validate_repository_root, validate_workspace_path,
+    atomic_write_workspace_file, atomic_write_workspace_file_with_precommit,
+    read_bounded_utf8_file, sha256_file, sha256_hex, validate_repository_root,
+    validate_workspace_path,
 };
 
 const LOCAL_LOCK_PATH: &str = "tools/toolchain/host-tools.lock";
 const CI_LOCK_PATH: &str = "tools/toolchain/host-tools.x86_64-unknown-linux-gnu-ci.lock";
 const CI_BOOTSTRAP_IMAGE_SHA256: &str =
     "sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3";
+const LOCAL_LOCK_SHA256: &str = "f7e9baf24aaff9eaa2a2032cf0a9919568cca817d6b5d0c7e6891bce05ec979a";
+const CI_LOCK_SHA256: &str = "6752b1b21ac8fa93a671ff9444173e4c3bbc4cdcbe4cf5cd39820371dc79aa24";
 const MANIFEST_PATH: &str = "tools/toolchain/host-tools.manifest";
 const INVENTORY_PATH: &str = "tools/toolchain/dependencies.r0";
 pub const BUILD_CONFIGURATION: &str = "release-0-host-scaffold";
@@ -30,6 +34,17 @@ pub const TOOL_LOCK_MAX_BYTES: usize = 16 * 1024;
 pub const TOOL_LOCK_MAX_LINE_BYTES: usize = 512;
 const GIT_OUTPUT_MAX_BYTES: usize = 64 * 1024;
 const HOST_TEST_SCRIPT_MAX_BYTES: usize = 64 * 1024;
+const SOURCE_INPUT_PATHS: &[&str] = &[
+    "Cargo.toml",
+    "rust-toolchain.toml",
+    "rustfmt.toml",
+    "tools/rar-lab/safety",
+    "spec/lab/vm-profile",
+    "tools/rarbuild",
+    "tools/toolchain",
+    "tests/host-safety",
+    "tests/bootstrap",
+];
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BuildError {
@@ -717,15 +732,15 @@ impl ToolLock {
     }
 
     pub fn load(root: &Path) -> BuildResult<(Self, String)> {
-        let lock_path = match env::var("RAR_CI_BOOTSTRAP_IMAGE") {
-            Ok(value) if value == CI_BOOTSTRAP_IMAGE_SHA256 => CI_LOCK_PATH,
+        let (lock_path, expected_digest) = match env::var("RAR_CI_BOOTSTRAP_IMAGE") {
+            Ok(value) if value == CI_BOOTSTRAP_IMAGE_SHA256 => (CI_LOCK_PATH, CI_LOCK_SHA256),
             Ok(_) => {
                 return Err(BuildError::new(
                     "unapproved-ci-bootstrap-image",
                     "RAR_CI_BOOTSTRAP_IMAGE does not name the approved immutable CI image",
                 ));
             }
-            Err(env::VarError::NotPresent) => LOCAL_LOCK_PATH,
+            Err(env::VarError::NotPresent) => (LOCAL_LOCK_PATH, LOCAL_LOCK_SHA256),
             Err(env::VarError::NotUnicode(_)) => {
                 return Err(BuildError::new(
                     "unapproved-ci-bootstrap-image",
@@ -735,7 +750,26 @@ impl ToolLock {
         };
         let path = validate_workspace_path(root, lock_path, true)
             .map_err(|error| BuildError::new(error.code, error.detail))?;
-        Self::load_from_path(&path)
+        let (lock, digest) = Self::load_from_path(&path)?;
+        if digest != expected_digest {
+            return Err(BuildError::new(
+                "unapproved-tool-lock",
+                "selected tool lock is not the reviewed immutable lock",
+            ));
+        }
+        let exported_digest = env::var("RAR_BOOTSTRAP_LOCK_SHA256").map_err(|_| {
+            BuildError::new(
+                "bootstrap-lock-handoff-missing",
+                "compiled verifier requires the shell-authenticated lock digest",
+            )
+        })?;
+        if exported_digest != expected_digest {
+            return Err(BuildError::new(
+                "bootstrap-lock-handoff-mismatch",
+                "shell and compiled verifier disagree on the selected lock digest",
+            ));
+        }
+        Ok((lock, digest))
     }
 
     pub fn load_from_path(path: &Path) -> BuildResult<(Self, String)> {
@@ -1020,29 +1054,32 @@ fn probe(root: &Path, lock: &ToolLock) -> BuildResult<ProbeReport> {
             .map(|_| firmware_aarch64_path.as_path()),
         &lock.firmware_aarch64,
     );
-    let certifiable = lock.certifiable
-        && platform == lock.platform
-        && [
-            &bootstrap_shell,
-            &bootstrap_mkdir,
-            &rustc,
-            &llvm,
-            &host_linker,
-            &host_sdk,
-            &cargo,
-            &rust_src,
-            &aarch64_target,
-            &thumbv8m_target,
-            &x86_64_target,
-            &lld,
-            &qemu_x86_64,
-            &qemu_aarch64,
-            &qemu_arm,
-            &firmware_x86_64,
-            &firmware_aarch64,
-        ]
-        .iter()
-        .all(|status| status.starts_with("ok-"));
+    let required_statuses = [
+        bootstrap_shell.as_str(),
+        bootstrap_hasher.as_str(),
+        bootstrap_mkdir.as_str(),
+        bootstrap_rm.as_str(),
+        bootstrap_env.as_str(),
+        bootstrap_closure.as_str(),
+        rustc.as_str(),
+        llvm.as_str(),
+        host_linker.as_str(),
+        host_sdk.as_str(),
+        cargo.as_str(),
+        git.as_str(),
+        rust_src.as_str(),
+        aarch64_target.as_str(),
+        thumbv8m_target.as_str(),
+        x86_64_target.as_str(),
+        lld.as_str(),
+        qemu_x86_64.as_str(),
+        qemu_aarch64.as_str(),
+        qemu_arm.as_str(),
+        firmware_x86_64.as_str(),
+        firmware_aarch64.as_str(),
+    ];
+    let certifiable =
+        lock.certifiable && platform == lock.platform && probe_statuses_are_ok(&required_statuses);
     Ok(ProbeReport {
         platform,
         bootstrap_trust: lock.bootstrap_trust.clone(),
@@ -1071,6 +1108,15 @@ fn probe(root: &Path, lock: &ToolLock) -> BuildResult<ProbeReport> {
         firmware_aarch64,
         certifiable,
     })
+}
+
+fn probe_statuses_are_ok(statuses: &[&str]) -> bool {
+    statuses.iter().all(|status| status.starts_with("ok-"))
+}
+
+#[cfg(test)]
+pub fn certifiable_probe_statuses_for_test(statuses: &[&str]) -> bool {
+    probe_statuses_are_ok(statuses)
 }
 
 fn evaluate_bootstrap_closure(root: &Path, lock: &ToolLock) -> String {
@@ -1102,13 +1148,8 @@ fn evaluate_bootstrap_closure(root: &Path, lock: &ToolLock) -> String {
         &lock.rust_toolchain_root,
     )
     .is_err()
-        || verify_closure_manifest(
-            root,
-            sdk_manifest,
-            sdk_manifest_sha256,
-            &lock.host_sdk_path,
-        )
-        .is_err()
+        || verify_closure_manifest(root, sdk_manifest, sdk_manifest_sha256, &lock.host_sdk_path)
+            .is_err()
     {
         "bootstrap-closure-mismatch".to_owned()
     } else {
@@ -1123,7 +1164,10 @@ fn verify_closure_manifest(
     closure_root: &Path,
 ) -> BuildResult<()> {
     let manifest_text = manifest_relative.to_str().ok_or_else(|| {
-        BuildError::new("non-utf8-closure-manifest", "closure manifest path is not UTF-8")
+        BuildError::new(
+            "non-utf8-closure-manifest",
+            "closure manifest path is not UTF-8",
+        )
     })?;
     let manifest_path = validate_workspace_path(root, manifest_text, true)
         .map_err(|error| BuildError::new(error.code, error.detail))?;
@@ -1160,7 +1204,10 @@ fn verify_closure_manifest(
         if !is_lower_sha256(digest) || !is_relative_lock_path(relative) {
             return Err(BuildError::new(
                 "malformed-closure-manifest",
-                format!("closure manifest line {} has an invalid hash or path", index + 1),
+                format!(
+                    "closure manifest line {} has an invalid hash or path",
+                    index + 1
+                ),
             ));
         }
         if !paths.insert(relative) {
@@ -1345,7 +1392,10 @@ fn one_git_object_id(bytes: Vec<u8>, identity: &str) -> BuildResult<String> {
     let text = String::from_utf8(bytes)
         .map_err(|_| BuildError::new("invalid-git-output", "Git output is not UTF-8"))?;
     let value = text.strip_suffix('\n').ok_or_else(|| {
-        BuildError::new("invalid-git-output", format!("{identity} is not one canonical line"))
+        BuildError::new(
+            "invalid-git-output",
+            format!("{identity} is not one canonical line"),
+        )
     })?;
     validate_source_revision(value)
 }
@@ -1364,18 +1414,56 @@ fn verified_git_snapshot(root: &Path, lock: &ToolLock) -> BuildResult<GitSnapsho
         ));
     }
     let revision = one_git_object_id(
-        run_bounded_pinned_git(root, lock, &["rev-parse", "--verify", "HEAD^{commit}"] )?,
+        run_bounded_pinned_git(root, lock, &["rev-parse", "--verify", "HEAD^{commit}"])?,
         "commit",
     )?;
-    run_bounded_pinned_git(root, lock, &["cat-file", "-e", &format!("{revision}^{{commit}}")])?;
+    if env::var("RAR_CI_BOOTSTRAP_IMAGE").as_deref() == Ok(CI_BOOTSTRAP_IMAGE_SHA256) {
+        let expected = env::var("RAR_EXPECTED_SOURCE_REVISION").map_err(|_| {
+            BuildError::new(
+                "expected-source-revision-missing",
+                "CI source verification requires the workflow-selected head SHA",
+            )
+        })?;
+        validate_source_revision(&expected)?;
+        if revision != expected {
+            return Err(BuildError::new(
+                "unexpected-source-revision",
+                "Git HEAD does not match the workflow-selected head SHA",
+            ));
+        }
+    }
+    run_bounded_pinned_git(
+        root,
+        lock,
+        &["cat-file", "-e", &format!("{revision}^{{commit}}")],
+    )?;
+    let revision_tree = format!("{revision}^{{tree}}");
     let tree = one_git_object_id(
-        run_bounded_pinned_git(root, lock, &["rev-parse", "--verify", "HEAD^{tree}"] )?,
+        run_bounded_pinned_git(root, lock, &["rev-parse", "--verify", &revision_tree])?,
         "tree",
     )?;
+    let index_state = run_bounded_pinned_git(root, lock, &["ls-files", "-v", "--cached"])?;
+    for line in index_state
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+    {
+        let tag = line[0];
+        if tag.is_ascii_lowercase() || tag == b'S' {
+            return Err(BuildError::new(
+                "hidden-index-state",
+                "assume-unchanged and skip-worktree index flags are forbidden",
+            ));
+        }
+    }
     let status = run_bounded_pinned_git(
         root,
         lock,
-        &["status", "--porcelain=v1", "--untracked-files=all", "--ignored=no"],
+        &[
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=all",
+            "--ignored=no",
+        ],
     )?;
     if !status.is_empty() {
         return Err(BuildError::new(
@@ -1390,9 +1478,9 @@ fn capture_build_snapshot(root: &Path) -> BuildResult<BuildSnapshot> {
     let (lock, lock_sha256) = ToolLock::load(root)?;
     let report = require_verified_bootstrap(root, &lock)?;
     let git = verified_git_snapshot(root, &lock)?;
-    let source_inputs_sha256 = source_inputs_sha256(root)?;
-    let manifest_sha256 = hash_owned_file(root, MANIFEST_PATH)?;
-    let inventory_sha256 = hash_owned_file(root, INVENTORY_PATH)?;
+    let source_inputs_sha256 = committed_source_inputs_sha256(root, &lock, &git.revision)?;
+    let manifest_sha256 = committed_file_sha256(root, &lock, &git.revision, MANIFEST_PATH)?;
+    let inventory_sha256 = committed_file_sha256(root, &lock, &git.revision, INVENTORY_PATH)?;
     let snapshot = BuildSnapshot {
         lock,
         lock_sha256,
@@ -1407,6 +1495,17 @@ fn capture_build_snapshot(root: &Path) -> BuildResult<BuildSnapshot> {
 }
 
 fn revalidate_build_snapshot(root: &Path, snapshot: &BuildSnapshot) -> BuildResult<()> {
+    revalidate_build_snapshot_with_probe(root, snapshot, require_verified_bootstrap)
+}
+
+fn revalidate_build_snapshot_with_probe<F>(
+    root: &Path,
+    snapshot: &BuildSnapshot,
+    mut fresh_probe: F,
+) -> BuildResult<()>
+where
+    F: FnMut(&Path, &ToolLock) -> BuildResult<ProbeReport>,
+{
     let (lock, lock_sha256) = ToolLock::load(root)?;
     if lock != snapshot.lock || lock_sha256 != snapshot.lock_sha256 {
         return Err(BuildError::new(
@@ -1414,20 +1513,26 @@ fn revalidate_build_snapshot(root: &Path, snapshot: &BuildSnapshot) -> BuildResu
             "tool lock changed during snapshot capture or output generation",
         ));
     }
+    let report = fresh_probe(root, &lock)?;
+    ensure_probe_unchanged(&snapshot.report, &report)?;
     if verified_git_snapshot(root, &lock)? != snapshot.git {
         return Err(BuildError::new(
             "source-revision-changed",
             "Git revision or tree changed during snapshot capture or output generation",
         ));
     }
-    if source_inputs_sha256(root)? != snapshot.source_inputs_sha256 {
+    if committed_source_inputs_sha256(root, &lock, &snapshot.git.revision)?
+        != snapshot.source_inputs_sha256
+    {
         return Err(BuildError::new(
             "source-inputs-changed",
             "source inputs changed during snapshot capture or output generation",
         ));
     }
-    if hash_owned_file(root, MANIFEST_PATH)? != snapshot.manifest_sha256
-        || hash_owned_file(root, INVENTORY_PATH)? != snapshot.inventory_sha256
+    if committed_file_sha256(root, &lock, &snapshot.git.revision, MANIFEST_PATH)?
+        != snapshot.manifest_sha256
+        || committed_file_sha256(root, &lock, &snapshot.git.revision, INVENTORY_PATH)?
+            != snapshot.inventory_sha256
     {
         return Err(BuildError::new(
             "source-metadata-changed",
@@ -1435,6 +1540,32 @@ fn revalidate_build_snapshot(root: &Path, snapshot: &BuildSnapshot) -> BuildResu
         ));
     }
     Ok(())
+}
+
+fn ensure_probe_unchanged(expected: &ProbeReport, actual: &ProbeReport) -> BuildResult<()> {
+    if actual != expected {
+        return Err(BuildError::new(
+            "tool-probe-changed",
+            "locked tool bytes, closure, SDK, or observed prerequisite state changed during output generation",
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+pub fn verify_probe_stability_for_test(
+    expected: &ProbeReport,
+    actual: &ProbeReport,
+) -> BuildResult<()> {
+    ensure_probe_unchanged(expected, actual)
+}
+
+#[cfg(test)]
+pub fn snapshot_revalidation_with_changed_probe_for_test(root: &Path) -> BuildResult<()> {
+    let snapshot = capture_build_snapshot(root)?;
+    let mut changed = snapshot.report.clone();
+    changed.host_linker = "hash-mismatch".to_owned();
+    revalidate_build_snapshot_with_probe(root, &snapshot, |_, _| Ok(changed.clone()))
 }
 
 #[cfg(test)]
@@ -1457,7 +1588,12 @@ fn build(root: &Path) -> BuildResult<CommandOutcome> {
     let snapshot = capture_build_snapshot(root)?;
     let plan = build_plan(&snapshot);
     revalidate_build_snapshot(root, &snapshot)?;
-    write_repository_output(root, "out/r0/build-plan/build-plan.txt", plan.as_bytes())?;
+    write_snapshot_output(
+        root,
+        "out/r0/build-plan/build-plan.txt",
+        plan.as_bytes(),
+        &snapshot,
+    )?;
     Ok(CommandOutcome {
         exit_code: 0,
         output: format!(
@@ -1524,12 +1660,10 @@ pub fn render_build_plan(
     )
 }
 
-fn image(root: &Path) -> BuildResult<CommandOutcome> {
-    let snapshot = capture_build_snapshot(root)?;
-    let plan = build_plan(&snapshot);
-    let image_plan = format!(
+pub fn render_image_plan(lock: &ToolLock, build_plan_sha256: &str) -> String {
+    format!(
         concat!(
-            "schema=rar-image-plan-v2\n",
+            "schema=rar-image-plan-v3\n",
             "build_plan_sha256={}\n",
             "image_output=out/r0/images\n",
             "target_artifact=unavailable\n",
@@ -1538,15 +1672,22 @@ fn image(root: &Path) -> BuildResult<CommandOutcome> {
             "status=blocked-target-artifact-unavailable\n",
             "target_execution=not-attempted\n"
         ),
-        sha256_hex(plan.as_bytes()),
-        lock_pin_state(&snapshot.lock.firmware_x86_64),
-        lock_pin_state(&snapshot.lock.firmware_aarch64),
-    );
+        build_plan_sha256,
+        lock_pin_state(&lock.firmware_x86_64),
+        lock_pin_state(&lock.firmware_aarch64),
+    )
+}
+
+fn image(root: &Path) -> BuildResult<CommandOutcome> {
+    let snapshot = capture_build_snapshot(root)?;
+    let plan = build_plan(&snapshot);
+    let image_plan = render_image_plan(&snapshot.lock, &sha256_hex(plan.as_bytes()));
     revalidate_build_snapshot(root, &snapshot)?;
-    write_repository_output(
+    write_snapshot_output(
         root,
         "out/r0/image-plan/image-plan.txt",
         image_plan.as_bytes(),
+        &snapshot,
     )?;
     Ok(CommandOutcome {
         exit_code: 4,
@@ -1568,10 +1709,11 @@ fn evidence(root: &Path) -> BuildResult<CommandOutcome> {
         &sha256_hex(plan.as_bytes()),
     );
     revalidate_build_snapshot(root, &snapshot)?;
-    write_repository_output(
+    write_snapshot_output(
         root,
         "out/r0/evidence/host/bootstrap.evidence",
         evidence.as_bytes(),
+        &snapshot,
     )?;
     Ok(CommandOutcome {
         exit_code: 4,
@@ -1695,6 +1837,7 @@ fn test(root: &Path) -> BuildResult<CommandOutcome> {
         let script_sha256 = run_captured_host_script(
             root,
             &snapshot.lock,
+            &snapshot.git.revision,
             script,
             ci_image.as_deref(),
             &mut || Ok(()),
@@ -1712,29 +1855,123 @@ fn test(root: &Path) -> BuildResult<CommandOutcome> {
 fn run_captured_host_script(
     root: &Path,
     lock: &ToolLock,
+    revision: &str,
     script: &str,
     ci_image: Option<&str>,
     before_spawn: &mut dyn FnMut() -> BuildResult<()>,
 ) -> BuildResult<String> {
-    let script_path = validate_workspace_path(root, script, true)
-        .map_err(|error| BuildError::new(error.code, error.detail))?;
-    let script_text = read_bounded_utf8_file(&script_path, HOST_TEST_SCRIPT_MAX_BYTES)
-        .map_err(|error| BuildError::new("host-test-read-failed", error.detail))?;
+    validate_source_revision(revision)?;
+    let script_text = read_committed_utf8_file(root, lock, revision, script)?;
+    let bootstrap_text =
+        read_committed_utf8_file(root, lock, revision, "tools/rarbuild/bootstrap-lib.sh")?;
     let script_sha256 = sha256_hex(script_text.as_bytes());
+    let combined = format!(
+        "{bootstrap_text}\nRAR_BOOTSTRAP_LIBRARY_ALREADY_LOADED=1\nexport RAR_BOOTSTRAP_LIBRARY_ALREADY_LOADED\n{script_text}"
+    );
+    let script_path = root.join(script);
+    run_captured_host_script_text(
+        root,
+        lock,
+        &combined,
+        &script_path,
+        script,
+        ci_image,
+        before_spawn,
+    )?;
+    Ok(script_sha256)
+}
+
+fn read_committed_utf8_file(
+    root: &Path,
+    lock: &ToolLock,
+    revision: &str,
+    relative: &str,
+) -> BuildResult<String> {
+    if !is_canonical_source_relative(relative) {
+        return Err(BuildError::new(
+            "unsafe-source-path",
+            "committed host input path is not canonical and relative",
+        ));
+    }
+    let object = format!("{revision}:{relative}");
+    let bytes = run_bounded_pinned_git(root, lock, &["show", &object])?;
+    if bytes.len() > HOST_TEST_SCRIPT_MAX_BYTES {
+        return Err(BuildError::new(
+            "host-test-read-failed",
+            "committed host input exceeds its bounded size limit",
+        ));
+    }
+    String::from_utf8(bytes)
+        .map_err(|_| BuildError::new("host-test-read-failed", "committed host input is not UTF-8"))
+}
+
+fn committed_file_sha256(
+    root: &Path,
+    lock: &ToolLock,
+    revision: &str,
+    relative: &str,
+) -> BuildResult<String> {
+    if !is_canonical_source_relative(relative) {
+        return Err(BuildError::new(
+            "unsafe-source-path",
+            "committed source path is not canonical and relative",
+        ));
+    }
+    let object = format!("{revision}:{relative}");
+    let bytes = run_bounded_pinned_git(root, lock, &["show", &object])?;
+    Ok(sha256_hex(&bytes))
+}
+
+fn is_canonical_source_relative(relative: &str) -> bool {
+    !relative.is_empty()
+        && !relative.starts_with('-')
+        && !Path::new(relative).is_absolute()
+        && Path::new(relative)
+            .components()
+            .all(|component| matches!(component, std::path::Component::Normal(_)))
+}
+
+fn run_captured_host_script_text(
+    root: &Path,
+    lock: &ToolLock,
+    script_text: &str,
+    script_path: &Path,
+    script_identity: &str,
+    ci_image: Option<&str>,
+    before_spawn: &mut dyn FnMut() -> BuildResult<()>,
+) -> BuildResult<()> {
     before_spawn()?;
     let mut command = Command::new(&lock.bootstrap_shell_path);
     command
         .arg("-c")
-        .arg(&script_text)
-        .arg(&script_path)
+        .arg(script_text)
+        .arg(script_path)
         .current_dir(root)
         .env_clear()
         .env("RAR_REPO_ROOT", root)
         .env("RAR_NESTED_POISON_TEST", "1")
         .env("PATH", "/nonexistent-rar-bootstrap-path")
         .stdin(Stdio::null());
-    if let Some(value) = ci_image {
-        command.env("RAR_CI_BOOTSTRAP_IMAGE", value);
+    if ci_image.is_some() {
+        for name in [
+            "RAR_CI_BOOTSTRAP_IMAGE",
+            "RAR_EXPECTED_SOURCE_REVISION",
+            "RAR_BOOTSTRAP_LOCK_SHA256",
+            "GITHUB_ACTIONS",
+            "CI",
+            "RUNNER_OS",
+            "RUNNER_ARCH",
+            "ImageOS",
+            "ImageVersion",
+        ] {
+            let value = env::var(name).map_err(|_| {
+                BuildError::new(
+                    "ci-boundary-handoff-missing",
+                    format!("required CI boundary variable {name} is absent"),
+                )
+            })?;
+            command.env(name, value);
+        }
     }
     let status = command
         .status()
@@ -1742,10 +1979,10 @@ fn run_captured_host_script(
     if !status.success() {
         return Err(BuildError::new(
             "host-test-failed",
-            format!("{script} exited unsuccessfully"),
+            format!("{script_identity} exited unsuccessfully"),
         ));
     }
-    Ok(script_sha256)
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1758,12 +1995,34 @@ pub fn run_captured_host_script_with_replacement_for_test(
     require_verified_bootstrap(root, &lock)?;
     let path = validate_workspace_path(root, script, true)
         .map_err(|error| BuildError::new(error.code, error.detail))?;
+    let script_text = read_bounded_utf8_file(&path, HOST_TEST_SCRIPT_MAX_BYTES)
+        .map_err(|error| BuildError::new("host-test-read-failed", error.detail))?;
+    let script_sha256 = sha256_hex(script_text.as_bytes());
     let mut hook = || {
         fs::write(&path, replacement)
             .map_err(|error| BuildError::new("host-test-replacement-failed", error.to_string()))
     };
     let ci_image = env::var("RAR_CI_BOOTSTRAP_IMAGE").ok();
-    run_captured_host_script(root, &lock, script, ci_image.as_deref(), &mut hook)
+    run_captured_host_script_text(
+        root,
+        &lock,
+        &script_text,
+        &path,
+        script,
+        ci_image.as_deref(),
+        &mut hook,
+    )?;
+    Ok(script_sha256)
+}
+
+#[cfg(test)]
+pub fn committed_host_input_for_test(
+    root: &Path,
+    revision: &str,
+    relative: &str,
+) -> BuildResult<String> {
+    let (lock, _) = ToolLock::load(root)?;
+    read_committed_utf8_file(root, &lock, revision, relative)
 }
 
 pub fn render_host_test_report(suites: &[(String, String)]) -> String {
@@ -1775,110 +2034,131 @@ pub fn render_host_test_report(suites: &[(String, String)]) -> String {
     output
 }
 
-fn hash_owned_file(root: &Path, relative: &str) -> BuildResult<String> {
-    let path = validate_workspace_path(root, relative, true)
-        .map_err(|error| BuildError::new(error.code, error.detail))?;
-    sha256_file(&path).map_err(|error| BuildError::new(error.code, error.detail))
-}
-
-fn is_lower_sha1(value: &str) -> bool {
-    value.len() == 40
+fn is_lower_git_object_id(value: &str) -> bool {
+    matches!(value.len(), 40 | 64)
         && value
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 fn validate_source_revision(revision: &str) -> BuildResult<String> {
-    if !is_lower_sha1(revision) {
+    if !is_lower_git_object_id(revision) {
         return Err(BuildError::new(
             "invalid-source-revision",
-            "source revision is not a lowercase SHA-1 object ID",
+            "source revision is not a lowercase SHA-1 or SHA-256 Git object ID",
         ));
     }
     Ok(revision.to_owned())
 }
 
-fn source_inputs_sha256(root: &Path) -> BuildResult<String> {
-    let mut files = vec![
-        PathBuf::from("Cargo.toml"),
-        PathBuf::from("rust-toolchain.toml"),
-        PathBuf::from("rustfmt.toml"),
-    ];
-    for directory in [
-        "tools/rar-lab/safety",
-        "spec/lab/vm-profile",
-        "tools/rarbuild",
-        "tools/toolchain",
-        "tests/host-safety",
-        "tests/bootstrap",
-    ] {
-        collect_files(root, Path::new(directory), &mut files)?;
-    }
-    files.sort();
-    files.dedup();
-    let mut canonical = Vec::new();
-    for relative in files {
-        let text = relative
-            .to_str()
-            .ok_or_else(|| BuildError::new("non-utf8-source-path", "source path is not UTF-8"))?;
-        let path = validate_workspace_path(root, text, true)
-            .map_err(|error| BuildError::new(error.code, error.detail))?;
-        let length = fs::symlink_metadata(&path)
-            .map_err(|error| BuildError::new("source-inspection-failed", error.to_string()))?
-            .len();
-        let digest = sha256_file(&path)
-            .map_err(|error| BuildError::new("source-read-failed", error.detail))?;
-        canonical.extend_from_slice(text.as_bytes());
-        canonical.push(0);
-        canonical.extend_from_slice(length.to_string().as_bytes());
-        canonical.push(0);
-        canonical.extend_from_slice(digest.as_bytes());
-        canonical.push(0);
-    }
-    Ok(sha256_hex(&canonical))
+#[cfg(test)]
+pub fn validate_source_revision_for_test(revision: &str) -> BuildResult<String> {
+    validate_source_revision(revision)
 }
 
-fn collect_files(root: &Path, relative: &Path, files: &mut Vec<PathBuf>) -> BuildResult<()> {
-    let relative_text = relative
-        .to_str()
-        .ok_or_else(|| BuildError::new("non-utf8-source-path", "source path is not UTF-8"))?;
-    let directory = validate_workspace_path(root, relative_text, false)
-        .map_err(|error| BuildError::new(error.code, error.detail))?;
-    if !directory.is_dir() {
+fn committed_source_inputs_sha256(
+    root: &Path,
+    lock: &ToolLock,
+    revision: &str,
+) -> BuildResult<String> {
+    validate_source_revision(revision)?;
+    let mut arguments = vec!["ls-tree", "-r", "-z", "--full-tree", revision, "--"];
+    arguments.extend_from_slice(SOURCE_INPUT_PATHS);
+    let listing = run_bounded_pinned_git(root, lock, &arguments)?;
+    if listing.is_empty() || !listing.ends_with(&[0]) {
         return Err(BuildError::new(
-            "source-directory-absent",
-            format!("{} is not a directory", directory.display()),
+            "invalid-source-tree-listing",
+            "committed source tree listing is empty or noncanonical",
         ));
     }
-    for entry in fs::read_dir(&directory)
-        .map_err(|error| BuildError::new("source-list-failed", error.to_string()))?
+    let mut observed = BTreeSet::new();
+    for entry in listing
+        .split(|byte| *byte == 0)
+        .filter(|entry| !entry.is_empty())
     {
-        let entry =
-            entry.map_err(|error| BuildError::new("source-list-failed", error.to_string()))?;
-        let metadata = fs::symlink_metadata(entry.path())
-            .map_err(|error| BuildError::new("source-inspection-failed", error.to_string()))?;
-        if metadata.file_type().is_symlink() {
+        let tab = entry
+            .iter()
+            .position(|byte| *byte == b'\t')
+            .ok_or_else(|| {
+                BuildError::new(
+                    "invalid-source-tree-listing",
+                    "committed source tree entry has no path delimiter",
+                )
+            })?;
+        let metadata = std::str::from_utf8(&entry[..tab]).map_err(|_| {
+            BuildError::new(
+                "invalid-source-tree-listing",
+                "committed source tree metadata is not UTF-8",
+            )
+        })?;
+        let path = std::str::from_utf8(&entry[tab + 1..]).map_err(|_| {
+            BuildError::new(
+                "invalid-source-tree-listing",
+                "committed source path is not UTF-8",
+            )
+        })?;
+        let fields = metadata.split(' ').collect::<Vec<_>>();
+        if fields.len() != 3
+            || !matches!(fields[0], "100644" | "100755")
+            || fields[1] != "blob"
+            || !is_lower_git_object_id(fields[2])
+            || !is_canonical_source_relative(path)
+            || !observed.insert(path)
+        {
             return Err(BuildError::new(
-                "source-symlink-forbidden",
-                format!("{} is a symlink", entry.path().display()),
-            ));
-        }
-        let child = relative.join(entry.file_name());
-        if metadata.is_dir() {
-            collect_files(root, &child, files)?;
-        } else if metadata.is_file() {
-            files.push(child);
-        } else {
-            return Err(BuildError::new(
-                "unsupported-source-entry",
-                format!("{} is not a regular file", entry.path().display()),
+                "invalid-source-tree-listing",
+                "committed source tree entry is malformed, unsafe, or duplicated",
             ));
         }
     }
+    for (index, required) in SOURCE_INPUT_PATHS.iter().enumerate() {
+        let present = if index < 3 {
+            observed.contains(*required)
+        } else {
+            let prefix = format!("{required}/");
+            observed.iter().any(|path| path.starts_with(&prefix))
+        };
+        if !present {
+            return Err(BuildError::new(
+                "incomplete-source-tree-listing",
+                format!("committed source tree omits {required}"),
+            ));
+        }
+    }
+    Ok(sha256_hex(&listing))
+}
+
+#[cfg(test)]
+pub fn committed_source_inputs_sha256_for_test(
+    root: &Path,
+    lock: &ToolLock,
+    revision: &str,
+) -> BuildResult<String> {
+    committed_source_inputs_sha256(root, lock, revision)
+}
+
+#[cfg(test)]
+pub fn set_index_flag_for_test(
+    root: &Path,
+    lock: &ToolLock,
+    flag: &str,
+    relative: &str,
+) -> BuildResult<()> {
+    if !matches!(
+        flag,
+        "--assume-unchanged" | "--no-assume-unchanged" | "--skip-worktree" | "--no-skip-worktree"
+    ) || !is_canonical_source_relative(relative)
+    {
+        return Err(BuildError::new(
+            "invalid-test-index-flag",
+            "test index flag or path is not allowlisted",
+        ));
+    }
+    run_bounded_pinned_git(root, lock, &["update-index", flag, "--", relative])?;
     Ok(())
 }
 
-pub fn write_repository_output(root: &Path, relative: &str, bytes: &[u8]) -> BuildResult<()> {
+fn validate_repository_output(root: &Path, relative: &str) -> BuildResult<()> {
     if !relative.starts_with("out/r0/") {
         return Err(BuildError::new(
             "unsafe-output-path",
@@ -1887,6 +2167,56 @@ pub fn write_repository_output(root: &Path, relative: &str, bytes: &[u8]) -> Bui
     }
     validate_workspace_path(root, relative, false)
         .map_err(|error| BuildError::new(error.code, error.detail))?;
+    Ok(())
+}
+
+pub fn write_repository_output(root: &Path, relative: &str, bytes: &[u8]) -> BuildResult<()> {
+    validate_repository_output(root, relative)?;
     atomic_write_workspace_file(root, Path::new(relative), bytes)
         .map_err(|error| BuildError::new(error.code, error.detail))
+}
+
+fn write_snapshot_output_with_hook<F>(
+    root: &Path,
+    relative: &str,
+    bytes: &[u8],
+    snapshot: &BuildSnapshot,
+    mut before_revalidation: F,
+) -> BuildResult<()>
+where
+    F: FnMut() -> BuildResult<()>,
+{
+    validate_repository_output(root, relative)?;
+    atomic_write_workspace_file_with_precommit(root, Path::new(relative), bytes, || {
+        before_revalidation()
+            .and_then(|()| revalidate_build_snapshot(root, snapshot))
+            .map_err(|error| safety::SafetyError {
+                code: error.code,
+                detail: error.detail,
+            })
+    })
+    .map_err(|error| BuildError::new(error.code, error.detail))
+}
+
+fn write_snapshot_output(
+    root: &Path,
+    relative: &str,
+    bytes: &[u8],
+    snapshot: &BuildSnapshot,
+) -> BuildResult<()> {
+    write_snapshot_output_with_hook(root, relative, bytes, snapshot, || Ok(()))
+}
+
+#[cfg(test)]
+pub fn snapshot_output_precommit_with_hook<F>(
+    root: &Path,
+    relative: &str,
+    bytes: &[u8],
+    hook: F,
+) -> BuildResult<()>
+where
+    F: FnMut() -> BuildResult<()>,
+{
+    let snapshot = capture_build_snapshot(root)?;
+    write_snapshot_output_with_hook(root, relative, bytes, &snapshot, hook)
 }

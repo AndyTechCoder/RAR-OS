@@ -8,11 +8,11 @@ Within CI:
 
 - `check` emits `rar-host-check-v2` and exits 3 because external LLD, QEMU, and firmware remain unavailable.
 - `build` writes deterministic `rar-build-plan-v3`; it does not compile or link target code.
-- `image` writes blocked `rar-image-plan-v2` and exits 4; it creates no bootable image.
+- `image` writes blocked `rar-image-plan-v3` and exits 4; it creates no bootable image.
 - `test` captures and hashes the two host scripts once, passes those exact bytes to the pinned shell, and emits `rar-host-test-v2`.
 - `evidence` writes `rar-build-evidence-v3` and exits 4 while target artifacts and certification inputs are absent.
 
-Pinned Git verifies that `HEAD` names an existing commit and tree and that tracked and untracked source state is clean. One `BuildSnapshot` captures lock, probe, commit, tree, source inputs, tool manifest, and dependency inventory; every field and the source snapshot are revalidated before output publication. Missing objects, dirty source, lock swaps, and source mutation fail closed.
+The shell binds the complete selected lock to a reviewed digest, verifies the read-only CI tool root, authenticates pinned Git, and compiles only source blobs materialized from the exact workflow-selected clean commit. The compiled verifier independently verifies that commit and its commit-bound tree, rejects hidden index flags, hashes the canonical commit-tree source listing, and hashes manifest/inventory bytes from commit blobs. One `BuildSnapshot` captures those identities with the complete tool probe. The locked tool bytes/closure and every other field are revalidated after output staging and immediately before atomic publication. Missing objects, hidden index state, dirty source, tool-probe drift, lock swaps, and source mutation fail closed.
 
 Durable output uses descriptor-relative no-follow traversal, synchronized exclusive staging, same-descriptor byte verification, atomic rename, and parent synchronization. A post-commit failure never unlinks the destination because a concurrent writer may already own that pathname.
 

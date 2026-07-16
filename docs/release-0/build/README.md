@@ -23,7 +23,7 @@ tools/rarbuild/rarbuild evidence
 
 `run`, aliases, delegation names, arbitrary commands, and argument-bearing `test` modes return 73 before root discovery or host-tool execution.
 
-Executable accepted routes run only in the official Rust 1.95.0 OCI image pinned by index digest `sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3`. CI checks out the exact PR head, selects the separately measured Linux lock, runs every accepted route under a poisoned caller `PATH`, and executes generated host binaries through `/proc/self/fd`.
+Executable accepted routes run only in the official Rust 1.95.0 OCI image pinned by index digest `sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3`. CI checks out the exact PR head, mounts the container tool root read-only, verifies the reviewed hosted-runner identity, selects a whole-file-digest-bound Linux lock, runs every accepted route under a poisoned caller `PATH`, and executes generated host binaries through `/proc/self/fd`.
 
 The physical Mac verifies the bounded policy records, proposed macOS roots, and both closure manifests, then returns exit 2 with `reason=local-bootstrap-execution-awaits-descriptor-bound-launcher`. macOS does not provide the required descriptor-execution primitive for generated Mach-O files, so Release 0 does not reopen a mutable generated pathname and overstate its safety. This is a deliberate fail-closed limitation, not target non-execution alone.
 
@@ -31,7 +31,9 @@ The physical Mac verifies the bounded policy records, proposed macOS roots, and 
 
 `rar-host-tool-lock-v3` separates the local diagnostic lock from the executable Linux CI lock.
 
-Before shell parsing can allocate an unbounded record, the reviewed preparser axiom verifies exact hasher, byte-count, and line-bound helpers. It limits the lock to 16 KiB and 512-byte lines, limits approval/task/safety records, and rejects unknown fields. Before any selected non-root executable can run, the wrapper hashes its exact canonical path.
+Before shell parsing can allocate an unbounded record, the reviewed preparser axiom verifies exact hasher, byte-count, and line-bound helpers. It limits the lock to 16 KiB and 512-byte lines, limits approval/task/safety records, and rejects unknown fields. The preparser also binds the complete selected lock to a separately reviewed SHA-256 before parsing; the compiled verifier requires that same digest handoff. Before any selected non-root executable can run, the wrapper hashes its exact canonical path.
+
+`tools/toolchain/class-b-host-tools.v1` closes the Class B policy ledger for selected macOS roots, Xcode SDK, Rust/LLVM, OCI packages, `actions/checkout`, and CI service boundaries. Every row has a version/identity, integrity source, license, provenance URL, setup source, and explicit status. CI rejects missing, duplicate, malformed, or stale rows. The hosted runner and container engine are version-attested external service layers, not part of the OCI userland digest, and remain explicitly non-certifying.
 
 The macOS closure manifests pin:
 
@@ -41,22 +43,22 @@ The macOS closure manifests pin:
 - Cargo;
 - SDK settings and every SDK `.tbd` link stub in the selected closure.
 
-The CI image digest is its complete transitive closure. The Linux lock additionally records exact hashes for Dash, SHA-256, bounds helpers, `mkdir`, `rm`, `env`, Rust, GCC 14, the sysroot marker, Cargo, and Git. `rustup` is never invoked and no command downloads or installs a dependency.
+The CI image digest and enforced read-only userland form the selected tool closure. The Linux lock additionally records exact hashes for Dash, SHA-256, bounds helpers, `mkdir`, `rm`, `env`, Rust, GCC 14, the sysroot marker, Cargo, and Git. Hosted runner, kernel, and container-engine layers remain recorded non-certifying service boundaries. `rustup` is never invoked and no command downloads or installs a dependency.
 
-Wrong-byte fixtures prove that compiler, linker, compiler-driver, and standard-library changes fail before a canary can execute. Normal-exit traps remove private bootstrap/test directories; unique exclusive names avoid stale PID collisions.
+Wrong-byte fixtures prove that compiler, linker, compiler-driver, and standard-library changes fail before a canary can execute, and a matching path/hash lock substitution fails against the immutable whole-lock digest. The shell verifies the exact clean workflow commit before compilation and materializes source blobs into an exclusive private directory. Its first external boundary after compiler return is opening the generated output; closure revalidation happens after that descriptor is held. Normal-exit traps remove only an exact regular-file allowlist relative to bound current directories; recursive deletion is not used. The CI route forbids introducing an unreviewed concurrent same-UID process.
 
 ## Clean source snapshot and versioned receipts
 
-Pinned Git runs only after the compiled verifier has authenticated it. Planning and evidence require:
+The shell authenticates pinned Git and establishes source identity before host compilation; the compiled verifier independently repeats the checks. Planning and evidence require:
 
-1. `HEAD^{commit}` and `HEAD^{tree}` resolve to existing objects;
-2. tracked and untracked source state is clean;
-3. one lock/probe/Git/source-input/manifest/inventory snapshot is captured;
-4. the same lock, commit, tree, and source hashes still match before publication.
+1. `HEAD^{commit}` resolves to an existing object and its tree is resolved from that captured commit;
+2. tracked and untracked source state is clean and no `assume-unchanged` or `skip-worktree` flags exist;
+3. source-input, manifest, and inventory digests derive from the captured commit's tree/blob objects, while compiler inputs are materialized from those same blobs;
+4. the complete locked tool/closure probe, lock, commit, tree, and source hashes still match after output staging and immediately before atomic publication.
 
-An archive containing only a claimed `.git/HEAD` value cannot emit evidence. Tests cover nonexistent objects, dirty source, lock replacement, and source mutation.
+An archive containing only a claimed `.git/HEAD` value cannot emit evidence. Both SHA-1 and SHA-256 Git object IDs are validated. Tests cover nonexistent objects, hidden index flags, dirty source, tool-probe drift, lock replacement, source mutation, and mutation at the publication boundary.
 
-Corrected host schemas are `rar-host-check-v2`, `rar-host-test-v2`, `rar-build-plan-v3`, and `rar-build-evidence-v3`. Their field-order contracts are test fixtures under `tools/rarbuild/contracts/`; strict consumers do not reinterpret older schemas.
+Corrected host schemas are `rar-host-check-v2`, `rar-host-test-v2`, `rar-build-plan-v3`, `rar-image-plan-v3`, and `rar-build-evidence-v3`. Their field-order contracts are test fixtures under `tools/rarbuild/contracts/`; strict consumers do not reinterpret older schemas.
 
 ## Output and host-script safety
 
@@ -64,7 +66,7 @@ Durable plan/evidence output uses descriptor-relative no-follow directory traver
 
 Competing-writer, parent-replacement, interruption, write/fsync/rename/unlink fault, and post-commit replacement tests cover those semantics.
 
-`rarbuild test` reads each bounded test script once through a no-follow descriptor, hashes those captured bytes, and passes the exact text to the pinned shell using `-c` with the canonical script path as `$0`. Replacing the pathname after capture cannot change executed script bytes.
+`rarbuild test` reads the bootstrap library and each bounded test script from the captured Git commit, hashes the script bytes, and passes the combined exact text to the pinned shell using `-c` with the canonical script path as `$0`. Replacing workspace paths before or after capture cannot change executed script bytes.
 
 ## Acceptance mapping
 

@@ -45,7 +45,9 @@ tools/rarbuild/bootstrap-lib.sh
 tools/rarbuild/contracts/rar-host-check-v2.fields
 tools/rarbuild/contracts/rar-host-test-v2.fields
 tools/rarbuild/contracts/rar-build-plan-v3.fields
+tools/rarbuild/contracts/rar-image-plan-v3.fields
 tools/rarbuild/contracts/rar-build-evidence-v3.fields
+tools/toolchain/class-b-host-tools.v1
 tools/toolchain/host-tools.x86_64-unknown-linux-gnu-ci.lock
 tools/toolchain/rust-host-closure.aarch64-apple-darwin.sha256
 tools/toolchain/sdk-link-closure.aarch64-apple-darwin.sha256'
@@ -195,6 +197,69 @@ fi
 grep -Eq 'uses: actions/checkout@[0-9a-f]{40}([[:space:]]|$)' .github/workflows/specifications.yml || fail "GitHub checkout action is not pinned by commit"
 grep -qx 'channel = "1.95.0"' rust-toolchain.toml || fail "Rust toolchain is not pinned to 1.95.0"
 grep -qx 'members = \[\]' Cargo.toml || fail "Gate 0 workspace must not contain implementation crates"
+
+class_b_inventory=tools/toolchain/class-b-host-tools.v1
+[ "$(sed -n '1p' "$class_b_inventory")" = 'schema=rar-class-b-host-tool-inventory-v1' ] || fail "Class B inventory schema is invalid"
+[ "$(sed -n '2p' "$class_b_inventory")" = 'id|platform|version|integrity|license|provenance|setup|status' ] || fail "Class B inventory header is invalid"
+[ "$(sed -n '3,$p' "$class_b_inventory" | awk 'END { print NR + 0 }')" -eq 15 ] || fail "Class B inventory entry count is invalid"
+
+class_b_ids='macos-sealed-bootstrap
+macos-apple-git
+macos-rust-toolchain
+xcode-macos-sdk
+rust-official-oci-image
+ci-rust-toolchain
+ci-dash
+ci-coreutils
+ci-grep
+ci-gcc
+ci-git
+ci-linux-sysroot
+actions-checkout
+github-hosted-runner
+github-runner-container-engine'
+printf '%s\n' "$class_b_ids" | while IFS= read -r id; do
+    [ "$(grep -c "^$id|" "$class_b_inventory")" -eq 1 ] || fail "Class B inventory ID is missing or duplicated: $id"
+done
+
+sed -n '3,$p' "$class_b_inventory" | while IFS='|' read -r id platform version integrity license provenance setup status extra; do
+    [ -n "$id" ] && [ -n "$platform" ] && [ -n "$version" ] && [ -n "$integrity" ] && [ -n "$license" ] && [ -n "$provenance" ] && [ -n "$setup" ] && [ -n "$status" ] && [ -z "${extra-}" ] || fail "Class B inventory row is incomplete: $id"
+    case "$id$platform$version$integrity$license$setup" in
+        *[!A-Za-z0-9._:/+-]*) fail "Class B inventory row is not canonical: $id" ;;
+    esac
+    case "$provenance" in https://*) ;; *) fail "Class B provenance is not an HTTPS source: $id" ;; esac
+    case "$status" in diagnostic-only | pinned-executable | pinned-orchestrator | external-attested-noncertifying) ;; *) fail "Class B inventory status is invalid: $id" ;; esac
+done
+
+grep -qx 'schema=rar-host-tool-manifest-v4' tools/toolchain/host-tools.manifest || fail "host tool manifest schema is stale"
+grep -qx 'class_b_inventory=tools/toolchain/class-b-host-tools.v1' tools/toolchain/host-tools.manifest || fail "host tool manifest omits the Class B inventory"
+grep -Eq '^class_b_inventory_sha256=[0-9a-f]{64}$' tools/toolchain/host-tools.manifest || fail "host tool manifest omits the Class B inventory digest"
+grep -q 'f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3' "$class_b_inventory" || fail "Class B inventory omits the OCI digest"
+grep -q '11bd71901bbe5b1630ceea73d27597364c9af683' "$class_b_inventory" || fail "Class B inventory omits the checkout action commit"
+grep -q 'ubuntu-24.04-20260714.240.1' "$class_b_inventory" || fail "Class B inventory omits the runner image version"
+
+sha256_of() {
+    if [ -x /usr/bin/sha256sum ]; then
+        digest_output=$(LC_ALL=C /usr/bin/sha256sum "$1") || return 1
+    elif [ -x /usr/bin/shasum ]; then
+        digest_output=$(LC_ALL=C /usr/bin/shasum -a 256 "$1") || return 1
+    else
+        return 1
+    fi
+    digest=${digest_output%% *}
+    [ "${#digest}" -eq 64 ] || return 1
+    case "$digest" in *[!0-9a-f]*) return 1 ;; esac
+    printf '%s\n' "$digest"
+}
+
+local_lock_sha256=$(sha256_of tools/toolchain/host-tools.lock) || fail "cannot hash local tool lock"
+ci_lock_sha256=$(sha256_of tools/toolchain/host-tools.x86_64-unknown-linux-gnu-ci.lock) || fail "cannot hash CI tool lock"
+[ "$local_lock_sha256" = f7e9baf24aaff9eaa2a2032cf0a9919568cca817d6b5d0c7e6891bce05ec979a ] || fail "local tool lock digest changed without bootstrap authority update"
+[ "$ci_lock_sha256" = 6752b1b21ac8fa93a671ff9444173e4c3bbc4cdcbe4cf5cd39820371dc79aa24 ] || fail "CI tool lock digest changed without bootstrap authority update"
+grep -qx "macos_lock_sha256=$local_lock_sha256" tools/toolchain/host-tools.manifest || fail "host tool manifest local lock digest is stale"
+grep -qx "ci_lock_sha256=$ci_lock_sha256" tools/toolchain/host-tools.manifest || fail "host tool manifest CI lock digest is stale"
+grep -q -- '--read-only' .github/workflows/specifications.yml || fail "CI container root is not read-only"
+grep -q 'rar-image-plan-v3' tools/rarbuild/contracts/rar-image-plan-v3.fields || fail "image-plan v3 contract is missing"
 
 tools/ci/check-host-policy.sh
 tools/ci/test-host-policy.sh

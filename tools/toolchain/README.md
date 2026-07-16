@@ -1,6 +1,6 @@
 # Release 0 host toolchain locks
 
-`host-tools.manifest` declares the Class B host surface and `dependencies.r0` separates host inputs from target dependencies. The versioned `rar-host-tool-lock-v3` records are platform-specific:
+`host-tools.manifest` declares the Class B host surface and `dependencies.r0` separates host inputs from target dependencies. `class-b-host-tools.v1` is the strict license/provenance/setup inventory for every selected platform tool group, OCI input, CI action, and orchestration boundary. The versioned `rar-host-tool-lock-v3` records are platform-specific:
 
 - `host-tools.lock` records the proposed `aarch64-apple-darwin` inputs on the physical development Mac.
 - `host-tools.x86_64-unknown-linux-gnu-ci.lock` records the executable test roots inside the Rust 1.95.0 OCI image pinned by digest `sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3`.
@@ -9,6 +9,8 @@ The macOS preparser uses the sealed-system shell, SHA-256 utility, and bounded-i
 
 macOS cannot execute the generated Mach-O through an already-open descriptor. Therefore Release 0 does not execute this local compiler closure: local accepted compile/test/planning/evidence routes refuse after verification and before `mkdir`, Rust, or linker execution. The Mac remains source/build storage. A future local route requires a separately reviewed descriptor-bound launcher or an equivalently immutable execution environment.
 
-The Linux CI image digest is the complete transitive execution closure for CI. The Linux lock additionally records exact in-image paths and hashes for the shell, hasher, bounded-input tools, directory/cleanup tools, environment sanitizer, compiler, GCC driver, sysroot marker, Cargo, and Git. Generated host binaries execute from `/proc/self/fd`; captured host test script bytes are passed directly to the pinned shell.
+The Linux CI image digest plus an enforced read-only container userland is the selected tool closure. The complete CI lock is itself bound to a reviewed digest before parsing and at the shell-to-Rust handoff. The lock additionally records exact in-image paths and hashes for the shell, hasher, bounded-input tools, directory/cleanup tools, environment sanitizer, compiler, GCC driver, sysroot marker, Cargo, and Git. Rust sources and host scripts come from exact Git blobs; generated host binaries execute from `/proc/self/fd`. Hosted runner, kernel, and container engine remain explicit external non-certifying boundaries.
+
+The Class B inventory records the upstream license and provenance source plus the exact repository setup/pin for each selected group. GNU/Debian package licenses remain available in the immutable image under the packaged copyright records; Xcode and Apple SDK use remains governed by the recorded Apple agreement. GitHub's hosted runner and container engine are explicitly `external-attested-noncertifying`: the workflow pins and checks the observed `ubuntu-24.04` image version, but those service layers are not folded into the OCI userland digest and cannot support target certification or the deferred artifact-reproducibility claim. A runner-image change fails CI until its inventory record is reviewed and updated.
 
 Both locks keep external LLD, every QEMU backend, and both firmware inputs unavailable. `certifiable=false` remains mandatory. No command downloads or installs a tool, and no Cargo package, third-party crate, target-linked dependency, target artifact, target asset, firmware payload, or Dependency Exception Record is present.

@@ -1,6 +1,7 @@
 #![deny(unsafe_code)]
 
-#[path = "lib.rs"]
+#[cfg_attr(rar_flat_bootstrap, path = "rarbuild.rs")]
+#[cfg_attr(not(rar_flat_bootstrap), path = "lib.rs")]
 mod rarbuild;
 
 use std::env;
