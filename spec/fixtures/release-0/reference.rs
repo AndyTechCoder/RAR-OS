@@ -168,7 +168,7 @@ fn mutate(mut bytes: Vec<u8>, predicate: &str) -> Vec<u8> {
         "flags" => bytes[entry + 23] = 1,
         "reserved" => bytes[entry + 32] = 1,
         "range-arithmetic" => { put_u64(&mut bytes, descriptor(0), u64::MAX); put_u64(&mut bytes, descriptor(0) + 8, 2); }
-        "address-width" => { bytes[entry + 22] = 32; }
+        "address-width" => { bytes[entry + 22] = 32; put_u64(&mut bytes, descriptor(0), 0x1_0000_0000); }
         "alignment" => put_u64(&mut bytes, descriptor(1), 8193),
         "entry-semantics" => put_u16(&mut bytes, entry + 24, 6),
         "minor-compatibility" => { put_u16(&mut bytes, entry + 10, 1); put_u16(&mut bytes, descriptor(5) + 16, 99); put_u16(&mut bytes, descriptor(5) + 26, 4); }
