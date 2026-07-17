@@ -10,9 +10,12 @@ maximum_record_count=256
 required_alignment=8
 architectures=1:x86_64,2:aarch64
 record_flags=1:critical
+compatible_minor_register_role=known-register-window-record,unknown-role,record-flag-critical
 records=1:cpu:48,2:memory:48,3:interrupt:48,4:timer:48,5:serial:48,6:boot-source:24,7:register-window:56
 required_records=cpu,memory,interrupt,timer,serial,boot-source,register-window
 record_identity=record-header-id-unique-within-kind
+cpu_hardware_identity=hardware-id-unique-across-cpu-records
+interrupt_global_range=x86_64:half-open-end-at-most-256,aarch64:half-open-end-at-most-1020,checked-nonoverlapping
 interrupt_models=1:x86-apic,2:arm-gicv3
 timer_models=1:x86-architectural,2:arm-generic
 serial_models=1:16550-compatible,2:pl011-compatible
@@ -79,6 +82,8 @@ rust-const|SERIAL_RECORD_BYTES|u32|48
 rust-const|BOOT_SOURCE_RECORD_BYTES|u32|24
 rust-const|REGISTER_WINDOW_RECORD_BYTES|u32|56
 rust-const|RECORD_CRITICAL|u16|1
+rust-const|X86_GLOBAL_INTERRUPT_LIMIT|u32|256
+rust-const|AARCH64_GLOBAL_INTERRUPT_LIMIT|u32|1_020
 rust-const|CPU_BOOT|u32|1
 rust-const|WINDOW_REQUIRED|u16|1
 rust-enum|RecordKind|u16|Cpu=1,Memory=2,Interrupt=3,Timer=4,Serial=5,BootSource=6,RegisterWindow=7
@@ -99,4 +104,4 @@ rust-struct|InterruptRecordV1|model:InterruptModel,flags:u16,global_interrupt_ba
 rust-struct|TimerRecordV1|model:TimerModel,flags:u16,frequency_hz:u64,interrupt_index:u32,interrupt_controller_id:u32,interrupt_trigger:InterruptTrigger,interrupt_polarity:InterruptPolarity
 rust-struct|SerialRecordV1|model:SerialModel,flags:u16,interrupt_index:u32,interrupt_controller_id:u32,input_clock_hz:u64,interrupt_trigger:InterruptTrigger,interrupt_polarity:InterruptPolarity
 rust-struct|BootSourceRecordV1|kind:BootSourceKind,flags:u16
-rust-struct|RegisterWindowRecordV1|parent_kind:RecordKind,role:RegisterWindowRole,parent_id:u32,address_space:AddressSpace,access_width:u8,byte_order:WireByteOrder,stride:u16,flags:u16,base:u64,length:u64,authority_selector:DescriptorSelectorV1
+rust-struct|RegisterWindowRecordV1|parent_kind:RecordKind,role:u16,parent_id:u32,address_space:AddressSpace,access_width:u8,byte_order:WireByteOrder,stride:u16,flags:u16,base:u64,length:u64,authority_selector:DescriptorSelectorV1

@@ -85,6 +85,13 @@ validation-predicate|33|cross-artifact|authority|descriptor-and-alias|unauthoriz
 validation-predicate|34|cross-artifact|architecture|agreement|architecture-mismatch|cross-artifact.authority.descriptor-and-alias|adapter+entry+handoff+rhd|none
 validation-predicate|35|cross-artifact|address-width|agreement|inconsistent-description|cross-artifact.architecture.agreement|adapter+entry+handoff+rhd|none
 validation-predicate|36|cross-artifact|page-size|agreement|page-size-mismatch|cross-artifact.address-width.agreement|adapter+handoff+rhd|none
+validation-detail|entry.header.framing|bind-entry-architecture-and-address-width-to-trusted-adapter-before-descriptor-use|invalid-entry
+validation-detail|adapter.entry.alignment|trusted-architecture-domain-and-page-size-domain-before-entry-copy|bad-alignment-or-architecture-mismatch
+validation-detail|descriptors.table.binding|whole-table-zero-length-address-width-alignment-selector-cardinality-rights-producer-transfer-flags|invalid-pointer-range
+validation-detail|rhd.records.framing|whole-table-bounds-size-reserved-and-supported-flags|bad-count-or-length
+validation-detail|rhd.records.critical-extension|whole-table-unknown-record-and-unknown-register-role-compatibility|unknown-critical-or-unsupported-minor
+validation-detail|rhd.cpu.cardinality-and-boot|unique-cpu-hardware-id|invalid-cpu-set
+validation-detail|rhd.interrupt.cardinality-and-model|checked-architecture-bounded-nonoverlapping-global-ranges|invalid-interrupt
 wire-field|BootEntryHeaderV1|0|magic|bytes:8
 wire-field|BootEntryHeaderV1|8|major|u16
 wire-field|BootEntryHeaderV1|10|minor|u16

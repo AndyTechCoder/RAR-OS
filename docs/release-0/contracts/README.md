@@ -28,9 +28,9 @@ The authoritative boot memory map describes dynamic range ownership. RHD memory 
 | CPU, memory, interrupts, timers, serial, boot source, reserved ownership | sole-ID RHD records plus authoritative memory-map kinds/owners |
 | Trusted entry and immutable snapshot | independently transported architecture-adapter tuple, inline `BootEntryV1` descriptors, descriptor-keyed provider, enforced one-copy rule, predicate access budgets, and empty rejected-effect logs |
 | Device description without authority escalation | typed RHD windows cross-checked against owner-bound MMIO/I/O descriptors |
-| Bounds, alignment, ownership, deterministic failure | staged 36-row predicate table executed as 36 single, 35 adjacent, and eight non-adjacent compound-invalid cases |
+| Bounds, alignment, ownership, deterministic failure | staged 36-row predicate table executed on both architecture baselines as 72 single runs, 70 adjacent runs, and eight non-adjacent pairs per architecture |
 | x86-64/AArch64 normalized categories | valid APIC/16550-I/O and GICv3/PL011 raw bundles decoded by one oracle |
-| Required malformed classes | both-architecture framing, alias, globally staged reordered descriptors, reordered known/unknown records, provider faults, compatible/critical minors, singleton cardinality, model/reference, exact handoff/descriptor equality, map bounds, register overflow, consistency, and architecture cases |
+| Required malformed classes | both-architecture adapter/entry binding, malformed address width/page size, framing, alias, globally staged reordered descriptors, reordered known/unknown records, provider faults, representable compatible/critical register roles, CPU hardware identity, checked interrupt bounds/overlap, singleton cardinality, model/reference, exact handoff/descriptor equality, map bounds, register overflow, consistency, and architecture cases |
 | No unverified pointer execution | host oracle uses byte slices and checked `u64` arithmetic; fixture addresses are never dereferenced |
 | Generated Rust source consistency | complete deterministic rendering from `rust-*` schema rows, byte comparison, pinned Linux metadata compilation |
 
@@ -48,7 +48,7 @@ out/r0-002-reference-local spec/fixtures/release-0
 tools/ci/check-specs.sh
 ```
 
-The host oracle reports 18 raw fixtures, 60 instrumented scenarios, 36 focused predicates, and 35 adjacent precedence edges. The required `Specifications` workflow additionally runs `spec/fixtures/release-0/run.sh --ci` and `sdk/generated/release-0/check.sh --compile` in the pinned Rust 1.95.0 read-only Linux container. The workflow binds checkout and evidence to the PR head through `RAR_EXPECTED_SOURCE_REVISION`. Generated Rust receives metadata-only host compilation; the host-only reference oracle runs against committed binary fixtures. No RAR target code is compiled or executed on the physical Mac or in CI.
+The host oracle reports 23 raw fixtures, 96 instrumented scenarios, 36 focused predicates executed on each of two architecture baselines, and all 35 adjacent precedence edges executed on each baseline. The required `Specifications` workflow additionally runs `spec/fixtures/release-0/run.sh --ci` and `sdk/generated/release-0/check.sh --compile` in the pinned Rust 1.95.0 read-only Linux container. The workflow binds checkout and evidence to the PR head through `RAR_EXPECTED_SOURCE_REVISION`. Generated Rust receives metadata-only host compilation; the host-only reference oracle runs against committed binary fixtures. No RAR target code is compiled or executed on the physical Mac or in CI.
 
 ## Security, unsafe, dependencies, and recovery
 

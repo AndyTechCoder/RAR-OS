@@ -58,6 +58,8 @@ Use alternative B for identity and typed register-window subrecords for hardware
 - Model specifications declare required and forbidden window roles. GICv3 requires distinct distributor and redistributor roles; 16550 may use either MMIO or x86 I/O-port space as declared.
 - Interrupt references use a controller-relative namespace plus a declared trigger/polarity model; global numbering is derived only by the validated controller binding.
 - Every window is cross-checked against the authority decision in ADR 0013 before access. `(purpose,parent_kind,parent_id)` selects owner candidates; address space, rights, and full-range containment must leave exactly one match, so split authorities are supported and descriptor order has no semantic effect.
+- CPU `hardware_id` values are unique across CPU records. Interrupt-controller global ranges use checked half-open arithmetic, are pairwise non-overlapping, and end at or below the Release 0 architectural limit (256 for x86-64 and 1020 for AArch64).
+- Compatible higher minors encode an optional unknown register role as a normal register-window record with record critical bit clear. It remains subject to framing, identity, and canonical ordering, then is skipped without reference resolution or authority. Setting the critical bit makes the unknown role fail closed.
 
 ## Consequences
 
@@ -73,7 +75,7 @@ One canonical identity prevents validators and consumers from resolving differen
 
 ## Compatibility and migration
 
-This decision revises unmerged RHD v1. After freeze, adding optional roles may use a compatible minor version only when old readers can ignore them safely; identity, address-space, or required-role changes require a major version.
+This decision revises unmerged RHD v1. After freeze, adding optional roles may use a compatible minor version only through the explicit noncritical register-record encoding that old readers can frame and ignore safely; identity, address-space, required-role, or architectural interrupt-limit changes require a major version.
 
 ## Validation
 

@@ -142,6 +142,7 @@ struct Behavior {
     external_address: Option<u64>,
     external_length: Option<u32>,
     adapter_address_bits: Option<u8>,
+    adapter_architecture: Option<u16>,
     page_bytes: Option<u64>,
     entry_alignment: Option<u16>,
     fault_purpose: Option<u16>,
@@ -305,7 +306,12 @@ fn overlaps(a: (u64, u64), b: (u64, u64)) -> Result<bool, Code> {
 
 fn address_fits(base: u64, length: u64, bits: u8) -> Result<bool, Code> {
     let end = checked_end(base, length)?;
-    Ok(bits == 64 || end <= (1u64 << bits))
+    let ceiling = match bits {
+        0..=63 => 1u64.checked_shl(u32::from(bits)),
+        64 => None,
+        _ => return Ok(false),
+    };
+    Ok(ceiling.is_none_or(|limit| end <= limit))
 }
 
 fn descriptor_offset(bytes: &[u8], purpose: u16, owner_kind: u16, owner_id: u32) -> Option<usize> {
@@ -560,10 +566,28 @@ fn apply_mutation(bytes: &mut Vec<u8>, predicate: &str, behavior: &mut Behavior)
             put_u64(bytes, map_descriptor, u64::MAX);
             put_u64(bytes, map_descriptor + 8, 2);
         }
+        "descriptor-binding-plus-alignment" => {
+            let handoff_descriptor = descriptor_offset(bytes, 1, 0, 0).expect("handoff descriptor");
+            put_u16(bytes, handoff_descriptor + 24, 1);
+            let map_descriptor = descriptor_offset(bytes, 2, 0, 0).expect("map descriptor");
+            put_u64(bytes, map_descriptor, 8193);
+        }
         "compatible-entry-minor" => add_entry_descriptor(bytes, false, true),
         "compatible-rhd-minor" => {
             put_u16(bytes, rhd + 10, 1);
             insert_rhd_record(bytes, record_header(99, 0, 24, 1));
+        }
+        "compatible-window-role" => {
+            put_u16(bytes, rhd + 10, 1);
+            let mut window = record_header(7, 0, 56, 99);
+            put_u16(&mut window, 18, 99);
+            insert_rhd_record(bytes, window);
+        }
+        "critical-window-role" => {
+            put_u16(bytes, rhd + 10, 1);
+            let mut window = record_header(7, 1, 56, 99);
+            put_u16(&mut window, 18, 99);
+            insert_rhd_record(bytes, window);
         }
         "critical-rhd-minor" => {
             put_u16(bytes, rhd + 10, 1);
@@ -576,6 +600,12 @@ fn apply_mutation(bytes: &mut Vec<u8>, predicate: &str, behavior: &mut Behavior)
         "double-boot-cpu" => {
             let cpu = record_offset(bytes, 1, 2).expect("second CPU");
             put_u32(bytes, cpu + 16, 1);
+        }
+        "duplicate-cpu-hardware" => {
+            let first = record_offset(bytes, 1, 1).expect("first CPU");
+            let second = record_offset(bytes, 1, 2).expect("second CPU");
+            let hardware_id = u64_at(bytes, first + 24).expect("hardware id");
+            put_u64(bytes, second + 24, hardware_id);
         }
         "missing-serial" => {
             let arch = u16_at(bytes, entry + 20).expect("entry architecture");
@@ -595,6 +625,18 @@ fn apply_mutation(bytes: &mut Vec<u8>, predicate: &str, behavior: &mut Behavior)
             insert_rhd_record(bytes, boot);
         }
         "duplicate-interrupt" => duplicate_rhd_record(bytes, 3, 1, 2),
+        "interrupt-overflow" => {
+            let interrupt = record_offset(bytes, 3, 1).expect("interrupt record");
+            put_u32(bytes, interrupt + 20, u32::MAX);
+            put_u32(bytes, interrupt + 24, 2);
+        }
+        "interrupt-overlap" => duplicate_rhd_record(bytes, 3, 1, 2),
+        "interrupt-upper-bound" => {
+            let interrupt = record_offset(bytes, 3, 1).expect("interrupt record");
+            let architecture = u16_at(bytes, entry + 20).expect("entry architecture");
+            put_u32(bytes, interrupt + 20, if architecture == 1 { 32 } else { 796 });
+            put_u32(bytes, interrupt + 24, 224);
+        }
         "duplicate-timer" => duplicate_rhd_record(bytes, 4, 1, 2),
         "duplicate-serial" => duplicate_rhd_record(bytes, 5, 1, 2),
         "record-reordered" => swap_equal_rhd_records(bytes, 1, 1, 2),
@@ -625,6 +667,18 @@ fn apply_mutation(bytes: &mut Vec<u8>, predicate: &str, behavior: &mut Behavior)
             put_u16(bytes, at + 22, 4);
         }
         "invalid-adapter-address-bits" => behavior.adapter_address_bits = Some(0),
+        "adapter-address-bits-65" => behavior.adapter_address_bits = Some(65),
+        "adapter-address-bits-255" => behavior.adapter_address_bits = Some(255),
+        "invalid-adapter-architecture" => behavior.adapter_architecture = Some(99),
+        "invalid-adapter-page-zero" => behavior.page_bytes = Some(0),
+        "invalid-adapter-page-nonpower" => behavior.page_bytes = Some(6144),
+        "entry-address-bits-65" => bytes[entry + 22] = 65,
+        "entry-address-bits-255" => bytes[entry + 22] = 255,
+        "entry-address-bits-mismatch" => bytes[entry + 22] = 47,
+        "entry-architecture-mismatch" => {
+            let current = u16_at(bytes, entry + 20).expect("entry architecture");
+            put_u16(bytes, entry + 20, if current == 1 { 2 } else { 1 });
+        }
         "system-memory-window-overflow" => {
             let window = record_offset(bytes, 7, 1).expect("system-memory window");
             put_u64(bytes, window + 32, u64::MAX - 7);
@@ -636,7 +690,7 @@ fn apply_mutation(bytes: &mut Vec<u8>, predicate: &str, behavior: &mut Behavior)
 
 fn adapter_for(bundle: &Bundle<'_>, behavior: Behavior) -> AdapterInputs {
     AdapterInputs {
-        expected_architecture: bundle.adapter.expected_architecture,
+        expected_architecture: behavior.adapter_architecture.unwrap_or(bundle.adapter.expected_architecture),
         external_entry_address: behavior.external_address.unwrap_or(bundle.adapter.external_entry_address),
         external_entry_bytes: behavior.external_length.unwrap_or(bundle.adapter.external_entry_bytes),
         address_bits: behavior.adapter_address_bits.unwrap_or(bundle.adapter.address_bits),
@@ -662,6 +716,9 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         || !address_fits(adapter.external_entry_address, u64::from(adapter.external_entry_bytes), adapter.address_bits)?
     {
         return Err(Code::OutOfAddressRange);
+    }
+    if !matches!(adapter.expected_architecture, 1 | 2) {
+        return Err(Code::ArchitectureMismatch);
     }
     if adapter.entry_alignment != 8
         || adapter.stack_alignment != 16
@@ -698,6 +755,15 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
 
     let entry_architecture = u16_at(&entry, 20).ok_or(Code::InvalidEntry)?;
     let entry_address_bits = *entry.get(22).ok_or(Code::InvalidEntry)?;
+    // Producer-controlled entry values are bound to the trusted adapter tuple
+    // before they can influence descriptor arithmetic, bounds, or acquisition.
+    if !matches!(entry_architecture, 1 | 2)
+        || entry_architecture != adapter.expected_architecture
+        || !(32..=64).contains(&entry_address_bits)
+        || entry_address_bits != adapter.address_bits
+    {
+        return Err(Code::InvalidEntry);
+    }
     let mut descriptors = Vec::with_capacity(descriptor_count);
     for index in 0..descriptor_count {
         let at = 64 + index * 32;
@@ -734,14 +800,17 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         return Err(Code::UnsupportedMinor);
     }
 
+    // All binding predicates are one whole-table stage and collapse to the
+    // declared invalid-pointer-range code. Descriptor order cannot select a
+    // different range, address-width, alignment, selector, or rights error.
     if descriptors.iter().any(|descriptor| {
         descriptor.length == 0
             || !address_fits(descriptor.base, descriptor.length, entry_address_bits).unwrap_or(false)
+            || descriptor_space(descriptor.selector.purpose) == 1 && descriptor.base % 8 != 0
+            || descriptor.selector.purpose == 3 && descriptor.length % 8 != 0
+            || descriptor.selector.purpose == 5 && (descriptor.base % 64 != 0 || descriptor.length % 64 != 0)
     }) {
-        return Err(Code::OutOfAddressRange);
-    }
-    if descriptors.iter().any(|descriptor| descriptor_space(descriptor.selector.purpose) == 1 && descriptor.base % 8 != 0) {
-        return Err(Code::BadAlignment);
+        return Err(Code::InvalidPointerRange);
     }
     let mut source_selectors = BTreeSet::new();
     if descriptors.iter().filter(|descriptor| descriptor.selector.purpose <= 5).any(|descriptor| !source_selectors.insert(descriptor.selector)) {
@@ -749,7 +818,7 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
     }
     for purpose in 1..=5 {
         if descriptors.iter().filter(|descriptor| descriptor.selector.purpose == purpose).count() != 1 {
-            return Err(Code::InvalidEntry);
+            return Err(Code::InvalidPointerRange);
         }
     }
     for descriptor in descriptors.iter().filter(|descriptor| descriptor.selector.purpose <= 7) {
@@ -762,12 +831,6 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         } && matches!(descriptor.producer, 1 | 2);
         if !valid {
             return Err(Code::InvalidPointerRange);
-        }
-        if descriptor.selector.purpose == 3 && (descriptor.base % 8 != 0 || descriptor.length % 8 != 0) {
-            return Err(Code::BadAlignment);
-        }
-        if descriptor.selector.purpose == 5 && (descriptor.base % 64 != 0 || descriptor.length % 64 != 0) {
-            return Err(Code::BadAlignment);
         }
     }
 
@@ -918,16 +981,11 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
             return Err(Code::BadCountOrLength);
         }
         let known_size = match kind { 1..=5 => Some(48), 6 => Some(24), 7 => Some(56), _ => None };
-        if known_size.is_some_and(|expected| expected != size) || known_size.is_some() && flags != 0 {
+        if known_size.is_some_and(|expected| expected != size)
+            || flags & !1 != 0
+            || known_size.is_some() && kind != 7 && flags != 0
+        {
             return Err(Code::BadCountOrLength);
-        }
-        if !(1..=7).contains(&kind) {
-            if flags & 1 != 0 {
-                return Err(Code::UnknownCritical);
-            }
-            if rhd_minor == 0 || flags != 0 {
-                return Err(Code::UnsupportedMinor);
-            }
         }
         let reserved_zero = match kind {
             1 => rhd.get(at + 20..at + 24) == Some([0; 4].as_slice()) && rhd.get(at + 40..at + 48) == Some([0; 8].as_slice()),
@@ -940,7 +998,7 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
             _ => true,
         };
         if !reserved_zero {
-            return Err(Code::NonzeroReserved);
+            return Err(Code::BadCountOrLength);
         }
         records.push((kind, id, at, size));
         at += size;
@@ -948,6 +1006,31 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
     if at != rhd.len() {
         return Err(Code::BadCountOrLength);
     }
+
+    // Compatibility is evaluated globally after every record is safely
+    // framed. Unknown records and unknown register roles share the existing
+    // criticality bit. Optional higher-minor additions are skipped and can
+    // never contribute references, windows, or authority.
+    for &(kind, _, offset, _) in &records {
+        let flags = u16_at(&rhd, offset + 2).ok_or(Code::BadCountOrLength)?;
+        let unknown_record = !(1..=7).contains(&kind);
+        let unknown_role = kind == 7 && !matches!(u16_at(&rhd, offset + 18), Some(1..=5));
+        if unknown_record || unknown_role {
+            if flags & 1 != 0 {
+                return Err(Code::UnknownCritical);
+            }
+            if rhd_minor == 0 {
+                return Err(Code::UnsupportedMinor);
+            }
+        } else if flags != 0 {
+            return Err(Code::BadCountOrLength);
+        }
+    }
+
+    let semantic_records: Vec<_> = records.iter().copied().filter(|(kind, _, offset, _)| {
+        (1..=7).contains(kind)
+            && (*kind != 7 || matches!(u16_at(&rhd, *offset + 18), Some(1..=5)))
+    }).collect();
 
     let mut identities = BTreeSet::new();
     let mut by_kind: BTreeMap<u16, BTreeMap<u32, usize>> = BTreeMap::new();
@@ -960,7 +1043,7 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         }
     }
     let has = |kind, id| by_kind.get(&kind).is_some_and(|items| items.contains_key(&id));
-    for &(kind, _, offset, _) in &records {
+    for &(kind, _, offset, _) in &semantic_records {
         match kind {
             1 => {
                 if !has(3, u32_at(&rhd, offset + 32).ok_or(Code::BadReference)?) || !has(4, u32_at(&rhd, offset + 36).ok_or(Code::BadReference)?) {
@@ -980,11 +1063,13 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         }
     }
 
-    let cpus: Vec<_> = records.iter().filter(|record| record.0 == 1).collect();
+    let cpus: Vec<_> = semantic_records.iter().filter(|record| record.0 == 1).collect();
     let boot_cpus: Vec<_> = cpus.iter().filter(|record| u32_at(&rhd, record.2 + 16) == Some(1)).collect();
+    let mut hardware_ids = BTreeSet::new();
     if cpus.is_empty()
         || boot_cpus.len() != 1
         || cpus.iter().any(|record| u32_at(&rhd, record.2 + 16).is_none_or(|flags| flags & !1 != 0))
+        || cpus.iter().any(|record| u64_at(&rhd, record.2 + 24).is_none_or(|id| !hardware_ids.insert(id)))
         || boot_cpus[0].1 != u32_at(&handoff, 104).unwrap_or(0)
     {
         return Err(Code::InvalidCpuSet);
@@ -992,19 +1077,26 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
 
     let expected_interrupt_model = if adapter.expected_architecture == 1 { 1 } else { 2 };
     let mut controllers = BTreeMap::new();
-    for record in records.iter().filter(|record| record.0 == 3) {
+    let interrupt_limit = if adapter.expected_architecture == 1 { 256 } else { 1020 };
+    let mut interrupt_ranges = Vec::new();
+    for record in semantic_records.iter().filter(|record| record.0 == 3) {
         let model = u16_at(&rhd, record.2 + 16).ok_or(Code::InvalidInterrupt)?;
+        let base = u32_at(&rhd, record.2 + 20).ok_or(Code::InvalidInterrupt)?;
         let count = u32_at(&rhd, record.2 + 24).ok_or(Code::InvalidInterrupt)?;
-        if model != expected_interrupt_model || count == 0 || u16_at(&rhd, record.2 + 18) != Some(0) {
+        let end = base.checked_add(count).ok_or(Code::InvalidInterrupt)?;
+        if model != expected_interrupt_model || count == 0 || end > interrupt_limit || u16_at(&rhd, record.2 + 18) != Some(0) {
             return Err(Code::InvalidInterrupt);
         }
+        interrupt_ranges.push((base, end));
         controllers.insert(record.1, count);
     }
-    if controllers.len() != 1 {
+    if interrupt_ranges.iter().enumerate().any(|(index, first)| {
+        interrupt_ranges.iter().skip(index + 1).any(|second| first.0 < second.1 && second.0 < first.1)
+    }) || controllers.len() != 1 {
         return Err(Code::InvalidInterrupt);
     }
 
-    let timers: Vec<_> = records.iter().filter(|record| record.0 == 4).collect();
+    let timers: Vec<_> = semantic_records.iter().filter(|record| record.0 == 4).collect();
     let expected_timer_model = if adapter.expected_architecture == 1 { 1 } else { 2 };
     if timers.len() != 1 {
         return Err(Code::InvalidTimer);
@@ -1023,7 +1115,7 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         }
     }
 
-    let serials: Vec<_> = records.iter().filter(|record| record.0 == 5).collect();
+    let serials: Vec<_> = semantic_records.iter().filter(|record| record.0 == 5).collect();
     let expected_serial_model = if adapter.expected_architecture == 1 { 1 } else { 2 };
     if serials.len() != 1 {
         return Err(Code::InvalidSerial);
@@ -1041,7 +1133,7 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         }
     }
 
-    let boot_sources: Vec<_> = records.iter().filter(|record| record.0 == 6).collect();
+    let boot_sources: Vec<_> = semantic_records.iter().filter(|record| record.0 == 6).collect();
     if boot_sources.len() != 1
         || u16_at(&rhd, boot_sources[0].2 + 16) != Some(1)
         || u16_at(&rhd, boot_sources[0].2 + 18) != Some(0)
@@ -1075,7 +1167,7 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
     }
 
     let mut rhd_memory = BTreeMap::new();
-    for record in records.iter().filter(|record| record.0 == 2) {
+    for record in semantic_records.iter().filter(|record| record.0 == 2) {
         let memory = Memory {
             id: record.1,
             base: u64_at(&rhd, record.2 + 16).unwrap_or(0),
@@ -1090,7 +1182,7 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         return Err(Code::InconsistentDescription);
     }
 
-    let windows: Vec<_> = records.iter().filter(|record| record.0 == 7).map(|record| Window {
+    let windows: Vec<_> = semantic_records.iter().filter(|record| record.0 == 7).map(|record| Window {
         parent_kind: u16_at(&rhd, record.2 + 16).unwrap_or(0),
         role: u16_at(&rhd, record.2 + 18).unwrap_or(0),
         parent_id: u32_at(&rhd, record.2 + 20).unwrap_or(0),
@@ -1103,7 +1195,7 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         length: u64_at(&rhd, record.2 + 40).unwrap_or(0),
         authority_purpose: u16_at(&rhd, record.2 + 48).unwrap_or(0),
     }).collect();
-    let parent_models: BTreeMap<(u16, u32), u16> = records.iter().filter(|record| matches!(record.0, 3 | 5)).map(|record| {
+    let parent_models: BTreeMap<(u16, u32), u16> = semantic_records.iter().filter(|record| matches!(record.0, 3 | 5)).map(|record| {
         ((record.0, record.1), u16_at(&rhd, record.2 + 16).unwrap_or(0))
     }).collect();
     for window in &windows {
@@ -1281,17 +1373,18 @@ fn check_precedence(root: &Path) -> Result<(), String> {
     let fixture = fs::read_to_string(root.join("validation-precedence.v1")).map_err(|error| error.to_string())?;
     let predicates = predicate_rows(&fields);
     if predicates.len() != 36 { return Err("canonical predicate count is not 36".into()); }
-    let baseline = fs::read(root.join("bin/valid-x86_64.bin")).map_err(|error| error.to_string())?;
-    for (index, (order, predicate, expected)) in predicates.iter().enumerate() {
+    for architecture in ["x86_64", "aarch64"] {
+      let baseline = fs::read(root.join(format!("bin/valid-{architecture}.bin"))).map_err(|error| error.to_string())?;
+      for (index, (order, predicate, expected)) in predicates.iter().enumerate() {
         let declaration = format!("single|{order}|{predicate}|{expected}");
         if !fixture.lines().any(|line| line == declaration) { return Err(format!("missing executable mutation declaration: {declaration}")); }
         let mut bytes = baseline.clone();
         let mut behavior = Behavior::default();
         apply_mutation(&mut bytes, predicate, &mut behavior);
         let (actual, reads, effects) = run_bytes(&bytes, behavior)?;
-        if expected_name(actual) != expected { return Err(format!("single {predicate} expected {expected}, got {}", expected_name(actual))); }
-        if access_log(&reads) != predicate_access_budget(*order) { return Err(format!("single {predicate} exceeded access budget: {}", access_log(&reads))); }
-        if actual != 0 && !effects.is_empty() { return Err(format!("single {predicate} produced rejected effects")); }
+        if expected_name(actual) != expected { return Err(format!("single {predicate} on {architecture} expected {expected}, got {}", expected_name(actual))); }
+        if access_log(&reads) != predicate_access_budget(*order) { return Err(format!("single {predicate} on {architecture} exceeded access budget: {}", access_log(&reads))); }
+        if actual != 0 && !effects.is_empty() { return Err(format!("single {predicate} on {architecture} produced rejected effects")); }
         if index + 1 < predicates.len() {
             let (_, next, _) = &predicates[index + 1];
             let dual = format!("dual|{predicate}|{next}|{expected}");
@@ -1301,10 +1394,11 @@ fn check_precedence(root: &Path) -> Result<(), String> {
             apply_mutation(&mut bytes, next, &mut behavior);
             apply_mutation(&mut bytes, predicate, &mut behavior);
             let (actual, reads, effects) = run_bytes(&bytes, behavior)?;
-            if expected_name(actual) != expected { return Err(format!("dual {predicate} + {next} expected {expected}, got {}", expected_name(actual))); }
-            if access_log(&reads) != predicate_access_budget(*order) { return Err(format!("dual {predicate} + {next} exceeded access budget: {}", access_log(&reads))); }
-            if !effects.is_empty() { return Err(format!("dual {predicate} + {next} produced rejected effects")); }
+            if expected_name(actual) != expected { return Err(format!("dual {predicate} + {next} on {architecture} expected {expected}, got {}", expected_name(actual))); }
+            if access_log(&reads) != predicate_access_budget(*order) { return Err(format!("dual {predicate} + {next} on {architecture} exceeded access budget: {}", access_log(&reads))); }
+            if !effects.is_empty() { return Err(format!("dual {predicate} + {next} on {architecture} produced rejected effects")); }
         }
+      }
     }
 
     for line in fixture.lines().filter(|line| line.starts_with("security-dual|")) {
@@ -1386,8 +1480,8 @@ fn main() {
     }
     if let Err(error) = check_precedence(&root) { eprintln!("{error}"); failures += 1; }
     let scenario_count = match check_scenarios(&root) { Ok(value) => value, Err(error) => { eprintln!("{error}"); failures += 1; 0 } };
-    if count != 18 { eprintln!("fixture count is {count}, expected 18"); failures += 1; }
+    if count != 23 { eprintln!("fixture count is {count}, expected 23"); failures += 1; }
     if scenario_count < 24 { eprintln!("scenario count is {scenario_count}, expected at least 24"); failures += 1; }
     if failures != 0 { std::process::exit(1); }
-    println!("R0-002 conformance passed: {count} raw fixtures, {scenario_count} scenarios, 36 singles, 35 adjacent edges");
+    println!("R0-002 conformance passed: {count} raw fixtures, {scenario_count} scenarios, 36 singles x 2 architectures, 35 adjacent edges x 2 architectures");
 }

@@ -269,6 +269,10 @@ pub const REGISTER_WINDOW_RECORD_BYTES: u32 = 56;
 
 pub const RECORD_CRITICAL: u16 = 1;
 
+pub const X86_GLOBAL_INTERRUPT_LIMIT: u32 = 256;
+
+pub const AARCH64_GLOBAL_INTERRUPT_LIMIT: u32 = 1_020;
+
 pub const CPU_BOOT: u32 = 1;
 
 pub const WINDOW_REQUIRED: u16 = 1;
@@ -414,7 +418,7 @@ pub struct BootSourceRecordV1 {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RegisterWindowRecordV1 {
     pub parent_kind: RecordKind,
-    pub role: RegisterWindowRole,
+    pub role: u16,
     pub parent_id: u32,
     pub address_space: AddressSpace,
     pub access_width: u8,

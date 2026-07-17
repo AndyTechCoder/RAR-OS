@@ -54,6 +54,8 @@ Each row defines:
 - whether failure permits evidence fields beyond the code;
 - compatibility behavior for unknown minor, optional, and critical fields.
 
+The entry-framing row binds the owned entry architecture and address width to the already validated trusted adapter tuple before descriptor arithmetic or acquisition. The descriptor binding row is a whole-table predicate that deliberately collapses zero length, address-width, alignment, selector/cardinality, rights, producer, transfer, and flag failures to `invalid-pointer-range`. RHD rows are likewise whole-table stages: framing precedes compatibility, identity, references, CPU, interrupt, timer, serial, boot source, canonical order, and cross-artifact checks. Reordering descriptors or records cannot select a different first error within those stages.
+
 Changing precedence or the meaning of an existing failure is a breaking public-contract change. Adding a new predicate requires an explicitly allocated position and compatibility analysis.
 
 ## Consequences

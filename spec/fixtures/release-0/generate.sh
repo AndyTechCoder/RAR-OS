@@ -22,7 +22,7 @@ descriptor() {
 emit_entry_header() {
     printf 'RARENTRY'
     u16 1; u16 0; u16 64; u16 32
-    u32 "$entry_total"; u16 "$entry_arch"; byte 48; byte 0
+    u32 "$entry_total"; u16 "$entry_arch"; byte "$entry_address_bits"; byte 0
     u16 "$descriptor_count_field"; u16 0; u32 0; zeros 32
 }
 
@@ -92,14 +92,14 @@ emit_window() {
 
 emit_rhd() {
     printf 'RARRHD\000\000'
-    u16 1; u16 0; u16 32; u16 16; u32 "$rhd_length"; u16 "$record_count"; u16 0
+    u16 1; u16 "$rhd_minor"; u16 32; u16 16; u32 "$rhd_length"; u16 "$record_count"; u16 0
     u16 "$rhd_arch"; byte 48; byte 12; u32 0
 
     record_header 1 0 48 1
     u32 1; u32 0; u64 16; u32 "$cpu_interrupt_id"; u32 1; zeros 8
 
     record_header 1 0 48 2
-    u32 0; u32 0; u64 17; u32 1; u32 1; zeros 8
+    u32 0; u32 0; u64 "$cpu2_hardware_id"; u32 1; u32 1; zeros 8
 
     emit_memory_record 1 4096 "$boot_length" 3 11 1
     emit_memory_record 2 "$rhd_usable_base" 524288 1 11 0
@@ -113,7 +113,7 @@ emit_rhd() {
 
     record_header 3 0 48 1
     if [ "$entry_arch" -eq 1 ]; then u16 1; else u16 2; fi
-    u16 0; u32 32; u32 224; zeros 20
+    u16 0; u32 "$interrupt_base"; u32 "$interrupt_count"; zeros 20
 
     record_header 4 0 48 1
     if [ "$entry_arch" -eq 1 ]; then u16 1; else u16 2; fi
@@ -135,6 +135,10 @@ emit_rhd() {
         emit_window "$second_window_id" 3 3 1 1 4 4 134873088 16121856 6
         emit_window 3 5 5 1 1 4 4 150994944 4096 6
     fi
+    if [ "$optional_window_role" -eq 1 ]; then
+        record_header 7 "$optional_window_critical" 56 99
+        u16 0; u16 99; u32 0; zeros 32
+    fi
 }
 
 emit_bundle() {
@@ -148,13 +152,16 @@ for case_id in \
     valid-x86_64 valid-aarch64 truncated-entry oversized-entry misaligned-window \
     overlapping-entry unknown-critical duplicate-id bad-reference invalid-memory-map \
     interrupt-out-of-range invalid-entry snapshot-violation invalid-register-window \
-    wrong-address-space unauthorized-device-window map-rhd-inconsistent architecture-inconsistent; do
+    wrong-address-space unauthorized-device-window map-rhd-inconsistent architecture-inconsistent \
+    entry-address-bits-65 duplicate-cpu-hardware interrupt-overflow compatible-window-role critical-window-role; do
     expected_code=0; entry_arch=1; rhd_arch=1; entry_blob_length=288; entry_total=288
     descriptor_count_field=7; map_count=3; map_length=96; rhd_length=552; record_count=11
     copy_fault=0; overlap_entry=0; apic_descriptor_base=4276092928
     boot_length=20480; rhd_usable_base=1048576; unknown_critical=0; cpu_interrupt_id=1
     serial_interrupt_index=4; apic_space=1; apic_stride=16; apic_authority_purpose=6
     second_window_id=2
+    entry_address_bits=48; rhd_minor=0; cpu2_hardware_id=17
+    interrupt_base=32; interrupt_count=224; optional_window_role=0; optional_window_critical=0
     case "$case_id" in
         valid-aarch64)
             entry_arch=2; rhd_arch=2; entry_blob_length=320; entry_total=320
@@ -162,7 +169,7 @@ for case_id in \
             ;;
         truncated-entry) expected_code=1; entry_blob_length=63; entry_total=63; descriptor_count_field=0 ;;
         oversized-entry) expected_code=2; entry_blob_length=4097; entry_total=4097 ;;
-        misaligned-window) expected_code=9; apic_descriptor_base=4276092929 ;;
+        misaligned-window) expected_code=12; apic_descriptor_base=4276092929 ;;
         overlapping-entry) expected_code=13; overlap_entry=1 ;;
         unknown-critical) expected_code=15; unknown_critical=1 ;;
         duplicate-id) expected_code=16; second_window_id=1 ;;
@@ -176,6 +183,11 @@ for case_id in \
         unauthorized-device-window) expected_code=33; apic_authority_purpose=7 ;;
         map-rhd-inconsistent) expected_code=29; rhd_usable_base=1572864 ;;
         architecture-inconsistent) expected_code=18; rhd_arch=2 ;;
+        entry-address-bits-65) expected_code=30; entry_address_bits=65 ;;
+        duplicate-cpu-hardware) expected_code=21; cpu2_hardware_id=16 ;;
+        interrupt-overflow) expected_code=22; interrupt_base=4294967295; interrupt_count=2 ;;
+        compatible-window-role) rhd_minor=1; rhd_length=608; record_count=12; optional_window_role=1 ;;
+        critical-window-role) expected_code=15; rhd_minor=1; rhd_length=608; record_count=12; optional_window_role=1; optional_window_critical=1 ;;
     esac
     emit_bundle > "$destination/$case_id.bin"
 done

@@ -55,6 +55,8 @@ Execute is forbidden in the Release 0 handoff map. Source descriptor ranges must
 
 Same-major higher minors are accepted only when fixed sizes remain supported and every addition is bounded, safely skippable, and explicitly optional/non-critical. Unknown non-critical additions are range-checked and skipped; unknown critical RHD records, critical entry descriptors, flags, required roles, or changed fixed sizes fail. Existing precedence and meaning do not change in a minor version.
 
+For register roles specifically, a compatible higher minor uses the existing register-window record and its record-header criticality bit: an unknown role with bit 0 clear participates in framing, identity, and canonical ordering but is then skipped without reference resolution, descriptor consumption, or authority construction; an unknown role with bit 0 set returns `unknown-critical`. This makes optional-role compatibility executable rather than prose-only.
+
 x86-64 entry requires long mode, interrupts disabled, direction flag clear, a 16-byte-aligned writable adapter stack, and a Root/Recovery-controlled translation that maps only the entry slice for the initial copy. AArch64 entry requires EL1, interrupts masked, a 16-byte-aligned writable adapter stack, coherent entry bytes, and MMU-off physical addressing for the initial copy. Other source mappings are constructed only after descriptor validation.
 
 ## Consequences
