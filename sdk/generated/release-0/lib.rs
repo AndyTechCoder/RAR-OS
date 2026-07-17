@@ -187,7 +187,7 @@ pub struct ArchitectureAdapterInputsV1 {
     pub stack_alignment: u16,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct DescriptorKeyV1 {
+pub struct DescriptorSelectorV1 {
     pub purpose: DescriptorPurpose,
     pub owner_kind: u16,
     pub owner_id: u32,
@@ -200,7 +200,7 @@ pub struct BootEntryHeaderV1 {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WindowDescriptorV1 {
-    pub key: DescriptorKeyV1,
+    pub selector: DescriptorSelectorV1,
     pub base: u64,
     pub length: u64,
     pub rights: u16,
@@ -421,5 +421,5 @@ pub struct RegisterWindowRecordV1 {
     pub flags: u16,
     pub base: u64,
     pub length: u64,
-    pub authority_key: DescriptorKeyV1,
+    pub authority_selector: DescriptorSelectorV1,
 }

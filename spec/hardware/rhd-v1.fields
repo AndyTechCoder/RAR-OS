@@ -98,4 +98,4 @@ rust-struct|InterruptRecordV1|model:InterruptModel,flags:u16,global_interrupt_ba
 rust-struct|TimerRecordV1|model:TimerModel,flags:u16,frequency_hz:u64,interrupt_index:u32,interrupt_controller_id:u32,interrupt_trigger:InterruptTrigger,interrupt_polarity:InterruptPolarity
 rust-struct|SerialRecordV1|model:SerialModel,flags:u16,interrupt_index:u32,interrupt_controller_id:u32,input_clock_hz:u64,interrupt_trigger:InterruptTrigger,interrupt_polarity:InterruptPolarity
 rust-struct|BootSourceRecordV1|kind:BootSourceKind,flags:u16
-rust-struct|RegisterWindowRecordV1|parent_kind:RecordKind,role:RegisterWindowRole,parent_id:u32,address_space:AddressSpace,access_width:u8,byte_order:WireByteOrder,stride:u16,flags:u16,base:u64,length:u64,authority_key:DescriptorKeyV1
+rust-struct|RegisterWindowRecordV1|parent_kind:RecordKind,role:RegisterWindowRole,parent_id:u32,address_space:AddressSpace,access_width:u8,byte_order:WireByteOrder,stride:u16,flags:u16,base:u64,length:u64,authority_selector:DescriptorSelectorV1

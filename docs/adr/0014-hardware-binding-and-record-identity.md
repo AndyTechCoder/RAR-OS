@@ -57,12 +57,12 @@ Use alternative B for identity and typed register-window subrecords for hardware
 - Register windows declare address space (`system-memory` or `x86-io-port` initially), role, checked base/length, access width, stride, and little-endian byte order.
 - Model specifications declare required and forbidden window roles. GICv3 requires distinct distributor and redistributor roles; 16550 may use either MMIO or x86 I/O-port space as declared.
 - Interrupt references use a controller-relative namespace plus a declared trigger/polarity model; global numbering is derived only by the validated controller binding.
-- Every window is cross-checked against the authority decision in ADR 0013 before access. Authority lookup uses the stable `(purpose,parent_kind,parent_id)` descriptor key, so descriptor order has no semantic effect.
+- Every window is cross-checked against the authority decision in ADR 0013 before access. `(purpose,parent_kind,parent_id)` selects owner candidates; address space, rights, and full-range containment must leave exactly one match, so split authorities are supported and descriptor order has no semantic effect.
 
 ## Consequences
 
 - The draft RHD wire layouts and generated Rust types change before freeze.
-- Record and authority lookup become deterministic by identity; descriptor reordering has no semantic effect and duplicate/mismatch states fail closed.
+- Record lookup is deterministic by identity. Authority lookup is deterministic by unique semantic match; non-overlapping descriptors may share an owner selector, while ambiguous or mismatched states fail closed.
 - Hardware records become slightly larger or use bounded child records.
 - Platform adapters gain explicit model validation but portable consumers avoid machine-name branches.
 - Fixtures must cover duplicate IDs, dangling references, unknown roles, wrong address spaces, missing/extra windows, invalid widths/strides, and controller-relative interrupt boundaries.

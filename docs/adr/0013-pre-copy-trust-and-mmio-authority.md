@@ -54,7 +54,7 @@ The mandatory algorithm is:
 3. Copy each readable source exactly once into bounded Nucleus-owned scratch; require external and embedded lengths to agree.
 4. Parse only owned copies, consume records exactly, and never revisit source addresses.
 5. Transfer the trace destination only after all validation succeeds; clear entropy source only when its descriptor grants that one write.
-6. Treat RHD register ranges as descriptions only. Grant MMIO or I/O-port access only when the complete checked range is contained in exactly one descriptor selected by `(purpose,owner_kind,owner_id)` with matching producer, transfer, owner, and rights.
+6. Treat RHD register ranges as descriptions only. Grant MMIO or I/O-port access only when exactly one descriptor matches `(purpose,owner_kind,owner_id)`, address space, rights, authority transfer, and complete checked range containment. Multiple non-overlapping descriptors may share an owner selector; order is never identity.
 
 The conformance boundary is an instrumented descriptor-keyed source provider and a commit-only effect sink. The provider records permitted reads, returns selected short copies or faults, and rejects a second copy. The sink records entropy clearing, trace activation, and constructed device authority only after complete validation; every rejected case must have an empty effect log.
 

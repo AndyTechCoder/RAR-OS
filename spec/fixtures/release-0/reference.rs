@@ -63,28 +63,35 @@ struct AdapterInputs {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-struct DescriptorKey {
+struct DescriptorSelector {
     purpose: u16,
     owner_kind: u16,
     owner_id: u32,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct AuthorityIdentity {
+    selector: DescriptorSelector,
+    base: u64,
+    length: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum AccessKey {
     Entry,
-    Descriptor(DescriptorKey),
+    Descriptor(DescriptorSelector),
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum Effect {
-    ClearEntropy(DescriptorKey),
-    ActivateTrace(DescriptorKey),
-    ConstructAuthority(DescriptorKey),
+    ClearEntropy(DescriptorSelector),
+    ActivateTrace(DescriptorSelector),
+    ConstructAuthority(AuthorityIdentity),
 }
 
 #[derive(Clone, Debug)]
 struct Descriptor {
-    key: DescriptorKey,
+    selector: DescriptorSelector,
     base: u64,
     length: u64,
     rights: u16,
@@ -172,7 +179,7 @@ impl<'a> SourceProvider<'a> {
     }
 
     fn copy_descriptor(&mut self, descriptor: &Descriptor) -> Result<Vec<u8>, Code> {
-        let data = match descriptor.key.purpose {
+        let data = match descriptor.selector.purpose {
             1 => self.handoff.to_vec(),
             2 => self.map.to_vec(),
             3 => self.rhd.to_vec(),
@@ -180,11 +187,11 @@ impl<'a> SourceProvider<'a> {
             _ => return Err(Code::SnapshotViolation),
         };
         self.copy(
-            AccessKey::Descriptor(descriptor.key),
+            AccessKey::Descriptor(descriptor.selector),
             data,
             usize::try_from(descriptor.length).map_err(|_| Code::SnapshotViolation)?,
-            self.fault_purpose == Some(descriptor.key.purpose),
-            self.short_purpose == Some(descriptor.key.purpose),
+            self.fault_purpose == Some(descriptor.selector.purpose),
+            self.short_purpose == Some(descriptor.selector.purpose),
         )
     }
 
@@ -407,7 +414,6 @@ fn apply_mutation(bytes: &mut Vec<u8>, predicate: &str, behavior: &mut Behavior)
     match predicate {
         "adapter.entry.external-bounds" => behavior.external_length = Some(63),
         "adapter.entry.external-ceiling" => behavior.external_length = Some(4097),
-        "adapter.entry.range-arithmetic" => { behavior.external_address = Some(u64::MAX); behavior.external_length = Some(2); }
         "adapter.entry.address-width" => { behavior.external_address = Some(0x1_0000_0000); behavior.adapter_address_bits = Some(32); }
         "adapter.entry.alignment" => behavior.external_address = Some(ENTRY_ADDRESS + 1),
         "entry.header.magic" => bytes[entry] ^= 0xff,
@@ -416,6 +422,11 @@ fn apply_mutation(bytes: &mut Vec<u8>, predicate: &str, behavior: &mut Behavior)
         "entry.header.flags" => bytes[entry + 23] = 1,
         "entry.header.reserved" => bytes[entry + 32] = 1,
         "entry.header.framing" => put_u16(bytes, entry + 24, 126),
+        "descriptors.table.range-arithmetic" => {
+            let at = descriptor_offset(bytes, 1, 0, 0).expect("handoff descriptor");
+            put_u64(bytes, at, u64::MAX);
+            put_u64(bytes, at + 8, 2);
+        }
         "descriptors.table.minor-compatibility" => add_entry_descriptor(bytes, false, false),
         "descriptors.table.binding" => {
             let at = descriptor_offset(bytes, 1, 0, 0).expect("handoff descriptor");
@@ -575,7 +586,7 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
     if adapter.external_entry_bytes > 4096 {
         return Err(Code::Oversized);
     }
-    checked_end(adapter.external_entry_address, u64::from(adapter.external_entry_bytes))?;
+    checked_end(adapter.external_entry_address, u64::from(adapter.external_entry_bytes)).map_err(|_| Code::OutOfAddressRange)?;
     if !(32..=64).contains(&adapter.address_bits)
         || !address_fits(adapter.external_entry_address, u64::from(adapter.external_entry_bytes), adapter.address_bits)?
     {
@@ -617,12 +628,12 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
     let entry_architecture = u16_at(&entry, 20).ok_or(Code::InvalidEntry)?;
     let entry_address_bits = *entry.get(22).ok_or(Code::InvalidEntry)?;
     let mut descriptors = Vec::with_capacity(descriptor_count);
-    let mut keys = BTreeSet::new();
+    let mut source_selectors = BTreeSet::new();
     for index in 0..descriptor_count {
         let at = 64 + index * 32;
         let purpose = u16_at(&entry, at + 16).ok_or(Code::InvalidEntry)?;
         let descriptor = Descriptor {
-            key: DescriptorKey {
+            selector: DescriptorSelector {
                 purpose,
                 owner_kind: u16_at(&entry, at + 24).ok_or(Code::InvalidEntry)?,
                 owner_id: u32_at(&entry, at + 28).ok_or(Code::InvalidEntry)?,
@@ -641,56 +652,56 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         if descriptor_space(purpose) == 1 && descriptor.base % 8 != 0 {
             return Err(Code::BadAlignment);
         }
-        if !keys.insert(descriptor.key) {
+        if purpose <= 5 && !source_selectors.insert(descriptor.selector) {
             return Err(Code::InvalidPointerRange);
         }
         descriptors.push(descriptor);
     }
 
-    let unknown: Vec<_> = descriptors.iter().filter(|descriptor| descriptor.key.purpose > 7).collect();
+    let unknown: Vec<_> = descriptors.iter().filter(|descriptor| descriptor.selector.purpose > 7).collect();
     if unknown.iter().any(|descriptor| descriptor.flags & 4 != 0) {
         return Err(Code::UnknownCritical);
     }
     if entry_minor == 0 && !unknown.is_empty()
-        || unknown.iter().any(|descriptor| descriptor.rights != 0 || descriptor.transfer != 0 || descriptor.key.owner_kind != 0 || descriptor.key.owner_id != 0 || descriptor.flags != 0)
+        || unknown.iter().any(|descriptor| descriptor.rights != 0 || descriptor.transfer != 0 || descriptor.selector.owner_kind != 0 || descriptor.selector.owner_id != 0 || descriptor.flags != 0)
     {
         return Err(Code::UnsupportedMinor);
     }
 
     for purpose in 1..=5 {
-        if descriptors.iter().filter(|descriptor| descriptor.key.purpose == purpose).count() != 1 {
+        if descriptors.iter().filter(|descriptor| descriptor.selector.purpose == purpose).count() != 1 {
             return Err(Code::InvalidEntry);
         }
     }
-    for descriptor in descriptors.iter().filter(|descriptor| descriptor.key.purpose <= 7) {
-        let valid = match descriptor.key.purpose {
-            1..=3 => descriptor.rights == 1 && descriptor.transfer == 1 && descriptor.flags == 3 && descriptor.key.owner_kind == 0 && descriptor.key.owner_id == 0,
-            4 => matches!((descriptor.rights, descriptor.transfer), (1, 1) | (3, 4)) && descriptor.flags == 3 && descriptor.key.owner_kind == 0 && descriptor.key.owner_id == 0,
-            5 => descriptor.rights == 3 && descriptor.transfer == 2 && descriptor.flags == 3 && descriptor.key.owner_kind == 0 && descriptor.key.owner_id == 0,
-            6 | 7 => descriptor.rights == 11 && descriptor.transfer == 3 && descriptor.flags == 0 && matches!(descriptor.key.owner_kind, 3 | 5) && descriptor.key.owner_id != 0,
+    for descriptor in descriptors.iter().filter(|descriptor| descriptor.selector.purpose <= 7) {
+        let valid = match descriptor.selector.purpose {
+            1..=3 => descriptor.rights == 1 && descriptor.transfer == 1 && descriptor.flags == 3 && descriptor.selector.owner_kind == 0 && descriptor.selector.owner_id == 0,
+            4 => matches!((descriptor.rights, descriptor.transfer), (1, 1) | (3, 4)) && descriptor.flags == 3 && descriptor.selector.owner_kind == 0 && descriptor.selector.owner_id == 0,
+            5 => descriptor.rights == 3 && descriptor.transfer == 2 && descriptor.flags == 3 && descriptor.selector.owner_kind == 0 && descriptor.selector.owner_id == 0,
+            6 | 7 => descriptor.rights == 11 && descriptor.transfer == 3 && descriptor.flags == 0 && matches!(descriptor.selector.owner_kind, 3 | 5) && descriptor.selector.owner_id != 0,
             _ => false,
         } && matches!(descriptor.producer, 1 | 2);
         if !valid {
             return Err(Code::InvalidPointerRange);
         }
-        if descriptor.key.purpose == 3 && (descriptor.base % 8 != 0 || descriptor.length % 8 != 0) {
+        if descriptor.selector.purpose == 3 && (descriptor.base % 8 != 0 || descriptor.length % 8 != 0) {
             return Err(Code::BadAlignment);
         }
-        if descriptor.key.purpose == 5 && (descriptor.base % 64 != 0 || descriptor.length % 64 != 0) {
+        if descriptor.selector.purpose == 5 && (descriptor.base % 64 != 0 || descriptor.length % 64 != 0) {
             return Err(Code::BadAlignment);
         }
     }
 
     for first in 0..descriptors.len() {
         for second in first + 1..descriptors.len() {
-            if descriptor_space(descriptors[first].key.purpose) == descriptor_space(descriptors[second].key.purpose)
+            if descriptor_space(descriptors[first].selector.purpose) == descriptor_space(descriptors[second].selector.purpose)
                 && overlaps((descriptors[first].base, descriptors[first].length), (descriptors[second].base, descriptors[second].length))?
             {
                 return Err(Code::Overlap);
             }
         }
     }
-    for descriptor in descriptors.iter().filter(|descriptor| descriptor_space(descriptor.key.purpose) == 1) {
+    for descriptor in descriptors.iter().filter(|descriptor| descriptor_space(descriptor.selector.purpose) == 1) {
         if overlaps(
             (adapter.external_entry_address, u64::from(adapter.external_entry_bytes)),
             (descriptor.base, descriptor.length),
@@ -699,13 +710,13 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         }
     }
 
-    let descriptor_by_key: BTreeMap<_, _> = descriptors.iter().map(|descriptor| (descriptor.key, descriptor)).collect();
-    let required = |purpose| DescriptorKey { purpose, owner_kind: 0, owner_id: 0 };
-    let handoff_descriptor = *descriptor_by_key.get(&required(1)).ok_or(Code::InvalidPointerRange)?;
-    let map_descriptor = *descriptor_by_key.get(&required(2)).ok_or(Code::InvalidPointerRange)?;
-    let rhd_descriptor = *descriptor_by_key.get(&required(3)).ok_or(Code::InvalidPointerRange)?;
-    let entropy_descriptor = *descriptor_by_key.get(&required(4)).ok_or(Code::InvalidPointerRange)?;
-    let trace_descriptor = *descriptor_by_key.get(&required(5)).ok_or(Code::InvalidPointerRange)?;
+    let descriptor_by_selector: BTreeMap<_, _> = descriptors.iter().filter(|descriptor| descriptor.selector.purpose <= 5).map(|descriptor| (descriptor.selector, descriptor)).collect();
+    let required = |purpose| DescriptorSelector { purpose, owner_kind: 0, owner_id: 0 };
+    let handoff_descriptor = *descriptor_by_selector.get(&required(1)).ok_or(Code::InvalidPointerRange)?;
+    let map_descriptor = *descriptor_by_selector.get(&required(2)).ok_or(Code::InvalidPointerRange)?;
+    let rhd_descriptor = *descriptor_by_selector.get(&required(3)).ok_or(Code::InvalidPointerRange)?;
+    let entropy_descriptor = *descriptor_by_selector.get(&required(4)).ok_or(Code::InvalidPointerRange)?;
+    let trace_descriptor = *descriptor_by_selector.get(&required(5)).ok_or(Code::InvalidPointerRange)?;
 
     let handoff = provider.copy_descriptor(handoff_descriptor)?;
     let map = provider.copy_descriptor(map_descriptor)?;
@@ -777,7 +788,7 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         map_by_base.push(memory);
     }
 
-    for descriptor in descriptors.iter().filter(|descriptor| (1..=5).contains(&descriptor.key.purpose)) {
+    for descriptor in descriptors.iter().filter(|descriptor| (1..=5).contains(&descriptor.selector.purpose)) {
         if !map_by_base.iter().any(|memory| {
             memory.kind == 3
                 && memory.owner == descriptor.producer
@@ -1046,16 +1057,24 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
     }
     let mut used_authorities = BTreeSet::new();
     for window in &windows {
-        let key = DescriptorKey { purpose: window.authority_purpose, owner_kind: window.parent_kind, owner_id: window.parent_id };
-        let authority = descriptor_by_key.get(&key).ok_or(Code::UnauthorizedDeviceWindow)?;
         let expected_purpose = if window.space == 1 { 6 } else { 7 };
-        if key.purpose != expected_purpose
-            || authority.base > window.base
-            || checked_end(window.base, window.length)? > checked_end(authority.base, authority.length)?
-            || !used_authorities.insert(key)
-        {
+        let window_end = checked_end(window.base, window.length)?;
+        let matches: Vec<_> = descriptors.iter().filter(|descriptor| {
+            descriptor.selector.purpose == expected_purpose
+                && window.authority_purpose == expected_purpose
+                && descriptor.selector.owner_kind == window.parent_kind
+                && descriptor.selector.owner_id == window.parent_id
+                && descriptor.rights == 11
+                && descriptor.transfer == 3
+                && descriptor.base <= window.base
+                && checked_end(descriptor.base, descriptor.length).is_ok_and(|authority_end| window_end <= authority_end)
+        }).collect();
+        if matches.len() != 1 {
             return Err(Code::UnauthorizedDeviceWindow);
         }
+        let authority = matches[0];
+        let identity = AuthorityIdentity { selector: authority.selector, base: authority.base, length: authority.length };
+        if !used_authorities.insert(identity) { return Err(Code::UnauthorizedDeviceWindow); }
         if window.space == 1 && !map_by_base.iter().any(|memory| {
             memory.kind == 5
                 && memory.attributes == 19
@@ -1066,7 +1085,9 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
             return Err(Code::UnauthorizedDeviceWindow);
         }
     }
-    let declared_authorities: BTreeSet<_> = descriptors.iter().filter(|descriptor| matches!(descriptor.key.purpose, 6 | 7)).map(|descriptor| descriptor.key).collect();
+    let declared_authorities: BTreeSet<_> = descriptors.iter().filter(|descriptor| matches!(descriptor.selector.purpose, 6 | 7)).map(|descriptor| {
+        AuthorityIdentity { selector: descriptor.selector, base: descriptor.base, length: descriptor.length }
+    }).collect();
     if used_authorities != declared_authorities {
         return Err(Code::UnauthorizedDeviceWindow);
     }
@@ -1094,11 +1115,11 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
     }
 
     if entropy_flags == 1 {
-        sink.commit(Effect::ClearEntropy(entropy_descriptor.key));
+        sink.commit(Effect::ClearEntropy(entropy_descriptor.selector));
     }
-    sink.commit(Effect::ActivateTrace(trace_descriptor.key));
-    for key in used_authorities {
-        sink.commit(Effect::ConstructAuthority(key));
+    sink.commit(Effect::ActivateTrace(trace_descriptor.selector));
+    for identity in used_authorities {
+        sink.commit(Effect::ConstructAuthority(identity));
     }
     Ok(())
 }
