@@ -573,7 +573,7 @@ fn check_precedence(root: &Path) -> Result<(), String> {
             let next: Vec<_> = predicates[index + 1].split('|').collect();
             let dual_row = format!("dual|{}|{}|{}", columns[2], next[2], columns[3]);
             if !fixture.lines().any(|line| line == dual_row) { return Err(format!("missing executable dual declaration: {dual_row}")); }
-            let mut dual = mutate(mutate(baseline.clone(), columns[2]), next[2]);
+            let mut dual = mutate(mutate(baseline.clone(), next[2]), columns[2]);
             if index < 15 { poison_nested(&mut dual); }
             let bundle = parse_bundle(&dual).ok_or_else(|| format!("dual mutation malformed bundle: {} + {}", columns[2], next[2]))?;
             let actual = validate(&bundle).map_or_else(|code| code as u16, |()| 0);
