@@ -579,6 +579,8 @@ rar_execute_generated_host_binary() {
         rar_verify_selected_bootstrap_closure || exit 1
         [ "${RAR_CI_BOOTSTRAP_IMAGE-}" = sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 ] || exit 1
         rar_generated_descriptor=/proc/self/fd/9
+        CDPATH= cd -- "$rar_root" || exit 1
+        [ "$(pwd -P)" = "$rar_root" ] || exit 1
         "$rar_generated_descriptor" "$@"
     )
 }

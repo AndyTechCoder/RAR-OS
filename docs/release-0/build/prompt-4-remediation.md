@@ -60,6 +60,7 @@ The first correctness and security re-reviews examined head `5df49b052f2e2e4e997
 | Approval-marker reads could block or allocate without bound after a path race | Root validation now uses the bounded nonblocking no-follow reader; oversized and post-check FIFO replacement tests fail closed |
 | Runner attestation was checked inside a container that does not inherit GitHub's runner-only image variables | A separate non-certifying runner job verifies the reviewed image, hands exact values to the read-only container through named outputs, and the bootstrap rejects missing, mismatched, or legacy-only environment variables |
 | Approval-marker defensive tests omitted their synthetic `docs/tasks/` fixture directory | The fixture now creates the complete required marker tree before oversized-read and FIFO-replacement assertions execute in pinned CI |
+| Descriptor execution left generated host tools in their private compilation directory | The executor opens and verifies the generated inode first, then restores the validated repository root as the child working directory without reopening the executable; accepted-route and cleanup tests enforce the behavior |
 
 ## Owned paths and coordinator handoff
 
