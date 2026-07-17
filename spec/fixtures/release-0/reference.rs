@@ -424,7 +424,8 @@ fn apply_mutation(bytes: &mut Vec<u8>, predicate: &str, behavior: &mut Behavior)
         "descriptors.table.aliasing" => {
             let handoff_descriptor = descriptor_offset(bytes, 1, 0, 0).expect("handoff descriptor");
             let map_descriptor = descriptor_offset(bytes, 2, 0, 0).expect("map descriptor");
-            put_u64(bytes, map_descriptor, u64_at(bytes, handoff_descriptor).expect("handoff base"));
+            let handoff_base = u64_at(bytes, handoff_descriptor).expect("handoff base");
+            put_u64(bytes, map_descriptor, handoff_base);
         }
         "acquisition.sources.copy" => behavior.fault_purpose = Some(1),
         "handoff.header.framing" => put_u32(bytes, handoff + 16, 127),
