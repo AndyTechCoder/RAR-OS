@@ -1,0 +1,4 @@
+schema=rar-host-test-v2
+suite=tests/host-safety/run.sh:passed:sha256-<lowercase-sha256>
+suite=tests/bootstrap/run.sh:passed:sha256-<lowercase-sha256>
+target_execution=not-attempted

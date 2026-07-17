@@ -1,10 +1,16 @@
-# R0-001 reproducible host bootstrap scaffold
+# R0-001 reproducible host bootstrap remediation
 
-Status: Host scaffold implemented; target builds and certification blocked by prerequisites
+Status: Prompt 4 remediation implemented; exact-head CI and independent review remain mandatory PR merge gates
 
-## Command surface
+## Historical correction
 
-Use the standalone wrapper from the repository checkout root:
+PR #2 (`codex/r0-host-safety-bootstrap`) merged as `2678a91996fbcbb1666fb008ecc1a347d7ba49e7` before Prompt 3 review, Prompt 4 remediation, and currently applicable acceptance evidence. Its description explicitly said review had not begun and it must not merge. The post-merge audit therefore remains a recorded process failure; that merge did not authorize R0-002, target execution, VM certification, physical-device access, or later Release 0 progression.
+
+This branch remediates only R0-000/R0-001. ADR 0011 changes only timing: deterministic build planning is proved while no target artifact exists, and two clean builds producing byte-identical unsigned target artifacts remain mandatory after artifacts exist and before R0-009 closes Release 0. ADR 0012 records the corrected host trust roots, platform lock separation, clean Git snapshot, and versioned host receipts.
+
+## Command surface and execution hosts
+
+The host command names remain:
 
 ```sh
 tools/rarbuild/rarbuild check
@@ -15,141 +21,84 @@ tools/rarbuild/rarbuild test
 tools/rarbuild/rarbuild evidence
 ```
 
-`Cargo.toml` intentionally remains an empty workspace with exactly `members = []`.
-`rarbuild` is compiled directly with Rust 1.95.0 into `out/r0/host-tools/rarbuild`.
-It uses repository-owned Rust plus `std`; it neither resolves Cargo dependencies nor
-downloads or installs tools.
+`run`, aliases, delegation names, arbitrary commands, and argument-bearing `test` modes return 73 before root discovery or host-tool execution.
 
-Before compiling, the wrapper classifies the complete closed command surface using shell
-builtins. Run/alias/test execution routes exit 73, while unknown, absolute, or wrong-arity
-host commands exit 64; none reaches root discovery or `rustc`. Accepted host commands then
-require a canonical absolute checkout root with regular repository/approval markers and a
-real `.git` directory or worktree file.
+Executable accepted routes run only in the official Rust 1.95.0 OCI image pinned by index digest `sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3`. CI checks out the exact PR head, mounts the container tool root read-only, verifies the reviewed hosted-runner identity, selects a whole-file-digest-bound Linux lock, runs every accepted route under a poisoned caller `PATH`, and executes generated host binaries through `/proc/self/fd`.
 
-The output layout is repository-confined and separated from source:
+The physical Mac verifies the bounded policy records, proposed macOS roots, and both closure manifests, then returns exit 2 with `reason=local-bootstrap-execution-awaits-descriptor-bound-launcher`. macOS does not provide the required descriptor-execution primitive for generated Mach-O files, so Release 0 does not reopen a mutable generated pathname and overstate its safety. This is a deliberate fail-closed limitation, not target non-execution alone.
 
-```text
-out/r0/
-  host-tools/                 standalone rarbuild binary
-  host-tests/                 standalone host test binaries
-  build-plan/build-plan.txt   deterministic target-build plan
-  image-plan/image-plan.txt   deterministic blocked image plan
-  evidence/host/              deterministic host bootstrap evidence
-  artifacts/                  reserved; no target artifact exists
-  images/                     reserved; no image is created
-  toolchain/firmware/         reserved; no firmware exists
-  vm/                         reserved for disposable VM images only
-```
+## Bootstrap trust and closure
 
-Every writer rejects paths outside `out/r0`, traversal, and existing symlink ancestors.
-Build-plan bytes derive from the source revision, an allowlisted source-input tree digest,
-the tool-lock digest, fixed targets, fixed configuration, and the empty target dependency
-inventory. The reproducibility test deletes the repository-confined plan between runs and
-proves byte-identical clean regeneration.
+`rar-host-tool-lock-v3` separates the local diagnostic lock from the executable Linux CI lock.
 
-## Pinned and discovered tools
+Before shell parsing can allocate an unbounded record, the reviewed preparser axiom verifies exact hasher, byte-count, and line-bound helpers. It limits the lock to 16 KiB and 512-byte lines, limits approval/task/safety records, and rejects unknown fields. The preparser also binds the complete selected lock to a separately reviewed SHA-256 before parsing; the compiled verifier requires that same digest handoff. Before any selected non-root executable can run, the wrapper hashes its exact canonical path.
 
-Observed on `aarch64-apple-darwin` on 2026-07-16:
+`tools/toolchain/class-b-host-tools.v1` closes the Class B policy ledger for selected macOS roots, Xcode SDK, Rust/LLVM, OCI packages, `actions/checkout`, and CI service boundaries. Every row has a version/identity, integrity source, license, provenance URL, setup source, and explicit status. CI rejects missing, duplicate, malformed, or stale rows. The hosted runner and container engine are version-attested external service layers, not part of the OCI userland digest, and remain explicitly non-certifying.
 
-| Input | Version/state | SHA-256 or status |
+The macOS closure manifests pin:
+
+- `rustc`, the compiler driver dylib, codegen backend, and Rust linker tools;
+- host Rust standard/test libraries;
+- the selected AArch64, x86-64, and Tier 0 target libraries and component manifests;
+- Cargo;
+- SDK settings and every SDK `.tbd` link stub in the selected closure.
+
+The CI image digest and enforced read-only userland form the selected tool closure. The Linux lock additionally records exact hashes for Dash, SHA-256, bounds helpers, `mkdir`, `rm`, `env`, Rust, GCC 14, the sysroot marker, Cargo, and Git. Hosted runner, kernel, and container-engine layers remain recorded non-certifying service boundaries. `rustup` is never invoked and no command downloads or installs a dependency.
+
+Wrong-byte fixtures prove that compiler, linker, compiler-driver, and standard-library changes fail before a canary can execute, and a matching path/hash lock substitution fails against the immutable whole-lock digest. The shell verifies the exact clean workflow commit before compilation and materializes source blobs into an exclusive private directory. Its first external boundary after compiler return is opening the generated output; closure revalidation happens after that descriptor is held. Normal-exit traps remove only an exact regular-file allowlist relative to bound current directories; recursive deletion is not used. The CI route forbids introducing an unreviewed concurrent same-UID process.
+
+## Clean source snapshot and versioned receipts
+
+The shell authenticates pinned Git and establishes source identity before host compilation; the compiled verifier independently repeats the checks. Planning and evidence require:
+
+1. `HEAD^{commit}` resolves to an existing object and its tree is resolved from that captured commit;
+2. tracked and untracked source state is clean and no `assume-unchanged` or `skip-worktree` flags exist;
+3. source-input, manifest, and inventory digests derive from the captured commit's tree/blob objects, while compiler inputs are materialized from those same blobs;
+4. the complete locked tool/closure probe, lock, commit, tree, and source hashes still match after output staging and immediately before atomic publication.
+
+An archive containing only a claimed `.git/HEAD` value cannot emit evidence. Both SHA-1 and SHA-256 Git object IDs are validated. Tests cover nonexistent objects, hidden index flags, dirty source, tool-probe drift, lock replacement, source mutation, and mutation at the publication boundary.
+
+Corrected host schemas are `rar-host-check-v2`, `rar-host-test-v2`, `rar-build-plan-v3`, `rar-image-plan-v3`, and `rar-build-evidence-v3`. Their field-order contracts are test fixtures under `tools/rarbuild/contracts/`; strict consumers do not reinterpret older schemas.
+
+## Output and host-script safety
+
+Durable plan/evidence output uses descriptor-relative no-follow directory traversal, exclusive mode-`0600` staging, file synchronization, same-descriptor rewind/hash verification, atomic rename, and directory synchronization. Newly created directory entries synchronize their parents. Pre-commit cleanup failures propagate. After rename, no failure path unlinks the destination because another writer may already have replaced it with valid evidence.
+
+Competing-writer, parent-replacement, interruption, write/fsync/rename/unlink fault, and post-commit replacement tests cover those semantics.
+
+`rarbuild test` reads the bootstrap library and each bounded test script from the captured Git commit, hashes the script bytes, and passes the combined exact text to the pinned shell using `-c` with the canonical script path as `$0`. Replacing workspace paths before or after capture cannot change executed script bytes.
+
+## Acceptance mapping
+
+| R0-001 acceptance | Current evidence | State |
 | --- | --- | --- |
-| `rustc` | 1.95.0, commit `59807616e1fa2540724bfbac14d7976d7e4a3860`, LLVM 22.1.2 | `b829b733131d4e1673eeebd1f34d06ae1e9ff4977b051313cf42e2a9e79ecf1c` |
-| Rust-bundled LLVM | 22.1.2 | Required verbose-version match; `llvm=ok-rust-bundled-22.1.2` |
-| `cargo` | 1.95.0, commit `f2d3ce0bd7f24a49f8f72d9000448f8838c4e850` | `c512bff73c86143b557463f021d0c3d5b0490d97d65040ba59ea2b3427784758` |
-| `rust-src` install manifest | Rust 1.95.0 installed | `47b629523343fa73b4436080f660b510e0cd1c2553a94ba90ef8bdcc2e025ec1` |
-| `aarch64-unknown-none` manifest | Installed | `d2c67d85ffb386328781b6300ddfde93c9a500072a9e6e08eb3ff1fb0017375c` |
-| `thumbv8m.main-none-eabi` manifest | Installed | `c12a52d6b268e44baf79e6ec56fe0f82b53587d2dee6b1694fda3ffb94720f2b` |
-| `x86_64-unknown-none` manifest | Installed | `a1c0aed6cf079827ac9ebc82faeea2b517aba581c240dfe84a31761a99068c75` |
-| Apple Clang | 16.0.0, discovery only | Not output-affecting in this scaffold |
-| External LLD | Unavailable | `status=unavailable`, version/hash `none` |
-| QEMU x86-64/ARM64/ARM | Unavailable | Each has `status=unavailable`, version/hash `none` |
-| x86-64/ARM64 firmware | Unavailable | Each has `status=unavailable`, identity/hash `none` |
+| Report unavailable prerequisites without installation or host mutation | CI `rarbuild check` emits `rar-host-check-v2`; external LLD/QEMU/firmware remain unavailable | Applicable CI gate |
+| Refuse every unauthorized execution route before resolution/spawn | Wrapper/compiled route matrices and poisoned-path canaries | Applicable CI gate |
+| Deterministic planning while no target artifact exists | Two clean `rar-build-plan-v3` generations compare byte-for-byte and state `target_artifacts=not-produced`, `worktree_state=clean`, and `execution=forbidden` | Applicable CI gate |
+| Bind evidence to tools, source, target, and configuration | `rar-build-evidence-v3` derives all values from one revalidated snapshot | Applicable CI gate |
+| Two clean builds produce identical unsigned target artifacts | ADR 0011 requires exact byte comparison after artifacts exist and before R0-009 closes Release 0 | Deferred-mandatory; not passed |
 
-The local lock digest observed after implementation is
-`5f1878b789df0505304b3a417637f76e26428487261dec24228bd9143e24fc35`.
-The dependency inventory states `target_linked_third_party_code=none` and there are no
-Dependency Exception Records.
+## Unsafe and dependency review
 
-## Exact validation and exit meanings
+No unsafe target code or assembly exists. Host-only unsafe remains isolated to `tools/rar-lab/safety/src/unix_fs.rs`. The Linux `mode_t` and variadic-promotion assertions, descriptor ownership, pointer lifetime, no-follow traversal, synchronization, and injected syscall failures are compiled and exercised by the pinned Linux CI route. The corresponding macOS constants, ABI bindings, and compile-time assertion are statically reviewed but remain uncompiled and unexecuted at this exact head because every local macOS Rust route refuses before compiler execution. Executable macOS evidence is deferred until a separately reviewed descriptor-bound launcher or equivalently immutable host-only route exists; ADR 0012 does not pre-authorize that route.
+
+No third-party crate, Cargo package, target-linked dependency, binary payload, target asset, firmware, VM image, or Dependency Exception Record was added. Closure manifests contain hashes and paths only.
+
+## Validation and remaining gates
+
+Durable executable validation is the exact-head GitHub workflow:
 
 ```sh
+tests/host-safety/run.sh
 tests/bootstrap/run.sh
+tools/rarbuild/rarbuild test
 tools/rarbuild/rarbuild check
 tools/rarbuild/rarbuild build
 tools/rarbuild/rarbuild image
 tools/rarbuild/rarbuild evidence
+tools/ci/check-specs.sh
 ```
 
-Observed results on 2026-07-16:
+Local host-only validation is limited to shell syntax, specification/policy checks, closure verification, and the expected fail-closed wrapper refusal. No RAR target artifact, QEMU process, firmware, VM, networked guest, physical device, or target linker is executed.
 
-- Bootstrap suite: exit 0; 17 passed, 0 failed.
-- `check`: exit 3. Rust, bundled LLVM 22.1.2, Cargo, `rust-src`, and all target manifests match; LLD,
-  QEMU, and firmware report `unavailable-required`; certification is impossible.
-- `build`: exit 0. It writes a build plan with `target_artifacts=not-produced`,
-  `target_linked_dependencies=none`, and `execution=forbidden`.
-- `image`: exit 4. It writes only a blocked plan; `target_artifact=unavailable` and
-  `firmware=unavailable`.
-- `evidence`: exit 4. It records source/tool/dependency/plan digests, bundled LLVM,
-  `configuration=release-0-host-scaffold`, the exact three-target list, impossible
-  certification, absent authorization, and no target execution.
-
-Exit 3 means required discovered tools are unavailable or unpinned. Exit 4 means a safe
-plan/evidence file was produced but a target artifact or certification prerequisite is
-blocked. Exit 73 is an intentional execution-route refusal.
-
-## macOS and Linux host procedure
-
-On ARM64 macOS, use the preinstalled Rust 1.95.0 toolchain and run `check`. The current
-lock supports only the exact measured `aarch64-apple-darwin` binaries above. No setup
-command installs missing tools.
-
-On Linux, begin with a pre-provisioned Rust 1.95.0 toolchain containing `rust-src` and all
-three target libraries, then run `check`. The macOS binary hashes must not be reused.
-Linux remains unsupported until a coordinator-approved, locally measured Linux lock entry
-records exact compiler/component hashes and the required pinned LLD, QEMU, and firmware.
-`rarbuild` reports a platform/hash mismatch rather than relaxing the lock or downloading
-anything.
-
-## Acceptance mapping
-
-| R0-001 acceptance | Evidence | State |
-| --- | --- | --- |
-| One command reports missing tools without host installation/mutation | `rarbuild check`; exit 3 with deterministic unavailable states | Pass |
-| Every unauthorized execution-capable route refuses before resolution/spawn | Bootstrap route matrix, wrapper-order test, R0-000 resolver/spawner counters | Pass |
-| Two clean builds yield identical unsigned target artifacts | No target implementation or target artifact exists in Prompt 2 | Blocked; two identical build plans proven instead |
-| Evidence records tools, hashes, target, configuration, and source | `rarbuild evidence` and `build-plan.txt` | Pass for host scaffold |
-
-## Security, unsafe, and dependency review
-
-- All Rust roots forbid unsafe code; no unsafe block or assembly exists.
-- No Cargo package, crate dependency, target runtime, binary blob, firmware, or target asset
-  was added.
-- Host tools are Class B inputs and remain outside any future target image.
-- The lock schema can represent future `pinned` external inputs with safe version/identity
-  and exact SHA-256 fields. `unavailable` requires `none/none`; `certifiable=true` is valid
-  only when every required external pin is complete and target dependencies remain none.
-- `check` invokes Rust/Cargo version operations and hashes discovered external candidates.
-  It never launches QEMU, firmware, a target linker, target binary, or image. A present but
-  unpinned executable remains unusable.
-- `build` and `image` are plan generators only. They do not compile, link, package, load, or
-  execute target code.
-- The source tree and outputs reject symbolic-link escape and non-repository destinations.
-
-## Limitations and next gate
-
-- External LLD, all QEMU backends, and required firmware are unavailable; their versions and
-  hashes remain absent rather than fabricated.
-- No target implementation exists, so unsigned target-artifact reproducibility cannot yet be
-  demonstrated. The scaffold records this as a blocked acceptance item.
-- Only the current ARM64 macOS Rust installation is locked. Linux needs a separate reviewed
-  platform lock based on observed binaries.
-- Prompt 3 must independently review correctness, security, provenance, reproducibility, and
-  the no-execution evidence. Prompt 2 does not authorize Prompt 3 remediation, merge, R0-002,
-  profile certification, or any guest boot.
-
-## Target non-execution attestation
-
-No QEMU executable, firmware, target linker, target binary, VM image, boot image, or RAR
-target artifact was executed. Permitted activity was limited to host Rust compilation and
-tests, Rust/Cargo version and component inspection, local file hashing, Git revision reading,
-static command/profile generation, deterministic repository output, and refusal paths.
+The PR may merge only after exact-head CI succeeds, current `main` is conflict-free, and fresh independent correctness and security reviews report no blocking findings. Even after merge, external LLD, QEMU, firmware, profile certification, owner boot authorization, real-spawner lifecycle controls, and target-artifact reproducibility remain unsatisfied gates. Prompt 5 and R0-002 do not begin here.

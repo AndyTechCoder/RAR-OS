@@ -1,9 +1,14 @@
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
+
+#[path = "unix_fs.rs"]
+mod unix_fs;
 
 use std::collections::BTreeSet;
 use std::fmt;
-use std::fs;
+use std::fs::{self, File};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub const PROFILE_SCHEMA: &str = "rar-vm-profile-v1";
 pub const CERTIFICATION_SCHEMA: &str = "rar-vm-certification-v1";
@@ -13,6 +18,7 @@ pub const PROFILE_MAX_BYTES: usize = 8 * 1024;
 pub const CERTIFICATION_MAX_BYTES: usize = 4 * 1024;
 pub const AUTHORIZATION_MAX_BYTES: usize = 2 * 1024;
 pub const RECORD_MAX_LINE_BYTES: usize = 512;
+pub const REPOSITORY_MARKER_MAX_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SafetyError {
@@ -499,6 +505,26 @@ pub enum VmArgument {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SpawnArgument {
+    Machine(Machine),
+    CpuModelMax,
+    CpuCount(u32),
+    MemoryMiB(u32),
+    NoUserConfig,
+    NoDefaults,
+    NoReboot,
+    NoShutdown,
+    NoDisplay,
+    SerialStdio,
+    NoMonitor,
+    NoNetwork,
+    Sandbox,
+    FirmwareHandle,
+    DisposableDiskHandle,
+    TargetArtifactHandle,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ResourceLimits {
     pub runtime_seconds: u32,
     pub output_bytes: u32,
@@ -545,6 +571,30 @@ impl CommandPlan {
 
     pub fn emulator(&self) -> EmulatorId {
         self.emulator
+    }
+
+    fn spawn_arguments(&self) -> Vec<SpawnArgument> {
+        self.arguments
+            .iter()
+            .map(|argument| match argument {
+                VmArgument::Machine(machine) => SpawnArgument::Machine(*machine),
+                VmArgument::CpuModelMax => SpawnArgument::CpuModelMax,
+                VmArgument::CpuCount(count) => SpawnArgument::CpuCount(*count),
+                VmArgument::MemoryMiB(memory) => SpawnArgument::MemoryMiB(*memory),
+                VmArgument::NoUserConfig => SpawnArgument::NoUserConfig,
+                VmArgument::NoDefaults => SpawnArgument::NoDefaults,
+                VmArgument::NoReboot => SpawnArgument::NoReboot,
+                VmArgument::NoShutdown => SpawnArgument::NoShutdown,
+                VmArgument::NoDisplay => SpawnArgument::NoDisplay,
+                VmArgument::SerialStdio => SpawnArgument::SerialStdio,
+                VmArgument::NoMonitor => SpawnArgument::NoMonitor,
+                VmArgument::NoNetwork => SpawnArgument::NoNetwork,
+                VmArgument::Sandbox => SpawnArgument::Sandbox,
+                VmArgument::Firmware(_) => SpawnArgument::FirmwareHandle,
+                VmArgument::DisposableDisk(_) => SpawnArgument::DisposableDiskHandle,
+                VmArgument::TargetArtifact(_) => SpawnArgument::TargetArtifactHandle,
+            })
+            .collect()
     }
 
     pub fn argv(&self) -> Vec<String> {
@@ -953,9 +1003,19 @@ fn is_timestamp(value: &str) -> bool {
         return false;
     }
     let number = |start: usize, end: usize| value[start..end].parse::<u32>().ok();
-    matches!(number(0, 4), Some(1..=9999))
-        && matches!(number(5, 7), Some(1..=12))
-        && matches!(number(8, 10), Some(1..=31))
+    let (Some(year), Some(month), Some(day)) = (number(0, 4), number(5, 7), number(8, 10)) else {
+        return false;
+    };
+    let leap_year = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let maximum_day = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap_year => 29,
+        2 => 28,
+        _ => return false,
+    };
+    (1..=9999).contains(&year)
+        && (1..=maximum_day).contains(&day)
         && matches!(number(11, 13), Some(0..=23))
         && matches!(number(14, 16), Some(0..=59))
         && matches!(number(17, 19), Some(0..=59))
@@ -1014,12 +1074,89 @@ pub struct ResolvedExecutable {
     pub sha256: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Debug)]
+pub struct VerifiedExecutable {
+    pub sha256: String,
+    file: File,
+}
+
+impl VerifiedExecutable {
+    pub fn file(&self) -> &File {
+        &self.file
+    }
+}
+
+#[derive(Debug)]
+pub struct VerifiedResource {
+    sha256: Option<String>,
+    file: File,
+}
+
+impl VerifiedResource {
+    pub fn file(&self) -> &File {
+        &self.file
+    }
+
+    pub fn sha256(&self) -> Option<&str> {
+        self.sha256.as_deref()
+    }
+}
+
+#[derive(Debug)]
 pub struct ResolvedCommand {
-    pub workspace_root: PathBuf,
-    pub executable: ResolvedExecutable,
-    pub argv: Vec<String>,
+    pub executable: VerifiedExecutable,
+    pub artifact: VerifiedResource,
+    pub firmware: Option<VerifiedResource>,
+    pub disk: VerifiedResource,
+    pub arguments: Vec<SpawnArgument>,
     pub limits: ResourceLimits,
+}
+
+/// Gate-validated identity supplied to the single-use authorization boundary.
+///
+/// The record digest and nonce are the atomic replay key. The remaining digests retain the
+/// already-validated certification, profile, and artifact bindings for durable consumers.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AuthorizationConsumptionKey<'a> {
+    authorization_record_sha256: &'a str,
+    nonce: &'a str,
+    certification_sha256: &'a str,
+    profile_sha256: &'a str,
+    artifact_sha256: &'a str,
+}
+
+impl AuthorizationConsumptionKey<'_> {
+    pub fn authorization_record_sha256(&self) -> &str {
+        self.authorization_record_sha256
+    }
+
+    pub fn nonce(&self) -> &str {
+        self.nonce
+    }
+
+    pub fn certification_sha256(&self) -> &str {
+        self.certification_sha256
+    }
+
+    pub fn profile_sha256(&self) -> &str {
+        self.profile_sha256
+    }
+
+    pub fn artifact_sha256(&self) -> &str {
+        self.artifact_sha256
+    }
+}
+
+pub trait AuthorizationConsumer {
+    /// Atomically checks and irreversibly consumes one validated authorization.
+    ///
+    /// Returning `Ok(())` commits the digest-and-nonce key permanently, including when a
+    /// later resolver or spawner operation fails. Replays, storage failures, and uncertain
+    /// commit outcomes must return `Err` and fail closed without restoring launch authority.
+    /// A production implementation must use monotonic state controlled by an authority outside
+    /// the writable repository. This R0 scaffold deliberately ships no production consumer;
+    /// without that authority, no real resolver or spawner may be installed.
+    fn consume_once(&self, key: &AuthorizationConsumptionKey<'_>) -> SafetyResult<()>;
 }
 
 pub trait ExecutableResolver {
@@ -1031,14 +1168,65 @@ pub trait ExecutableResolver {
 }
 
 pub trait ProcessSpawner {
-    fn spawn(&mut self, command: &ResolvedCommand) -> SafetyResult<()>;
+    fn spawn(&mut self, command: ResolvedCommand) -> SafetyResult<()>;
 }
 
-pub fn authorize_then_delegate<R: ExecutableResolver, S: ProcessSpawner>(
+pub fn authorize_then_delegate<
+    C: AuthorizationConsumer,
+    R: ExecutableResolver,
+    S: ProcessSpawner,
+>(
     policy: &LaunchPolicy,
     request: &LaunchRequest<'_>,
+    authorization_consumer: &C,
     resolver: &mut R,
     spawner: &mut S,
+) -> SafetyResult<()> {
+    authorize_then_delegate_inner(
+        policy,
+        request,
+        authorization_consumer,
+        resolver,
+        spawner,
+        &mut || Ok(()),
+    )
+}
+
+#[cfg(test)]
+pub fn authorize_then_delegate_with_hook<
+    C: AuthorizationConsumer,
+    R: ExecutableResolver,
+    S: ProcessSpawner,
+    F: FnMut() -> SafetyResult<()>,
+>(
+    policy: &LaunchPolicy,
+    request: &LaunchRequest<'_>,
+    authorization_consumer: &C,
+    resolver: &mut R,
+    spawner: &mut S,
+    mut before_spawn: F,
+) -> SafetyResult<()> {
+    authorize_then_delegate_inner(
+        policy,
+        request,
+        authorization_consumer,
+        resolver,
+        spawner,
+        &mut before_spawn,
+    )
+}
+
+fn authorize_then_delegate_inner<
+    C: AuthorizationConsumer,
+    R: ExecutableResolver,
+    S: ProcessSpawner,
+>(
+    policy: &LaunchPolicy,
+    request: &LaunchRequest<'_>,
+    authorization_consumer: &C,
+    resolver: &mut R,
+    spawner: &mut S,
+    before_spawn: &mut dyn FnMut() -> SafetyResult<()>,
 ) -> SafetyResult<()> {
     let expected_certification = policy
         .expected_certification_sha256
@@ -1132,52 +1320,197 @@ pub fn authorize_then_delegate<R: ExecutableResolver, S: ProcessSpawner>(
     }
 
     let workspace_root = validate_repository_root(request.workspace_root)?;
-    let artifact_path =
-        validate_workspace_path(&workspace_root, profile.artifact_path.as_str(), true)?;
-    let actual_artifact_sha256 = sha256_file(&artifact_path)?;
-    if actual_artifact_sha256 != request.artifact_sha256
-        || actual_artifact_sha256 != certification.artifact_sha256
-    {
+    let artifact = verify_workspace_resource(
+        &workspace_root,
+        profile.artifact_path.as_str(),
+        Some(request.artifact_sha256),
+        "artifact-content-mismatch",
+        "artifact bytes do not match the request and certification digest",
+    )?;
+    if artifact.sha256() != Some(certification.artifact_sha256.as_str()) {
         return Err(SafetyError::new(
             "artifact-content-mismatch",
             "artifact bytes do not match the request and certification digest",
         ));
     }
-    if let Some(firmware_path) = &profile.firmware_path {
-        let firmware_path = validate_workspace_path(&workspace_root, firmware_path.as_str(), true)?;
-        let actual_firmware_sha256 = sha256_file(&firmware_path)?;
-        if actual_firmware_sha256 != firmware_hash
-            || actual_firmware_sha256 != certification.firmware_sha256
-        {
-            return Err(SafetyError::new(
+    let firmware = profile
+        .firmware_path
+        .as_ref()
+        .map(|firmware_path| {
+            verify_workspace_resource(
+                &workspace_root,
+                firmware_path.as_str(),
+                Some(firmware_hash),
                 "firmware-content-mismatch",
                 "firmware bytes do not match the pin and certification digest",
-            ));
-        }
+            )
+        })
+        .transpose()?;
+    if firmware.as_ref().and_then(VerifiedResource::sha256)
+        != profile
+            .firmware_path
+            .as_ref()
+            .map(|_| certification.firmware_sha256.as_str())
+    {
+        return Err(SafetyError::new(
+            "firmware-content-mismatch",
+            "firmware bytes do not match the pin and certification digest",
+        ));
     }
-    validate_workspace_path(&workspace_root, profile.disk_path.as_str(), true)?;
+    let disk = verify_workspace_resource(
+        &workspace_root,
+        profile.disk_path.as_str(),
+        None,
+        "disk-content-mismatch",
+        "disposable disk bytes changed while being opened",
+    )?;
+
+    let consumption_key = AuthorizationConsumptionKey {
+        authorization_record_sha256: &authorization.record_sha256,
+        nonce: &authorization.nonce,
+        certification_sha256: &authorization.certification_sha256,
+        profile_sha256: &authorization.profile_sha256,
+        artifact_sha256: &authorization.artifact_sha256,
+    };
+    authorization_consumer.consume_once(&consumption_key)?;
 
     let expected_emulator_hash = request
         .pins
         .emulator_sha256
         .as_deref()
         .expect("validated emulator pin must be present");
-    let executable = resolver.resolve(profile.emulator, expected_emulator_hash)?;
-    if !executable.path.is_absolute() || executable.sha256 != expected_emulator_hash {
+    let executable_claim = resolver.resolve(profile.emulator, expected_emulator_hash)?;
+    let executable = verify_resolved_executable(executable_claim, expected_emulator_hash)?;
+    let command = ResolvedCommand {
+        executable,
+        artifact,
+        firmware,
+        disk,
+        arguments: plan.spawn_arguments(),
+        limits: plan.limits,
+    };
+    before_spawn()?;
+    spawner.spawn(command)
+}
+
+fn verify_workspace_resource(
+    workspace_root: &Path,
+    relative: &str,
+    expected_sha256: Option<&str>,
+    mismatch_code: &'static str,
+    mismatch_detail: &'static str,
+) -> SafetyResult<VerifiedResource> {
+    use std::os::unix::fs::MetadataExt;
+
+    let path = validate_workspace_path(workspace_root, relative, true)?;
+    let mut file = unix_fs::open_absolute_regular_nofollow(&path)?;
+    let before = file
+        .metadata()
+        .map_err(|error| SafetyError::new("launch-resource-metadata", error.to_string()))?;
+    let actual_sha256 = expected_sha256.map(|expected| {
+        let actual = sha256_reader(&mut file)?;
+        if actual != expected {
+            return Err(SafetyError::new(mismatch_code, mismatch_detail));
+        }
+        Ok(actual)
+    });
+    let actual_sha256 = actual_sha256.transpose()?;
+    let after = file
+        .metadata()
+        .map_err(|error| SafetyError::new("launch-resource-metadata", error.to_string()))?;
+    if !same_metadata_identity(&before, &after) {
         return Err(SafetyError::new(
-            "resolved-emulator-mismatch",
-            "resolved executable is not the pinned emulator",
+            "launch-resource-changed",
+            "launch resource changed while its opened descriptor was being verified",
         ));
     }
-    spawner.spawn(&ResolvedCommand {
-        workspace_root,
-        executable,
-        argv: plan.argv(),
-        limits: plan.limits,
+
+    let rebound_path = validate_workspace_path(workspace_root, relative, true)?;
+    let rebound = fs::symlink_metadata(rebound_path)
+        .map_err(|error| SafetyError::new("launch-resource-metadata", error.to_string()))?;
+    if before.dev() != rebound.dev() || before.ino() != rebound.ino() {
+        return Err(SafetyError::new(
+            "launch-resource-path-changed",
+            "launch resource pathname changed while its descriptor was being opened",
+        ));
+    }
+    file.seek(SeekFrom::Start(0))
+        .map_err(|error| SafetyError::new("launch-resource-seek", error.to_string()))?;
+    Ok(VerifiedResource {
+        sha256: actual_sha256,
+        file,
+    })
+}
+
+#[cfg(unix)]
+fn same_metadata_identity(before: &fs::Metadata, after: &fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    before.dev() == after.dev()
+        && before.ino() == after.ino()
+        && before.len() == after.len()
+        && before.mtime() == after.mtime()
+        && before.mtime_nsec() == after.mtime_nsec()
+        && before.ctime() == after.ctime()
+        && before.ctime_nsec() == after.ctime_nsec()
+}
+
+fn verify_resolved_executable(
+    claim: ResolvedExecutable,
+    expected_sha256: &str,
+) -> SafetyResult<VerifiedExecutable> {
+    if !claim.path.is_absolute() || claim.sha256 != expected_sha256 {
+        return Err(SafetyError::new(
+            "resolved-emulator-mismatch",
+            "resolver claim does not identify the pinned emulator",
+        ));
+    }
+    let canonical = fs::canonicalize(&claim.path)
+        .map_err(|error| SafetyError::new("resolved-emulator-unavailable", error.to_string()))?;
+    if canonical != claim.path {
+        return Err(SafetyError::new(
+            "resolved-emulator-alias",
+            "resolved emulator path is not canonical",
+        ));
+    }
+    let mut file = unix_fs::open_absolute_regular_nofollow(&claim.path)?;
+    let before = file
+        .metadata()
+        .map_err(|error| SafetyError::new("resolved-emulator-metadata", error.to_string()))?;
+    let actual_sha256 = sha256_reader(&mut file)?;
+    let after = file
+        .metadata()
+        .map_err(|error| SafetyError::new("resolved-emulator-metadata", error.to_string()))?;
+    if !same_metadata_identity(&before, &after) {
+        return Err(SafetyError::new(
+            "resolved-emulator-changed",
+            "resolved emulator changed while it was being verified",
+        ));
+    }
+    let canonical_after = fs::canonicalize(&claim.path)
+        .map_err(|error| SafetyError::new("resolved-emulator-unavailable", error.to_string()))?;
+    if canonical_after != claim.path || actual_sha256 != expected_sha256 {
+        return Err(SafetyError::new(
+            "resolved-emulator-content-mismatch",
+            "fresh emulator bytes or canonical path do not match the pin",
+        ));
+    }
+    file.seek(SeekFrom::Start(0))
+        .map_err(|error| SafetyError::new("resolved-emulator-seek", error.to_string()))?;
+    Ok(VerifiedExecutable {
+        sha256: actual_sha256,
+        file,
     })
 }
 
 pub fn validate_repository_root(root: &Path) -> SafetyResult<PathBuf> {
+    validate_repository_root_inner(root, &mut || Ok(()))
+}
+
+fn validate_repository_root_inner(
+    root: &Path,
+    before_marker_read: &mut dyn FnMut() -> SafetyResult<()>,
+) -> SafetyResult<PathBuf> {
     if !root.is_absolute() {
         return Err(SafetyError::new(
             "unsafe-root",
@@ -1236,6 +1569,8 @@ pub fn validate_repository_root(root: &Path) -> SafetyResult<PathBuf> {
         ));
     }
 
+    before_marker_read()?;
+
     for (document, required_text) in [
         ("docs/approval-record.md", "Status: Approved"),
         ("docs/approval-record.md", "Approval: approved"),
@@ -1248,9 +1583,8 @@ pub fn validate_repository_root(root: &Path) -> SafetyResult<PathBuf> {
             "Status: Mandatory and effective immediately",
         ),
     ] {
-        let content = fs::read_to_string(root.join(document)).map_err(|error| {
-            SafetyError::new("repository-marker-read-failed", error.to_string())
-        })?;
+        let content = read_bounded_utf8_file(&root.join(document), REPOSITORY_MARKER_MAX_BYTES)
+            .map_err(|error| SafetyError::new(error.code, error.detail))?;
         if !content.lines().any(|line| line.starts_with(required_text)) {
             return Err(SafetyError::new(
                 "repository-approval-marker-mismatch",
@@ -1259,6 +1593,22 @@ pub fn validate_repository_root(root: &Path) -> SafetyResult<PathBuf> {
         }
     }
     Ok(canonical)
+}
+
+#[cfg(test)]
+pub fn validate_repository_root_with_hook_for_test<F>(
+    root: &Path,
+    mut before_marker_read: F,
+) -> SafetyResult<PathBuf>
+where
+    F: FnMut() -> SafetyResult<()>,
+{
+    validate_repository_root_inner(root, &mut before_marker_read)
+}
+
+#[cfg(test)]
+pub fn create_fifo_for_test(path: &Path) -> SafetyResult<()> {
+    unix_fs::create_fifo_for_test(path)
 }
 
 pub fn validate_workspace_path(
@@ -1330,13 +1680,306 @@ pub fn validate_workspace_path(
     Ok(joined)
 }
 
+static OUTPUT_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AtomicWriteStage {
+    Write,
+    FileSync,
+    Rename,
+    Unlink,
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AtomicWriteInjectedFailure {
+    Write,
+    FileSync,
+    Rename,
+    Unlink,
+}
+
+#[cfg(test)]
+impl AtomicWriteInjectedFailure {
+    fn stage(self) -> AtomicWriteStage {
+        match self {
+            Self::Write => AtomicWriteStage::Write,
+            Self::FileSync => AtomicWriteStage::FileSync,
+            Self::Rename => AtomicWriteStage::Rename,
+            Self::Unlink => AtomicWriteStage::Unlink,
+        }
+    }
+}
+
+pub fn atomic_write_workspace_file(root: &Path, relative: &Path, bytes: &[u8]) -> SafetyResult<()> {
+    atomic_write_workspace_file_inner(
+        root,
+        relative,
+        bytes,
+        &mut || Ok(()),
+        &mut || Ok(()),
+        &mut |_| Ok(()),
+    )
+}
+
+pub fn atomic_write_workspace_file_with_precommit<F>(
+    root: &Path,
+    relative: &Path,
+    bytes: &[u8],
+    mut before_commit: F,
+) -> SafetyResult<()>
+where
+    F: FnMut() -> SafetyResult<()>,
+{
+    atomic_write_workspace_file_inner(
+        root,
+        relative,
+        bytes,
+        &mut before_commit,
+        &mut || Ok(()),
+        &mut |_| Ok(()),
+    )
+}
+
+#[cfg(test)]
+pub fn atomic_write_workspace_file_with_hook<F>(
+    root: &Path,
+    relative: &Path,
+    bytes: &[u8],
+    mut before_commit: F,
+) -> SafetyResult<()>
+where
+    F: FnMut() -> SafetyResult<()>,
+{
+    atomic_write_workspace_file_inner(
+        root,
+        relative,
+        bytes,
+        &mut before_commit,
+        &mut || Ok(()),
+        &mut |_| Ok(()),
+    )
+}
+
+#[cfg(test)]
+pub fn atomic_write_workspace_file_with_hooks<F, G>(
+    root: &Path,
+    relative: &Path,
+    bytes: &[u8],
+    mut before_commit: F,
+    mut after_commit: G,
+) -> SafetyResult<()>
+where
+    F: FnMut() -> SafetyResult<()>,
+    G: FnMut() -> SafetyResult<()>,
+{
+    atomic_write_workspace_file_inner(
+        root,
+        relative,
+        bytes,
+        &mut before_commit,
+        &mut after_commit,
+        &mut |_| Ok(()),
+    )
+}
+
+#[cfg(test)]
+pub fn atomic_write_workspace_file_with_injected_failure(
+    root: &Path,
+    relative: &Path,
+    bytes: &[u8],
+    failure: AtomicWriteInjectedFailure,
+) -> SafetyResult<()> {
+    let failure_stage = failure.stage();
+    let mut injected = false;
+    let mut inject_failure = |stage| {
+        if !injected && stage == failure_stage {
+            injected = true;
+            return Err(SafetyError::new(
+                "injected-atomic-output-failure",
+                format!("injected failure at {stage:?}"),
+            ));
+        }
+        Ok(())
+    };
+    let mut before_commit = || {
+        if failure == AtomicWriteInjectedFailure::Unlink {
+            Err(SafetyError::new(
+                "injected-precommit-failure",
+                "force temporary-file cleanup before the injected unlink failure",
+            ))
+        } else {
+            Ok(())
+        }
+    };
+    atomic_write_workspace_file_inner(
+        root,
+        relative,
+        bytes,
+        &mut before_commit,
+        &mut || Ok(()),
+        &mut inject_failure,
+    )
+}
+
+fn atomic_write_workspace_file_inner(
+    root: &Path,
+    relative: &Path,
+    bytes: &[u8],
+    before_commit: &mut dyn FnMut() -> SafetyResult<()>,
+    after_commit: &mut dyn FnMut() -> SafetyResult<()>,
+    inject_failure: &mut dyn FnMut(AtomicWriteStage) -> SafetyResult<()>,
+) -> SafetyResult<()> {
+    if relative.is_absolute()
+        || relative
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        return Err(SafetyError::new(
+            "unsafe-output-path",
+            "atomic output path must be canonical and relative",
+        ));
+    }
+    let parent = relative.parent().ok_or_else(|| {
+        SafetyError::new("unsafe-output-path", "atomic output path has no parent")
+    })?;
+    let destination_name = relative
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| {
+            SafetyError::new("unsafe-output-path", "atomic output filename must be UTF-8")
+        })?;
+    let directory = unix_fs::open_or_create_relative_directory(root, parent)?;
+    let (temporary_name, mut temporary) = (0..128)
+        .find_map(|_| {
+            let sequence = OUTPUT_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+            let name = format!(".rarbuild-{}-{sequence:016x}.tmp", std::process::id());
+            match unix_fs::create_new_file_at(&directory, &name) {
+                Ok(file) => Some(Ok((name, file))),
+                Err(error) if error.code == "descriptor-file-exists" => None,
+                Err(error) => Some(Err(error)),
+            }
+        })
+        .transpose()?
+        .ok_or_else(|| {
+            SafetyError::new(
+                "temporary-output-exhausted",
+                "could not allocate an exclusive output temporary file",
+            )
+        })?;
+
+    let mut committed = false;
+    let staged = (|| -> SafetyResult<()> {
+        inject_failure(AtomicWriteStage::Write)?;
+        temporary
+            .write_all(bytes)
+            .map_err(|error| SafetyError::new("output-write-failed", error.to_string()))?;
+        inject_failure(AtomicWriteStage::FileSync)?;
+        temporary
+            .sync_all()
+            .map_err(|error| SafetyError::new("output-sync-failed", error.to_string()))?;
+        temporary
+            .seek(SeekFrom::Start(0))
+            .map_err(|error| SafetyError::new("output-seek-failed", error.to_string()))?;
+        let actual = sha256_reader(&mut temporary)?;
+        if actual != sha256_hex(bytes) {
+            return Err(SafetyError::new(
+                "output-verification-failed",
+                "staged output bytes differ from the requested bytes",
+            ));
+        }
+        before_commit()?;
+        unix_fs::verify_open_directory_binding(&directory, &root.join(parent))?;
+        inject_failure(AtomicWriteStage::Rename)?;
+        unix_fs::rename_at(&directory, &temporary_name, destination_name)?;
+        committed = true;
+        after_commit()?;
+        directory
+            .sync_all()
+            .map_err(|error| SafetyError::new("output-directory-sync-failed", error.to_string()))?;
+        Ok(())
+    })();
+    if let Err(primary) = staged {
+        if !committed {
+            let cleanup = inject_failure(AtomicWriteStage::Unlink)
+                .and_then(|()| unix_fs::unlink_at(&directory, &temporary_name))
+                .and_then(|()| {
+                    directory.sync_all().map_err(|error| {
+                        SafetyError::new("output-cleanup-sync-failed", error.to_string())
+                    })
+                });
+            if let Err(cleanup) = cleanup {
+                return Err(SafetyError::new(
+                    "output-cleanup-failed",
+                    format!("primary failure: {primary}; temporary cleanup failure: {cleanup}"),
+                ));
+            }
+        }
+        return Err(primary);
+    }
+    Ok(())
+}
+
+pub fn read_bounded_utf8_file(path: &Path, maximum_bytes: usize) -> SafetyResult<String> {
+    let mut file = unix_fs::open_absolute_regular_nofollow(path)?;
+    let metadata = file
+        .metadata()
+        .map_err(|error| SafetyError::new("bounded-read-metadata-failed", error.to_string()))?;
+    if metadata.len() > maximum_bytes as u64 {
+        return Err(SafetyError::new(
+            "bounded-read-too-large",
+            format!("file exceeds the {maximum_bytes}-byte limit"),
+        ));
+    }
+    let mut bytes = Vec::with_capacity(metadata.len() as usize);
+    Read::by_ref(&mut file)
+        .take(maximum_bytes as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| SafetyError::new("bounded-read-failed", error.to_string()))?;
+    if bytes.len() > maximum_bytes {
+        return Err(SafetyError::new(
+            "bounded-read-too-large",
+            format!("file exceeds the {maximum_bytes}-byte limit"),
+        ));
+    }
+    String::from_utf8(bytes)
+        .map_err(|_| SafetyError::new("bounded-read-not-utf8", "file is not valid UTF-8"))
+}
+
 pub fn sha256_file(path: &Path) -> SafetyResult<String> {
-    let bytes =
-        fs::read(path).map_err(|error| SafetyError::new("hash-read-failed", error.to_string()))?;
-    Ok(sha256_hex(&bytes))
+    let mut file = unix_fs::open_absolute_regular_nofollow(path)?;
+    sha256_reader(&mut file)
+}
+
+pub fn sha256_reader(reader: &mut impl Read) -> SafetyResult<String> {
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let count = reader
+            .read(&mut buffer)
+            .map_err(|error| SafetyError::new("hash-read-failed", error.to_string()))?;
+        if count == 0 {
+            break;
+        }
+        hasher.update(&buffer[..count]);
+    }
+    Ok(hasher.finish_hex())
 }
 
 pub fn sha256_hex(input: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(input);
+    hasher.finish_hex()
+}
+
+struct Sha256 {
+    state: [u32; 8],
+    block: [u8; 64],
+    block_len: usize,
+    total_bytes: u64,
+}
+
+impl Sha256 {
     const INITIAL: [u32; 8] = [
         0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
         0x5be0cd19,
@@ -1354,16 +1997,39 @@ pub fn sha256_hex(input: &[u8]) -> String {
         0xc67178f2,
     ];
 
-    let bit_length = (input.len() as u64).wrapping_mul(8);
-    let mut padded = input.to_vec();
-    padded.push(0x80);
-    while padded.len() % 64 != 56 {
-        padded.push(0);
+    fn new() -> Self {
+        Self {
+            state: Self::INITIAL,
+            block: [0; 64],
+            block_len: 0,
+            total_bytes: 0,
+        }
     }
-    padded.extend_from_slice(&bit_length.to_be_bytes());
 
-    let mut state = INITIAL;
-    for block in padded.chunks_exact(64) {
+    fn update(&mut self, mut input: &[u8]) {
+        self.total_bytes = self.total_bytes.wrapping_add(input.len() as u64);
+        if self.block_len != 0 {
+            let count = (64 - self.block_len).min(input.len());
+            self.block[self.block_len..self.block_len + count].copy_from_slice(&input[..count]);
+            self.block_len += count;
+            input = &input[count..];
+            if self.block_len == 64 {
+                let block = self.block;
+                self.compress(&block);
+                self.block_len = 0;
+            }
+        }
+        while input.len() >= 64 {
+            self.compress(&input[..64]);
+            input = &input[64..];
+        }
+        if !input.is_empty() {
+            self.block[..input.len()].copy_from_slice(input);
+            self.block_len = input.len();
+        }
+    }
+
+    fn compress(&mut self, block: &[u8]) {
         let mut schedule = [0_u32; 64];
         for (index, bytes) in block.chunks_exact(4).enumerate() {
             schedule[index] = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
@@ -1381,14 +2047,14 @@ pub fn sha256_hex(input: &[u8]) -> String {
                 .wrapping_add(s1);
         }
 
-        let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut h] = state;
+        let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut h] = self.state;
         for index in 0..64 {
             let sum1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
             let choice = (e & f) ^ ((!e) & g);
             let temporary1 = h
                 .wrapping_add(sum1)
                 .wrapping_add(choice)
-                .wrapping_add(K[index])
+                .wrapping_add(Self::K[index])
                 .wrapping_add(schedule[index]);
             let sum0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
             let majority = (a & b) ^ (a & c) ^ (b & c);
@@ -1402,15 +2068,32 @@ pub fn sha256_hex(input: &[u8]) -> String {
             b = a;
             a = temporary1.wrapping_add(temporary2);
         }
-        for (slot, value) in state.iter_mut().zip([a, b, c, d, e, f, g, h]) {
+        for (slot, value) in self.state.iter_mut().zip([a, b, c, d, e, f, g, h]) {
             *slot = slot.wrapping_add(value);
         }
     }
 
-    let mut output = String::with_capacity(64);
-    for word in state {
-        use fmt::Write as _;
-        write!(&mut output, "{word:08x}").expect("writing to String cannot fail");
+    fn finish_hex(mut self) -> String {
+        let bit_length = self.total_bytes.wrapping_mul(8);
+        self.block[self.block_len] = 0x80;
+        self.block_len += 1;
+        if self.block_len > 56 {
+            self.block[self.block_len..].fill(0);
+            let block = self.block;
+            self.compress(&block);
+            self.block = [0; 64];
+            self.block_len = 0;
+        }
+        self.block[self.block_len..56].fill(0);
+        self.block[56..64].copy_from_slice(&bit_length.to_be_bytes());
+        let block = self.block;
+        self.compress(&block);
+
+        let mut output = String::with_capacity(64);
+        for word in self.state {
+            use fmt::Write as _;
+            write!(&mut output, "{word:08x}").expect("writing to String cannot fail");
+        }
+        output
     }
-    output
 }

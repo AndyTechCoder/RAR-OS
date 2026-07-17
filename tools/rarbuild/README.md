@@ -1,25 +1,19 @@
 # `rarbuild` Release 0 host CLI
 
-Run `tools/rarbuild/rarbuild <command>` from the repository checkout root. The wrapper compiles
-repository-owned host Rust with the pinned toolchain into `out/r0/host-tools/`; no Cargo
-workspace member or third-party crate is used.
+The public host-only command surface remains `check`, `build`, `image`, refusal-only `run`, host-only `test`, and `evidence`. Every execution alias and argument-bearing test mode refuses before repository discovery, record reads, executable resolution, or process spawn.
 
-- `check` verifies the observed Rust binary/component hashes, Rust-bundled LLVM 22.1.2,
-  and hashes any pinned external candidate without launching it; it reports missing required
-  tools without installing or downloading anything. Exit 3 means certification prerequisites
-  are unavailable.
-- `build` writes a deterministic host-only build plan. No target source or target artifact
-  exists yet, so it does not invoke a target linker.
-- `image` writes a deterministic blocked image plan and exits 4. It creates no bootable image.
-- `run` is refusal-only and exits 73 before tool compilation, executable lookup, record reads,
-  or process spawning.
-- `test` with no arguments runs only the standalone host suites. Every argument-bearing test
-  mode is refused before tool compilation.
-- `evidence` writes deterministic host bootstrap evidence and exits 4 while certification is
-  impossible. Evidence names the exact configuration and target list directly.
+Executable accepted routes currently run only in the digest-pinned Linux CI image with its separately measured lock. The macOS wrapper verifies bounded policy records, exact proposed roots, and both closure manifests, then exits 2 with `reason=local-bootstrap-execution-awaits-descriptor-bound-launcher` before compiler execution. This preserves the physical-Mac boundary instead of claiming pathname verification is descriptor-bound execution.
 
-Execution aliases, delegation names, arbitrary emulator names and arguments, unknown
-commands, and wrong-arity host commands are classified before root discovery or compilation.
-They cannot reach a resolver. The compiled CLI independently applies the same route
-classification in case the wrapper is bypassed. No emulator process-spawning implementation
-is shipped.
+Within CI:
+
+- `check` emits `rar-host-check-v2` and exits 3 because external LLD, QEMU, and firmware remain unavailable.
+- `build` writes deterministic `rar-build-plan-v3`; it does not compile or link target code.
+- `image` writes blocked `rar-image-plan-v3` and exits 4; it creates no bootable image.
+- `test` captures and hashes the two host scripts once, passes those exact bytes to the pinned shell, and emits `rar-host-test-v2`.
+- `evidence` writes `rar-build-evidence-v3` and exits 4 while target artifacts and certification inputs are absent.
+
+The shell binds the complete selected lock to a reviewed digest, verifies the read-only CI tool root, authenticates pinned Git, and compiles only source blobs materialized from the exact workflow-selected clean commit. The compiled verifier independently verifies that commit and its commit-bound tree, rejects hidden index flags, hashes the canonical commit-tree source listing, and hashes manifest/inventory bytes from commit blobs. One `BuildSnapshot` captures those identities with the complete tool probe. The locked tool bytes/closure and every other field are revalidated after output staging and immediately before atomic publication. Missing objects, hidden index state, dirty source, tool-probe drift, lock swaps, and source mutation fail closed.
+
+Durable output uses descriptor-relative no-follow traversal, synchronized exclusive staging, same-descriptor byte verification, atomic rename, and parent synchronization. A post-commit failure never unlinks the destination because a concurrent writer may already own that pathname.
+
+Field-order contracts live in `tools/rarbuild/contracts/`. ADR 0011 retains two byte-identical clean unsigned target builds as a mandatory Release 0 closure gate after target artifacts exist. No current command satisfies or waives that deferred gate.

@@ -1,4 +1,4 @@
-schema=rar-dependency-inventory-v1
+schema=rar-dependency-inventory-v3
 release=0
 target_owned_code=none-yet
 target_linked_third_party_code=none
@@ -7,6 +7,9 @@ target_firmware=none
 dependency_exception_records=none
 host_rust_code=repository-owned-plus-rust-std
 host_shell=posix-sh
-host_tools=rustc-1.95.0,rust-bundled-llvm-22.1.2,cargo-1.95.0,rustup,git
+host_tools=macos-sealed-shell-hasher-bounds,macos-mkdir-rm-env,rustc-1.95.0,rust-bundled-rust-lld-22.1.2,xcode-macos-sdk,cargo-1.95.0,pinned-git,ci-gcc-14
+class_b_inventory=tools/toolchain/class-b-host-tools.v1
 host_optional_discovery=clang,lld,qemu
+ci_host_test_root=rust-1.95.0-oci-sha256-f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
+ci_orchestration_boundary=github-runner-ubuntu-24.04-20260714.240.1-external-attested-noncertifying
 runtime_distribution=none

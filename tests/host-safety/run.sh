@@ -34,35 +34,78 @@ if [ -L "$root/.git" ] || { [ ! -d "$root/.git" ] && [ ! -f "$root/.git" ]; }; t
     echo "host-safety tests require a regular .git directory or worktree file" >&2
     exit 2
 fi
-grep -q '^Status: Approved$' "$root/docs/approval-record.md" || exit 2
-grep -q '^Approval: approved$' "$root/docs/approval-record.md" || exit 2
-grep -q '^Status: Ready — Gate 0 owner approval recorded ' "$root/docs/tasks/release-0.md" || exit 2
-grep -q '^Status: Mandatory and effective immediately$' "$root/docs/host-safety.md" || exit 2
+bootstrap_library=$root/tools/rarbuild/bootstrap-lib.sh
+[ -f "$bootstrap_library" ] && [ ! -L "$bootstrap_library" ] || exit 2
+if [ "${RAR_BOOTSTRAP_LIBRARY_ALREADY_LOADED-}" != 1 ]; then
+    . "$bootstrap_library"
+fi
+rar_preflight_policy_records "$root" || exit 2
+rar_file_has_exact_line "$root/docs/approval-record.md" 'Status: Approved' || exit 2
+rar_file_has_exact_line "$root/docs/approval-record.md" 'Approval: approved' || exit 2
+rar_file_has_exact_line "$root/docs/tasks/release-0.md" 'Status: Ready — Gate 0 owner approval recorded 2026-07-16' || exit 2
+rar_file_has_exact_line "$root/docs/host-safety.md" 'Status: Mandatory and effective immediately' || exit 2
+rar_load_selected_bootstrap_root "$root" || exit 2
+rar_verify_selected_bootstrap_root || exit 2
+[ "${RAR_CI_BOOTSTRAP_IMAGE-}" = sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 ] || exit 2
+rar_verify_ci_execution_boundary || exit 2
+rar_verify_ci_source_snapshot || exit 2
+RAR_BOOTSTRAP_LOCK_SHA256=$bootstrap_lock_sha256
+export RAR_BOOTSTRAP_LOCK_SHA256
 cd "$root"
+umask 077
 
-for path in out out/r0 out/r0/host-tests out/r0/tmp out/r0/host-tests/host-safety-tests; do
+for path in out out/r0 out/r0/host-tests out/r0/tmp; do
     if [ -L "$path" ]; then
         echo "host-safety test output must not be a symbolic link: $path" >&2
         exit 2
     fi
 done
 
-mkdir -p out/r0/host-tests out/r0/tmp
-resolved_host_tests=$(CDPATH= cd -- out/r0/host-tests && pwd -P)
-[ "$resolved_host_tests" = "$root/out/r0/host-tests" ] || {
-    echo "host-safety test output escaped the repository checkout" >&2
-    exit 2
+rar_root=$root
+rar_prepare_output_parent "$root/out/r0" || exit 2
+rar_prepare_output_parent "$root/out/r0/host-tests" || exit 2
+rar_prepare_output_parent "$root/out/r0/tmp" || exit 2
+test_directory=$(rar_allocate_private_directory "$root/out/r0/host-tests" host-safety) || exit 2
+[ ! -L "$test_directory" ] || exit 2
+resolved_test_directory=$(CDPATH= cd -- "$test_directory" && pwd -P)
+[ "$resolved_test_directory" = "$test_directory" ] || exit 2
+host_safety_test_cleanup() {
+    [ -n "${test_directory-}" ] || return 0
+    rar_cleanup_private_directory \
+        "$test_directory" \
+        host-safety-tests main.rs safety.rs unix_fs.rs \
+        x86_64-static.profile aarch64-static.profile thumbv8m-static.profile \
+        oversized-line.profile || return 1
+    test_directory=
 }
-TMPDIR="$root/out/r0/tmp"
-export TMPDIR
-if [ -d /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk ]; then
-    SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
-    export SDKROOT
+trap 'host_safety_test_cleanup' 0
+trap 'exit 129' 1
+trap 'exit 130' 2
+trap 'exit 143' 15
+RAR_REPO_ROOT=$root
+export RAR_REPO_ROOT
+rar_materialize_git_sources \
+    "$test_directory" \
+    tests/host-safety/src/main.rs main.rs \
+    tools/rar-lab/safety/src/lib.rs safety.rs \
+    tools/rar-lab/safety/src/unix_fs.rs unix_fs.rs \
+    spec/lab/vm-profile/examples/x86_64-static.profile x86_64-static.profile \
+    spec/lab/vm-profile/examples/aarch64-static.profile aarch64-static.profile \
+    spec/lab/vm-profile/examples/thumbv8m-static.profile thumbv8m-static.profile \
+    tests/host-safety/fixtures/oversized-line.profile oversized-line.profile || exit 2
+rar_compile_host_rust \
+    "$test_directory" \
+    main.rs \
+    host-safety-tests \
+    --cfg rar_flat_bootstrap \
+    --test
+RAR_BOOTSTRAP_BOUNDARY=$bootstrap_boundary
+export RAR_BOOTSTRAP_BOUNDARY
+if rar_execute_generated_host_binary "$test_directory/host-safety-tests" --test-threads=1; then
+    host_safety_test_status=0
+else
+    host_safety_test_status=$?
 fi
-RAR_REPO_ROOT="$root" rustc \
-    --edition 2024 \
-    --test \
-    --deny unsafe_code \
-    tests/host-safety/src/main.rs \
-    -o out/r0/host-tests/host-safety-tests
-RAR_REPO_ROOT="$root" out/r0/host-tests/host-safety-tests
+host_safety_test_cleanup || exit 2
+trap - 0 1 2 15
+exit "$host_safety_test_status"

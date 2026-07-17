@@ -18,6 +18,7 @@ unknown, reordered, non-ASCII, or malformed data without a third-party parser.
   the schema explicitly names it.
 - VM profiles are limited to 8 KiB, certification records to 4 KiB, authorization records
   to 2 KiB, and every line to 512 bytes. Limits are checked before field parsing.
+- UTC timestamps must be real Gregorian calendar dates, including correct leap-year rules.
 
 ## VM profile
 
@@ -40,7 +41,16 @@ not accepted.
 Before a resolver may run, the launcher validates an already-canonical repository root
 using repository and approval markers, then requires the firmware (when applicable), target
 artifact, and disposable disk to be regular non-symlink files at the profile's exact paths.
-Artifact and firmware bytes are freshly SHA-256 hashed against their bindings.
+Artifact and firmware bytes are freshly SHA-256 hashed against their bindings. After every
+policy, record, path, pin, and input check succeeds, the gate must atomically consume the
+validated owner authorization by its record digest and nonce, retaining the certification,
+profile, and artifact bindings in the consumption key. Replay or consumer failure refuses
+before executable resolution or spawning.
+
+After resolver delegation, the gate independently opens the claimed emulator through
+descriptor-relative no-follow traversal, streams a fresh hash, checks stable file identity,
+compares the actual bytes with the immutable pin, and carries that same open descriptor to
+the spawner boundary. A resolver-supplied path/hash assertion is never sufficient.
 
 The generated command is typed. There is no profile field for emulator arguments,
 environment wrappers, shell fragments, helper programs, devices, or delegation.
@@ -67,6 +77,16 @@ and its required path is:
 It becomes effective only when a future owner-approved launcher policy pins its exact
 digest. The shipped Release 0 scaffold pins neither a certification nor an authorization,
 so creating or editing local record files cannot authorize execution.
+
+The `max_launches=1` promise requires an `AuthorizationConsumer` whose `consume_once`
+operation durably and atomically records the validated record-digest/nonce key before any
+resolver or spawner delegation. Successful consumption is irreversible even if resolution
+or spawning later fails. An unavailable consumer, a replay, or an uncertain commit state
+fails closed. Repository-local markers are rollbackable and therefore cannot satisfy this
+contract. The current scaffold supplies the mandatory consumer boundary and hostile-state
+test doubles, but deliberately supplies no production consumer. A future real launcher needs
+an owner-reviewed monotonic authority outside writable repository state; until it exists,
+installing a real resolver or spawner is forbidden and the one-launch gate remains unsatisfied.
 
 ## Current certification state
 
