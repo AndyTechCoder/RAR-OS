@@ -38,8 +38,11 @@ jobs:
       - name: Validate in pinned read-only container on attested runner
         shell: /usr/bin/dash -e {0}
         run: |
+          host_uid=$(/usr/bin/id -u)
+          host_gid=$(/usr/bin/id -g)
           docker run --rm --read-only \
-            --tmpfs /tmp:rw,nosuid,nodev,size=128m \
+            --user "$host_uid:$host_gid" \
+            --tmpfs "/tmp:rw,nosuid,nodev,size=128m,uid=$host_uid,gid=$host_gid,mode=1777" \
             --mount "type=bind,source=$GITHUB_WORKSPACE,target=/workspace" \
             --workdir /workspace \
             --env RAR_EXPECTED_SOURCE_REVISION \

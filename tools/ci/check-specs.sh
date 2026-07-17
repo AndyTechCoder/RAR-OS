@@ -275,6 +275,10 @@ for runner_handoff in \
 done
 grep -q 'docker run --rm --read-only' .github/workflows/specifications.yml || fail "same-runner pinned container launch is missing"
 grep -q -- '--read-only' .github/workflows/specifications.yml || fail "CI container root is not read-only"
+grep -Fq 'host_uid=$(/usr/bin/id -u)' .github/workflows/specifications.yml || fail "CI runner UID capture is missing"
+grep -Fq 'host_gid=$(/usr/bin/id -g)' .github/workflows/specifications.yml || fail "CI runner GID capture is missing"
+grep -Fq -- '--user "$host_uid:$host_gid"' .github/workflows/specifications.yml || fail "CI container does not use the runner identity"
+grep -Fq -- 'uid=$host_uid,gid=$host_gid,mode=1777' .github/workflows/specifications.yml || fail "CI tmpfs is not writable by the runner identity"
 grep -q 'rar-image-plan-v3' tools/rarbuild/contracts/rar-image-plan-v3.fields || fail "image-plan v3 contract is missing"
 
 tools/ci/check-host-policy.sh
