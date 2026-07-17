@@ -40,6 +40,7 @@ docs/release-0/build/prompt-4-remediation.md
 docs/adr/0013-pre-copy-trust-and-mmio-authority.md
 docs/adr/0014-hardware-binding-and-record-identity.md
 docs/adr/0015-deterministic-validation-precedence.md
+docs/adr/0016-release-0-entry-validation-and-authority-closure.md
 docs/release-0/contracts/README.md
 spec/boot/handoff-v1.fields
 spec/hardware/rhd-v1.fields
@@ -125,7 +126,7 @@ duplicates=$(printf '%s\n' "$index_targets" | sort | uniq -d)
 
 adr_files=$(sed -n 's/^- \[ADR [^]]*\](\(adr\/[^)]*\.md\))$/docs\/\1/p' docs/README.md)
 adr_count=$(printf '%s\n' "$adr_files" | awk 'NF { count++ } END { print count + 0 }')
-[ "$adr_count" -eq 15 ] || fail "expected exactly 15 indexed ADRs"
+[ "$adr_count" -eq 16 ] || fail "expected exactly 16 indexed ADRs"
 
 approval_date=$(sed -n 's/^Date: //p' docs/approval-record.md)
 case "$approval_date" in
@@ -163,14 +164,14 @@ grep -qx "Status: Ready — Gate 0 owner approval recorded $approval_date" docs/
 grep -qx 'Status: Approved for Prompt 2 after repository publication' docs/handoff-prompt.md || fail "handoff prompt status is inconsistent"
 grep -qx 'Status: Approved for execution; begins after repository publication and GitHub authentication' docs/v1-alpha-execution.md || fail "execution runbook status is inconsistent"
 
-for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0014 0015; do
+for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0014 0015 0016; do
     matches=$(printf '%s\n' "$adr_files" | grep -c "/$number-")
     [ "$matches" -eq 1 ] || fail "expected one indexed ADR for $number"
 done
 
-grep -q 'ADRs 0001–0015' docs/tasks/release-0.md || fail "Release 0 approved ADR range is stale"
+grep -q 'ADRs 0001–0016' docs/tasks/release-0.md || fail "Release 0 approved ADR range is stale"
 grep -q 'Build-plan and evidence schemas use version 3' docs/adr/0011-release-0-reproducibility-gate-phasing.md || fail "ADR 0011 build-plan/evidence schema version is stale"
-for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0014 0015; do
+for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0014 0015 0016; do
     if grep -q "ADR $number" docs/tasks/release-0.md; then
         printf '%s\n' "$adr_files" | grep -q "/$number-" || fail "task-referenced ADR $number is not indexed and approved"
     fi
@@ -179,7 +180,7 @@ done
 printf '%s\n' "$adr_files" | while IFS= read -r adr; do
     [ -s "$adr" ] || fail "missing or empty indexed ADR: $adr"
     case "$adr" in
-        docs/adr/0013-* | docs/adr/0014-* | docs/adr/0015-*) adr_approval_date=2026-07-17 ;;
+        docs/adr/0013-* | docs/adr/0014-* | docs/adr/0015-* | docs/adr/0016-*) adr_approval_date=2026-07-17 ;;
         *) adr_approval_date=$approval_date ;;
     esac
     grep -qx "Status: Accepted — $adr_approval_date" "$adr" || fail "ADR status mismatch: $adr"

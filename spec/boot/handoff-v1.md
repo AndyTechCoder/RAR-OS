@@ -8,35 +8,39 @@ Source schema: `handoff-v1.fields`
 
 RAR Root or Recovery supplies one contiguous immutable `BootEntryV1` byte slice through the architecture entry ABI. On x86-64 its physical address and byte length are in `RDI` and `RSI`; on AArch64 they are in `x0` and `x1`. This fixed register pair is the only pre-descriptor read authority. The architecture adapter already knows its expected architecture, bounds the external length to 64 through 4,096 bytes, checks 8-byte alignment and address-width fit, copies the slice exactly once, and then parses only the owned copy. Root/Recovery guarantees the slice is immutable and DMA-revoked from before transfer until the copy completes.
 
-The entry header is 64 bytes followed inline by 32-byte window descriptors. `total_bytes` must equal `64 + descriptor_count * 32` using checked arithmetic; descriptor count is 1 through 126. Header fields are magic `RARENTRY`, version 1.0, header size 64, descriptor size 32, architecture, address bits 32 through 64, zero flags/reserved bytes, and a nonzero snapshot generation.
+x86-64 enters in long mode with interrupts disabled, direction flag clear, a 16-byte-aligned writable adapter stack, and Root/Recovery-controlled translation mapping only the entry slice for the initial copy. AArch64 enters at EL1 with interrupts masked, a 16-byte-aligned writable adapter stack, coherent entry bytes, and MMU-off physical addressing for the initial copy. The adapter maps no other source until its descriptor passes.
+
+The entry header is 64 bytes followed inline by 32-byte window descriptors. `total_bytes` must equal `64 + descriptor_count * 32` using checked arithmetic; descriptor count is 1 through 126. Header fields are magic `RARENTRY`, version 1.0, header size 64, descriptor size 32, architecture, address bits 32 through 64, and zero flags/reserved bytes. There is no out-of-band generation receipt.
 
 Each descriptor contains `base:u64`, `length:u64`, `purpose:u16`, `rights:u16`, `producer:u16`, `transfer:u16`, `owner_kind:u16`, `flags:u16`, and `owner_id:u32`. Ranges are nonempty checked half-open ranges. Purposes are handoff, memory map, RHD, entropy, trace, device MMIO, and device I/O port. Rights are read, write, execute, and device. Producers are Root or Recovery only. Transfer modes are snapshot, exclusive, authority, and clear-after-snapshot. Source descriptors require immutable and DMA-revoked flags; executable source metadata is forbidden.
 
-Exactly one descriptor exists for handoff, map, RHD, entropy, and trace. Source descriptors are pairwise disjoint. Handoff/map/RHD use read-only snapshot transfer. Entropy uses read-only snapshot or read/write clear-after-snapshot consistently with the handoff flag. Trace uses read/write exclusive transfer. Device descriptors use read/write/device authority, identify an owning RHD `(kind,id)`, and do not grant access until RHD and memory-map cross-validation succeeds.
+Exactly one descriptor exists for handoff, map, RHD, entropy, and trace. Descriptor order is immaterial. The external entry slice and every system-memory descriptor are pairwise disjoint; I/O-port descriptors are pairwise disjoint in their separate space. Handoff/map/RHD use read-only snapshot transfer. Entropy uses read-only snapshot or read/write clear-after-snapshot consistently with the handoff flag. Trace uses read/write exclusive transfer. Device descriptors use read/write/device authority, identify an owning RHD `(kind,id)`, and do not grant access until RHD and memory-map cross-validation succeeds.
 
 ## Boot handoff and memory map
 
 `BootHandoffV1` remains exactly 128 little-endian bytes with the offsets in the source schema. It carries magic/version, architecture, page shift, boot-source kind, memory-map address/count, RHD address/bytes, entropy range/flags, trace identity/range, and boot CPU ID. Its embedded ranges and exact lengths must equal the unique entry descriptors. The adapter snapshots map, RHD, and entropy once, requires embedded and external lengths to agree, parses only owned copies, and never revisits source addresses.
 
-Each 32-byte memory-map entry is `base:u64`, `length:u64`, `kind:u16`, `attributes:u16`, `owner:u16`, `reserved0:u16`, `region_id:u32`, `reserved1:u32`. Entries are ordered by base, nonempty, non-wrapping, and non-overlapping. Kinds are usable, firmware, boot-owned, Nucleus, MMIO, and reserved. Attribute bits are read, write, execute, cacheable, and device. Owners are none, Root, Recovery, Nucleus, firmware, and device. Unknown values/bits and nonzero reserved fields fail.
+Release 0 boot-source kind is 1 and must match the sole RHD boot-source record. Entropy flag bit 0 selects clear-after-snapshot and must match a read/write clear-after descriptor; zero selects a read-only snapshot descriptor. Other entropy bits are zero. Trace version is exactly 1.0, trace flags are zero, and the trace buffer remains inactive until full validation succeeds.
+
+Each 32-byte memory-map entry is `base:u64`, `length:u64`, `kind:u16`, `attributes:u16`, `owner:u16`, `reserved0:u16`, `region_id:u32`, `reserved1:u32`. Entries are ordered by base, nonempty, non-wrapping, and non-overlapping. Exact accepted `(kind,attributes,owner)` combinations are usable `(read|write|cacheable, none)`, firmware `(read|cacheable, firmware)`, boot-owned `(read|write|cacheable, Root or Recovery)`, Nucleus `(read|write|cacheable, Nucleus)`, MMIO `(read|write|device, device)`, and reserved `(none, none)`. Execute is forbidden. Source ranges lie in boot-owned entries of their producer. Any other combination or reserved value fails.
 
 System-memory register windows must fit exactly one MMIO entry with read/write/device, no execute, and device ownership. I/O-port windows are not physical-memory entries and must fit the 16-bit port space. In both spaces, the entry authority descriptor must contain the complete range and match the parent record kind and ID.
 
 ## Snapshot and ownership sequence
 
-1. Bound and copy the entry slice; compare its architecture with the adapter.
+1. Under the architecture preconditions in ADR 0016, bound and copy only the entry slice; compare its architecture with the adapter.
 2. Validate every descriptor and its checked range before reading a described window.
-3. Verify source immutability and DMA revocation for the advertised generation.
+3. Verify the trusted immutable and DMA-revoked precondition; no independent mutation receipt is claimed.
 4. Snapshot handoff, map, RHD, and entropy exactly once into bounded owned storage.
 5. Require descriptor, handoff, and embedded RHD/map lengths to agree and consume all bytes exactly.
 6. Validate owned values according to the total predicate table.
 7. Only after success transfer trace exclusivity and construct device authorities. Clear entropy source only under clear-after-snapshot transfer.
 
-Any generation change, producer/DMA write, short copy, or re-read attempt returns `snapshot-violation`. Rejection grants no mapping, executable, device, trace, or recovery authority.
+A short copy, copy-provider fault, adapter-observed stability failure, or re-read attempt returns `snapshot-violation`. A malicious producer that violates the trusted precondition is outside structural validation. Rejection grants no mapping, executable, device, trace, or recovery authority.
 
 ## Deterministic validation
 
-`handoff-v1.fields` is the canonical total predicate table. Predicates run strictly in ascending table order; a decoder returns the code of the first failing row and performs only the access named by that row after all prerequisites passed. Unknown minor versions are rejected. Numeric code order is not precedence. Changing row order or an existing code meaning requires a new major contract.
+`handoff-v1.fields` is the canonical staged predicate table. Entry predicates run before descriptor binding; acquisition follows; owned-artifact framing and semantics run only afterward. Within each stage predicates run in table order and artifacts use entry, handoff, map, then RHD order. Same-major higher minors are accepted only when fixed sizes remain supported and additions are optional/non-critical; unknown critical additions fail. Numeric code order is not precedence.
 
 ## Compatibility and replacement
 

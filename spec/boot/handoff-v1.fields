@@ -14,31 +14,44 @@ memory_map_entry_size=32
 maximum_memory_map_entries=256
 entropy_size=32..64
 trace_size=4096..1048576
+boot_source_kinds=1:boot-volume
+entropy_flags=1:clear-after-snapshot
+trace_version=1.0
+trace_flags=none
 descriptor_purposes=1:handoff,2:memory-map,3:rhd,4:entropy,5:trace,6:device-mmio,7:device-io-port
 descriptor_rights=1:read,2:write,4:execute,8:device
 descriptor_producers=1:root,2:recovery
 descriptor_transfers=1:snapshot,2:exclusive,3:authority,4:clear-after-snapshot
-descriptor_flags=1:immutable,2:dma-revoked
+descriptor_flags=1:immutable,2:dma-revoked,4:critical
 memory_kinds=1:usable,2:firmware,3:boot-owned,4:nucleus,5:mmio,6:reserved
 memory_attributes=1:read,2:write,4:execute,8:cacheable,16:device
 memory_owners=0:none,1:root,2:recovery,3:nucleus,4:firmware,5:device
+memory-rule|usable|read+write+cacheable|none
+memory-rule|firmware|read+cacheable|firmware
+memory-rule|boot-owned|read+write+cacheable|root-or-recovery
+memory-rule|nucleus|read+write+cacheable|nucleus
+memory-rule|mmio|read+write+device|device
+memory-rule|reserved|none|none
+validation-stage|1|entry|external-bounds-through-range-aliasing|entry-slice-only
+validation-stage|2|acquisition|snapshot-acquisition|descriptor-authorized-provider-copies
+validation-stage|3|owned-artifacts|framing-through-page-size|owned-copies-only
 validation_codes=0:ok,1:truncated,2:oversized,3:bad-magic,4:unsupported-major,5:unsupported-minor,6:bad-header-size,7:unsupported-flags,8:nonzero-reserved,9:bad-alignment,10:range-overflow,11:out-of-address-range,12:invalid-pointer-range,13:overlap,14:bad-count-or-length,15:unknown-critical,16:duplicate-id,17:bad-reference,18:architecture-mismatch,19:page-size-mismatch,20:invalid-memory-map,21:invalid-cpu-set,22:invalid-interrupt,23:invalid-timer,24:invalid-serial,25:invalid-boot-source,26:invalid-entropy,27:invalid-trace,28:noncanonical-order,29:inconsistent-description,30:invalid-entry,31:snapshot-violation,32:invalid-register-window,33:unauthorized-device-window
 validation-predicate|1|external-bounds|truncated|none|architecture-entry slice only|code|reject
 validation-predicate|2|external-ceiling|oversized|external-bounds|architecture-entry length only|code|reject
 validation-predicate|3|magic|bad-magic|external-ceiling|owned fixed prefixes|code|reject
 validation-predicate|4|major-version|unsupported-major|magic|owned version fields|code|reject
-validation-predicate|5|minor-version|unsupported-minor|major-version|owned version fields|code|reject
-validation-predicate|6|fixed-sizes|bad-header-size|minor-version|owned size fields|code|reject
-validation-predicate|7|flags|unsupported-flags|fixed-sizes|owned flag fields|code|reject
-validation-predicate|8|reserved|nonzero-reserved|flags|owned reserved fields|code|reject
-validation-predicate|9|range-arithmetic|range-overflow|reserved|owned scalar values|code|reject
-validation-predicate|10|address-width|out-of-address-range|range-arithmetic|owned scalar values|code|reject
-validation-predicate|11|alignment|bad-alignment|address-width|owned scalar values|code|reject
-validation-predicate|12|entry-semantics|invalid-entry|alignment|owned entry|code|reject
-validation-predicate|13|descriptor-binding|invalid-pointer-range|entry-semantics|owned entry and architecture-entry slice|code|reject
+validation-predicate|5|fixed-sizes|bad-header-size|major-version|owned size fields|code|reject
+validation-predicate|6|flags|unsupported-flags|fixed-sizes|owned flag fields|code|reject
+validation-predicate|7|reserved|nonzero-reserved|flags|owned reserved fields|code|reject
+validation-predicate|8|range-arithmetic|range-overflow|reserved|owned scalar values|code|reject
+validation-predicate|9|address-width|out-of-address-range|range-arithmetic|owned scalar values|code|reject
+validation-predicate|10|alignment|bad-alignment|address-width|owned scalar values|code|reject
+validation-predicate|11|entry-semantics|invalid-entry|alignment|owned entry|code|reject
+validation-predicate|12|minor-compatibility|unsupported-minor|entry-semantics|owned entry descriptors|code|reject
+validation-predicate|13|descriptor-binding|invalid-pointer-range|minor-compatibility|owned entry and architecture-entry slice|code|reject
 validation-predicate|14|range-aliasing|overlap|descriptor-binding|owned descriptor ranges|code|reject
-validation-predicate|15|snapshot-generation|snapshot-violation|range-aliasing|owned entry and snapshot receipt|code|reject
-validation-predicate|16|counts-and-lengths|bad-count-or-length|snapshot-generation|owned snapshot framing fields|code|reject
+validation-predicate|15|snapshot-acquisition|snapshot-violation|range-aliasing|descriptor-authorized copy results|code|reject
+validation-predicate|16|counts-and-lengths|bad-count-or-length|snapshot-acquisition|owned snapshot framing fields|code|reject
 validation-predicate|17|critical-extension|unknown-critical|counts-and-lengths|owned record headers|code|reject
 validation-predicate|18|identity-uniqueness|duplicate-id|critical-extension|owned record headers|code|reject
 validation-predicate|19|references|bad-reference|identity-uniqueness|owned records|code|reject
@@ -68,8 +81,7 @@ wire-field|BootEntryHeaderV1|23|flags|u8
 wire-field|BootEntryHeaderV1|24|descriptor_count|u16
 wire-field|BootEntryHeaderV1|26|reserved0|u16
 wire-field|BootEntryHeaderV1|28|reserved1|u32
-wire-field|BootEntryHeaderV1|32|snapshot_generation|u64
-wire-field|BootEntryHeaderV1|40|reserved2|bytes:24
+wire-field|BootEntryHeaderV1|32|reserved2|bytes:32
 wire-field|WindowDescriptorV1|0|base|u64
 wire-field|WindowDescriptorV1|8|length|u64
 wire-field|WindowDescriptorV1|16|purpose|u16
@@ -140,7 +152,7 @@ rust-enum|DescriptorPurpose|u16|Handoff=1,MemoryMap=2,Rhd=3,Entropy=4,Trace=5,De
 rust-enum|Producer|u16|Root=1,Recovery=2
 rust-enum|TransferMode|u16|Snapshot=1,Exclusive=2,Authority=3,ClearAfterSnapshot=4
 rust-enum|ValidationCode|u32|Ok=0,Truncated=1,Oversized=2,BadMagic=3,UnsupportedMajor=4,UnsupportedMinor=5,BadHeaderSize=6,UnsupportedFlags=7,NonzeroReserved=8,BadAlignment=9,RangeOverflow=10,OutOfAddressRange=11,InvalidPointerRange=12,Overlap=13,BadCountOrLength=14,UnknownCritical=15,DuplicateId=16,BadReference=17,ArchitectureMismatch=18,PageSizeMismatch=19,InvalidMemoryMap=20,InvalidCpuSet=21,InvalidInterrupt=22,InvalidTimer=23,InvalidSerial=24,InvalidBootSource=25,InvalidEntropy=26,InvalidTrace=27,NoncanonicalOrder=28,InconsistentDescription=29,InvalidEntry=30,SnapshotViolation=31,InvalidRegisterWindow=32,UnauthorizedDeviceWindow=33
-rust-struct|BootEntryHeaderV1|architecture:Architecture,address_bits:u8,descriptor_count:u16,snapshot_generation:u64
+rust-struct|BootEntryHeaderV1|architecture:Architecture,address_bits:u8,descriptor_count:u16
 rust-struct|WindowDescriptorV1|base:u64,length:u64,purpose:DescriptorPurpose,rights:u16,producer:Producer,transfer:TransferMode,owner_kind:u16,flags:u16,owner_id:u32
 rust-struct|BootHandoffV1|architecture:Architecture,address_bits:u8,page_shift:u8,boot_source_kind:u16,memory_map_address:u64,memory_map_count:u32,rhd_address:u64,rhd_bytes:u32,entropy_address:u64,entropy_bytes:u32,entropy_flags:u32,trace_channel_id:u32,trace_major:u16,trace_minor:u16,trace_buffer_address:u64,trace_buffer_bytes:u32,trace_flags:u32,boot_cpu_id:u32
 rust-struct|MemoryRegionV1|base:u64,length:u64,kind:u16,attributes:u16,owner:u16,region_id:u32

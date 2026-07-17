@@ -23,8 +23,7 @@ emit_entry_header() {
     printf 'RARENTRY'
     u16 1; u16 0; u16 64; u16 32
     u32 "$entry_total"; u16 "$entry_arch"; byte 48; byte 0
-    u16 "$descriptor_count_field"; u16 0; u32 0
-    u64 "$snapshot_generation"; zeros 24
+    u16 "$descriptor_count_field"; u16 0; u32 0; zeros 32
 }
 
 emit_entry() {
@@ -32,7 +31,7 @@ emit_entry() {
         printf 'RARENTRY'
         u16 1; u16 0; u16 64; u16 32
         u32 63; u16 "$entry_arch"; byte 48; byte 0
-        u16 0; u16 0; u32 0; u64 1; zeros 23
+        u16 0; u16 0; u32 0; zeros 31
         return
     fi
     emit_entry_header
@@ -50,6 +49,7 @@ emit_entry() {
         descriptor 134873088 16121856 6 11 3 3 0 1
         descriptor 150994944 4096 6 11 3 5 0 1
     fi
+    if [ "$entry_blob_length" -eq 4097 ]; then zeros 3809; fi
 }
 
 memory_entry() {
@@ -136,7 +136,7 @@ emit_rhd() {
 
 emit_bundle() {
     printf 'R0FXBIN\000'; u16 1; u16 "$expected_code"
-    u32 "$entry_blob_length"; u32 128; u32 "$map_length"; u32 "$rhd_length"; u32 0; u64 "$observed_generation"
+    u32 "$entry_blob_length"; u32 128; u32 "$map_length"; u32 "$rhd_length"; u32 0; u32 "$copy_fault"; u32 0
     emit_entry; emit_handoff; emit_map; emit_rhd
 }
 
@@ -147,7 +147,7 @@ for case_id in \
     wrong-address-space unauthorized-device-window map-rhd-inconsistent architecture-inconsistent; do
     expected_code=0; entry_arch=1; rhd_arch=1; entry_blob_length=288; entry_total=288
     descriptor_count_field=7; map_count=3; map_length=96; rhd_length=504; record_count=10
-    snapshot_generation=1; observed_generation=1; overlap_entry=0; apic_descriptor_base=4276092928
+    copy_fault=0; overlap_entry=0; apic_descriptor_base=4276092928
     boot_length=20480; rhd_usable_base=1048576; unknown_critical=0; cpu_interrupt_id=1
     serial_interrupt_index=4; apic_space=1; apic_stride=16; apic_authority_index=5
     second_window_id=2
@@ -157,7 +157,7 @@ for case_id in \
             descriptor_count_field=8; map_count=5; map_length=160; rhd_length=656; record_count=13
             ;;
         truncated-entry) expected_code=1; entry_blob_length=63; entry_total=63; descriptor_count_field=0 ;;
-        oversized-entry) expected_code=2; entry_total=4097 ;;
+        oversized-entry) expected_code=2; entry_blob_length=4097; entry_total=4097 ;;
         misaligned-window) expected_code=9; apic_descriptor_base=4276092929 ;;
         overlapping-entry) expected_code=13; overlap_entry=1 ;;
         unknown-critical) expected_code=15; unknown_critical=1 ;;
@@ -166,7 +166,7 @@ for case_id in \
         invalid-memory-map) expected_code=20; boot_length=0 ;;
         interrupt-out-of-range) expected_code=24; serial_interrupt_index=224 ;;
         invalid-entry) expected_code=30; descriptor_count_field=6 ;;
-        snapshot-violation) expected_code=31; observed_generation=2 ;;
+        snapshot-violation) expected_code=31; copy_fault=1 ;;
         invalid-register-window) expected_code=32; apic_stride=4 ;;
         wrong-address-space) expected_code=32; apic_space=2 ;;
         unauthorized-device-window) expected_code=33; apic_authority_index=6 ;;

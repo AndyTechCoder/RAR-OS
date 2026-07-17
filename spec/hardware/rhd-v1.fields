@@ -20,6 +20,12 @@ address_spaces=1:system-memory,2:x86-io-port
 window_roles=1:apic,2:gic-distributor,3:gic-redistributor,4:timer,5:serial
 byte_orders=1:little-endian
 window_flags=1:required
+cpu_flags=1:boot-cpu
+interrupt_flags=none
+timer_flags=none
+serial_flags=none
+boot_source_kinds=1:boot-volume
+boot_source_flags=none
 interrupt_triggers=1:edge,2:level
 interrupt_polarities=1:active-high,2:active-low
 wire-field|RhdHeaderV1|0|magic|bytes:8

@@ -45,6 +45,8 @@ Every record begins with `kind:u16`, `flags:u16`, `record_bytes:u32`, `record_id
 
 At least one record of every core kind exists and at least the model-required register windows exist. Dangling references, duplicate IDs within a kind, ambiguous targets, and forbidden windows fail.
 
+CPU payload flag bit 0 identifies the boot CPU and all other CPU flag bits are zero. Interrupt, timer, serial, and boot-source payload flags are zero. Release 0 boot-source kind 1 means the validated boot volume and must equal handoff `boot_source_kind`. All known payload reserved fields are zero and every known record has its exact declared size.
+
 ## Typed register binding
 
 Address spaces are system memory (1) and x86 I/O port (2). Roles are APIC (1), GIC distributor (2), GIC redistributor (3), timer (4), and serial (5). Byte order is explicitly little-endian (1). Access width and stride are bytes and must be nonzero, powers of two, no larger than the window, and model-exact:

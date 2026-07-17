@@ -116,7 +116,6 @@ pub struct BootEntryHeaderV1 {
     pub architecture: Architecture,
     pub address_bits: u8,
     pub descriptor_count: u16,
-    pub snapshot_generation: u64,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WindowDescriptorV1 {
