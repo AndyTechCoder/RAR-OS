@@ -51,6 +51,8 @@ jobs:
             --env RAR_CI_RUNNER_IMAGE_VERSION \
             --env RAR_CI_RUNNER_OS \
             --env RAR_CI_RUNNER_ARCH \
+            --env GITHUB_ACTIONS \
+            --env CI \
             rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 \
             /usr/bin/dash -e -c '
               tools/ci/check-specs.sh
