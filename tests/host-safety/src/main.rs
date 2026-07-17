@@ -661,7 +661,7 @@ fn repository_marker_fixture(label: &str) -> PathBuf {
         std::process::id(),
         FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed)
     ));
-    fs::create_dir_all(root.join("docs")).expect("create marker fixture docs");
+    fs::create_dir_all(root.join("docs/tasks")).expect("create marker fixture task docs");
     fs::create_dir(root.join(".git")).expect("create marker fixture Git directory");
     fs::write(root.join("Cargo.toml"), b"[workspace]\nmembers = []\n")
         .expect("write marker fixture Cargo file");
