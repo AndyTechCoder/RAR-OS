@@ -1,20 +1,20 @@
 # Release 0 Boot Entry and Handoff
 
-Status: R0-002 implementation contract; ADRs 0013–0015 accepted 2026-07-17
+Status: R0-002 implementation contract; ADRs 0013–0016 accepted 2026-07-17
 
 Source schema: `handoff-v1.fields`
 
 ## Trusted entry boundary
 
-RAR Root or Recovery supplies one contiguous immutable `BootEntryV1` byte slice through the architecture entry ABI. On x86-64 its physical address and byte length are in `RDI` and `RSI`; on AArch64 they are in `x0` and `x1`. This fixed register pair is the only pre-descriptor read authority. The architecture adapter already knows its expected architecture, bounds the external length to 64 through 4,096 bytes, checks 8-byte alignment and address-width fit, copies the slice exactly once, and then parses only the owned copy. Root/Recovery guarantees the slice is immutable and DMA-revoked from before transfer until the copy completes.
+RAR Root or Recovery supplies one contiguous immutable `BootEntryV1` byte slice through the architecture entry ABI. On x86-64 its physical address and byte length are in `RDI` and `RSI`; on AArch64 they are in `x0` and `x1`. This fixed register pair is the only pre-descriptor read authority. The architecture adapter conformance tuple is expected architecture, external entry address and length, address width, page size, entry alignment, and stack alignment. The adapter bounds the external length to 64 through 4,096 bytes, validates the tuple with checked arithmetic, copies the slice exactly once, and then parses only the owned copy. Root/Recovery guarantees the slice is immutable and DMA-revoked from before transfer until the copy completes.
 
 x86-64 enters in long mode with interrupts disabled, direction flag clear, a 16-byte-aligned writable adapter stack, and Root/Recovery-controlled translation mapping only the entry slice for the initial copy. AArch64 enters at EL1 with interrupts masked, a 16-byte-aligned writable adapter stack, coherent entry bytes, and MMU-off physical addressing for the initial copy. The adapter maps no other source until its descriptor passes.
 
-The entry header is 64 bytes followed inline by 32-byte window descriptors. `total_bytes` must equal `64 + descriptor_count * 32` using checked arithmetic; descriptor count is 1 through 126. Header fields are magic `RARENTRY`, version 1.0, header size 64, descriptor size 32, architecture, address bits 32 through 64, and zero flags/reserved bytes. There is no out-of-band generation receipt.
+The entry header is 64 bytes followed inline by 32-byte window descriptors. `total_bytes` must equal `64 + descriptor_count * 32` using checked arithmetic; descriptor count is 1 through 126. Header fields are magic `RARENTRY`, version 1.0, header size 64, descriptor size 32, architecture, address bits 32 through 64, and zero flags/reserved bytes.
 
 Each descriptor contains `base:u64`, `length:u64`, `purpose:u16`, `rights:u16`, `producer:u16`, `transfer:u16`, `owner_kind:u16`, `flags:u16`, and `owner_id:u32`. Ranges are nonempty checked half-open ranges. Purposes are handoff, memory map, RHD, entropy, trace, device MMIO, and device I/O port. Rights are read, write, execute, and device. Producers are Root or Recovery only. Transfer modes are snapshot, exclusive, authority, and clear-after-snapshot. Source descriptors require immutable and DMA-revoked flags; executable source metadata is forbidden.
 
-Exactly one descriptor exists for handoff, map, RHD, entropy, and trace. Descriptor order is immaterial. The external entry slice and every system-memory descriptor are pairwise disjoint; I/O-port descriptors are pairwise disjoint in their separate space. Handoff/map/RHD use read-only snapshot transfer. Entropy uses read-only snapshot or read/write clear-after-snapshot consistently with the handoff flag. Trace uses read/write exclusive transfer. Device descriptors use read/write/device authority, identify an owning RHD `(kind,id)`, and do not grant access until RHD and memory-map cross-validation succeeds.
+Exactly one descriptor exists for handoff, map, RHD, entropy, and trace. Descriptor order is immaterial. The external entry slice and every system-memory descriptor are pairwise disjoint; I/O-port descriptors are pairwise disjoint in their separate space. Handoff/map/RHD use read-only snapshot transfer. Entropy uses read-only snapshot or read/write clear-after-snapshot consistently with the handoff flag. Trace uses read/write exclusive transfer. Device descriptors use read/write/device authority, identify an owning RHD `(kind,id)`, and do not grant access until RHD and memory-map cross-validation succeeds. Their stable lookup key is `(purpose, owner_kind, owner_id)`; descriptor position carries no authority meaning.
 
 ## Boot handoff and memory map
 
@@ -40,7 +40,9 @@ A short copy, copy-provider fault, adapter-observed stability failure, or re-rea
 
 ## Deterministic validation
 
-`handoff-v1.fields` is the canonical staged predicate table. Entry predicates run before descriptor binding; acquisition follows; owned-artifact framing and semantics run only afterward. Within each stage predicates run in table order and artifacts use entry, handoff, map, then RHD order. Same-major higher minors are accepted only when fixed sizes remain supported and additions are optional/non-critical; unknown critical additions fail. Numeric code order is not precedence.
+`handoff-v1.fields` is the canonical artifact-qualified staged predicate table and defines the exact inter-artifact first-error order. Adapter predicates run before the entry copy; entry predicates run before descriptor binding; acquisition follows; owned handoff, map, and RHD framing and semantics run only afterward; effects commit last. Each row states its required prior fact and access budget. Same-major higher minors are accepted only when fixed sizes remain supported and bounded additions are explicitly optional and non-critical; unknown critical additions fail. Numeric code order is not precedence.
+
+The conformance oracle uses a descriptor-keyed source provider and an effect sink. It records every permitted entry/source copy, faults or truncates selected sources, rejects a second copy, and records entropy clearing, trace transfer, and device-authority construction only after complete acceptance. Rejected input must leave the effect log empty.
 
 ## Compatibility and replacement
 

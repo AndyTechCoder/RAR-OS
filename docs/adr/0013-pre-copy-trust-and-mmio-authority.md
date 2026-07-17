@@ -49,12 +49,14 @@ Use alternative B.
 
 The mandatory algorithm is:
 
-1. Validate the fixed entry value without following embedded addresses.
+1. Validate the architecture-adapter tuple—expected architecture, external entry address/length, address width, page size, entry alignment, and stack alignment—then copy the fixed entry value without following embedded addresses.
 2. Validate descriptor count, checked half-open arithmetic, address width, alignment, non-aliasing, purpose, and expected architecture.
 3. Copy each readable source exactly once into bounded Nucleus-owned scratch; require external and embedded lengths to agree.
 4. Parse only owned copies, consume records exactly, and never revisit source addresses.
 5. Transfer the trace destination only after all validation succeeds; clear entropy source only when its descriptor grants that one write.
-6. Treat RHD register ranges as descriptions only. Grant MMIO access only when the complete checked range is contained in exactly one authoritative MMIO/device descriptor with matching owner and rights.
+6. Treat RHD register ranges as descriptions only. Grant MMIO or I/O-port access only when the complete checked range is contained in exactly one descriptor selected by `(purpose,owner_kind,owner_id)` with matching producer, transfer, owner, and rights.
+
+The conformance boundary is an instrumented descriptor-keyed source provider and a commit-only effect sink. The provider records permitted reads, returns selected short copies or faults, and rejects a second copy. The sink records entropy clearing, trace activation, and constructed device authority only after complete validation; every rejected case must have an empty effect log.
 
 ## Consequences
 
@@ -76,7 +78,7 @@ Because RHD/boot v1 is not merged, approval should revise the draft v1 contracts
 
 - Independent adapters produce the same owned snapshot for equivalent x86-64 and AArch64 inputs.
 - Every overflow, alias, source mutation, length mismatch, unauthorized MMIO, and wrong-owner case returns a deterministic validation code before device access.
-- Instrumented reference tests prove rejected ranges are never read or written.
+- Instrumented reference tests prove exact permitted reads, one-copy behavior, provider faults, and absence of rejected writes or authority construction.
 
 ## Replacement path
 

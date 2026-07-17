@@ -98,6 +98,9 @@ emit_rhd() {
     record_header 1 0 48 1
     u32 1; u32 0; u64 16; u32 "$cpu_interrupt_id"; u32 1; zeros 8
 
+    record_header 1 0 48 2
+    u32 0; u32 0; u64 17; u32 1; u32 1; zeros 8
+
     emit_memory_record 1 4096 "$boot_length" 3 11 1
     emit_memory_record 2 "$rhd_usable_base" 524288 1 11 0
     if [ "$entry_arch" -eq 1 ]; then
@@ -125,12 +128,12 @@ emit_rhd() {
     fi
 
     if [ "$entry_arch" -eq 1 ]; then
-        emit_window 1 3 1 1 "$apic_space" 4 "$apic_stride" 4276092928 4096 "$apic_authority_index"
-        emit_window "$second_window_id" 5 5 1 2 1 1 1016 8 6
+        emit_window 1 3 1 1 "$apic_space" 4 "$apic_stride" 4276092928 4096 "$apic_authority_purpose"
+        emit_window "$second_window_id" 5 5 1 2 1 1 1016 8 7
     else
-        emit_window 1 3 2 1 1 4 4 134217728 65536 5
+        emit_window 1 3 2 1 1 4 4 134217728 65536 6
         emit_window "$second_window_id" 3 3 1 1 4 4 134873088 16121856 6
-        emit_window 3 5 5 1 1 4 4 150994944 4096 7
+        emit_window 3 5 5 1 1 4 4 150994944 4096 6
     fi
 }
 
@@ -146,15 +149,15 @@ for case_id in \
     interrupt-out-of-range invalid-entry snapshot-violation invalid-register-window \
     wrong-address-space unauthorized-device-window map-rhd-inconsistent architecture-inconsistent; do
     expected_code=0; entry_arch=1; rhd_arch=1; entry_blob_length=288; entry_total=288
-    descriptor_count_field=7; map_count=3; map_length=96; rhd_length=504; record_count=10
+    descriptor_count_field=7; map_count=3; map_length=96; rhd_length=552; record_count=11
     copy_fault=0; overlap_entry=0; apic_descriptor_base=4276092928
     boot_length=20480; rhd_usable_base=1048576; unknown_critical=0; cpu_interrupt_id=1
-    serial_interrupt_index=4; apic_space=1; apic_stride=16; apic_authority_index=5
+    serial_interrupt_index=4; apic_space=1; apic_stride=16; apic_authority_purpose=6
     second_window_id=2
     case "$case_id" in
         valid-aarch64)
             entry_arch=2; rhd_arch=2; entry_blob_length=320; entry_total=320
-            descriptor_count_field=8; map_count=5; map_length=160; rhd_length=656; record_count=13
+            descriptor_count_field=8; map_count=5; map_length=160; rhd_length=704; record_count=14
             ;;
         truncated-entry) expected_code=1; entry_blob_length=63; entry_total=63; descriptor_count_field=0 ;;
         oversized-entry) expected_code=2; entry_blob_length=4097; entry_total=4097 ;;
@@ -169,7 +172,7 @@ for case_id in \
         snapshot-violation) expected_code=31; copy_fault=1 ;;
         invalid-register-window) expected_code=32; apic_stride=4 ;;
         wrong-address-space) expected_code=32; apic_space=2 ;;
-        unauthorized-device-window) expected_code=33; apic_authority_index=6 ;;
+        unauthorized-device-window) expected_code=33; apic_authority_purpose=7 ;;
         map-rhd-inconsistent) expected_code=29; rhd_usable_base=1572864 ;;
         architecture-inconsistent) expected_code=18; rhd_arch=2 ;;
     esac

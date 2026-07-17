@@ -33,9 +33,9 @@ Each decoder follows the current broad phases but chooses its own order within a
 - Advantage: easiest implementation.
 - Cost: violates deterministic cross-architecture conformance and makes compound-invalid fixtures non-portable.
 
-### C. One total ordered predicate table with access preconditions
+### C. Artifact-qualified staged predicate tables with one inter-artifact order
 
-The canonical schema assigns every validation predicate a unique precedence and states which bytes or windows may be accessed after it passes. Generated decoders and conformance fixtures derive from that table.
+The canonical schema assigns every validation predicate to a named artifact and stage, states which bytes or windows may be accessed after it passes, and defines one exact order between artifacts. Generated decoders and conformance fixtures derive from that table.
 
 - Advantage: deterministic, auditable, and safe by construction.
 - Cost: more specification work and deliberate compatibility management when predicates change.
@@ -44,7 +44,7 @@ The canonical schema assigns every validation predicate a unique precedence and 
 
 Use alternative C.
 
-The canonical schema contains a total predicate sequence, not merely code numbers. It begins with externally bounded fixed-header availability; then magic/version/fixed sizes; checked scalar arithmetic, address-width limits, alignment, entry semantics and descriptor binding; alias rejection and snapshot acquisition; exact embedded/external length equality; record framing, identity and references; memory and model validation; canonical order; authoritative-map consistency and device authority; and finally cross-record architecture/page consistency.
+The canonical schema contains artifact-qualified staged predicates plus an exact inter-artifact first-error order, not a single incomplete global sequence and not merely code numbers. It begins with adapter bounds, arithmetic, address-width, and alignment; copies and frames the entry; validates descriptors and alias rules; acquires each descriptor-keyed source exactly once; then validates owned handoff, map, and RHD framing and semantics before cross-artifact consistency and commit-only effects. No predicate may inspect an artifact before its validated acquisition.
 
 Each row defines:
 
@@ -58,7 +58,7 @@ Changing precedence or the meaning of an existing failure is a breaking public-c
 
 ## Consequences
 
-- The prior prose order is replaced by one machine-readable table.
+- The prior global prose order is replaced by one machine-readable staged table with explicit artifact and access-budget columns.
 - Generated decoders, Rust enums, documentation, and fixtures share the same source.
 - Compound-invalid fixtures are required for every adjacent precedence edge and security-sensitive non-adjacent pair.
 - Some existing numeric codes may remain out of numeric order because safe access order controls precedence.
@@ -73,10 +73,10 @@ This decision revises the unmerged v1 draft. After freeze, changing precedence o
 
 ## Validation
 
-- One generated table is the source for prose, decoder stubs, and test expectations.
+- One staged table is the source for prose, decoder stubs, and test expectations.
 - Every single predicate has a focused fixture.
 - Every precedence edge has a dual-fault fixture proving the earlier result.
-- Instrumentation proves no predicate reads outside its declared access budget.
+- Provider and effect-sink instrumentation proves no predicate reads outside its declared access budget and no rejected case commits a side effect.
 - x86-64, AArch64, and the host reference oracle return identical codes.
 
 ## Replacement path
