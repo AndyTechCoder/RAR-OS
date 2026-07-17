@@ -258,17 +258,22 @@ ci_lock_sha256=$(sha256_of tools/toolchain/host-tools.x86_64-unknown-linux-gnu-c
 [ "$ci_lock_sha256" = 6752b1b21ac8fa93a671ff9444173e4c3bbc4cdcbe4cf5cd39820371dc79aa24 ] || fail "CI tool lock digest changed without bootstrap authority update"
 grep -qx "macos_lock_sha256=$local_lock_sha256" tools/toolchain/host-tools.manifest || fail "host tool manifest local lock digest is stale"
 grep -qx "ci_lock_sha256=$ci_lock_sha256" tools/toolchain/host-tools.manifest || fail "host tool manifest CI lock digest is stale"
-grep -q '^  runner_evidence:$' .github/workflows/specifications.yml || fail "CI runner evidence job is missing"
-grep -q '^    needs: runner_evidence$' .github/workflows/specifications.yml || fail "CI validation does not depend on runner evidence"
+if grep -q '^  runner_evidence:$' .github/workflows/specifications.yml ||
+    grep -q '^    needs: runner_evidence$' .github/workflows/specifications.yml; then
+    fail "CI runner evidence and validation must not be split across hosted runners"
+fi
+grep -q '^  validate:$' .github/workflows/specifications.yml || fail "same-runner CI validation job is missing"
+grep -q 'name: attest-runner-and-validate' .github/workflows/specifications.yml || fail "same-runner attestation/validation identity is missing"
 grep -Fq '[ "${ImageOS-}" = ubuntu24 ]' .github/workflows/specifications.yml || fail "CI runner image OS is not attested"
 grep -Fq '[ "${ImageVersion-}" = 20260714.240.1 ]' .github/workflows/specifications.yml || fail "CI runner image version is not attested"
 for runner_handoff in \
-    'RAR_CI_RUNNER_IMAGE_OS: ${{ needs.runner_evidence.outputs.image_os }}' \
-    'RAR_CI_RUNNER_IMAGE_VERSION: ${{ needs.runner_evidence.outputs.image_version }}' \
-    'RAR_CI_RUNNER_OS: ${{ needs.runner_evidence.outputs.runner_os }}' \
-    'RAR_CI_RUNNER_ARCH: ${{ needs.runner_evidence.outputs.runner_arch }}'; do
+    'RAR_CI_RUNNER_IMAGE_OS=$ImageOS' \
+    'RAR_CI_RUNNER_IMAGE_VERSION=$ImageVersion' \
+    'RAR_CI_RUNNER_OS=$RUNNER_OS' \
+    'RAR_CI_RUNNER_ARCH=$RUNNER_ARCH'; do
     grep -Fq "$runner_handoff" .github/workflows/specifications.yml || fail "CI runner evidence handoff is incomplete: $runner_handoff"
 done
+grep -q 'docker run --rm --read-only' .github/workflows/specifications.yml || fail "same-runner pinned container launch is missing"
 grep -q -- '--read-only' .github/workflows/specifications.yml || fail "CI container root is not read-only"
 grep -q 'rar-image-plan-v3' tools/rarbuild/contracts/rar-image-plan-v3.fields || fail "image-plan v3 contract is missing"
 

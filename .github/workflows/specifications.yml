@@ -8,17 +8,14 @@ permissions:
   contents: read
 
 jobs:
-  runner_evidence:
-    name: attest-runner
+  validate:
+    name: attest-runner-and-validate
     runs-on: ubuntu-24.04
-    outputs:
-      image_os: ${{ steps.attest.outputs.image_os }}
-      image_version: ${{ steps.attest.outputs.image_version }}
-      runner_os: ${{ steps.attest.outputs.runner_os }}
-      runner_arch: ${{ steps.attest.outputs.runner_arch }}
+    env:
+      RAR_EXPECTED_SOURCE_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      RAR_CI_BOOTSTRAP_IMAGE: sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
     steps:
       - name: Verify CI runner evidence boundary
-        id: attest
         shell: /usr/bin/dash -e {0}
         run: |
           set -u
@@ -27,30 +24,10 @@ jobs:
           [ "${RUNNER_OS-}" = Linux ]
           [ "${RUNNER_ARCH-}" = X64 ]
           printf '%s\n' \
-            "image_os=$ImageOS" \
-            "image_version=$ImageVersion" \
-            "runner_os=$RUNNER_OS" \
-            "runner_arch=$RUNNER_ARCH" >> "$GITHUB_OUTPUT"
-
-  validate:
-    needs: runner_evidence
-    runs-on: ubuntu-24.04
-    env:
-      RAR_EXPECTED_SOURCE_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-      RAR_CI_RUNNER_IMAGE_OS: ${{ needs.runner_evidence.outputs.image_os }}
-      RAR_CI_RUNNER_IMAGE_VERSION: ${{ needs.runner_evidence.outputs.image_version }}
-      RAR_CI_RUNNER_OS: ${{ needs.runner_evidence.outputs.runner_os }}
-      RAR_CI_RUNNER_ARCH: ${{ needs.runner_evidence.outputs.runner_arch }}
-    container:
-      image: rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
-      options: --read-only --tmpfs /tmp:rw,nosuid,nodev,size=128m
-    steps:
-      - name: Verify attested runner handoff
-        run: |
-          [ "${RAR_CI_RUNNER_IMAGE_OS-}" = ubuntu24 ]
-          [ "${RAR_CI_RUNNER_IMAGE_VERSION-}" = 20260714.240.1 ]
-          [ "${RAR_CI_RUNNER_OS-}" = Linux ]
-          [ "${RAR_CI_RUNNER_ARCH-}" = X64 ]
+            "RAR_CI_RUNNER_IMAGE_OS=$ImageOS" \
+            "RAR_CI_RUNNER_IMAGE_VERSION=$ImageVersion" \
+            "RAR_CI_RUNNER_OS=$RUNNER_OS" \
+            "RAR_CI_RUNNER_ARCH=$RUNNER_ARCH" >> "$GITHUB_ENV"
 
       - name: Check out repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -58,30 +35,31 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
 
-      - name: Validate specification handoff
-        run: tools/ci/check-specs.sh
-
-      - name: Validate host-only shell entry points
-        run: /usr/bin/dash -n tools/rarbuild/rarbuild tools/rarbuild/bootstrap-lib.sh tests/host-safety/run.sh tests/bootstrap/run.sh
-
-      - name: Run R0-000 host-safety suite
-        env:
-          RAR_CI_BOOTSTRAP_IMAGE: sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
-        run: tests/host-safety/run.sh
-
-      - name: Run R0-001 bootstrap suite
-        env:
-          RAR_CI_BOOTSTRAP_IMAGE: sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
-        run: tests/bootstrap/run.sh
-
-      - name: Prove execution routes remain refusal-only
+      - name: Validate in pinned read-only container on attested runner
         shell: /usr/bin/dash -e {0}
         run: |
-          set +e
-          output=$(tools/rarbuild/rarbuild run)
-          status=$?
-          set -e
-          [ "$status" -eq 73 ]
-          printf '%s\n' "$output" | grep -qx 'resolver_invoked=false'
-          printf '%s\n' "$output" | grep -qx 'spawner_invoked=false'
-          printf '%s\n' "$output" | grep -qx 'target_execution=not-attempted'
+          docker run --rm --read-only \
+            --tmpfs /tmp:rw,nosuid,nodev,size=128m \
+            --mount "type=bind,source=$GITHUB_WORKSPACE,target=/workspace" \
+            --workdir /workspace \
+            --env RAR_EXPECTED_SOURCE_REVISION \
+            --env RAR_CI_BOOTSTRAP_IMAGE \
+            --env RAR_CI_RUNNER_IMAGE_OS \
+            --env RAR_CI_RUNNER_IMAGE_VERSION \
+            --env RAR_CI_RUNNER_OS \
+            --env RAR_CI_RUNNER_ARCH \
+            rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 \
+            /usr/bin/dash -e -c '
+              tools/ci/check-specs.sh
+              /usr/bin/dash -n tools/rarbuild/rarbuild tools/rarbuild/bootstrap-lib.sh tests/host-safety/run.sh tests/bootstrap/run.sh
+              tests/host-safety/run.sh
+              tests/bootstrap/run.sh
+              set +e
+              output=$(tools/rarbuild/rarbuild run)
+              status=$?
+              set -e
+              [ "$status" -eq 73 ]
+              printf "%s\n" "$output" | grep -qx "resolver_invoked=false"
+              printf "%s\n" "$output" | grep -qx "spawner_invoked=false"
+              printf "%s\n" "$output" | grep -qx "target_execution=not-attempted"
+            '
