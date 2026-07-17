@@ -1865,9 +1865,8 @@ fn run_captured_host_script(
     let bootstrap_text =
         read_committed_utf8_file(root, lock, revision, "tools/rarbuild/bootstrap-lib.sh")?;
     let script_sha256 = sha256_hex(script_text.as_bytes());
-    let combined = format!(
-        "{bootstrap_text}\nRAR_BOOTSTRAP_LIBRARY_ALREADY_LOADED=1\nexport RAR_BOOTSTRAP_LIBRARY_ALREADY_LOADED\n{script_text}"
-    );
+    let combined =
+        format!("{bootstrap_text}\nRAR_BOOTSTRAP_LIBRARY_ALREADY_LOADED=1\n{script_text}");
     let script_path = root.join(script);
     run_captured_host_script_text(
         root,
