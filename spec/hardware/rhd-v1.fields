@@ -1,0 +1,14 @@
+schema=rar-hardware-description-v1
+byte_order=little-endian
+magic=52:41:52:52:48:44:00:00
+version_major=1
+version_minor=0
+header_size=32
+record_header_size=16
+maximum_total_size=65536
+maximum_record_count=256
+required_alignment=8
+architectures=1:x86_64,2:aarch64
+record_flags=1:critical
+records=1:cpu:48,2:memory:48,3:interrupt:48,4:timer:48,5:serial:48,6:boot_source:24
+required_records=cpu,memory,interrupt,timer,serial,boot_source

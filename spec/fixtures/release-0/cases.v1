@@ -1,0 +1,14 @@
+schema=rar-r0-contract-fixtures-v1
+id|expected|handoff_bytes|handoff_total|handoff_arch|rhd_arch|rhd_bytes|rhd_total|rhd_address|trusted_base|trusted_size|record_offset|unknown_kind|unknown_flags|memory_a_base|memory_a_length|memory_b_base|memory_b_length|semantic_id
+valid-x86_64|ok|128|128|1|1|512|512|4096|4096|65536|200|0|0|1048576|524288|2097152|524288|baseline
+valid-aarch64|ok|128|128|2|2|512|512|4096|4096|65536|200|0|0|1048576|524288|2097152|524288|baseline
+valid-max-rhd|ok|128|128|1|1|65536|65536|4096|4096|65536|200|0|0|1048576|524288|2097152|524288|max-boundary
+truncated-handoff|truncated|127|128|1|1|512|512|4096|4096|65536|200|0|0|1048576|524288|2097152|524288|negative
+oversized-handoff|oversized|128|4097|1|1|512|512|4096|4096|65536|200|0|0|1048576|524288|2097152|524288|negative
+oversized-rhd|oversized|128|128|1|1|65544|65544|4096|4096|131072|200|0|0|1048576|524288|2097152|524288|negative
+misaligned-rhd|bad-alignment|128|128|1|1|512|512|4097|4096|65536|200|0|0|1048576|524288|2097152|524288|negative
+misaligned-record|bad-alignment|128|128|1|1|512|512|4096|4096|65536|201|0|0|1048576|524288|2097152|524288|negative
+invalid-pointer|invalid-pointer-range|128|128|1|1|512|512|69632|4096|65536|200|0|0|1048576|524288|2097152|524288|negative
+unknown-critical|unknown-critical|128|128|1|1|512|512|4096|4096|65536|200|99|1|1048576|524288|2097152|524288|negative
+overlapping-memory|overlap|128|128|1|1|512|512|4096|4096|65536|200|0|0|1048576|524288|1310720|524288|negative
+architecture-inconsistent|architecture-mismatch|128|128|1|2|512|512|4096|4096|65536|200|0|0|1048576|524288|2097152|524288|negative
