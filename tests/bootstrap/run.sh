@@ -48,6 +48,29 @@ rar_load_selected_bootstrap_root "$root" || exit 2
 rar_verify_selected_bootstrap_root || exit 2
 [ "${RAR_CI_BOOTSTRAP_IMAGE-}" = sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 ] || exit 2
 rar_verify_ci_execution_boundary || exit 2
+for boundary_variable in \
+    RAR_CI_RUNNER_OS \
+    RAR_CI_RUNNER_ARCH \
+    RAR_CI_RUNNER_IMAGE_OS \
+    RAR_CI_RUNNER_IMAGE_VERSION; do
+    (
+        unset "$boundary_variable"
+        if rar_verify_ci_execution_boundary; then
+            exit 1
+        fi
+    ) || exit 2
+done
+(
+    unset RAR_CI_RUNNER_OS RAR_CI_RUNNER_ARCH RAR_CI_RUNNER_IMAGE_OS RAR_CI_RUNNER_IMAGE_VERSION
+    RUNNER_OS=Linux
+    RUNNER_ARCH=X64
+    ImageOS=ubuntu24
+    ImageVersion=20260714.240.1
+    export RUNNER_OS RUNNER_ARCH ImageOS ImageVersion
+    if rar_verify_ci_execution_boundary; then
+        exit 1
+    fi
+) || exit 2
 rar_verify_ci_source_snapshot || exit 2
 RAR_BOOTSTRAP_LOCK_SHA256=$bootstrap_lock_sha256
 export RAR_BOOTSTRAP_LOCK_SHA256

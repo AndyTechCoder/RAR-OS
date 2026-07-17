@@ -433,10 +433,10 @@ rar_verify_ci_execution_boundary() {
     [ "${RAR_CI_BOOTSTRAP_IMAGE-}" = sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 ] || return 1
     [ "${GITHUB_ACTIONS-}" = true ] || return 1
     [ "${CI-}" = true ] || return 1
-    [ "${RUNNER_OS-}" = Linux ] || return 1
-    [ "${RUNNER_ARCH-}" = X64 ] || return 1
-    [ "${ImageOS-}" = ubuntu24 ] || return 1
-    [ "${ImageVersion-}" = 20260714.240.1 ] || return 1
+    [ "${RAR_CI_RUNNER_OS-}" = Linux ] || return 1
+    [ "${RAR_CI_RUNNER_ARCH-}" = X64 ] || return 1
+    [ "${RAR_CI_RUNNER_IMAGE_OS-}" = ubuntu24 ] || return 1
+    [ "${RAR_CI_RUNNER_IMAGE_VERSION-}" = 20260714.240.1 ] || return 1
     [ "$bootstrap_lock_sha256" = 6752b1b21ac8fa93a671ff9444173e4c3bbc4cdcbe4cf5cd39820371dc79aa24 ] || return 1
     rar_validate_git_object_id "${RAR_EXPECTED_SOURCE_REVISION-}" || return 1
     rar_verify_read_only_ci_tool_mounts

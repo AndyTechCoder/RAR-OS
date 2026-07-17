@@ -1959,10 +1959,10 @@ fn run_captured_host_script_text(
             "RAR_BOOTSTRAP_LOCK_SHA256",
             "GITHUB_ACTIONS",
             "CI",
-            "RUNNER_OS",
-            "RUNNER_ARCH",
-            "ImageOS",
-            "ImageVersion",
+            "RAR_CI_RUNNER_OS",
+            "RAR_CI_RUNNER_ARCH",
+            "RAR_CI_RUNNER_IMAGE_OS",
+            "RAR_CI_RUNNER_IMAGE_VERSION",
         ] {
             let value = env::var(name).map_err(|_| {
                 BuildError::new(

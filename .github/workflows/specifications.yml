@@ -8,20 +8,49 @@ permissions:
   contents: read
 
 jobs:
-  validate:
+  runner_evidence:
+    name: attest-runner
     runs-on: ubuntu-24.04
-    env:
-      RAR_EXPECTED_SOURCE_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-    container:
-      image: rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
-      options: --read-only --tmpfs /tmp:rw,nosuid,nodev,size=128m
+    outputs:
+      image_os: ${{ steps.attest.outputs.image_os }}
+      image_version: ${{ steps.attest.outputs.image_version }}
+      runner_os: ${{ steps.attest.outputs.runner_os }}
+      runner_arch: ${{ steps.attest.outputs.runner_arch }}
     steps:
       - name: Verify CI runner evidence boundary
+        id: attest
+        shell: /usr/bin/dash -e {0}
         run: |
+          set -u
           [ "${ImageOS-}" = ubuntu24 ]
           [ "${ImageVersion-}" = 20260714.240.1 ]
           [ "${RUNNER_OS-}" = Linux ]
           [ "${RUNNER_ARCH-}" = X64 ]
+          printf '%s\n' \
+            "image_os=$ImageOS" \
+            "image_version=$ImageVersion" \
+            "runner_os=$RUNNER_OS" \
+            "runner_arch=$RUNNER_ARCH" >> "$GITHUB_OUTPUT"
+
+  validate:
+    needs: runner_evidence
+    runs-on: ubuntu-24.04
+    env:
+      RAR_EXPECTED_SOURCE_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      RAR_CI_RUNNER_IMAGE_OS: ${{ needs.runner_evidence.outputs.image_os }}
+      RAR_CI_RUNNER_IMAGE_VERSION: ${{ needs.runner_evidence.outputs.image_version }}
+      RAR_CI_RUNNER_OS: ${{ needs.runner_evidence.outputs.runner_os }}
+      RAR_CI_RUNNER_ARCH: ${{ needs.runner_evidence.outputs.runner_arch }}
+    container:
+      image: rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
+      options: --read-only --tmpfs /tmp:rw,nosuid,nodev,size=128m
+    steps:
+      - name: Verify attested runner handoff
+        run: |
+          [ "${RAR_CI_RUNNER_IMAGE_OS-}" = ubuntu24 ]
+          [ "${RAR_CI_RUNNER_IMAGE_VERSION-}" = 20260714.240.1 ]
+          [ "${RAR_CI_RUNNER_OS-}" = Linux ]
+          [ "${RAR_CI_RUNNER_ARCH-}" = X64 ]
 
       - name: Check out repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2

@@ -58,6 +58,7 @@ The first correctness and security re-reviews examined head `5df49b052f2e2e4e997
 | Image-plan grammar lacked a versioned contract | `rar-image-plan-v3` has a canonical field-order contract and renderer conformance coverage |
 | Git index flags could hide workspace changes | `assume-unchanged`/`skip-worktree` are rejected; source, manifest, and inventory hashes derive from captured commit objects; compiler inputs use the same commit blobs |
 | Approval-marker reads could block or allocate without bound after a path race | Root validation now uses the bounded nonblocking no-follow reader; oversized and post-check FIFO replacement tests fail closed |
+| Runner attestation was checked inside a container that does not inherit GitHub's runner-only image variables | A separate non-certifying runner job verifies the reviewed image, hands exact values to the read-only container through named outputs, and the bootstrap rejects missing, mismatched, or legacy-only environment variables |
 
 ## Owned paths and coordinator handoff
 
