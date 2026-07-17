@@ -80,7 +80,7 @@ Competing-writer, parent-replacement, interruption, write/fsync/rename/unlink fa
 
 ## Unsafe and dependency review
 
-No unsafe target code or assembly exists. Host-only unsafe remains isolated to `tools/rar-lab/safety/src/unix_fs.rs`. Platform-specific `mode_t` and variadic promotions have compile-time assertions; descriptor ownership, pointer lifetime, no-follow traversal, synchronization, and injected syscall failures have focused tests on supported CI/macOS configurations.
+No unsafe target code or assembly exists. Host-only unsafe remains isolated to `tools/rar-lab/safety/src/unix_fs.rs`. The Linux `mode_t` and variadic-promotion assertions, descriptor ownership, pointer lifetime, no-follow traversal, synchronization, and injected syscall failures are compiled and exercised by the pinned Linux CI route. The corresponding macOS constants, ABI bindings, and compile-time assertion are statically reviewed but remain uncompiled and unexecuted at this exact head because every local macOS Rust route refuses before compiler execution. Executable macOS evidence is deferred until a separately reviewed descriptor-bound launcher or equivalently immutable host-only route exists; ADR 0012 does not pre-authorize that route.
 
 No third-party crate, Cargo package, target-linked dependency, binary payload, target asset, firmware, VM image, or Dependency Exception Record was added. Closure manifests contain hashes and paths only.
 
