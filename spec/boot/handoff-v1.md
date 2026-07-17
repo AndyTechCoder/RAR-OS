@@ -1,55 +1,43 @@
-# Release 0 Boot Handoff
+# Release 0 Boot Entry and Handoff
 
-Status: Draft implementation contract for R0-002
+Status: R0-002 implementation contract; ADRs 0013–0015 accepted 2026-07-17
 
-Source manifest: `handoff-v1.fields`
+Source schema: `handoff-v1.fields`
 
-## Boundary and non-goals
+## Trusted entry boundary
 
-RAR Root/Recovery supplies one immutable handoff and separately binds readable/writable physical windows. The architecture adapter copies the fixed header without interpreting embedded addresses. Validation uses integers and window descriptors; it never dereferences a candidate address. Only validated ranges are copied into Nucleus-owned memory.
+RAR Root or Recovery supplies one contiguous immutable `BootEntryV1` byte slice through the architecture entry ABI. On x86-64 its physical address and byte length are in `RDI` and `RSI`; on AArch64 they are in `x0` and `x1`. This fixed register pair is the only pre-descriptor read authority. The architecture adapter already knows its expected architecture, bounds the external length to 64 through 4,096 bytes, checks 8-byte alignment and address-width fit, copies the slice exactly once, and then parses only the owned copy. Root/Recovery guarantees the slice is immutable and DMA-revoked from before transfer until the copy completes.
 
-This contract does not define firmware entry, page tables, executable entry ABI, recovery implementation, target boot code, a VM profile, trace record encoding, or entropy authenticity.
+The entry header is 64 bytes followed inline by 32-byte window descriptors. `total_bytes` must equal `64 + descriptor_count * 32` using checked arithmetic; descriptor count is 1 through 126. Header fields are magic `RARENTRY`, version 1.0, header size 64, descriptor size 32, architecture, address bits 32 through 64, zero flags/reserved bytes, and a nonzero snapshot generation.
 
-## Fixed wire record
+Each descriptor contains `base:u64`, `length:u64`, `purpose:u16`, `rights:u16`, `producer:u16`, `transfer:u16`, `owner_kind:u16`, `flags:u16`, and `owner_id:u32`. Ranges are nonempty checked half-open ranges. Purposes are handoff, memory map, RHD, entropy, trace, device MMIO, and device I/O port. Rights are read, write, execute, and device. Producers are Root or Recovery only. Transfer modes are snapshot, exclusive, authority, and clear-after-snapshot. Source descriptors require immutable and DMA-revoked flags; executable source metadata is forbidden.
 
-`BootHandoffV1` is exactly 128 bytes, little-endian and 8-byte aligned:
+Exactly one descriptor exists for handoff, map, RHD, entropy, and trace. Source descriptors are pairwise disjoint. Handoff/map/RHD use read-only snapshot transfer. Entropy uses read-only snapshot or read/write clear-after-snapshot consistently with the handoff flag. Trace uses read/write exclusive transfer. Device descriptors use read/write/device authority, identify an owning RHD `(kind,id)`, and do not grant access until RHD and memory-map cross-validation succeeds.
 
-| Offset | Field | Rule |
-| ---: | --- | --- |
-| 0x00 | `magic[8]` | `RARBOOT\0` |
-| 0x08 | `major:u16`, `minor:u16` | 1, 0 |
-| 0x0c | `header_bytes:u16`, `flags:u16` | 128, zero |
-| 0x10 | `total_bytes:u32` | 128 in v1; future ceiling 4,096 |
-| 0x14 | `architecture:u16`, `address_bits:u8`, `page_shift:u8` | architecture 1 x86-64 or 2 AArch64; bits 32..64; shift 12..30 |
-| 0x18 | `boot_source_kind:u16`, `reserved0:u16`, `reserved1:u32` | source matches RHD; reserved zero |
-| 0x20 | `memory_map_paddr:u64` | aligned readable range |
-| 0x28 | `memory_map_count:u32`, `entry_bytes:u16`, `map_version:u16` | 1..256, 32, 1 |
-| 0x30 | `rhd_paddr:u64` | aligned readable range |
-| 0x38 | `rhd_bytes:u32`, `rhd_alignment:u16`, `reserved2:u16` | 32..65,536; 8; zero |
-| 0x40 | `entropy_paddr:u64` | aligned readable range |
-| 0x48 | `entropy_bytes:u32`, `entropy_flags:u32` | 32..64; only bit 0 (source writable) |
-| 0x50 | `trace_channel_id:u32`, `trace_major:u16`, `trace_minor:u16` | nonzero ID; version 1.0 |
-| 0x58 | `trace_buffer_paddr:u64` | 64-byte aligned writable range |
-| 0x60 | `trace_buffer_bytes:u32`, `trace_flags:u32` | 4 KiB..1 MiB, multiple of 64; flags zero |
-| 0x68 | `boot_cpu_id:u32`, `reserved3:u32` | ID references RHD; reserved zero |
-| 0x70 | `reserved4[16]` | zero |
+## Boot handoff and memory map
 
-Each 32-byte memory-map entry is `base:u64`, `length:u64`, `kind:u16`, `attributes:u16`, `owner:u16`, `reserved0:u16`, `region_id:u32`, `reserved1:u32`. Entries are sorted by base, nonempty, non-wrapping, and non-overlapping. Kinds are 1 usable, 2 firmware, 3 boot-owned, 4 nucleus, 5 MMIO, and 6 reserved. Attribute bits are read, write, execute, cache, and device. Unknown bits fail.
+`BootHandoffV1` remains exactly 128 little-endian bytes with the offsets in the source schema. It carries magic/version, architecture, page shift, boot-source kind, memory-map address/count, RHD address/bytes, entropy range/flags, trace identity/range, and boot CPU ID. Its embedded ranges and exact lengths must equal the unique entry descriptors. The adapter snapshots map, RHD, and entropy once, requires embedded and external lengths to agree, parses only owned copies, and never revisits source addresses.
 
-## Range and ownership rules
+Each 32-byte memory-map entry is `base:u64`, `length:u64`, `kind:u16`, `attributes:u16`, `owner:u16`, `reserved0:u16`, `region_id:u32`, `reserved1:u32`. Entries are ordered by base, nonempty, non-wrapping, and non-overlapping. Kinds are usable, firmware, boot-owned, Nucleus, MMIO, and reserved. Attribute bits are read, write, execute, cacheable, and device. Owners are none, Root, Recovery, Nucleus, firmware, and device. Unknown values/bits and nonzero reserved fields fail.
 
-Every referenced range must fit `address_bits`, be fully contained in exactly one boot-owned, non-MMIO memory-map entry with the needed access, and be pairwise disjoint from the handoff, map, RHD, entropy, and trace ranges. Metadata and entropy must be non-executable. Trace is the only writable destination.
+System-memory register windows must fit exactly one MMIO entry with read/write/device, no execute, and device ownership. I/O-port windows are not physical-memory entries and must fit the 16-bit port space. In both spaces, the entry authority descriptor must contain the complete range and match the parent record kind and ID.
 
-Root/Recovery owns all source buffers until acceptance. The Nucleus bounded-copies map, RHD, and entropy and retains values, never boot pointers. Entropy is untrusted seed input: structural acceptance makes no unpredictability or authenticity claim. If entropy flag bit 0 is set the adapter clears the source after copying; otherwise it relinquishes access. Temporary copies are cleared after seeding.
+## Snapshot and ownership sequence
 
-The trace channel is only a versioned bounded byte sink identified by `(id, major, minor)`; R0-002 assigns no record framing or trust semantics. Exclusive producer ownership transfers to the Nucleus on acceptance and ends at shutdown. Mutation of any bound window during validation invalidates the handoff.
+1. Bound and copy the entry slice; compare its architecture with the adapter.
+2. Validate every descriptor and its checked range before reading a described window.
+3. Verify source immutability and DMA revocation for the advertised generation.
+4. Snapshot handoff, map, RHD, and entropy exactly once into bounded owned storage.
+5. Require descriptor, handoff, and embedded RHD/map lengths to agree and consume all bytes exactly.
+6. Validate owned values according to the total predicate table.
+7. Only after success transfer trace exclusivity and construct device authorities. Clear entropy source only under clear-after-snapshot transfer.
 
-## Stable validation codes and order
+Any generation change, producer/DMA write, short copy, or re-read attempt returns `snapshot-violation`. Rejection grants no mapping, executable, device, trace, or recovery authority.
 
-Codes are `u32`: 0 ok; 1 truncated; 2 oversized; 3 bad-magic; 4 unsupported-major; 5 unsupported-minor; 6 bad-header-size; 7 unsupported-flags; 8 nonzero-reserved; 9 bad-alignment; 10 range-overflow; 11 out-of-address-range; 12 invalid-pointer-range; 13 overlap; 14 bad-count-or-length; 15 unknown-critical; 16 duplicate-id; 17 bad-reference; 18 architecture-mismatch; 19 page-size-mismatch; 20 invalid-memory-map; 21 invalid-cpu-set; 22 invalid-interrupt; 23 invalid-timer; 24 invalid-serial; 25 invalid-boot-source; 26 invalid-entropy; 27 invalid-trace; 28 noncanonical-order; 29 inconsistent-description.
+## Deterministic validation
 
-Return the first applicable code in this order: bounded fixed header; magic/version/header/flags/reserved; checked lengths and address-width limits; alignment and window coverage; overlap; bounded copy; memory map; RHD framing/order; references and record-specific values; map/RHD consistency; architecture/page consistency. Rejection never requires pointer or MMIO access.
+`handoff-v1.fields` is the canonical total predicate table. Predicates run strictly in ascending table order; a decoder returns the code of the first failing row and performs only the access named by that row after all prerequisites passed. Unknown minor versions are rejected. Numeric code order is not precedence. Changing row order or an existing code meaning requires a new major contract.
 
-## Compatibility, recovery, and replacement
+## Compatibility and replacement
 
-Minor additions must leave the fixed prefix unchanged and be ignorable. Breaking layout, ownership, or validation meaning requires a new major version and side-by-side decoder. Invalid handoff yields a bounded code and the R0 recovery halt; it grants no mapping, device, executable, or recovery authority. A replacement adapter must pass the same fixtures and prove zero access to rejected ranges. Structural validation is not signature or authenticity verification.
+The approved trust, identity, and precedence decisions revise the unmerged v1 draft. After merge, changes to entry authority, descriptor semantics, required RHD identity/window rules, or predicate order require a new major version and parallel decoder. Platform adapters remain replaceable when they produce identical owned values, access no rejected range, and pass the complete corpus.

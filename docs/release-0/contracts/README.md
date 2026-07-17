@@ -1,39 +1,37 @@
 # R0-002 hardware and boot contracts
 
-Status: Prompt 6 bounded remediation proposed; owner ADR decisions required before contract freeze
+Status: Owner-approved contracts implemented; exact-head review and CI required before merge
 
 ## Delivered boundary
 
-R0-002 drafts compiler-independent Release 0 v1 byte contracts for x86-64 and AArch64 hardware description and boot handoff. The current branch includes machine-readable wire rows, deterministically generated unsafe-free `no_std` Rust semantic types, committed raw binary structural fixtures, a checked host-only reference oracle, and exact-head CI coverage.
+R0-002 defines compiler-independent Release 0 v1 byte contracts for x86-64 and AArch64 hardware description and boot handoff. The branch includes machine-readable wire rows, deterministically generated unsafe-free `no_std` Rust semantic types, committed raw binary structural fixtures, a checked host-only reference oracle, and exact-head CI coverage.
 
-Independent Prompt 6 review found three unresolved public decisions. They are isolated in proposed ADRs and are not silently implemented:
-
-- [Proposed ADR 0013](../../adr/proposed/0013-pre-copy-trust-and-mmio-authority.md): trusted entry/snapshot rules and separate MMIO authority.
-- [Proposed ADR 0014](../../adr/proposed/0014-hardware-binding-and-record-identity.md): typed hardware windows and canonical record identity.
-- [Proposed ADR 0015](../../adr/proposed/0015-deterministic-validation-precedence.md): total predicate order and access budgets.
+The public decisions are recorded in [ADR 0013](../../adr/0013-pre-copy-trust-and-mmio-authority.md), [ADR 0014](../../adr/0014-hardware-binding-and-record-identity.md), and [ADR 0015](../../adr/0015-deterministic-validation-precedence.md). They establish the immutable pre-copy entry boundary and separate device authority, sole record-header identity plus typed register windows, and one total validation predicate order.
 
 Out of scope and absent: target boot code, Nucleus implementation, Tier 0 layout, firmware callbacks, executable pointers, storage, networking, GUI, agents, packages, applications, VM/emulator launch, device access, trace-record framing, signatures, and entropy authenticity claims.
 
 ## Contract index
 
-- `spec/hardware/rhd-v1.fields` and `rhd-v1.md`: normalized RHD source and reference.
-- `spec/boot/handoff-v1.fields` and `handoff-v1.md`: fixed handoff, failure codes, pointer validation, and ownership.
+- `spec/boot/handoff-v1.fields` and `handoff-v1.md`: Boot Entry, fixed handoff, authority descriptors, failure codes, ownership, and total predicate order.
+- `spec/hardware/rhd-v1.fields` and `rhd-v1.md`: normalized RHD, sole record identity, typed register windows, and model rules.
 - `sdk/generated/release-0/lib.rs`: byte-for-byte regenerated owned Rust representation; Rust layout is not wire ABI.
-- `spec/fixtures/release-0/bin/*.bin`: valid, boundary, and malformed raw binary fixture bundles.
+- `spec/fixtures/release-0/bin/*.bin`: valid and malformed raw binary fixture bundles.
+- `spec/fixtures/release-0/validation-precedence.v1`: all 33 focused predicates and all 32 adjacent dual-fault edges.
 
-The authoritative boot memory map describes dynamic range ownership. RHD memory records describe the same normalized topology and must compare equal. Entropy is explicitly untrusted seed input. The trace channel is only a bounded versioned byte sink; its record format belongs to R0-008.
+The authoritative boot memory map describes dynamic range ownership. RHD memory records describe the same normalized topology and must compare equal. An RHD register window is descriptive only: access also requires its exact Boot Entry authority descriptor, and system-memory windows require device-owned MMIO map containment. Entropy is explicitly untrusted seed input. The trace channel is only a bounded versioned byte sink; its record format belongs to R0-008.
 
 ## Acceptance and evidence
 
 | Requirement | Evidence |
 | --- | --- |
-| CPU, memory, interrupts, timers, serial, boot source, reserved ownership | RHD records plus authoritative memory-map kinds/owners |
-| Magic, version, architecture, memory map, RHD location, entropy, trace | 128-byte boot handoff offset table |
-| Bounds, alignment, ownership, failure codes | Boot validation order and codes 0–29 |
-| x86-64/AArch64 structural semantic equivalence | pinned Linux reference oracle computes equality from decoded record kinds and normalized memory records |
-| Required malformed classes | committed raw bytes for truncated, oversized, misaligned, overlap, unknown-critical, invalid-pointer, and architecture mismatch cases |
-| No unverified pointer execution | host oracle uses injected test-only windows, checked `u64` arithmetic, and byte slices; it does not dereference fixture addresses |
-| Generated Rust source consistency | complete deterministic rendering from `rust-*` schema rows compared byte-for-byte and metadata-compiled in pinned Linux CI |
+| CPU, memory, interrupts, timers, serial, boot source, reserved ownership | sole-ID RHD records plus authoritative memory-map kinds/owners |
+| Trusted entry and immutable snapshot | inline `BootEntryV1` descriptors, generation receipt, one-copy rule, mutation fixture |
+| Device description without authority escalation | typed RHD windows cross-checked against owner-bound MMIO/I/O descriptors |
+| Bounds, alignment, ownership, deterministic failure | canonical 33-row predicate table, 33 singles, 32 adjacent dual-fault edges |
+| x86-64/AArch64 normalized categories | valid APIC/16550-I/O and GICv3/PL011 raw bundles decoded by one oracle |
+| Required malformed classes | committed raw bytes for framing, overlap, identity, reference, model, authority, consistency, and architecture faults |
+| No unverified pointer execution | host oracle uses byte slices and checked `u64` arithmetic; fixture addresses are never dereferenced |
+| Generated Rust source consistency | complete deterministic rendering from `rust-*` schema rows, byte comparison, pinned Linux metadata compilation |
 
 Host-only checks:
 
@@ -51,12 +49,12 @@ The required `Specifications` workflow additionally runs `spec/fixtures/release-
 
 ## Security, unsafe, dependencies, and recovery
 
-The contracts expose no host virtual address, raw Rust pointer, function pointer, firmware callback, or unchecked MMIO operation. Candidate ranges use checked integer arithmetic, declared access windows, pairwise disjointness, bounded copies, and deterministic first-error codes. Structural validation does not authenticate the producer.
+The contracts expose no host virtual address, raw Rust pointer, function pointer, firmware callback, or unchecked register operation. Candidate ranges use checked integer arithmetic, immutable snapshots, explicit access windows, pairwise disjointness, bounded copies, and deterministic first-error codes. Structural validation does not authenticate the producer.
 
 Generated Rust and the host reference oracle deny unsafe code. The committed `.bin` files are deterministic host-only conformance inputs, not target assets or executable payloads. This task adds no assembly, third-party crate, target-linked code, firmware, external dependency, persistent user data, migration, or signing behavior. Invalid input enters the later R0 platform's defined invalid-handoff recovery halt without granting authority.
 
-## Versioning, limitations, and next action
+## Versioning and limitations
 
-Minor versions may add ignorable non-critical records only after the owner approves the outstanding identity, hardware-binding, trust-boundary, and precedence decisions. Changed meaning or required layout needs a new major version and parallel decoder after freeze. Platform evidence may require a versioned correction, never silent reinterpretation.
+Changes to identity, descriptor authority, required register roles, address-space meaning, or predicate precedence require a new major version and parallel decoder. Safely ignorable non-critical additions require explicit minor-version compatibility analysis. Platform evidence may require a versioned correction, never silent reinterpretation.
 
-The binary corpus covers the task packet's named malformed classes with one intended structural fault per case. It deliberately does not encode unresolved MMIO authorization, record-identity, or compound-fault precedence choices. If proposed ADRs 0013–0015 are approved, their focused and dual-fault cases, schemas, generated types, and documentation must be added before R0-002 freezes. Prompt 7 and VM authorization remain out of scope.
+R0-002 provides structural host evidence only. Instrumented real-decoder access-budget evidence belongs to the later authorized R0-003/R0-004 implementation tasks. Prompt 7 and all target/VM execution remain out of scope.

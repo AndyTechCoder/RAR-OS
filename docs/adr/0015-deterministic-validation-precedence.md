@@ -1,12 +1,14 @@
-# Proposed ADR 0015: Deterministic Validation Precedence
+# ADR 0015: Deterministic Validation Precedence
 
-Status: Proposed — owner approval required
+Status: Accepted — 2026-07-17
+
+Approval basis: explicit owner approval of the recommended decision on 2026-07-17.
 
 ## Context
 
 R0-002 assigns stable validation codes but orders only broad phases. Multi-fault inputs can therefore produce different first errors across independent or architecture-specific decoders. Numeric code order also does not consistently express safe access order.
 
-This proposal changes public failure semantics. It is not applied before owner approval.
+This decision changes public failure semantics before the R0-002 draft is frozen.
 
 ## Decision drivers
 
@@ -15,7 +17,7 @@ This proposal changes public failure semantics. It is not applied before owner a
 - Stable codes must remain useful for recovery evidence without leaking unchecked input.
 - The order must be generated and tested, not duplicated informally in prose and code.
 
-## Alternatives
+## Considered options
 
 ### A. Lowest numeric validation code wins
 
@@ -38,13 +40,13 @@ The canonical schema assigns every validation predicate a unique precedence and 
 - Advantage: deterministic, auditable, and safe by construction.
 - Cost: more specification work and deliberate compatibility management when predicates change.
 
-## Recommendation
+## Decision
 
-Approve alternative C.
+Use alternative C.
 
-The canonical schema should contain a total predicate sequence, not merely code numbers. The sequence should begin with externally bounded fixed-header availability; then magic/version/fixed sizes; checked scalar arithmetic and address-width limits; trusted-window coverage and alignment; snapshot acquisition; exact embedded/external length equality; memory-map framing; RHD framing and exact end consumption; canonical order and identity; references; record/model values; authoritative-map consistency and MMIO authority; and finally cross-record architecture/page consistency.
+The canonical schema contains a total predicate sequence, not merely code numbers. It begins with externally bounded fixed-header availability; then magic/version/fixed sizes; checked scalar arithmetic, address-width limits, alignment, entry semantics and descriptor binding; alias rejection and snapshot acquisition; exact embedded/external length equality; record framing, identity and references; memory and model validation; canonical order; authoritative-map consistency and device authority; and finally cross-record architecture/page consistency.
 
-Each row should define:
+Each row defines:
 
 - predicate identity and stable returned code;
 - required previously validated facts;
@@ -56,7 +58,7 @@ Changing precedence or the meaning of an existing failure is a breaking public-c
 
 ## Consequences
 
-- The current prose order is replaced by one machine-readable table after approval.
+- The prior prose order is replaced by one machine-readable table.
 - Generated decoders, Rust enums, documentation, and fixtures share the same source.
 - Compound-invalid fixtures are required for every adjacent precedence edge and security-sensitive non-adjacent pair.
 - Some existing numeric codes may remain out of numeric order because safe access order controls precedence.
@@ -67,7 +69,7 @@ The recommendation prevents decoders from reading unvalidated locations merely t
 
 ## Compatibility and migration
 
-Approval should revise the unmerged v1 draft. After freeze, changing precedence or code meaning requires a new major validation contract; old and new decoders may coexist only with version-selected corpora.
+This decision revises the unmerged v1 draft. After freeze, changing precedence or code meaning requires a new major validation contract; old and new decoders may coexist only with version-selected corpora.
 
 ## Validation
 

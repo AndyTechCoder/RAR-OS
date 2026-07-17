@@ -1,12 +1,14 @@
-# Proposed ADR 0013: Pre-Copy Trust Boundary and MMIO Authority
+# ADR 0013: Pre-Copy Trust Boundary and MMIO Authority
 
-Status: Proposed — owner approval required
+Status: Accepted — 2026-07-17
+
+Approval basis: explicit owner approval of the recommended decision on 2026-07-17.
 
 ## Context
 
 R0-002 currently starts with a handoff address and separately bound windows, but does not define who authenticates those inputs, how they remain stable while copied, or what grants authority to access device registers. R0-003 and R0-004 must not invent different trust roots or treat an RHD address as permission to map MMIO.
 
-This proposal changes a boot trust boundary and public handoff contract. It is intentionally not applied to `spec/boot/` or `spec/hardware/` before owner approval.
+This decision changes a boot trust boundary and public handoff contract before the R0-002 draft is frozen.
 
 ## Decision drivers
 
@@ -16,7 +18,7 @@ This proposal changes a boot trust boundary and public handoff contract. It is i
 - Source mutation, DMA, overflow, aliasing, and ownership transfer must fail closed.
 - The entry mechanism must remain replaceable behind a small architecture adapter.
 
-## Alternatives
+## Considered options
 
 ### A. Trust firmware-native entry structures directly
 
@@ -39,13 +41,13 @@ Root/Recovery places the handoff, map, RHD, and entropy into one fixed-size arch
 - Advantage: simple bounds and snapshot rules.
 - Cost: fixed placement leaks platform assumptions into the public contract, wastes constrained memory, and complicates future extensibility.
 
-## Recommendation
+## Decision
 
-Approve alternative B.
+Use alternative B.
 
-Define `BootEntryV1` as a small RAR-owned value delivered by the architecture entry ABI. It should bind the expected architecture, handoff address and exact size, and a bounded descriptor table. Each descriptor should carry a physical half-open range, read/write purpose, producer identity, and transfer mode. Root/Recovery must revoke producer and DMA writes before entry or provide an immutable snapshot guarantee.
+`BootEntryV1` is a small RAR-owned value delivered by the architecture entry ABI. It binds the expected architecture, handoff address and exact size, and a bounded descriptor table. Each descriptor carries a physical half-open range, access purpose and rights, producer identity, and transfer mode. Root/Recovery must revoke producer and DMA writes before entry and provide the immutable snapshot guarantee defined by the contract.
 
-The mandatory algorithm should be:
+The mandatory algorithm is:
 
 1. Validate the fixed entry value without following embedded addresses.
 2. Validate descriptor count, checked half-open arithmetic, address width, alignment, non-aliasing, purpose, and expected architecture.

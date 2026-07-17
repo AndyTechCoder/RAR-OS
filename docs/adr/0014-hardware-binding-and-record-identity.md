@@ -1,12 +1,14 @@
-# Proposed ADR 0014: Hardware Binding and Record Identity
+# ADR 0014: Hardware Binding and Record Identity
 
-Status: Proposed — owner approval required
+Status: Accepted — 2026-07-17
+
+Approval basis: explicit owner approval of the recommended decision on 2026-07-17.
 
 ## Context
 
 The draft RHD assigns both a record-header ID and payload-specific IDs without defining equality or reference namespaces. It also represents every register location as an untyped physical address, which cannot distinguish x86 I/O ports from MMIO or describe role-separated regions such as GICv3 distributor and redistributor windows.
 
-This proposal changes public RHD fields and device authority semantics. It is not applied before owner approval.
+This decision changes public RHD fields and device authority semantics before the R0-002 draft is frozen.
 
 ## Decision drivers
 
@@ -16,7 +18,7 @@ This proposal changes public RHD fields and device authority semantics. It is no
 - Future devices must be extensible through versioned records rather than overloaded zero fields.
 - Invalid or unknown model-specific combinations must have deterministic failure behavior.
 
-## Alternatives
+## Considered options
 
 ### A. Keep header and payload IDs, requiring equality
 
@@ -45,9 +47,9 @@ For hardware windows:
 - **Typed register-window subrecords:** explicit address space, role, base, length, access width, stride, and byte order; extensible but larger.
 - **Opaque model payloads:** flexible but pushes public semantics into platform-specific parsers.
 
-## Recommendation
+## Decision
 
-Approve alternative B for identity and typed register-window subrecords for hardware binding.
+Use alternative B for identity and typed register-window subrecords for hardware binding.
 
 - `record_id` is the sole identity and is unique within `record_kind`.
 - A reference field has a schema-fixed target kind; ambiguous generic references encode both kind and ID.
@@ -55,7 +57,7 @@ Approve alternative B for identity and typed register-window subrecords for hard
 - Register windows declare address space (`system-memory` or `x86-io-port` initially), role, checked base/length, access width, stride, and little-endian byte order.
 - Model specifications declare required and forbidden window roles. GICv3 requires distinct distributor and redistributor roles; 16550 may use either MMIO or x86 I/O-port space as declared.
 - Interrupt references use a controller-relative namespace plus a declared trigger/polarity model; global numbering is derived only by the validated controller binding.
-- Every window is cross-checked against the authority decision in proposed ADR 0013 before access.
+- Every window is cross-checked against the authority decision in ADR 0013 before access.
 
 ## Consequences
 
@@ -71,7 +73,7 @@ One canonical identity prevents validators and consumers from resolving differen
 
 ## Compatibility and migration
 
-Approval should revise unmerged RHD v1. After freeze, adding optional roles may use a compatible minor version only when old readers can ignore them safely; identity, address-space, or required-role changes require a major version.
+This decision revises unmerged RHD v1. After freeze, adding optional roles may use a compatible minor version only when old readers can ignore them safely; identity, address-space, or required-role changes require a major version.
 
 ## Validation
 

@@ -30,7 +30,7 @@ while IFS='|' read -r id expected file; do
     }
     count=$((count + 1))
 done < "$fixture_root/cases.v1"
-[ "$count" -eq 12 ] || { echo "binary fixture corpus is incomplete" >&2; exit 1; }
+[ "$count" -eq 18 ] || { echo "binary fixture corpus is incomplete" >&2; exit 1; }
 
 case "${1-}" in
     '') ;;
