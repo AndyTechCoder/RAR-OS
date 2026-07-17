@@ -139,7 +139,8 @@ emit_rhd() {
 
 emit_bundle() {
     printf 'R0FXBIN\000'; u16 1; u16 "$expected_code"
-    u32 "$entry_blob_length"; u32 128; u32 "$map_length"; u32 "$rhd_length"; u32 0; u32 "$copy_fault"; u32 0
+    u32 "$entry_blob_length"; u32 128; u32 "$map_length"; u32 "$rhd_length"; u32 0; u32 "$copy_fault"
+    u16 "$entry_arch"; byte 48; byte 0; u64 268435456; u64 4096; u16 8; u16 16; u32 0
     emit_entry; emit_handoff; emit_map; emit_rhd
 }
 

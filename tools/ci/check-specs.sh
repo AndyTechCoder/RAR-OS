@@ -83,7 +83,7 @@ done
 [ "$(grep -c '^single|' spec/fixtures/release-0/validation-precedence.v1)" -eq 36 ] || fail "R0-002 focused precedence fixtures are incomplete"
 [ "$(grep -c '^dual|' spec/fixtures/release-0/validation-precedence.v1)" -eq 35 ] || fail "R0-002 adjacent precedence fixtures are incomplete"
 [ "$(grep -c '^security-dual|' spec/fixtures/release-0/validation-precedence.v1)" -eq 8 ] || fail "R0-002 security-sensitive precedence fixtures are incomplete"
-[ "$(awk -F '|' 'NR > 2 && NF { count++ } END { print count + 0 }' spec/fixtures/release-0/conformance-scenarios.v1)" -eq 36 ] || fail "R0-002 architecture/provider conformance scenarios are incomplete"
+[ "$(awk -F '|' 'NR > 2 && NF { count++ } END { print count + 0 }' spec/fixtures/release-0/conformance-scenarios.v1)" -eq 60 ] || fail "R0-002 architecture/provider conformance scenarios are incomplete"
 printf '%s\n' \
     'spec/fixtures/release-0/run.sh --ci' \
     'sdk/generated/release-0/check.sh --compile' | while IFS= read -r command; do

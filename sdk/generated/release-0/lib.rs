@@ -271,6 +271,8 @@ pub const RECORD_CRITICAL: u16 = 1;
 
 pub const CPU_BOOT: u32 = 1;
 
+pub const WINDOW_REQUIRED: u16 = 1;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u16)]
 pub enum RecordKind {

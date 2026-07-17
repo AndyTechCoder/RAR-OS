@@ -10,6 +10,7 @@ const ENTRY_MAGIC: &[u8; 8] = b"RARENTRY";
 const BOOT_MAGIC: &[u8; 8] = b"RARBOOT\0";
 const RHD_MAGIC: &[u8; 8] = b"RARRHD\0\0";
 const ENTRY_ADDRESS: u64 = 0x1000_0000;
+const BUNDLE_HEADER_BYTES: usize = 64;
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -129,6 +130,7 @@ struct Window {
 struct Bundle<'a> {
     expected: u16,
     copy_fault: bool,
+    adapter: AdapterInputs,
     entry: &'a [u8],
     handoff: &'a [u8],
     map: &'a [u8],
@@ -253,10 +255,15 @@ fn take<'a>(bytes: &'a [u8], offset: &mut usize, length: usize) -> Option<&'a [u
 }
 
 fn parse_bundle(bytes: &[u8]) -> Option<Bundle<'_>> {
-    if bytes.get(0..8)? != BUNDLE_MAGIC || u16_at(bytes, 8)? != 1 || u32_at(bytes, 28)? != 0 {
+    if bytes.get(0..8)? != BUNDLE_MAGIC
+        || u16_at(bytes, 8)? != 1
+        || u32_at(bytes, 28)? != 0
+        || bytes.get(39) != Some(&0)
+        || u32_at(bytes, 60)? != 0
+    {
         return None;
     }
-    let mut offset = 40usize;
+    let mut offset = BUNDLE_HEADER_BYTES;
     let entry = take(bytes, &mut offset, usize::try_from(u32_at(bytes, 12)?).ok()?)?;
     let handoff = take(bytes, &mut offset, usize::try_from(u32_at(bytes, 16)?).ok()?)?;
     let map = take(bytes, &mut offset, usize::try_from(u32_at(bytes, 20)?).ok()?)?;
@@ -264,6 +271,15 @@ fn parse_bundle(bytes: &[u8]) -> Option<Bundle<'_>> {
     (offset == bytes.len()).then_some(Bundle {
         expected: u16_at(bytes, 10)?,
         copy_fault: u32_at(bytes, 32)? != 0,
+        adapter: AdapterInputs {
+            expected_architecture: u16_at(bytes, 36)?,
+            address_bits: *bytes.get(38)?,
+            external_entry_address: u64_at(bytes, 40)?,
+            external_entry_bytes: u32_at(bytes, 12)?,
+            page_bytes: u64_at(bytes, 48)?,
+            entry_alignment: u16_at(bytes, 56)?,
+            stack_alignment: u16_at(bytes, 58)?,
+        },
         entry,
         handoff,
         map,
@@ -272,7 +288,7 @@ fn parse_bundle(bytes: &[u8]) -> Option<Bundle<'_>> {
 }
 
 fn bundle_offsets(bytes: &[u8]) -> Option<(usize, usize, usize, usize)> {
-    let entry = 40usize;
+    let entry = BUNDLE_HEADER_BYTES;
     let handoff = entry.checked_add(usize::try_from(u32_at(bytes, 12)?).ok()?)?;
     let map = handoff.checked_add(usize::try_from(u32_at(bytes, 16)?).ok()?)?;
     let rhd = map.checked_add(usize::try_from(u32_at(bytes, 20)?).ok()?)?;
@@ -334,7 +350,11 @@ fn update_rhd_lengths(bytes: &mut [u8], new_length: u32, new_count: u16) {
 
 fn insert_rhd_record(bytes: &mut Vec<u8>, record: Vec<u8>) {
     let records = rhd_records(bytes).expect("RHD records");
-    let insert = records.iter().find(|record| record.0 == 7).map_or_else(
+    let new_key = (
+        u16_at(&record, 0).expect("new record kind"),
+        u32_at(&record, 8).expect("new record id"),
+    );
+    let insert = records.iter().find(|record| (record.0, record.1) > new_key).map_or_else(
         || {
             let (_, _, _, rhd) = bundle_offsets(bytes).expect("bundle offsets");
             rhd + usize::try_from(u32_at(bytes, rhd + 16).expect("RHD length")).expect("RHD length usize")
@@ -346,6 +366,28 @@ fn insert_rhd_record(bytes: &mut Vec<u8>, record: Vec<u8>) {
     let old_count = u16_at(bytes, rhd + 20).expect("RHD count");
     update_rhd_lengths(bytes, old_length + u32::try_from(record.len()).expect("record size"), old_count + 1);
     bytes.splice(insert..insert, record);
+}
+
+fn duplicate_rhd_record(bytes: &mut Vec<u8>, kind: u16, source_id: u32, new_id: u32) {
+    let source = rhd_records(bytes)
+        .expect("RHD records")
+        .into_iter()
+        .find(|record| record.0 == kind && record.1 == source_id)
+        .expect("record to duplicate");
+    let mut duplicate = bytes[source.2..source.2 + source.3].to_vec();
+    put_u32(&mut duplicate, 8, new_id);
+    insert_rhd_record(bytes, duplicate);
+}
+
+fn swap_equal_rhd_records(bytes: &mut [u8], kind: u16, first_id: u32, second_id: u32) {
+    let first = record_offset(bytes, kind, first_id).expect("first record");
+    let second = record_offset(bytes, kind, second_id).expect("second record");
+    let first_size = usize::try_from(u32_at(bytes, first + 4).expect("first size")).expect("first size usize");
+    let second_size = usize::try_from(u32_at(bytes, second + 4).expect("second size")).expect("second size usize");
+    assert_eq!(first_size, second_size, "records must have equal size");
+    for index in 0..first_size {
+        bytes.swap(first + index, second + index);
+    }
 }
 
 fn remove_rhd_record(bytes: &mut Vec<u8>, kind: u16, id: u32) {
@@ -511,6 +553,13 @@ fn apply_mutation(bytes: &mut Vec<u8>, predicate: &str, behavior: &mut Behavior)
             put_u64(bytes, at, ENTRY_ADDRESS);
         }
         "descriptor-reordered" => swap_descriptors(bytes),
+        "descriptor-range-plus-binding" => {
+            let handoff_descriptor = descriptor_offset(bytes, 1, 0, 0).expect("handoff descriptor");
+            put_u16(bytes, handoff_descriptor + 24, 1);
+            let map_descriptor = descriptor_offset(bytes, 2, 0, 0).expect("map descriptor");
+            put_u64(bytes, map_descriptor, u64::MAX);
+            put_u64(bytes, map_descriptor + 8, 2);
+        }
         "compatible-entry-minor" => add_entry_descriptor(bytes, false, true),
         "compatible-rhd-minor" => {
             put_u16(bytes, rhd + 10, 1);
@@ -545,7 +594,24 @@ fn apply_mutation(bytes: &mut Vec<u8>, predicate: &str, behavior: &mut Behavior)
             put_u16(&mut boot, 16, 1);
             insert_rhd_record(bytes, boot);
         }
+        "duplicate-interrupt" => duplicate_rhd_record(bytes, 3, 1, 2),
+        "duplicate-timer" => duplicate_rhd_record(bytes, 4, 1, 2),
+        "duplicate-serial" => duplicate_rhd_record(bytes, 5, 1, 2),
+        "record-reordered" => swap_equal_rhd_records(bytes, 1, 1, 2),
+        "unknown-record-reordered" => {
+            put_u16(bytes, rhd + 10, 1);
+            insert_rhd_record(bytes, record_header(99, 0, 24, 1));
+            insert_rhd_record(bytes, record_header(100, 0, 24, 1));
+            let first_unknown = record_offset(bytes, 99, 1).expect("first unknown record");
+            put_u16(bytes, first_unknown, 101);
+        }
         "map-count-over-limit" => put_u32(bytes, handoff + 40, 257),
+        "map-address-mismatch" => put_u64(bytes, handoff + 32, 8192 + 32),
+        "rhd-address-mismatch" => put_u64(bytes, handoff + 48, 12288 + 8),
+        "rhd-length-mismatch" => {
+            let length = u32_at(bytes, handoff + 56).expect("RHD length");
+            put_u32(bytes, handoff + 56, length - 8);
+        }
         "rhd-alignment" => put_u16(bytes, handoff + 60, 16),
         "descriptor-owner" => {
             let at = descriptor_offset(bytes, 3, 0, 0).expect("RHD descriptor");
@@ -558,20 +624,25 @@ fn apply_mutation(bytes: &mut Vec<u8>, predicate: &str, behavior: &mut Behavior)
             put_u16(bytes, at + 18, 3);
             put_u16(bytes, at + 22, 4);
         }
+        "invalid-adapter-address-bits" => behavior.adapter_address_bits = Some(0),
+        "system-memory-window-overflow" => {
+            let window = record_offset(bytes, 7, 1).expect("system-memory window");
+            put_u64(bytes, window + 32, u64::MAX - 7);
+            put_u64(bytes, window + 40, 16);
+        }
         _ => panic!("unknown mutation: {predicate}"),
     }
 }
 
 fn adapter_for(bundle: &Bundle<'_>, behavior: Behavior) -> AdapterInputs {
-    let architecture = u16_at(bundle.entry, 20).unwrap_or(1);
     AdapterInputs {
-        expected_architecture: architecture,
-        external_entry_address: behavior.external_address.unwrap_or(ENTRY_ADDRESS),
-        external_entry_bytes: behavior.external_length.unwrap_or_else(|| u32::try_from(bundle.entry.len()).unwrap_or(u32::MAX)),
-        address_bits: behavior.adapter_address_bits.unwrap_or(48),
-        page_bytes: behavior.page_bytes.unwrap_or(4096),
-        entry_alignment: behavior.entry_alignment.unwrap_or(8),
-        stack_alignment: 16,
+        expected_architecture: bundle.adapter.expected_architecture,
+        external_entry_address: behavior.external_address.unwrap_or(bundle.adapter.external_entry_address),
+        external_entry_bytes: behavior.external_length.unwrap_or(bundle.adapter.external_entry_bytes),
+        address_bits: behavior.adapter_address_bits.unwrap_or(bundle.adapter.address_bits),
+        page_bytes: behavior.page_bytes.unwrap_or(bundle.adapter.page_bytes),
+        entry_alignment: behavior.entry_alignment.unwrap_or(bundle.adapter.entry_alignment),
+        stack_alignment: bundle.adapter.stack_alignment,
     }
 }
 
@@ -628,7 +699,6 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
     let entry_architecture = u16_at(&entry, 20).ok_or(Code::InvalidEntry)?;
     let entry_address_bits = *entry.get(22).ok_or(Code::InvalidEntry)?;
     let mut descriptors = Vec::with_capacity(descriptor_count);
-    let mut source_selectors = BTreeSet::new();
     for index in 0..descriptor_count {
         let at = 64 + index * 32;
         let purpose = u16_at(&entry, at + 16).ok_or(Code::InvalidEntry)?;
@@ -645,20 +715,16 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
             transfer: u16_at(&entry, at + 22).ok_or(Code::InvalidEntry)?,
             flags: u16_at(&entry, at + 26).ok_or(Code::InvalidEntry)?,
         };
-        checked_end(descriptor.base, descriptor.length)?;
-        if descriptor.length == 0 || !address_fits(descriptor.base, descriptor.length, entry_address_bits)? {
-            return Err(Code::OutOfAddressRange);
-        }
-        if descriptor_space(purpose) == 1 && descriptor.base % 8 != 0 {
-            return Err(Code::BadAlignment);
-        }
-        if purpose <= 5 && !source_selectors.insert(descriptor.selector) {
-            return Err(Code::InvalidPointerRange);
-        }
         descriptors.push(descriptor);
     }
 
-    let unknown: Vec<_> = descriptors.iter().filter(|descriptor| descriptor.selector.purpose > 7).collect();
+    // Descriptor predicates are global stages. A later table row can never win
+    // merely because its descriptor appeared earlier in the entry table.
+    for descriptor in &descriptors {
+        checked_end(descriptor.base, descriptor.length)?;
+    }
+
+    let unknown: Vec<_> = descriptors.iter().filter(|descriptor| !(1..=7).contains(&descriptor.selector.purpose)).collect();
     if unknown.iter().any(|descriptor| descriptor.flags & 4 != 0) {
         return Err(Code::UnknownCritical);
     }
@@ -668,6 +734,19 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         return Err(Code::UnsupportedMinor);
     }
 
+    if descriptors.iter().any(|descriptor| {
+        descriptor.length == 0
+            || !address_fits(descriptor.base, descriptor.length, entry_address_bits).unwrap_or(false)
+    }) {
+        return Err(Code::OutOfAddressRange);
+    }
+    if descriptors.iter().any(|descriptor| descriptor_space(descriptor.selector.purpose) == 1 && descriptor.base % 8 != 0) {
+        return Err(Code::BadAlignment);
+    }
+    let mut source_selectors = BTreeSet::new();
+    if descriptors.iter().filter(|descriptor| descriptor.selector.purpose <= 5).any(|descriptor| !source_selectors.insert(descriptor.selector)) {
+        return Err(Code::InvalidPointerRange);
+    }
     for purpose in 1..=5 {
         if descriptors.iter().filter(|descriptor| descriptor.selector.purpose == purpose).count() != 1 {
             return Err(Code::InvalidEntry);
@@ -746,7 +825,14 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
     }
 
     let map_count = usize::try_from(u32_at(&handoff, 40).ok_or(Code::InvalidMemoryMap)?).map_err(|_| Code::InvalidMemoryMap)?;
-    if map_count == 0 || map_count > 256 || map_count.checked_mul(32) != Some(map.len()) || u16_at(&handoff, 44) != Some(32) || u16_at(&handoff, 46) != Some(1) {
+    if map_count == 0
+        || map_count > 256
+        || map_count.checked_mul(32) != Some(map.len())
+        || u64::try_from(map.len()).ok() != Some(map_descriptor.length)
+        || u64_at(&handoff, 32) != Some(map_descriptor.base)
+        || u16_at(&handoff, 44) != Some(32)
+        || u16_at(&handoff, 46) != Some(1)
+    {
         return Err(Code::InvalidMemoryMap);
     }
     let mut map_by_id = BTreeMap::new();
@@ -805,7 +891,10 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
     let rhd_minor = u16_at(&rhd, 10).ok_or(Code::BadCountOrLength)?;
     let rhd_total = usize::try_from(u32_at(&rhd, 16).ok_or(Code::BadCountOrLength)?).map_err(|_| Code::BadCountOrLength)?;
     let record_count = usize::from(u16_at(&rhd, 20).ok_or(Code::BadCountOrLength)?);
-    if u16_at(&rhd, 12) != Some(32)
+    if u64_at(&handoff, 48) != Some(rhd_descriptor.base)
+        || u32_at(&handoff, 56).map(u64::from) != Some(rhd_descriptor.length)
+        || u64::try_from(rhd.len()).ok() != Some(rhd_descriptor.length)
+        || u16_at(&rhd, 12) != Some(32)
         || u16_at(&rhd, 14) != Some(16)
         || u16_at(&rhd, 22) != Some(0)
         || rhd.get(28..32) != Some([0; 4].as_slice())
@@ -832,7 +921,7 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         if known_size.is_some_and(|expected| expected != size) || known_size.is_some() && flags != 0 {
             return Err(Code::BadCountOrLength);
         }
-        if kind > 7 {
+        if !(1..=7).contains(&kind) {
             if flags & 1 != 0 {
                 return Err(Code::UnknownCritical);
             }
@@ -911,13 +1000,13 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         }
         controllers.insert(record.1, count);
     }
-    if controllers.is_empty() {
+    if controllers.len() != 1 {
         return Err(Code::InvalidInterrupt);
     }
 
     let timers: Vec<_> = records.iter().filter(|record| record.0 == 4).collect();
     let expected_timer_model = if adapter.expected_architecture == 1 { 1 } else { 2 };
-    if timers.is_empty() {
+    if timers.len() != 1 {
         return Err(Code::InvalidTimer);
     }
     for timer in timers {
@@ -936,7 +1025,7 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
 
     let serials: Vec<_> = records.iter().filter(|record| record.0 == 5).collect();
     let expected_serial_model = if adapter.expected_architecture == 1 { 1 } else { 2 };
-    if serials.is_empty() {
+    if serials.len() != 1 {
         return Err(Code::InvalidSerial);
     }
     for serial in serials {
@@ -981,8 +1070,7 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         return Err(Code::InvalidTrace);
     }
 
-    let known_records: Vec<_> = records.iter().filter(|record| record.0 <= 7).collect();
-    if known_records.windows(2).any(|pair| (pair[0].0, pair[0].1) >= (pair[1].0, pair[1].1)) {
+    if records.windows(2).any(|pair| (pair[0].0, pair[0].1) >= (pair[1].0, pair[1].1)) {
         return Err(Code::NoncanonicalOrder);
     }
 
@@ -1034,7 +1122,11 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
             (5, 2, 5, 1, 4, 4) if adapter.expected_architecture == 2 => true,
             _ => false,
         };
-        if !common || !model_valid || window.space == 2 && checked_end(window.base, window.length)? > 65_536 {
+        let window_end = checked_end(window.base, window.length).map_err(|_| Code::InvalidRegisterWindow)?;
+        if !common
+            || !model_valid
+            || window.space == 2 && window_end > 65_536
+        {
             return Err(Code::InvalidRegisterWindow);
         }
     }
@@ -1151,6 +1243,19 @@ fn access_name(key: AccessKey) -> &'static str {
     }
 }
 
+fn access_log(keys: &[AccessKey]) -> String {
+    keys.iter().copied().map(access_name).collect::<Vec<_>>().join(",")
+}
+
+fn predicate_access_budget(order: usize) -> &'static str {
+    match order {
+        1..=4 => "",
+        5..=14 => "entry",
+        15 => "entry,handoff",
+        _ => "entry,handoff,memory-map,rhd,entropy",
+    }
+}
+
 fn run_bytes(bytes: &[u8], behavior: Behavior) -> Result<(u16, Vec<AccessKey>, Vec<Effect>), String> {
     let bundle = parse_bundle(bytes).ok_or_else(|| "malformed fixture bundle".to_string())?;
     let adapter = adapter_for(&bundle, behavior);
@@ -1183,8 +1288,9 @@ fn check_precedence(root: &Path) -> Result<(), String> {
         let mut bytes = baseline.clone();
         let mut behavior = Behavior::default();
         apply_mutation(&mut bytes, predicate, &mut behavior);
-        let (actual, _, effects) = run_bytes(&bytes, behavior)?;
+        let (actual, reads, effects) = run_bytes(&bytes, behavior)?;
         if expected_name(actual) != expected { return Err(format!("single {predicate} expected {expected}, got {}", expected_name(actual))); }
+        if access_log(&reads) != predicate_access_budget(*order) { return Err(format!("single {predicate} exceeded access budget: {}", access_log(&reads))); }
         if actual != 0 && !effects.is_empty() { return Err(format!("single {predicate} produced rejected effects")); }
         if index + 1 < predicates.len() {
             let (_, next, _) = &predicates[index + 1];
@@ -1194,8 +1300,9 @@ fn check_precedence(root: &Path) -> Result<(), String> {
             let mut behavior = Behavior::default();
             apply_mutation(&mut bytes, next, &mut behavior);
             apply_mutation(&mut bytes, predicate, &mut behavior);
-            let (actual, _, effects) = run_bytes(&bytes, behavior)?;
+            let (actual, reads, effects) = run_bytes(&bytes, behavior)?;
             if expected_name(actual) != expected { return Err(format!("dual {predicate} + {next} expected {expected}, got {}", expected_name(actual))); }
+            if access_log(&reads) != predicate_access_budget(*order) { return Err(format!("dual {predicate} + {next} exceeded access budget: {}", access_log(&reads))); }
             if !effects.is_empty() { return Err(format!("dual {predicate} + {next} produced rejected effects")); }
         }
     }
@@ -1208,8 +1315,10 @@ fn check_precedence(root: &Path) -> Result<(), String> {
             let mut behavior = Behavior::default();
             apply_mutation(&mut bytes, columns[2], &mut behavior);
             apply_mutation(&mut bytes, columns[1], &mut behavior);
-            let (actual, _, effects) = run_bytes(&bytes, behavior)?;
+            let (actual, reads, effects) = run_bytes(&bytes, behavior)?;
             if expected_name(actual) != columns[3] { return Err(format!("security pair {} + {} on {architecture} expected {}, got {}", columns[1], columns[2], columns[3], expected_name(actual))); }
+            let order = predicates.iter().find(|row| row.1 == columns[1]).map(|row| row.0).ok_or_else(|| format!("unknown security predicate {}", columns[1]))?;
+            if access_log(&reads) != predicate_access_budget(order) { return Err(format!("security pair on {architecture} exceeded access budget: {}", access_log(&reads))); }
             if !effects.is_empty() { return Err(format!("security pair on {architecture} produced rejected effects")); }
         }
     }
@@ -1236,23 +1345,17 @@ fn check_scenarios(root: &Path) -> Result<usize, String> {
         }
         let (actual, reads, effects) = run_bytes(&bytes, behavior)?;
         if expected_name(actual) != columns[3] { return Err(format!("{} expected {}, got {}", columns[0], columns[3], expected_name(actual))); }
-        let read_names = reads.into_iter().map(access_name).collect::<Vec<_>>().join(",");
+        if columns[6] == "single-copy" {
+            let mut seen = BTreeSet::new();
+            if reads.iter().any(|key| !seen.insert(*key)) { return Err(format!("{} repeated a provider copy", columns[0])); }
+        }
+        let read_names = access_log(&reads);
         if read_names != columns[4] { return Err(format!("{} expected reads {}, got {read_names}", columns[0], columns[4])); }
         let effect_class = if effects.is_empty() { "none" } else { "commit" };
         if effect_class != columns[5] { return Err(format!("{} expected effects {}, got {effect_class}", columns[0], columns[5])); }
-        if columns[6] == "single-copy" {
-            let mut seen = BTreeSet::new();
-            for key in provider_keys_from_names(columns[4]) {
-                if !seen.insert(key) { return Err(format!("{} expected single-copy access", columns[0])); }
-            }
-        }
         count += 1;
     }
     Ok(count)
-}
-
-fn provider_keys_from_names(names: &str) -> Vec<&str> {
-    names.split(',').collect()
 }
 
 fn main() {

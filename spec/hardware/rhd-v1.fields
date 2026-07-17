@@ -80,6 +80,7 @@ rust-const|BOOT_SOURCE_RECORD_BYTES|u32|24
 rust-const|REGISTER_WINDOW_RECORD_BYTES|u32|56
 rust-const|RECORD_CRITICAL|u16|1
 rust-const|CPU_BOOT|u32|1
+rust-const|WINDOW_REQUIRED|u16|1
 rust-enum|RecordKind|u16|Cpu=1,Memory=2,Interrupt=3,Timer=4,Serial=5,BootSource=6,RegisterWindow=7
 rust-enum|InterruptModel|u16|X86Apic=1,ArmGicV3=2
 rust-enum|TimerModel|u16|X86Architectural=1,ArmGeneric=2
