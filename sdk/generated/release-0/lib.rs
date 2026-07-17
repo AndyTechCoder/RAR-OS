@@ -1,19 +1,18 @@
 //! GENERATED FILE — DO NOT EDIT.
-//! Sources: spec/hardware/rhd-v1.fields and spec/boot/handoff-v1.fields.
+//! Sources: spec/boot/handoff-v1.fields and spec/hardware/rhd-v1.fields.
 //! These are owned semantic types. Rust layout is not the wire format.
 
 #![no_std]
 #![deny(unsafe_code)]
 
 pub const BOOT_MAGIC: [u8; 8] = *b"RARBOOT\0";
-pub const RHD_MAGIC: [u8; 8] = *b"RARRHD\0\0";
+
 pub const BOOT_V1_BYTES: u16 = 128;
-pub const RHD_V1_HEADER_BYTES: u16 = 32;
-pub const RHD_V1_RECORD_HEADER_BYTES: u16 = 16;
+
 pub const MEMORY_MAP_V1_ENTRY_BYTES: u16 = 32;
+
 pub const MAX_HANDOFF_BYTES: u32 = 4_096;
-pub const MAX_RHD_BYTES: u32 = 65_536;
-pub const MAX_RHD_RECORDS: u16 = 256;
+
 pub const MAX_MEMORY_MAP_ENTRIES: u32 = 256;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -79,7 +78,6 @@ pub struct BootHandoffV1 {
     pub trace_flags: u32,
     pub boot_cpu_id: u32,
 }
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MemoryRegionV1 {
     pub base: u64,
@@ -89,6 +87,15 @@ pub struct MemoryRegionV1 {
     pub owner: u16,
     pub region_id: u32,
 }
+pub const RHD_MAGIC: [u8; 8] = *b"RARRHD\0\0";
+
+pub const RHD_V1_HEADER_BYTES: u16 = 32;
+
+pub const RHD_V1_RECORD_HEADER_BYTES: u16 = 16;
+
+pub const MAX_RHD_BYTES: u32 = 65_536;
+
+pub const MAX_RHD_RECORDS: u16 = 256;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RhdHeaderV1 {
@@ -98,7 +105,6 @@ pub struct RhdHeaderV1 {
     pub address_bits: u8,
     pub page_shift: u8,
 }
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RecordHeaderV1 {
     pub kind: u16,
@@ -106,7 +112,6 @@ pub struct RecordHeaderV1 {
     pub record_bytes: u32,
     pub record_id: u32,
 }
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CpuRecordV1 {
     pub cpu_id: u32,
@@ -115,7 +120,6 @@ pub struct CpuRecordV1 {
     pub interrupt_controller_id: u32,
     pub timer_id: u32,
 }
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct InterruptRecordV1 {
     pub controller_id: u32,
@@ -126,7 +130,6 @@ pub struct InterruptRecordV1 {
     pub global_interrupt_base: u32,
     pub interrupt_count: u32,
 }
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TimerRecordV1 {
     pub timer_id: u32,
@@ -137,7 +140,6 @@ pub struct TimerRecordV1 {
     pub interrupt: u32,
     pub interrupt_controller_id: u32,
 }
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SerialRecordV1 {
     pub serial_id: u32,
@@ -149,7 +151,6 @@ pub struct SerialRecordV1 {
     pub interrupt_controller_id: u32,
     pub input_clock_hz: u64,
 }
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BootSourceRecordV1 {
     pub kind: u16,

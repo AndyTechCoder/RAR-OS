@@ -37,6 +37,19 @@ docs/tasks/release-0.md
 docs/adr/0011-release-0-reproducibility-gate-phasing.md
 docs/adr/0012-release-0-host-bootstrap-trust-and-snapshot.md
 docs/release-0/build/prompt-4-remediation.md
+docs/adr/proposed/0013-pre-copy-trust-and-mmio-authority.md
+docs/adr/proposed/0014-hardware-binding-and-record-identity.md
+docs/adr/proposed/0015-deterministic-validation-precedence.md
+docs/release-0/contracts/README.md
+spec/boot/handoff-v1.fields
+spec/hardware/rhd-v1.fields
+spec/fixtures/release-0/cases.v1
+spec/fixtures/release-0/generate.sh
+spec/fixtures/release-0/reference.rs
+spec/fixtures/release-0/run.sh
+sdk/generated/release-0/generate.sh
+sdk/generated/release-0/check.sh
+sdk/generated/release-0/lib.rs
 tools/ci/check-specs.sh
 tools/ci/check-host-policy.sh
 tools/ci/test-host-policy.sh
@@ -58,8 +71,19 @@ printf '%s\n' "$required_files" | while IFS= read -r file; do
     [ -s "$file" ] || fail "empty required file: $file"
 done
 
-for script in tools/ci/check-specs.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh; do
+for script in tools/ci/check-specs.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
     [ -x "$script" ] || fail "required script is not executable: $script"
+done
+
+for proposal in docs/adr/proposed/*.md; do
+    grep -qx 'Status: Proposed — owner approval required' "$proposal" || fail "proposed ADR status is invalid: $proposal"
+done
+
+[ "$(sed -n '2,$p' spec/fixtures/release-0/cases.v1 | awk -F '|' 'NR > 1 { count++ } END { print count + 0 }')" -eq 12 ] || fail "R0-002 binary fixture manifest is incomplete"
+printf '%s\n' \
+    'spec/fixtures/release-0/run.sh --ci' \
+    'sdk/generated/release-0/check.sh --compile' | while IFS= read -r command; do
+    grep -Fq "$command" .github/workflows/specifications.yml || fail "R0-002 exact-head CI command is missing: $command"
 done
 
 check_markdown_links() {
@@ -186,11 +210,11 @@ if grep -nE '^- `\[[^x]\]` \*\*P0' BACKLOG.md; then
     fail "Gate 0 P0 backlog item does not use the complete status"
 fi
 
-if find . -path ./.git -prune -o -path ./out -prune -o -type f -exec grep -nHE '[[:blank:]]+$' {} +; then
+if find . -path ./.git -prune -o -path ./out -prune -o -path ./spec/fixtures/release-0/bin -prune -o -type f -exec grep -nHE '[[:blank:]]+$' {} +; then
     fail "trailing whitespace found"
 fi
 
-if find . -path ./.git -prune -o -path ./out -prune -o -type f -exec grep -nHE '^(<<<<<<<|=======|>>>>>>>)' {} +; then
+if find . -path ./.git -prune -o -path ./out -prune -o -path ./spec/fixtures/release-0/bin -prune -o -type f -exec grep -nHE '^(<<<<<<<|=======|>>>>>>>)' {} +; then
     fail "merge-conflict marker found"
 fi
 
