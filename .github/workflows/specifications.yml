@@ -187,6 +187,7 @@ jobs:
         shell: /usr/bin/dash -e {0}
         run: |
           docker run --rm --read-only --network none \
+            --user "$(id -u):$(id -g)" \
             --tmpfs /tmp:rw,exec,nosuid,nodev,size=256m,mode=1777 \
             --mount "type=bind,source=$GITHUB_WORKSPACE,target=/workspace" \
             --workdir /workspace \
