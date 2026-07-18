@@ -160,8 +160,8 @@ entropy-ceiling-x86|x86_64|entropy-source-boundary|invalid-entropy|entry,handoff
 entropy-ceiling-arm|aarch64|entropy-source-boundary|invalid-entropy|entry,handoff,memory-map,rhd,entropy|none|single-copy|entry@268435456+320,handoff@4096+128,memory-map@8192+160,rhd@12288+704,entropy@16384+64
 entropy-over-ceiling-x86|x86_64|entropy-source-over-ceiling|invalid-pointer-range|entry|none|single-copy|entry@268435456+288
 entropy-over-ceiling-arm|aarch64|entropy-source-over-ceiling|invalid-pointer-range|entry|none|single-copy|entry@268435456+320
-trace-ceiling-x86|x86_64|trace-source-boundary|invalid-trace|entry,handoff,memory-map,rhd,entropy|none|single-copy
-trace-ceiling-arm|aarch64|trace-source-boundary|invalid-trace|entry,handoff,memory-map,rhd,entropy|none|single-copy
+trace-ceiling-x86|x86_64|trace-source-boundary|invalid-memory-map|entry,handoff,memory-map,rhd,entropy|none|single-copy
+trace-ceiling-arm|aarch64|trace-source-boundary|invalid-memory-map|entry,handoff,memory-map,rhd,entropy|none|single-copy
 trace-over-ceiling-x86|x86_64|trace-source-over-ceiling|invalid-pointer-range|entry|none|single-copy|entry@268435456+288
 trace-over-ceiling-arm|aarch64|trace-source-over-ceiling|invalid-pointer-range|entry|none|single-copy|entry@268435456+320
 source-ceiling-alias-x86|x86_64|source-ceiling-alias-compound|invalid-pointer-range|entry|none|single-copy
