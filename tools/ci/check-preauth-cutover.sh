@@ -31,16 +31,18 @@ workflow=.github/workflows/specifications.yml
 [ "$(grep -c 'tools/toolchain/preauth-transaction --prepare' "$workflow")" -eq 1 ] || fail workflow-entrypoint
 ! grep -Eq 'eval|source[[:space:]]|^[[:space:]]*\.[[:space:]]|RAR_ALLOW_.*LEGACY|fallback' "$workflow" || fail workflow-indirection
 
+production_pattern='rar-preauth-closure-v3|rar-preauth-identity-graph-v2|rar-preauth-ci-attestation-v2|rar-preauth-prepared-certification-v1|rar-execution-host-v1|rar-disposable-disk-v1|rar-vm-profile-v1|rar-vm-certification-v1|rar-vm-owner-authorization-v1|AuthorizationRecord|AuthorizationConsumptionKey|DescriptorBinding'
 for root_path in .github/workflows tools/toolchain tools/rar-lab/preauth/src tools/rar-lab/safety/src tools/rarbuild/src tests/preauth/src tests/host-safety/src; do
- if rg -n -i 'rar-preauth-closure-v3|rar-preauth-identity-graph-v2|rar-preauth-ci-attestation-v2|rar-preauth-prepared-certification-v1|rar-execution-host-v1|rar-disposable-disk-v1|rar-vm-profile-v1|rar-vm-certification-v1|rar-vm-owner-authorization-v1|AuthorizationRecord|AuthorizationConsumptionKey|DescriptorBinding' "$root_path"; then
-  fail "production-legacy-token:$root_path"
- fi
+ find "$root_path" -type f -print | while IFS= read -r file; do
+  if grep -Eiq "$production_pattern" "$file"; then fail "production-legacy-token:$file"; fi
+ done
 done
 
-matches=$(rg -l -i 'rar-preauth-closure-v3|rar-preauth-identity-graph-v2|rar-preauth-ci-attestation-v2|rar-preauth-prepared-certification-v1|rar-external-authorization-v1|rar-execution-host-v1|rar-disposable-disk-v1|rar-vm-profile-v1|rar-vm-certification-v1|rar-vm-owner-authorization-v1|AuthorizationRecord|AuthorizationConsumptionKey|DescriptorBinding|prepare-preauth-output.sh|acquire-preauth-closure.sh|preauth-validate-record' . --glob '!out/**' --glob '!.git/**' || :)
-printf '%s\n' "$matches" | while IFS= read -r path; do
- [ -n "$path" ] || continue
+all_pattern="$production_pattern|rar-external-authorization-v1|prepare-preauth-output.sh|acquire-preauth-closure.sh|preauth-validate-record"
+find . -type f -print | while IFS= read -r path; do
  path=${path#./}
+ case "$path" in .git/*|out/*) continue;; esac
+ grep -Eiq "$all_pattern" "$path" || continue
  case "$path" in
   tests/preauth/fixtures/legacy-rejection/*|tests/preauth/fixtures/cutover-mutations.v1|docs/adr/*|docs/release-0/*|docs/tasks/*|tools/ci/check-preauth-cutover.sh|tools/ci/check-specs.sh|tests/preauth/transaction-contracts.sh|spec/lab/preauth/cutover-v1.manifest) ;;
   *) fail "unallowlisted-legacy-reference:$path";;
@@ -48,11 +50,12 @@ printf '%s\n' "$matches" | while IFS= read -r path; do
 done
 
 mkdir -p out/r0/cutover
-snippet=out/r0/cutover/removed-api.rs
-printf '%s\n' '#[path="../../../tools/rar-lab/preauth/src/lib.rs"] mod preauth;' 'use preauth::{AuthorizationRecord,AuthorizationConsumptionKey,DescriptorBinding,IdentityGraph,ClosureLock,PreparedCertification,ExecutionHostRecord,StrictAuthorityRecord};' 'fn main(){}' > "$snippet"
-if rustc --edition=2024 "$snippet" -o out/r0/cutover/removed-api 2>out/r0/cutover/removed-api.stderr; then fail old-api-exported; fi
 for removed_type in AuthorizationRecord AuthorizationConsumptionKey DescriptorBinding IdentityGraph ClosureLock PreparedCertification ExecutionHostRecord StrictAuthorityRecord; do
- grep -q "$removed_type" out/r0/cutover/removed-api.stderr || fail "old-api-negative-compile:$removed_type"
+ snippet=out/r0/cutover/removed-api-$removed_type.rs
+ printf '%s\n' '#[path="../../../tools/rar-lab/preauth/src/lib.rs"] mod preauth;' "use preauth::$removed_type;" 'fn main(){}' > "$snippet"
+ if rustc --edition=2024 "$snippet" -o "out/r0/cutover/removed-api-$removed_type" 2>"out/r0/cutover/removed-api-$removed_type.stderr"; then
+  fail "old-api-exported:$removed_type"
+ fi
 done
 rustc --edition=2024 tools/toolchain/preauth-validate-record.rs -o out/r0/cutover/record-refusal
 rustc --edition=2024 tools/toolchain/preauth-verify-oci.rs -o out/r0/cutover/oci-refusal
