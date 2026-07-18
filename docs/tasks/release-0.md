@@ -7,7 +7,7 @@ Rule: Release 0 proves architecture; it does not implement storage, networking, 
 
 Every R0 task below is defined by this shared contract, its row in the task field matrix, and its detailed owner, dependencies, deliverables, and acceptance criteria.
 
-- **Approved specifications:** `docs/constitution.md`, `docs/from-scratch-policy.md`, `docs/release-roadmap.md`, `docs/architecture.md`, `docs/security-and-recovery.md`, `docs/interfaces-and-formats.md`, `docs/handoff.md`, `docs/host-safety.md`, ADRs 0001–0012, and this packet. A task uses only the subset relevant to its row and dependencies.
+- **Approved specifications:** `docs/constitution.md`, `docs/from-scratch-policy.md`, `docs/release-roadmap.md`, `docs/architecture.md`, `docs/security-and-recovery.md`, `docs/interfaces-and-formats.md`, `docs/handoff.md`, `docs/host-safety.md`, ADRs 0001–0016, and this packet. A task uses only the subset relevant to its row and dependencies.
 - **Global in-scope rule:** implement only the mechanisms, host tools, contracts, tests, and documentation named by the active task.
 - **Global out-of-scope rule:** no Release 1+ component model, filesystems, networking, GUI, agents, package system, applications, physical-device enablement, or unapproved stable contract. No task may weaken a prior gate.
 - **Ownership rule:** the paths in the matrix are exclusive write ownership while that task is active. Dependency paths are read-only unless the coordinator records an ownership handoff. Root and shared governance files require coordinator ownership.
