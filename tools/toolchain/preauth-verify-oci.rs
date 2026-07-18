@@ -211,24 +211,29 @@ fn metadata_digest(path: &Path, field: &str) -> String {
     value
 }
 
-fn metadata_summary(path: &Path) -> (String, String, String, String, String, String) {
+fn metadata_summary(path: &Path) -> (String, String, Option<(String, String, String, String)>) {
     let text = fs::read_to_string(path).unwrap_or_else(|_| fail("unreadable OCI metadata"));
     if text.len() as u64 > MAX_INLINE { fail("oversized OCI metadata"); }
     let compact: String = text.chars().filter(|character| !character.is_ascii_whitespace()).collect();
     let config = metadata_digest(path, "containerimage.config.digest");
     let digest = metadata_digest(path, "containerimage.digest");
-    let descriptor = after(&compact, "\"containerimage.descriptor\":{");
-    let descriptor_digest = quoted(descriptor, "\"digest\":\"sha256:");
-    let media_type = quoted(descriptor, "\"mediaType\":\"");
-    let platform = after(descriptor, "\"platform\":{");
-    let architecture = quoted(platform, "\"architecture\":\"");
-    let os = quoted(platform, "\"os\":\"");
-    for value in [&descriptor_digest, &config, &digest] {
+    for value in [&config, &digest] {
         if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()) {
             fail("invalid OCI metadata descriptor digest");
         }
     }
-    (config, digest, descriptor_digest, media_type, architecture, os)
+    let descriptor = compact.split_once("\"containerimage.descriptor\":{").map(|(_, value)| {
+        let descriptor_digest = quoted(value, "\"digest\":\"sha256:");
+        let media_type = quoted(value, "\"mediaType\":\"");
+        let platform = after(value, "\"platform\":{");
+        let architecture = quoted(platform, "\"architecture\":\"");
+        let os = quoted(platform, "\"os\":\"");
+        if descriptor_digest.len() != 64
+            || !descriptor_digest.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        { fail("invalid OCI metadata descriptor digest"); }
+        (descriptor_digest, media_type, architecture, os)
+    });
+    (config, digest, descriptor)
 }
 
 fn blob_digest(path: &str) -> Option<&str> {
@@ -417,22 +422,29 @@ fn verify_one(
         if entries.keys().any(|name| !expected.contains(name)) { fail("unexpected archive member"); }
         (config_digest.clone(), expected)
     };
-    let (metadata_config, metadata_digest, descriptor_digest, descriptor_media_type, architecture, os) =
-        metadata_summary(metadata);
+    let (metadata_config, metadata_digest, descriptor) = metadata_summary(metadata);
     let selected_path = format!("blobs/sha256/{reported_digest}");
     let selected = entries.get(&selected_path).unwrap_or_else(|| fail("selected OCI manifest absent"));
     let selected_text = std::str::from_utf8(&selected.data).unwrap_or_else(|_| fail("selected OCI manifest is not UTF-8"));
     let selected_compact: String = selected_text.chars().filter(|character| !character.is_ascii_whitespace()).collect();
     let selected_media_type = quoted(&selected_compact, "\"mediaType\":\"");
-    eprintln!(
-        "oci_buildx_descriptor digest=sha256:{} descriptor_digest=sha256:{} config=sha256:{} media_type={} platform={}/{}",
-        metadata_digest, descriptor_digest, metadata_config, descriptor_media_type, os, architecture,
-    );
+    if let Some((descriptor_digest, descriptor_media_type, architecture, os)) = &descriptor {
+        eprintln!(
+            "oci_buildx_descriptor digest=sha256:{} descriptor_digest=sha256:{} config=sha256:{} media_type={} platform={}/{} descriptor_object=present",
+            metadata_digest, descriptor_digest, metadata_config, descriptor_media_type, os, architecture,
+        );
+    } else {
+        eprintln!(
+            "oci_buildx_descriptor digest=sha256:{} config=sha256:{} descriptor_object=absent",
+            metadata_digest, metadata_config,
+        );
+    }
     eprintln!(
         "oci_selected_manifest digest=sha256:{} size={} media_type={} canonical_bytes_sha256={}",
         reported_digest, selected.size, selected_media_type, selected.sha256,
     );
-    if metadata_config != config_digest || descriptor_digest != metadata_digest
+    if metadata_config != config_digest
+        || descriptor.as_ref().is_some_and(|value| value.0 != metadata_digest)
         || metadata_digest != reported_digest { fail("reported image digest mismatch"); }
     let image_id = fs::read_to_string(image_id_path).unwrap_or_else(|_| fail("loaded image identity absent"));
     if image_id.trim() != format!("sha256:{config_digest}") { fail("loaded image identity mismatch"); }

@@ -57,14 +57,16 @@ build_two_archive() {
         "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest"
 }
 build_two_members() {
-    printf '%s\n' "$@" | /usr/bin/tar --sort=name --mtime='@1784332800' \
+    printf '%s\n' "$@" | LC_ALL=C /usr/bin/sort | \
+        /usr/bin/tar --sort=name --mtime='@1784332800' \
         --owner=0 --group=0 --numeric-owner --format=gnu \
         -cf "$oci_test/two/image.tar" -C "$oci_test/root" -T -
 }
-/usr/bin/tar --sort=name --mtime='@1784332800' --owner=0 --group=0 --numeric-owner --format=gnu \
-    -cf "$oci_test/one/image.tar" -C "$oci_test/root" \
+printf '%s\n' \
     "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest" \
-    index.json manifest.json oci-layout repositories
+    index.json manifest.json oci-layout repositories | LC_ALL=C /usr/bin/sort | \
+    /usr/bin/tar --sort=name --mtime='@1784332800' --owner=0 --group=0 \
+        --numeric-owner --format=gnu -cf "$oci_test/one/image.tar" -C "$oci_test/root" -T -
 cp "$oci_test/one/image.tar" "$oci_test/two/image.tar"
 printf '{"containerimage.config.digest":"sha256:%s","containerimage.descriptor":{"digest":"sha256:%s","mediaType":"application/vnd.oci.image.manifest.v1+json","platform":{"architecture":"amd64","os":"linux"}},"containerimage.digest":"sha256:%s"}\n' \
     "$digest" "$manifest_digest" "$manifest_digest" > "$oci_test/one/metadata.json"
