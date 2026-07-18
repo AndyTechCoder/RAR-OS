@@ -19,7 +19,7 @@ for path in "$root/out" "$root/out/r0" "$root/out/r0/preauth" "$output"; do
 done
 mkdir -p "$output/apt-state/lists/partial" "$output/apt-cache/archives/partial" "$output/debs" "$output/licenses" "$output/derived-context/debs"
 
-snapshot=20260718T000000Z
+snapshot=20260630T000000Z
 sources=$output/sources.list
 cat > "$sources" <<EOF
 deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/$snapshot trixie main

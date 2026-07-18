@@ -20,7 +20,7 @@ R0-001 pinned the compiler root but intentionally left external LLD, QEMU, and f
 
 ## Decision
 
-The closure begins at `rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3`. A version-2 lock binds an exact Debian snapshot, signed metadata and key identity, `lld-19=1:19.1.7-3+b1`, `qemu-system-x86=1:10.0.8+ds-0+deb13u1+b2`, `ovmf=2025.02-8+deb13u1`, the complete no-recommends transitive set, each package SHA-256/license, the deterministic derived OCI digest, and extracted LLD/QEMU/OVMF byte hashes. Acquisition is confined below `out/r0/preauth/acquisition`; symlinks, path escape, mutation, signature failure, checksum failure, version drift, or closure drift fail closed.
+The closure begins at `rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3`. A version-2 lock binds Debian snapshot `20260630T000000Z`, signed metadata and key identity, `lld-19=1:19.1.7-3+b1`, `qemu-system-x86=1:10.0.8+ds-0+deb13u1+b2`, `ovmf=2025.02-8+deb13u1`, the complete no-recommends transitive set, each package SHA-256/license, the deterministic derived OCI digest, and extracted LLD/QEMU/OVMF byte hashes. This timestamp is after the approved QEMU and OVMF uploads and before QEMU 10.0.11 replaced 10.0.8 in proposed-updates. Acquisition is confined below `out/r0/preauth/acquisition`; symlinks, path escape, mutation, signature failure, checksum failure, version drift, or closure drift fail closed.
 
 ## Consequences
 
