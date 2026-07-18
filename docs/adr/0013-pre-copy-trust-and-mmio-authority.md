@@ -51,12 +51,12 @@ The mandatory algorithm is:
 
 1. Validate the architecture-adapter tuple—expected architecture, external entry address/length, address width, page size, entry alignment, and stack alignment—then copy the fixed entry value without following embedded addresses.
 2. Validate descriptor count, checked half-open arithmetic, address width, alignment, non-aliasing, purpose, and expected architecture.
-3. Copy each readable source exactly once into bounded Nucleus-owned scratch; require external and embedded lengths to agree.
+3. Before a request, enforce the canonical purpose ceiling (handoff 4096, memory map 8192, RHD 65536, entropy 64, trace 1048576 bytes); copy each readable source exactly once into bounded Nucleus-owned scratch and require external and embedded lengths to agree. Trace is a bounded destination, not a readable source.
 4. Parse only owned copies, consume records exactly, and never revisit source addresses.
 5. Transfer the trace destination only after all validation succeeds; clear entropy source only when its descriptor grants that one write.
 6. Treat RHD register ranges as descriptions only. Grant MMIO or I/O-port access only when exactly one descriptor matches `(purpose,owner_kind,owner_id)`, address space, rights, authority transfer, and complete checked range containment. Multiple non-overlapping descriptors may share an owner selector; order is never identity.
 
-The conformance boundary is an instrumented descriptor-keyed source provider and a commit-only effect sink. The provider records permitted reads, returns selected short copies or faults, and rejects a second copy. The sink records entropy clearing, trace activation, and constructed device authority only after complete validation; every rejected case must have an empty effect log.
+The conformance boundary is an instrumented descriptor-keyed source provider and a commit-only effect sink. The provider records descriptor identity plus the exact requested base and byte length, returns selected short copies or faults, and rejects a second copy. The sink records entropy clearing, trace activation, and constructed device authority only after complete validation; every rejected case must have an empty effect log.
 
 ## Consequences
 

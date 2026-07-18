@@ -12,6 +12,11 @@ const BOOT_MAGIC: &[u8; 8] = b"RARBOOT\0";
 const RHD_MAGIC: &[u8; 8] = b"RARRHD\0\0";
 const ENTRY_ADDRESS: u64 = 0x1000_0000;
 const BUNDLE_HEADER_BYTES: usize = 64;
+const MAX_HANDOFF_SOURCE_BYTES: u64 = 4_096;
+const MAX_MEMORY_MAP_SOURCE_BYTES: u64 = 8_192;
+const MAX_RHD_SOURCE_BYTES: u64 = 65_536;
+const MAX_ENTROPY_SOURCE_BYTES: u64 = 64;
+const MAX_TRACE_SOURCE_BYTES: u64 = 1_048_576;
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -80,6 +85,12 @@ struct AuthorityIdentity {
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum AccessKey {
+    Entry { base: u64, length: u64 },
+    Descriptor { selector: DescriptorSelector, base: u64, length: u64 },
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum CopyKey {
     Entry,
     Descriptor(DescriptorSelector),
 }
@@ -159,7 +170,7 @@ struct SourceProvider<'a> {
     fault_purpose: Option<u16>,
     short_purpose: Option<u16>,
     reads: Vec<AccessKey>,
-    copied: BTreeSet<AccessKey>,
+    copied: BTreeSet<CopyKey>,
 }
 
 impl<'a> SourceProvider<'a> {
@@ -177,9 +188,9 @@ impl<'a> SourceProvider<'a> {
         }
     }
 
-    fn copy_entry(&mut self, expected: usize) -> Result<Vec<u8>, Code> {
+    fn copy_entry(&mut self, base: u64, expected: usize) -> Result<Vec<u8>, Code> {
         let data = self.entry.to_vec();
-        self.copy(AccessKey::Entry, data, expected, false, false)
+        self.copy(AccessKey::Entry { base, length: u64::try_from(expected).map_err(|_| Code::Oversized)? }, data, expected, false, false)
     }
 
     fn copy_descriptor(&mut self, descriptor: &Descriptor) -> Result<Vec<u8>, Code> {
@@ -191,7 +202,7 @@ impl<'a> SourceProvider<'a> {
             _ => return Err(Code::SnapshotViolation),
         };
         self.copy(
-            AccessKey::Descriptor(descriptor.selector),
+            AccessKey::Descriptor { selector: descriptor.selector, base: descriptor.base, length: descriptor.length },
             data,
             usize::try_from(descriptor.length).map_err(|_| Code::SnapshotViolation)?,
             self.fault_purpose == Some(descriptor.selector.purpose),
@@ -201,7 +212,11 @@ impl<'a> SourceProvider<'a> {
 
     fn copy(&mut self, key: AccessKey, mut data: Vec<u8>, expected: usize, fault: bool, short: bool) -> Result<Vec<u8>, Code> {
         self.reads.push(key);
-        if !self.copied.insert(key) || fault {
+        let identity = match key {
+            AccessKey::Entry { .. } => CopyKey::Entry,
+            AccessKey::Descriptor { selector, .. } => CopyKey::Descriptor(selector),
+        };
+        if !self.copied.insert(identity) || fault {
             return Err(Code::SnapshotViolation);
         }
         if short && !data.is_empty() {
@@ -426,8 +441,6 @@ fn add_entry_descriptor(bytes: &mut Vec<u8>, critical: bool, inert: bool) {
     put_u16(bytes, entry + 24, count + 1);
     put_u16(bytes, entry + 10, 1);
     let mut descriptor = vec![0; 32];
-    put_u64(&mut descriptor, 0, 0x3000_0000);
-    put_u64(&mut descriptor, 8, 8);
     put_u16(&mut descriptor, 16, 99);
     put_u16(&mut descriptor, 20, 1);
     put_u16(&mut descriptor, 26, if critical { 4 } else { 0 });
@@ -435,6 +448,40 @@ fn add_entry_descriptor(bytes: &mut Vec<u8>, critical: bool, inert: bool) {
         put_u16(&mut descriptor, 18, 1);
     }
     bytes.splice(insert..insert, descriptor);
+}
+
+fn mutate_inert_descriptor(bytes: &mut Vec<u8>, field: &str) {
+    add_entry_descriptor(bytes, false, true);
+    let descriptor = descriptor_offset(bytes, 99, 0, 0).expect("inert descriptor");
+    match field {
+        "base" => put_u64(bytes, descriptor, 8),
+        "length" => put_u64(bytes, descriptor + 8, 8),
+        "rights" => put_u16(bytes, descriptor + 18, 1),
+        "producer" => put_u16(bytes, descriptor + 20, 0),
+        "transfer" => put_u16(bytes, descriptor + 22, 1),
+        "owner-kind" => put_u16(bytes, descriptor + 24, 1),
+        "flags" => put_u16(bytes, descriptor + 26, 1),
+        "owner-id" => put_u32(bytes, descriptor + 28, 1),
+        "purpose" => put_u16(bytes, descriptor + 16, 7),
+        _ => panic!("unknown inert field: {field}"),
+    }
+}
+
+fn source_ceiling(purpose: u16) -> Option<u64> {
+    match purpose {
+        1 => Some(MAX_HANDOFF_SOURCE_BYTES),
+        2 => Some(MAX_MEMORY_MAP_SOURCE_BYTES),
+        3 => Some(MAX_RHD_SOURCE_BYTES),
+        4 => Some(MAX_ENTROPY_SOURCE_BYTES),
+        5 => Some(MAX_TRACE_SOURCE_BYTES),
+        _ => None,
+    }
+}
+
+fn set_source_length(bytes: &mut [u8], purpose: u16, length: u64, base: Option<u64>) {
+    let descriptor = descriptor_offset(bytes, purpose, 0, 0).expect("source descriptor");
+    if let Some(base) = base { put_u64(bytes, descriptor, base); }
+    put_u64(bytes, descriptor + 8, length);
 }
 
 fn swap_descriptors(bytes: &mut [u8]) {
@@ -574,7 +621,43 @@ fn apply_mutation(bytes: &mut Vec<u8>, predicate: &str, behavior: &mut Behavior)
             put_u64(bytes, map_descriptor, 8193);
         }
         "compatible-entry-minor" => add_entry_descriptor(bytes, false, true),
+        "compatible-entry-recovery" => {
+            add_entry_descriptor(bytes, false, true);
+            let descriptor = descriptor_offset(bytes, 99, 0, 0).expect("inert descriptor");
+            put_u16(bytes, descriptor + 20, 2);
+        }
         "critical-entry-minor" => add_entry_descriptor(bytes, true, true),
+        "inert-entry-base" => mutate_inert_descriptor(bytes, "base"),
+        "inert-entry-length" => mutate_inert_descriptor(bytes, "length"),
+        "inert-entry-rights" => mutate_inert_descriptor(bytes, "rights"),
+        "inert-entry-producer" => mutate_inert_descriptor(bytes, "producer"),
+        "inert-entry-transfer" => mutate_inert_descriptor(bytes, "transfer"),
+        "inert-entry-owner-kind" => mutate_inert_descriptor(bytes, "owner-kind"),
+        "inert-entry-flags" => mutate_inert_descriptor(bytes, "flags"),
+        "inert-entry-owner-id" => mutate_inert_descriptor(bytes, "owner-id"),
+        "inert-entry-known-purpose" => mutate_inert_descriptor(bytes, "purpose"),
+        "handoff-source-boundary" => set_source_length(bytes, 1, MAX_HANDOFF_SOURCE_BYTES, None),
+        "handoff-source-over-ceiling" => set_source_length(bytes, 1, MAX_HANDOFF_SOURCE_BYTES + 1, None),
+        "map-source-boundary" => set_source_length(bytes, 2, MAX_MEMORY_MAP_SOURCE_BYTES, Some(0x0040_0000)),
+        "map-source-over-ceiling" => set_source_length(bytes, 2, MAX_MEMORY_MAP_SOURCE_BYTES + 1, Some(0x0040_0000)),
+        "rhd-source-boundary" => set_source_length(bytes, 3, MAX_RHD_SOURCE_BYTES, Some(0x0050_0000)),
+        "rhd-source-over-ceiling" => set_source_length(bytes, 3, MAX_RHD_SOURCE_BYTES + 1, Some(0x0050_0000)),
+        "entropy-source-boundary" => set_source_length(bytes, 4, MAX_ENTROPY_SOURCE_BYTES, None),
+        "entropy-source-over-ceiling" => set_source_length(bytes, 4, MAX_ENTROPY_SOURCE_BYTES + 1, None),
+        "trace-source-boundary" => set_source_length(bytes, 5, MAX_TRACE_SOURCE_BYTES, Some(0x2000_0000)),
+        "trace-source-over-ceiling" => set_source_length(bytes, 5, MAX_TRACE_SOURCE_BYTES + 1, Some(0x2000_0000)),
+        "source-ceiling-alias-compound" => {
+            set_source_length(bytes, 1, MAX_HANDOFF_SOURCE_BYTES + 1, None);
+            let map_descriptor = descriptor_offset(bytes, 2, 0, 0).expect("map descriptor");
+            put_u64(bytes, map_descriptor, 4096);
+        }
+        "source-ceiling-overflow-compound" => {
+            set_source_length(bytes, 1, MAX_HANDOFF_SOURCE_BYTES + 1, None);
+            let map_descriptor = descriptor_offset(bytes, 2, 0, 0).expect("map descriptor");
+            put_u64(bytes, map_descriptor, u64::MAX);
+            put_u64(bytes, map_descriptor + 8, 2);
+        }
+        "handoff-major-version" => put_u16(bytes, handoff + 8, 2),
         "compatible-rhd-minor" => {
             put_u16(bytes, rhd + 10, 1);
             insert_rhd_record(bytes, record_header(99, 0, 24, 1));
@@ -752,7 +835,7 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         return Err(Code::BadAlignment);
     }
 
-    let entry = provider.copy_entry(usize::try_from(adapter.external_entry_bytes).map_err(|_| Code::Oversized)?)?;
+    let entry = provider.copy_entry(adapter.external_entry_address, usize::try_from(adapter.external_entry_bytes).map_err(|_| Code::Oversized)?)?;
     if entry.get(0..8) != Some(ENTRY_MAGIC) {
         return Err(Code::BadMagic);
     }
@@ -815,7 +898,16 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
 
     let unknown: Vec<_> = descriptors.iter().filter(|descriptor| !(1..=7).contains(&descriptor.selector.purpose)).collect();
     if entry_minor == 0 && !unknown.is_empty()
-        || unknown.iter().any(|descriptor| descriptor.rights != 0 || descriptor.transfer != 0 || descriptor.selector.owner_kind != 0 || descriptor.selector.owner_id != 0 || descriptor.flags != 0)
+        || unknown.iter().any(|descriptor| {
+            descriptor.base != 0
+                || descriptor.length != 0
+                || descriptor.rights != 0
+                || !matches!(descriptor.producer, 1 | 2)
+                || descriptor.transfer != 0
+                || descriptor.selector.owner_kind != 0
+                || descriptor.selector.owner_id != 0
+                || descriptor.flags != 0
+        })
     {
         return Err(Code::UnsupportedMinor);
     }
@@ -823,12 +915,13 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
     // All binding predicates are one whole-table stage and collapse to the
     // declared invalid-pointer-range code. Descriptor order cannot select a
     // different range, address-width, alignment, selector, or rights error.
-    if descriptors.iter().any(|descriptor| {
+    if descriptors.iter().filter(|descriptor| (1..=7).contains(&descriptor.selector.purpose)).any(|descriptor| {
         descriptor.length == 0
             || !address_fits(descriptor.base, descriptor.length, entry_address_bits).unwrap_or(false)
             || descriptor_space(descriptor.selector.purpose) == 1 && descriptor.base % 8 != 0
             || descriptor.selector.purpose == 3 && descriptor.length % 8 != 0
             || descriptor.selector.purpose == 5 && (descriptor.base % 64 != 0 || descriptor.length % 64 != 0)
+            || source_ceiling(descriptor.selector.purpose).is_some_and(|ceiling| descriptor.length > ceiling)
     }) {
         return Err(Code::InvalidPointerRange);
     }
@@ -889,7 +982,7 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         return Err(Code::BadCountOrLength);
     }
     if u16_at(&handoff, 8) != Some(1) {
-        return Err(Code::UnsupportedMajor);
+        return Err(Code::BadCountOrLength);
     }
     if u16_at(&handoff, 12) != Some(128)
         || u32_at(&handoff, 16) != Some(128)
@@ -1370,8 +1463,8 @@ fn expected_name(code: u16) -> &'static str {
 
 fn access_name(key: AccessKey) -> &'static str {
     match key {
-        AccessKey::Entry => "entry",
-        AccessKey::Descriptor(key) => match key.purpose {
+        AccessKey::Entry { .. } => "entry",
+        AccessKey::Descriptor { selector, .. } => match selector.purpose {
             1 => "handoff",
             2 => "memory-map",
             3 => "rhd",
@@ -1379,6 +1472,33 @@ fn access_name(key: AccessKey) -> &'static str {
             _ => "unexpected",
         },
     }
+}
+
+fn copy_key(key: AccessKey) -> CopyKey {
+    match key {
+        AccessKey::Entry { .. } => CopyKey::Entry,
+        AccessKey::Descriptor { selector, .. } => CopyKey::Descriptor(selector),
+    }
+}
+
+fn request_name(key: AccessKey) -> String {
+    match key {
+        AccessKey::Entry { base, length } => format!("entry@{base}+{length}"),
+        AccessKey::Descriptor { selector, base, length } => format!("{}@{base}+{length}", access_name(AccessKey::Descriptor { selector, base, length })),
+    }
+}
+
+fn request_log(keys: &[AccessKey]) -> String {
+    keys.iter().copied().map(request_name).collect::<Vec<_>>().join(",")
+}
+
+fn requests_are_bounded(keys: &[AccessKey]) -> bool {
+    keys.iter().all(|key| match *key {
+        AccessKey::Entry { base, length } => length <= 4_096 && checked_end(base, length).is_ok(),
+        AccessKey::Descriptor { selector, base, length } => {
+            source_ceiling(selector.purpose).is_some_and(|ceiling| length <= ceiling) && checked_end(base, length).is_ok()
+        }
+    })
 }
 
 fn access_log(keys: &[AccessKey]) -> String {
@@ -1402,6 +1522,9 @@ fn run_bytes(bytes: &[u8], behavior: Behavior) -> Result<(u16, Vec<AccessKey>, V
     let result = catch_unwind(AssertUnwindSafe(|| validate(adapter, &mut provider, &mut sink)))
         .map_err(|_| "validation panicked".to_string())?;
     let code = result.map_or_else(|code| code as u16, |()| 0);
+    if !requests_are_bounded(&provider.reads) {
+        return Err(format!("validator issued an unbounded provider request: {}", request_log(&provider.reads)));
+    }
     Ok((code, provider.reads, sink.effects))
 }
 
@@ -1473,7 +1596,7 @@ fn check_scenarios(root: &Path) -> Result<usize, String> {
     for line in manifest.lines() {
         if line.is_empty() || line.starts_with("schema=") || line.starts_with("id|") { continue; }
         let columns: Vec<_> = line.split('|').collect();
-        if columns.len() != 7 { return Err(format!("malformed scenario row: {line}")); }
+        if !matches!(columns.len(), 7 | 8) { return Err(format!("malformed scenario row: {line}")); }
         let mut bytes = fs::read(root.join(format!("bin/valid-{}.bin", columns[1]))).map_err(|error| error.to_string())?;
         let mut behavior = Behavior::default();
         for mutation in columns[2].split(',').filter(|mutation| *mutation != "none") {
@@ -1486,13 +1609,15 @@ fn check_scenarios(root: &Path) -> Result<usize, String> {
             }
         }
         let (actual, reads, effects) = run_bytes(&bytes, behavior)?;
+        if !requests_are_bounded(&reads) { return Err(format!("{} issued an unbounded provider request: {}", columns[0], request_log(&reads))); }
         if expected_name(actual) != columns[3] { return Err(format!("{} expected {}, got {}", columns[0], columns[3], expected_name(actual))); }
         if columns[6] == "single-copy" {
             let mut seen = BTreeSet::new();
-            if reads.iter().any(|key| !seen.insert(*key)) { return Err(format!("{} repeated a provider copy", columns[0])); }
+            if reads.iter().any(|key| !seen.insert(copy_key(*key))) { return Err(format!("{} repeated a provider copy", columns[0])); }
         }
         let read_names = access_log(&reads);
         if read_names != columns[4] { return Err(format!("{} expected reads {}, got {read_names}", columns[0], columns[4])); }
+        if columns.len() == 8 && request_log(&reads) != columns[7] { return Err(format!("{} expected requests {}, got {}", columns[0], columns[7], request_log(&reads))); }
         let effect_class = if effects.is_empty() { "none" } else { "commit" };
         if effect_class != columns[5] { return Err(format!("{} expected effects {}, got {effect_class}", columns[0], columns[5])); }
         count += 1;

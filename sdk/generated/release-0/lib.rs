@@ -35,15 +35,39 @@ pub const MEMORY_MAP_V1_ENTRY_BYTES: u16 = 32;
 
 pub const MAX_HANDOFF_BYTES: u32 = 4_096;
 
+pub const MAX_HANDOFF_SOURCE_BYTES: u32 = 4_096;
+
 pub const MAX_MEMORY_MAP_ENTRIES: u32 = 256;
+
+pub const MAX_MEMORY_MAP_SOURCE_BYTES: u32 = 8_192;
+
+pub const MAX_RHD_SOURCE_BYTES: u32 = 65_536;
 
 pub const MIN_ENTROPY_BYTES: u32 = 32;
 
 pub const MAX_ENTROPY_BYTES: u32 = 64;
 
+pub const MAX_ENTROPY_SOURCE_BYTES: u32 = 64;
+
 pub const MIN_TRACE_BYTES: u32 = 4_096;
 
 pub const MAX_TRACE_BYTES: u32 = 1_048_576;
+
+pub const MAX_TRACE_SOURCE_BYTES: u32 = 1_048_576;
+
+pub const INERT_DESCRIPTOR_BASE: u64 = 0;
+
+pub const INERT_DESCRIPTOR_LENGTH: u64 = 0;
+
+pub const INERT_DESCRIPTOR_RIGHTS: u16 = 0;
+
+pub const INERT_DESCRIPTOR_TRANSFER: u16 = 0;
+
+pub const INERT_DESCRIPTOR_OWNER_KIND: u16 = 0;
+
+pub const INERT_DESCRIPTOR_FLAGS: u16 = 0;
+
+pub const INERT_DESCRIPTOR_OWNER_ID: u32 = 0;
 
 pub const RIGHT_READ: u16 = 1;
 

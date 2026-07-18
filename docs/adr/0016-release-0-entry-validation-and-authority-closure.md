@@ -55,7 +55,7 @@ Execute is forbidden in the Release 0 handoff map. Source descriptor ranges must
 
 Same-major higher minors are accepted only when fixed sizes remain supported and every addition is bounded, safely skippable, and explicitly optional/non-critical. Unknown non-critical additions are range-checked and skipped; unknown critical RHD records, critical entry descriptors, flags, required roles, or changed fixed sizes fail. Existing precedence and meaning do not change in a minor version.
 
-Boot Entry has one allocated descriptor compatibility result: any unknown descriptor addition that is not the exact inert compatible form, including a descriptor marked critical, returns `unsupported-minor`. RHD retains distinct `unknown-critical` and `unsupported-minor` outcomes as consecutive whole-table predicates; validators collect all framed-record facts and reduce them in that fixed order rather than returning during wire-order traversal.
+Boot Entry has one allocated descriptor compatibility result. `handoff-v1.fields` defines the exact inert form: entry minor is greater than supported, purpose is unallocated, producer is Root or Recovery, and base, length, rights, transfer, owner kind/id, and flags are zero. It is excluded from binding, aliasing, acquisition, and authority. Any deviation, including invalid producer or critical flags, returns `unsupported-minor`. RHD retains distinct `unknown-critical` and `unsupported-minor` outcomes as consecutive whole-table predicates; validators collect all framed-record facts and reduce them in that fixed order rather than returning during wire-order traversal.
 
 The single memory-map predicate includes all entry framing, checked range arithmetic, identity, canonical ordering, overlap, ownership/attribute semantics, and containment of every acquired source descriptor in a boot-owned region of its declared producer. Every such failure returns `invalid-memory-map`; no generic arithmetic or pointer-range code escapes that stage.
 
@@ -66,7 +66,7 @@ x86-64 entry requires long mode, interrupts disabled, direction flag clear, a 16
 ## Consequences
 
 - The validation table becomes stage-aware and may repeat a failure code for different artifact-local predicates.
-- Fixtures must execute every predicate and adjacent edge while recording logical source accesses and side effects.
+- Fixtures must execute every predicate and adjacent edge while recording source identity, exact requested base/length, and side effects.
 - The producer precondition is smaller and honest, but a malicious trusted Root/Recovery producer remains outside structural validation.
 - The strict Release 0 memory matrix may require a later major contract for executable or shared map states.
 
