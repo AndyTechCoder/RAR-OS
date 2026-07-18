@@ -78,12 +78,24 @@ jobs:
     env:
       RAR_CI_BOOTSTRAP_IMAGE: sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
       RAR_PREAUTH_ACQUISITION: signed-snapshot-only
+      RAR_EVENT_NAME: ${{ github.event_name }}
+      RAR_EVENT_SHA: ${{ github.sha }}
+      RAR_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '-' }}
     steps:
       - name: Check out exact source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
+
+      - name: Bind evidence to the explicit checked-out head
+        shell: /usr/bin/dash -e {0}
+        run: |
+          checked_out_sha=$(/usr/bin/git rev-parse HEAD)
+          binding=$(tools/toolchain/bind-preauth-head.sh \
+            "$RAR_EVENT_NAME" "$RAR_EVENT_SHA" "$RAR_PR_HEAD_SHA" "$checked_out_sha")
+          [ "$binding" = "source_revision=$checked_out_sha" ]
+          printf 'RAR_CHECKED_OUT_SOURCE_REVISION=%s\n' "$checked_out_sha" >> "$GITHUB_ENV"
 
       - name: Acquire signed snapshot closure without installation on host
         shell: /usr/bin/dash -e {0}
@@ -103,13 +115,30 @@ jobs:
       - name: Produce immutable derived OCI image
         shell: /usr/bin/dash -e {0}
         run: |
-          docker buildx build \
-            --network=none \
-            --provenance=false \
-            --load \
-            --tag "rar-preauth:${GITHUB_SHA}" \
-            --metadata-file out/r0/preauth/acquisition/derived-image.metadata.json \
-            out/r0/preauth/acquisition/derived-context
+          mkdir -p out/r0/preauth/acquisition/derived-build/one \
+            out/r0/preauth/acquisition/derived-build/two
+          for candidate in one two; do
+            SOURCE_DATE_EPOCH=1784332800 docker buildx build \
+              --network=none \
+              --no-cache \
+              --provenance=false \
+              --build-arg SOURCE_DATE_EPOCH=1784332800 \
+              --tag "rar-preauth:${RAR_CHECKED_OUT_SOURCE_REVISION}" \
+              --output "type=docker,dest=out/r0/preauth/acquisition/derived-build/$candidate/image.tar,rewrite-timestamp=true" \
+              --metadata-file "out/r0/preauth/acquisition/derived-build/$candidate/metadata.json" \
+              out/r0/preauth/acquisition/derived-context
+          done
+          tools/toolchain/verify-preauth-oci.sh \
+            out/r0/preauth/acquisition/derived-build/one/image.tar \
+            out/r0/preauth/acquisition/derived-build/one/metadata.json \
+            out/r0/preauth/acquisition/derived-build/two/image.tar \
+            out/r0/preauth/acquisition/derived-build/two/metadata.json \
+            > out/r0/preauth/acquisition/derived-verification.evidence
+          cp out/r0/preauth/acquisition/derived-build/one/metadata.json \
+            out/r0/preauth/acquisition/derived-image.metadata.json
+          cp out/r0/preauth/acquisition/derived-build/one/image.tar \
+            out/r0/preauth/acquisition/derived-image.tar
+          docker load --input out/r0/preauth/acquisition/derived-image.tar
 
       - name: Build twice, bind media, and run host-only controls
         shell: /usr/bin/dash -e {0}
@@ -119,12 +148,12 @@ jobs:
             --mount "type=bind,source=$GITHUB_WORKSPACE,target=/workspace" \
             --workdir /workspace \
             --env SOURCE_DATE_EPOCH=1784332800 \
-            --env GITHUB_SHA \
+            --env RAR_CHECKED_OUT_SOURCE_REVISION \
             --env CI \
             --env GITHUB_ACTIONS \
             --env RAR_PREAUTH_BUILD_CONTAINER=rar-preauth-closure-v2 \
             --env RAR_TARGET_EXECUTION=prohibited \
-            "rar-preauth:${GITHUB_SHA}" \
+            "rar-preauth:${RAR_CHECKED_OUT_SOURCE_REVISION}" \
             /usr/bin/dash -e -c '
               mkdir -p out/r0/preauth/build/one out/r0/preauth/build/two out/r0/artifacts/x86_64 out/r0/vm/x86_64
               /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition=2024 tools/rar-lab/preauth/src/disk.rs -o /tmp/rar-qcow2-writer
@@ -140,7 +169,7 @@ jobs:
               sdk/generated/release-0/check.sh --compile
               {
                 printf "schema=rar-preauth-exact-head-evidence-v1\n"
-                printf "source_revision=%s\n" "${GITHUB_SHA}"
+                printf "source_revision=%s\n" "${RAR_CHECKED_OUT_SOURCE_REVISION}"
                 printf "profile_sha256="; sha256sum spec/lab/vm-profile/examples/x86_64-preauth.profile | cut -d " " -f 1
                 printf "artifact_sha256="; sha256sum out/r0/artifacts/x86_64/rar-r0-x86_64-preauth.elf | cut -d " " -f 1
                 printf "disk_seed_sha256="; sha256sum out/r0/vm/x86_64/seed.qcow2 | cut -d " " -f 1
@@ -161,4 +190,5 @@ jobs:
           cat out/r0/preauth/acquisition/discovery.evidence
           cat out/r0/preauth/acquisition/packages.v2
           cat out/r0/preauth/acquisition/derived-image.metadata.json
+          cat out/r0/preauth/acquisition/derived-verification.evidence
           cat out/r0/preauth/exact-head.evidence

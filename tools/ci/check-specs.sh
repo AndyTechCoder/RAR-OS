@@ -68,6 +68,8 @@ tools/rar-lab/preauth/src/disk.rs
 tests/preauth/src/main.rs
 tests/preauth/run.sh
 tools/toolchain/acquire-preauth-closure.sh
+tools/toolchain/bind-preauth-head.sh
+tools/toolchain/verify-preauth-oci.sh
 tools/ci/check-specs.sh
 tools/ci/check-host-policy.sh
 tools/ci/test-host-policy.sh
