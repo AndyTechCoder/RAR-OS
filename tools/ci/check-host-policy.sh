@@ -45,7 +45,7 @@ config=$(resolve_repository_file "$requested_config")
 rules=$(resolve_repository_file "$requested_rules")
 
 if [ "$config" = "$root/.codex/config.toml" ]; then
-    expected_config_sha256='33dff9ac3285812814a003f35ff36d328765fa189010e105edec6816d6285078'
+    expected_config_sha256='b85c24b2ccfbf4c0574d94eb93b9f6d9ad4355c2ac61823e53de494f42953627'
     [ "$(sha256_file "$config")" = "$expected_config_sha256" ] || fail "canonical Codex configuration integrity mismatch"
 fi
 
@@ -138,7 +138,7 @@ assert_setting "sandbox_workspace_write" "writable_roots" "[]"
 assert_setting "sandbox_workspace_write" "network_access" "false"
 assert_setting "sandbox_workspace_write" "exclude_tmpdir_env_var" "true"
 assert_setting "sandbox_workspace_write" "exclude_slash_tmp" "true"
-assert_setting "agents" "max_threads" "4"
+assert_setting "agents" "max_threads" "2"
 assert_setting "agents" "max_depth" "1"
 
 auto_review_policy=$(awk '
