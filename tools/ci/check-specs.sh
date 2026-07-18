@@ -59,53 +59,42 @@ spec/fixtures/release-0/conformance-scenarios.v1
 sdk/generated/release-0/generate.sh
 sdk/generated/release-0/check.sh
 sdk/generated/release-0/lib.rs
-spec/lab/preauth/closure-v3.fields
-spec/lab/preauth/locks/r0-x86_64-preauth-v3.lock
 spec/lab/preauth/closure-input-lock-v4.fields
 spec/lab/preauth/transaction-graph-v1.fields
 spec/lab/preauth/transaction-bundle-v1.fields
+spec/lab/preauth/cutover-v1.manifest
 spec/lab/preauth/disk-v2.fields
 spec/lab/preauth/execution-host-v2.fields
 spec/lab/preauth/locks/r0-x86_64-preauth-input-v4.lock
 spec/lab/vm-profile/profile-v2.fields
 spec/lab/vm-profile/command-v2.fields
 spec/lab/preauth/locks/r0-x86_64-preauth-packages.v2
-spec/lab/preauth/locks/r0-x86_64-preauth-disk.v1
-spec/lab/vm-profile/examples/x86_64-preauth.command
-spec/lab/vm-profile/prepared/r0-x86_64-preauth-v1.cert
 spec/lab/preauth/package-v2.fields
-spec/lab/preauth/authority-v1.fields
-spec/lab/preauth/disk-v1.fields
-spec/lab/preauth/execution-host-v1.fields
-spec/lab/preauth/identity-graph-v2.fields
-spec/lab/preauth/ci-attestation-v2.fields
-spec/lab/preauth/prepared-certification-v1.fields
-spec/lab/preauth/authorization-identity-v1.fields
-spec/lab/preauth/consumption-key-v1.fields
-spec/lab/preauth/prepared/r0-x86_64-preauth-v1.host
-spec/lab/preauth/prepared/r0-x86_64-preauth-v1.identity
-spec/lab/preauth/prepared/r0-x86_64-preauth-v1.authority-identity
-spec/lab/preauth/prepared/r0-x86_64-preauth-v1.consumption-key
-spec/lab/preauth/prepared/r0-x86_64-preauth-v1.source-tree
 tools/rar-lab/preauth/src/lib.rs
-tools/rar-lab/preauth/src/contracts.rs
+tools/rar-lab/preauth/src/descriptor_fs.rs
+tools/rar-lab/preauth/src/hash.rs
 tools/rar-lab/preauth/src/json.rs
+tools/rar-lab/preauth/src/package.rs
+tools/rar-lab/preauth/src/transaction.rs
 tools/rar-lab/preauth/src/transaction_contracts.rs
 tools/rar-lab/preauth/src/disk.rs
 tests/preauth/src/main.rs
-tests/preauth/src/records.rs
 tests/preauth/run.sh
 tests/preauth/transaction-contracts.sh
+tests/preauth/fixtures/cutover-mutations.v1
 tools/toolchain/acquire-preauth-closure.sh
+tools/toolchain/preauth-transaction
 tools/toolchain/bind-preauth-head.sh
 tools/toolchain/verify-preauth-oci.sh
 tools/toolchain/preauth-verify-oci.rs
 tools/toolchain/preauth-validate-record.rs
 tools/ci/check-specs.sh
+tools/ci/check-preauth-cutover.sh
 tools/ci/check-host-policy.sh
 tools/ci/test-host-policy.sh
 tools/ci/fixtures/host-policy/README.md
 tools/rarbuild/bootstrap-lib.sh
+tools/rarbuild/src/safety_support.rs
 tools/rarbuild/contracts/rar-host-check-v2.fields
 tools/rarbuild/contracts/rar-host-test-v2.fields
 tools/rarbuild/contracts/rar-build-plan-v3.fields
@@ -122,7 +111,7 @@ printf '%s\n' "$required_files" | while IFS= read -r file; do
     [ -s "$file" ] || fail "empty required file: $file"
 done
 
-for script in tools/ci/check-specs.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh tests/preauth/transaction-contracts.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
+for script in tools/ci/check-specs.sh tools/ci/check-preauth-cutover.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh tests/preauth/run.sh tests/preauth/transaction-contracts.sh tools/toolchain/preauth-transaction spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
     [ -x "$script" ] || fail "required script is not executable: $script"
 done
 

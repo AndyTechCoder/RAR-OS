@@ -173,7 +173,7 @@ rarbuild_cleanup() {
     [ -n "${bootstrap_directory-}" ] || return 0
     rar_cleanup_private_directory \
         "$bootstrap_directory" \
-        rarbuild main.rs rarbuild.rs safety.rs unix_fs.rs || return 1
+        rarbuild main.rs rarbuild.rs safety.rs unix_fs.rs hash.rs || return 1
     bootstrap_directory=
 }
 trap 'rarbuild_cleanup' 0
@@ -184,8 +184,9 @@ rar_materialize_git_sources \
     "$bootstrap_directory" \
     tools/rarbuild/src/main.rs main.rs \
     tools/rarbuild/src/lib.rs rarbuild.rs \
-    tools/rar-lab/safety/src/lib.rs safety.rs \
-    tools/rar-lab/safety/src/unix_fs.rs unix_fs.rs || exit 2
+    tools/rarbuild/src/safety_support.rs safety.rs \
+    tools/rar-lab/safety/src/unix_fs.rs unix_fs.rs \
+    tools/rar-lab/preauth/src/hash.rs hash.rs || exit 2
 rar_compile_host_rust \
     "$bootstrap_directory" \
     main.rs \

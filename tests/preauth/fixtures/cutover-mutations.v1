@@ -1,0 +1,7 @@
+schema=rar-preauth-cutover-mutations-v1
+old-workflow-command|tools/toolchain/acquire-preauth-closure.sh
+source-old-shell|. tools/toolchain/prepare-preauth-output.sh
+import-old-rust-type|use preauth::AuthorizationRecord;
+accept-old-lock|schema=rar-preauth-closure-v3
+restore-prepared-record|schema=rar-preauth-prepared-certification-v1
+fallback-flag|RAR_ALLOW_LEGACY_PREAUTH=1

@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+[ "$#" -eq 1 ] && [ "$1" = --prepare ] || {
+  printf '%s\n' 'preauth-transaction-usage-refused' >&2
+  exit 64
+}
+printf '%s\n' 'preauth-transaction-m2-incomplete' >&2
+exit 73

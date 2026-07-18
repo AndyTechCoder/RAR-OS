@@ -96,7 +96,7 @@ bootstrap_test_cleanup() {
     [ -n "${test_directory-}" ] || return 0
     rar_cleanup_private_directory \
         "$test_directory" \
-        bootstrap-tests main.rs rarbuild.rs safety.rs unix_fs.rs oversized-line.lock || return 1
+        bootstrap-tests main.rs rarbuild.rs safety.rs unix_fs.rs hash.rs oversized-line.lock || return 1
     test_directory=
 }
 trap 'bootstrap_test_cleanup' 0
@@ -109,8 +109,9 @@ rar_materialize_git_sources \
     "$test_directory" \
     tests/bootstrap/src/main.rs main.rs \
     tools/rarbuild/src/lib.rs rarbuild.rs \
-    tools/rar-lab/safety/src/lib.rs safety.rs \
+    tools/rarbuild/src/safety_support.rs safety.rs \
     tools/rar-lab/safety/src/unix_fs.rs unix_fs.rs \
+    tools/rar-lab/preauth/src/hash.rs hash.rs \
     tests/bootstrap/fixtures/oversized-line.lock oversized-line.lock || exit 2
 rar_compile_host_rust \
     "$test_directory" \

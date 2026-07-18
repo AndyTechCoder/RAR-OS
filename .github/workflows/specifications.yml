@@ -29,58 +29,41 @@ jobs:
             "RAR_CI_RUNNER_OS=$RUNNER_OS" \
             "RAR_CI_RUNNER_ARCH=$RUNNER_ARCH" >> "$GITHUB_ENV"
 
-      - name: Check out repository
+      - name: Check out exact source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
 
-      - name: Validate in pinned read-only container on attested runner
+      - name: Validate host-only specifications and cutover
         shell: /usr/bin/dash -e {0}
         run: |
           host_uid=$(/usr/bin/id -u)
           host_gid=$(/usr/bin/id -g)
-          docker run --rm --read-only \
+          docker run --rm --read-only --network none \
             --user "$host_uid:$host_gid" \
+            --security-opt no-new-privileges --cap-drop ALL \
             --tmpfs "/tmp:rw,nosuid,nodev,size=128m,uid=$host_uid,gid=$host_gid,mode=1777" \
             --mount "type=bind,source=$GITHUB_WORKSPACE,target=/workspace" \
             --workdir /workspace \
             --env RAR_EXPECTED_SOURCE_REVISION \
             --env RAR_CI_BOOTSTRAP_IMAGE \
-            --env RAR_CI_RUNNER_IMAGE_OS \
-            --env RAR_CI_RUNNER_IMAGE_VERSION \
-            --env RAR_CI_RUNNER_OS \
-            --env RAR_CI_RUNNER_ARCH \
-            --env GITHUB_ACTIONS \
-            --env CI \
+            --env GITHUB_ACTIONS --env CI \
             rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 \
             /usr/bin/dash -e -c '
+              tools/ci/check-preauth-cutover.sh --self-test
               tools/ci/check-specs.sh
-              /usr/bin/dash -n tools/rarbuild/rarbuild tools/rarbuild/bootstrap-lib.sh tests/host-safety/run.sh tests/bootstrap/run.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh
+              /usr/bin/dash -n tools/rarbuild/rarbuild tools/rarbuild/bootstrap-lib.sh tests/host-safety/run.sh tests/bootstrap/run.sh tests/preauth/run.sh tools/toolchain/preauth-transaction
               spec/fixtures/release-0/run.sh --ci
               sdk/generated/release-0/check.sh --compile
               tests/host-safety/run.sh
               tests/bootstrap/run.sh
               tests/preauth/run.sh
-              set +e
-              output=$(tools/rarbuild/rarbuild run)
-              status=$?
-              set -e
-              [ "$status" -eq 73 ]
-              printf "%s\n" "$output" | grep -qx "resolver_invoked=false"
-              printf "%s\n" "$output" | grep -qx "spawner_invoked=false"
-              printf "%s\n" "$output" | grep -qx "target_execution=not-attempted"
             '
 
-  preauth-static:
-    name: preauth-static-no-execution
+  preauth-cutover:
+    name: preauth-transaction-cutover-refusal
     runs-on: ubuntu-24.04
-    env:
-      RAR_CI_BOOTSTRAP_IMAGE: sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
-      RAR_PREAUTH_ACQUISITION: signed-snapshot-only
-      RAR_EVENT_NAME: ${{ github.event_name }}
-      RAR_EVENT_SHA: ${{ github.sha }}
-      RAR_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '-' }}
     steps:
       - name: Check out exact source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -88,241 +71,19 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
 
-      - name: Bind evidence to the explicit checked-out head
+      - name: Prove sole transaction entrypoint refuses until M2
         shell: /usr/bin/dash -e {0}
         run: |
-          checked_out_sha=$(/usr/bin/git rev-parse HEAD)
-          binding=$(tools/toolchain/bind-preauth-head.sh \
-            "$RAR_EVENT_NAME" "$RAR_EVENT_SHA" "$RAR_PR_HEAD_SHA" "$checked_out_sha")
-          [ "$binding" = "source_revision=$checked_out_sha" ]
-          printf 'RAR_CHECKED_OUT_SOURCE_REVISION=%s\n' "$checked_out_sha" >> "$GITHUB_ENV"
-
-      - name: Acquire signed snapshot closure without installation on host
-        shell: /usr/bin/dash -e {0}
-        run: |
-          host_uid=$(/usr/bin/id -u)
-          host_gid=$(/usr/bin/id -g)
-          ownership=$(tools/toolchain/prepare-preauth-output.sh)
-          {
-            printf 'schema=rar-preauth-output-ownership-v1\n'
-            printf 'output_guard_sha256='; sha256sum tools/toolchain/prepare-preauth-output.sh | cut -d ' ' -f 1
-            printf '%s\n' "$ownership"
-          } > out/r0/preauth/output-ownership.evidence
-          docker run --rm --read-only \
-            --user "$host_uid:$host_gid" \
-            --security-opt no-new-privileges --cap-drop ALL \
-            --tmpfs /tmp:rw,exec,nosuid,nodev,size=512m,mode=1777 \
-            --mount "type=bind,source=$GITHUB_WORKSPACE,target=/workspace" \
-            --workdir /workspace \
-            --env HOME=/tmp/rar-home \
-            --env RAR_CI_BOOTSTRAP_IMAGE \
-            --env RAR_PREAUTH_ACQUISITION \
-            --env RAR_OUTPUT_UID="$host_uid" \
-            --env RAR_OUTPUT_GID="$host_gid" \
-            rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 \
-            /usr/bin/dash -e -c 'mkdir -p "$HOME"; exec tools/toolchain/acquire-preauth-closure.sh'
-
-      - name: Produce immutable derived OCI image
-        shell: /usr/bin/dash -e {0}
-        run: |
-          host_uid=$(/usr/bin/id -u)
-          host_gid=$(/usr/bin/id -g)
-          docker run --rm --read-only --network none \
-            --user "$host_uid:$host_gid" \
-            --security-opt no-new-privileges --cap-drop ALL \
-            --tmpfs /tmp:rw,exec,nosuid,nodev,size=256m,mode=1777 \
-            --mount "type=bind,source=$GITHUB_WORKSPACE,target=/workspace" \
-            --workdir /workspace \
-            --env HOME=/tmp/rar-home \
-            rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 \
-            /usr/bin/dash -e -c '
-              mkdir -p "$HOME"
-              /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc \
-                --edition=2024 tools/toolchain/preauth-verify-oci.rs \
-                -o out/r0/preauth/acquisition/host-tools/preauth-verify-oci
-              /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc \
-                --edition=2024 tools/toolchain/preauth-validate-record.rs \
-                -o out/r0/preauth/acquisition/host-tools/preauth-validate-record
-            '
-          for candidate in one two; do
-            SOURCE_DATE_EPOCH=1784332800 docker buildx build \
-              --network=none \
-              --no-cache \
-              --provenance=false \
-              --load \
-              --build-arg SOURCE_DATE_EPOCH=1784332800 \
-              --tag "rar-preauth:${RAR_CHECKED_OUT_SOURCE_REVISION}" \
-              --metadata-file "out/r0/preauth/acquisition/derived-build/$candidate/metadata.json" \
-              out/r0/preauth/acquisition/derived-context
-            docker image inspect --format '{{.Id}}' \
-              "rar-preauth:${RAR_CHECKED_OUT_SOURCE_REVISION}" \
-              > "out/r0/preauth/acquisition/derived-build/$candidate/image.id"
-            docker image inspect --format \
-              'oci_loaded_image id={{.Id}} os={{.Os}} architecture={{.Architecture}} repo_digest_count={{len .RepoDigests}} rootfs_diff_id_count={{len .RootFS.Layers}} rootfs_diff_ids={{json .RootFS.Layers}}' \
-              "rar-preauth:${RAR_CHECKED_OUT_SOURCE_REVISION}"
-            docker save \
-              --output "out/r0/preauth/acquisition/derived-build/$candidate/raw-image.tar" \
-              "rar-preauth:${RAR_CHECKED_OUT_SOURCE_REVISION}"
-            members=$(out/r0/preauth/acquisition/host-tools/preauth-verify-oci \
-              --member-list \
-              "out/r0/preauth/acquisition/derived-build/$candidate/raw-image.tar" \
-              "out/r0/preauth/acquisition/derived-build/$candidate/metadata.json" \
-              "out/r0/preauth/acquisition/derived-build/$candidate/image.id" -)
-            mkdir "out/r0/preauth/acquisition/derived-build/$candidate/archive-root"
-            /usr/bin/tar -xf \
-              "out/r0/preauth/acquisition/derived-build/$candidate/raw-image.tar" \
-              -C "out/r0/preauth/acquisition/derived-build/$candidate/archive-root"
-            out/r0/preauth/acquisition/host-tools/preauth-verify-oci \
-              --canonical-index \
-              "out/r0/preauth/acquisition/derived-build/$candidate/raw-image.tar" \
-              "out/r0/preauth/acquisition/derived-build/$candidate/metadata.json" \
-              "out/r0/preauth/acquisition/derived-build/$candidate/image.id" - \
-              > "out/r0/preauth/acquisition/derived-build/$candidate/archive-root/index.json.pending"
-            /bin/mv \
-              "out/r0/preauth/acquisition/derived-build/$candidate/archive-root/index.json.pending" \
-              "out/r0/preauth/acquisition/derived-build/$candidate/archive-root/index.json"
-            printf '%s\n' "$members" | /usr/bin/tar --sort=name --mtime='@1784332800' \
-              --owner=0 --group=0 --numeric-owner --format=gnu \
-              -cf "out/r0/preauth/acquisition/derived-build/$candidate/image.tar" \
-              -C "out/r0/preauth/acquisition/derived-build/$candidate/archive-root" -T -
-            docker load \
-              --input "out/r0/preauth/acquisition/derived-build/$candidate/image.tar" \
-              > "out/r0/preauth/acquisition/derived-build/$candidate/load.evidence"
-            canonical_loaded_id=$(docker image inspect --format '{{.Id}}' \
-              "rar-preauth:${RAR_CHECKED_OUT_SOURCE_REVISION}")
-            IFS= read -r expected_loaded_id \
-              < "out/r0/preauth/acquisition/derived-build/$candidate/image.id"
-            [ "$canonical_loaded_id" = "$expected_loaded_id" ]
-            /bin/rm -f "out/r0/preauth/acquisition/derived-build/$candidate/raw-image.tar"
-            /bin/rm -rf "out/r0/preauth/acquisition/derived-build/$candidate/archive-root"
-          done
-          tools/toolchain/verify-preauth-oci.sh \
-            out/r0/preauth/acquisition/derived-build/one/image.tar \
-            out/r0/preauth/acquisition/derived-build/one/metadata.json \
-            out/r0/preauth/acquisition/derived-build/one/image.id \
-            out/r0/preauth/acquisition/derived-build/two/image.tar \
-            out/r0/preauth/acquisition/derived-build/two/metadata.json \
-            out/r0/preauth/acquisition/derived-build/two/image.id \
-            > out/r0/preauth/acquisition/derived-verification.evidence
-          verified_image=$(sed -n 's/^loaded_image_config_sha256=//p' out/r0/preauth/acquisition/derived-verification.evidence)
-          if [ "${#verified_image}" -ne 64 ]; then
-            echo 'assertion=closure.loaded-config.length expected=64 actual=invalid' >&2
-            exit 1
-          fi
-          expected_image=$(sed -n 's/^docker_config_sha256=//p' spec/lab/preauth/locks/r0-x86_64-preauth-v3.lock)
-          if [ "$verified_image" != "$expected_image" ]; then
-            echo "assertion=closure.loaded-config.digest expected=$expected_image actual=$verified_image" >&2
-            exit 1
-          fi
-          printf 'RAR_VERIFIED_PREAUTH_IMAGE=sha256:%s\n' "$verified_image" >> "$GITHUB_ENV"
-          cp out/r0/preauth/acquisition/derived-build/one/metadata.json \
-            out/r0/preauth/acquisition/derived-image.metadata.json
-          mv out/r0/preauth/acquisition/derived-build/one/image.tar \
-            out/r0/preauth/acquisition/derived-image.tar
-
-      - name: Build twice, bind media, and run host-only controls
-        shell: /usr/bin/dash -e {0}
-        run: |
-          docker run --rm --read-only --network none \
-            --user "$(id -u):$(id -g)" \
-            --security-opt no-new-privileges --cap-drop ALL \
-            --tmpfs /tmp:rw,exec,nosuid,nodev,size=256m,mode=1777 \
-            --mount "type=bind,source=$GITHUB_WORKSPACE,target=/workspace" \
-            --workdir /workspace \
-            --env SOURCE_DATE_EPOCH=1784332800 \
-            --env RAR_CHECKED_OUT_SOURCE_REVISION \
-            --env CI \
-            --env GITHUB_ACTIONS \
-            --env RAR_PREAUTH_BUILD_CONTAINER=rar-preauth-closure-v3 \
-            --env RAR_TARGET_EXECUTION=prohibited \
-            --env HOME=/tmp/rar-home \
-            "$RAR_VERIFIED_PREAUTH_IMAGE" \
-            /usr/bin/dash -e -c '
-              mkdir -p "$HOME"
-              /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition=2024 tools/rar-lab/preauth/src/disk.rs -o /tmp/rar-qcow2-writer
-              /tmp/rar-qcow2-writer /workspace/out/r0/vm/x86_64/seed.qcow2
-              cp out/r0/vm/x86_64/seed.qcow2 out/r0/vm/x86_64/launch-0001.qcow2
-              nucleus/arch/x86_64/build-preauth.sh /workspace/out/r0/preauth/build/one
-              nucleus/arch/x86_64/build-preauth.sh /workspace/out/r0/preauth/build/two
-              cmp out/r0/preauth/build/one/rar-r0-x86_64-preauth.elf out/r0/preauth/build/two/rar-r0-x86_64-preauth.elf
-              cp out/r0/preauth/build/one/rar-r0-x86_64-preauth.elf out/r0/artifacts/x86_64/
-              readelf -h -l -s out/r0/artifacts/x86_64/rar-r0-x86_64-preauth.elf
-              tests/preauth/run.sh
-              spec/fixtures/release-0/run.sh --ci
-              sdk/generated/release-0/check.sh --compile
-              {
-                printf "schema=rar-preauth-exact-head-evidence-v1\n"
-                printf "source_revision=%s\n" "${RAR_CHECKED_OUT_SOURCE_REVISION}"
-                printf "profile_sha256="; sha256sum spec/lab/vm-profile/examples/x86_64-preauth.profile | cut -d " " -f 1
-                printf "artifact_sha256="; sha256sum out/r0/artifacts/x86_64/rar-r0-x86_64-preauth.elf | cut -d " " -f 1
-                printf "disk_seed_sha256="; sha256sum out/r0/vm/x86_64/seed.qcow2 | cut -d " " -f 1
-                printf "disk_child_sha256="; sha256sum out/r0/vm/x86_64/launch-0001.qcow2 | cut -d " " -f 1
-                printf "lld_sha256="; sha256sum /usr/bin/ld.lld-19 | cut -d " " -f 1
-                printf "qemu_sha256="; sha256sum /usr/bin/qemu-system-x86_64 | cut -d " " -f 1
-                for firmware in /usr/share/OVMF/OVMF_CODE_4M.fd /usr/share/OVMF/OVMF_VARS_4M.fd; do
-                  printf "ovmf_%s_sha256=" "$(basename "$firmware")"; sha256sum "$firmware" | cut -d " " -f 1
-                done
-                printf "package_manifest_sha256="; sha256sum out/r0/preauth/acquisition/packages.v2 | cut -d " " -f 1
-                printf "target_execution=not-attempted\nqemu_execution=not-attempted\nemulator_execution=not-attempted\nvm_execution=not-attempted\naws_calls=not-attempted\n"
-              } | tee out/r0/preauth/exact-head.evidence
-            '
-
-      - name: Emit exact-head CI attestation for prepared identities
-        shell: /usr/bin/dash -e {0}
-        run: |
-          validator=out/r0/preauth/acquisition/host-tools/preauth-validate-record
-          "$validator" packages spec/lab/preauth/locks/r0-x86_64-preauth-packages.v2
-          "$validator" closure spec/lab/preauth/locks/r0-x86_64-preauth-v3.lock \
-            spec/lab/preauth/locks/r0-x86_64-preauth-packages.v2
-          "$validator" host spec/lab/preauth/prepared/r0-x86_64-preauth-v1.host
-          "$validator" prepared spec/lab/vm-profile/prepared/r0-x86_64-preauth-v1.cert
-          "$validator" identity spec/lab/preauth/prepared/r0-x86_64-preauth-v1.identity
-          attested_identity=out/r0/preauth/exact-head.identity
-          cp spec/lab/preauth/prepared/r0-x86_64-preauth-v1.identity "$attested_identity.work"
-          sed -i 's/^phase=prepared$/phase=attested/' "$attested_identity.work"
-          for pair in \
-            canonical_oci_archive_sha256:derived_oci_archive_sha256 \
-            canonical_oci_index_sha256:canonical_oci_index_sha256 \
-            selected_oci_manifest_sha256:selected_oci_manifest_sha256 \
-            docker_config_sha256:docker_config_sha256 \
-            compressed_layer_descriptor_set_sha256:layer_descriptor_set_sha256 \
-            rootfs_diff_id_set_sha256:rootfs_diff_id_set_sha256; do
-            identity_key=${pair%%:*}; evidence_key=${pair#*:}
-            value=$(sed -n "s/^$evidence_key=//p" out/r0/preauth/acquisition/derived-verification.evidence)
-            [ "${#value}" -eq 64 ]
-            sed -i "s/^$identity_key=.*/$identity_key=$value/" "$attested_identity.work"
-          done
-          sed '/^record_sha256=/d' "$attested_identity.work" > "$attested_identity.payload"
-          cp "$attested_identity.payload" "$attested_identity"
-          printf 'record_sha256=' >> "$attested_identity"
-          sha256sum "$attested_identity.payload" | cut -d ' ' -f 1 >> "$attested_identity"
-          "$validator" identity "$attested_identity"
-          attestation=out/r0/preauth/exact-head.attestation
-          {
-            printf 'schema=rar-preauth-ci-attestation-v2\nphase=attested\n'
-            printf 'attested_identity_graph_sha256='; sha256sum "$attested_identity" | cut -d ' ' -f 1
-            printf 'source_revision=%s\nevent=%s\nrun_id=%s\n' "$RAR_CHECKED_OUT_SOURCE_REVISION" "$RAR_EVENT_NAME" "$GITHUB_RUN_ID"
-            printf 'archive_sha256='; sha256sum out/r0/preauth/acquisition/derived-image.tar | cut -d ' ' -f 1
-            sed -n '/^buildx_descriptor_kind=/p;/^buildx_descriptor_sha256=/p;/^docker_config_sha256=/p;/^selected_oci_manifest_sha256=/p;/^canonical_oci_index_sha256=/p;/^layer_descriptor_set_sha256=/p;/^rootfs_diff_id_set_sha256=/p;/^loaded_image_config_sha256=/p' \
-              out/r0/preauth/acquisition/derived-verification.evidence
-            printf 'package_manifest_sha256='; sha256sum out/r0/preauth/acquisition/packages.v2 | cut -d ' ' -f 1
-            printf 'profile_sha256='; sha256sum spec/lab/vm-profile/examples/x86_64-preauth.profile | cut -d ' ' -f 1
-            printf 'artifact_sha256='; sha256sum out/r0/artifacts/x86_64/rar-r0-x86_64-preauth.elf | cut -d ' ' -f 1
-            printf 'disk_sha256='; sha256sum out/r0/vm/x86_64/launch-0001.qcow2 | cut -d ' ' -f 1
-            printf 'closure_sha256='; sha256sum spec/lab/preauth/locks/r0-x86_64-preauth-v3.lock | cut -d ' ' -f 1
-          } > "$attestation.payload"
-          cp "$attestation.payload" "$attestation"
-          printf 'record_sha256=' >> "$attestation"
-          sha256sum "$attestation.payload" | cut -d ' ' -f 1 >> "$attestation"
-          "$validator" attestation "$attestation" "$RAR_CHECKED_OUT_SOURCE_REVISION" "$RAR_EVENT_NAME" "$GITHUB_RUN_ID" "$attested_identity"
-          rm -f "$attestation.payload" "$attested_identity.payload" "$attested_identity.work"
-
-      - name: Print canonical closure evidence
-        shell: /usr/bin/dash -e {0}
-        run: |
-          cat out/r0/preauth/acquisition/discovery.evidence
-          cat out/r0/preauth/acquisition/packages.v2
-          cat out/r0/preauth/acquisition/derived-image.metadata.json
-          cat out/r0/preauth/acquisition/derived-verification.evidence
-          cat out/r0/preauth/exact-head.evidence
-          cat out/r0/preauth/exact-head.attestation
+          tools/ci/check-preauth-cutover.sh
+          set +e
+          output=$(tools/toolchain/preauth-transaction --prepare 2>&1)
+          status=$?
+          set -e
+          [ "$status" -eq 73 ]
+          [ "$output" = preauth-transaction-m2-incomplete ]
+          printf '%s\n' \
+            'target_execution=not-attempted' \
+            'qemu_execution=not-attempted' \
+            'emulator_execution=not-attempted' \
+            'vm_execution=not-attempted' \
+            'aws_calls=not-attempted'

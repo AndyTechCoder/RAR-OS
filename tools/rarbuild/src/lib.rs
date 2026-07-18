@@ -2,7 +2,7 @@
 
 #[allow(dead_code)]
 #[cfg_attr(rar_flat_bootstrap, path = "safety.rs")]
-#[cfg_attr(not(rar_flat_bootstrap), path = "../../rar-lab/safety/src/lib.rs")]
+#[cfg_attr(not(rar_flat_bootstrap), path = "safety_support.rs")]
 pub mod safety;
 
 use std::collections::BTreeSet;
