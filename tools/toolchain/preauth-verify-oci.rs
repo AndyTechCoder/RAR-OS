@@ -193,9 +193,6 @@ fn validate_layer_sources(
     if sources.len() != diff_ids.len() || sources.len() != layers.len() {
         fail("Docker LayerSources count mismatch");
     }
-    let authoritative_layers = layers.iter().map(|layer| {
-        blob_digest(layer).unwrap_or_else(|| fail("invalid OCI layer path"))
-    }).collect::<BTreeSet<_>>();
     let mut source_digests = BTreeSet::new();
     let mut media_mismatches = Vec::new();
     for (position, diff_id) in diff_ids.iter().enumerate() {
@@ -213,26 +210,29 @@ fn validate_layer_sources(
         let size = descriptor.get("size").and_then(preauth::Json::number)
             .unwrap_or_else(|error| fail(error.code));
         if size == 0 || size > MAX_MEMBER { fail("Docker LayerSources size bound exceeded"); }
+        let key_digest = diff_id.strip_prefix("sha256:").unwrap();
+        let layer_digest = blob_digest(&layers[position])
+            .unwrap_or_else(|| fail("invalid OCI layer path"));
+        if digest != key_digest || digest != layer_digest {
+            fail("Docker LayerSources descriptor cross-link mismatch");
+        }
         if digest == config_digest || !source_digests.insert(digest.clone()) {
             fail("Docker LayerSources identity collision");
         }
         let source_path = format!("blobs/sha256/{digest}");
-        let source = entries.get(&source_path);
-        if let Some(source) = source {
-            if source.sha256 != digest || source.size != size {
-                fail("Docker LayerSources payload mismatch");
-            }
+        let source = entries.get(&source_path)
+            .unwrap_or_else(|| fail("Docker LayerSources payload absent"));
+        if source.sha256 != digest || source.size != size {
+            fail("Docker LayerSources payload mismatch");
         }
-        if media_type != "application/vnd.oci.image.layer.v1.tar+gzip" {
-            let key_digest = diff_id.strip_prefix("sha256:").unwrap();
-            let layer_digest = blob_digest(&layers[position]);
+        if media_type != "application/vnd.oci.image.layer.v1.tar" {
+            let map_index = sources.keys().position(|key| key == diff_id).unwrap_or(position);
             media_mismatches.push(format!(
-                "layer_sources_media_mismatch path=/0/LayerSources/* map_index={} manifest_position={} key_prefix={} key_sha256={} actual={} actual_bytes={} expected=application/vnd.oci.image.layer.v1.tar+gzip digest_payload_match={} size_payload_match={} key_matches_manifest_layer={} descriptor_digest_matches_manifest_layer={}",
-                position, position, &key_digest[..12], preauth::sha256_hex(diff_id.as_bytes()),
+                "layer_sources_media_mismatch path=/0/LayerSources/* map_index={} manifest_position={} key_prefix={} key_sha256={} actual={} actual_bytes={} expected=application/vnd.oci.image.layer.v1.tar digest_payload_match={} size_payload_match={} key_matches_manifest_layer={} descriptor_digest_matches_manifest_layer={}",
+                map_index, position, &key_digest[..12], preauth::sha256_hex(diff_id.as_bytes()),
                 diagnostic_text(media_type), media_type.len(),
-                source.map(|entry| entry.sha256 == digest).map_or("absent", |value| if value { "true" } else { "false" }),
-                source.map(|entry| entry.size == size).map_or("absent", |value| if value { "true" } else { "false" }),
-                layer_digest == Some(key_digest), authoritative_layers.contains(digest.as_str()),
+                source.sha256 == digest, source.size == size,
+                layer_digest == key_digest, digest == layer_digest,
             ));
         }
     }
@@ -279,7 +279,31 @@ fn report_index_mapping(index: &str, expected_digest: &str, expected_size: u64, 
     let descriptors = parsed.get("manifests").and_then(preauth::Json::array).unwrap_or(&[]);
     let digests = descriptors.iter().map(|value| sha_digest(value.get("digest").unwrap())).collect::<Vec<_>>();
     let sizes = descriptors.iter().map(|value| value.get("size").and_then(preauth::Json::number).unwrap_or(0)).collect::<Vec<_>>();
-    let (architecture, os, variant, os_version, os_features, features) = (Vec::<String>::new(), Vec::<String>::new(), Vec::<String>::new(), Vec::<String>::new(), Vec::<String>::new(), Vec::<String>::new());
+    let mut architecture = Vec::<String>::new();
+    let mut os = Vec::<String>::new();
+    let mut variant = Vec::<String>::new();
+    let mut os_version = Vec::<String>::new();
+    let mut os_features = Vec::<String>::new();
+    let mut features = Vec::<String>::new();
+    for descriptor in descriptors {
+        let Ok(platform) = descriptor.get("platform") else { continue };
+        let Ok(platform) = platform.object() else { continue };
+        let scalar = |name: &str, output: &mut Vec<String>| {
+            if let Some(value) = platform.get(name).and_then(|value| value.string().ok()) {
+                output.push(diagnostic_text(value));
+            }
+        };
+        scalar("architecture", &mut architecture);
+        scalar("os", &mut os);
+        scalar("variant", &mut variant);
+        scalar("os.version", &mut os_version);
+        for (name, output) in [("os.features", &mut os_features), ("features", &mut features)] {
+            if let Some(values) = platform.get(name).and_then(|value| value.array().ok()) {
+                output.extend(values.iter().filter_map(|value| value.string().ok())
+                    .take(16).map(diagnostic_text));
+            }
+        }
+    }
     eprintln!(
         "oci_index_mapping actual_schema={schema:?} expected_schema=[2] expected_schema_source=oci-image-spec actual_media={media:?} expected_media=[application/vnd.oci.image.index.v1+json,application/vnd.oci.image.manifest.v1+json] expected_media_source=validated-index-and-selected-manifest",
     );
