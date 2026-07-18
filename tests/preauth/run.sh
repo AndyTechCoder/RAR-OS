@@ -41,6 +41,8 @@ assert_files_equal() {
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 cd "$root"
 
+tests/preauth/transaction-contracts.sh
+
 tests/preauth/output-ownership.sh
 
 head=0123456789abcdef0123456789abcdef01234567

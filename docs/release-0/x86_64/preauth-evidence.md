@@ -1,24 +1,16 @@
 # Prompt 7A Pre-authorization Evidence
 
-Status: prepared records only; exact-head CI attestation and independent review pending; execution unauthorized
+Status: M1 transaction contract frozen; implementation and regenerated evidence pending; execution unauthorized
 
-Prompt 7A uses a two-phase evidence model. Committed `phase=prepared` records bind immutable inputs and deliberately contain no Git commit, workflow run, or generated archive claim; this avoids an impossible commit self-reference. Each push and pull-request route checks out the explicit branch head, rejects merge-ref or event mismatch, independently builds closure schema v3, and emits a `phase=attested` record bound to that checked-out SHA, event and run ID. The v3 lock and attestation preserve distinct typed fields for the canonical archive, Buildx Docker-config descriptor, Docker config, byte-present canonical OCI index, selected OCI manifest, ordered compressed layers, ordered rootfs diff IDs and loaded image config. Ambiguous v2 records and cross-type substitutions are rejected. A repository-owned bounded structural JSON parser rejects duplicate keys, spoofed keys in strings, invalid escapes/Unicode, unknown fields, depth/size overflow and trailing data before graph use.
+ADR 0022 replaces the earlier mutable prepared/attested graph with a temporal DAG that has no commit self-reference. The committed `closure-input-lock-v4` binds only immutable external inputs, schema/grammar versions, algorithms, and policies. A future completed `preauth-transaction` run emits an external immutable `transaction-bundle-v1` and `transaction-graph-v1` exactly once for an exact checked-out source SHA. Distinct push and pull-request `ci-attestation-v3` leaves retain event/run/attempt/workflow identity while an `attestation-set-v1` proves both leaves name the same deterministic graph. Review certificate, owner authorization, and signed launch session are later temporal nodes and are neither committed nor fabricated by Prompt 7A construction.
+
+M1 freezes schemas, typed Rust parsing, version refusal, transaction bounds, privilege separation, deterministic encoding, failure effects, and atomic-publication semantics. It does not claim that the current legacy shell pipeline satisfies M2 descriptor ownership. All prior generated archive/artifact hashes and prepared records are downstream evidence invalidated by the redesign and are not current certification evidence.
 
 The approved closure contains exactly 36 canonical package rows. Every row binds binary name/version/architecture/filename/size/hash/license hash and signed-snapshot source package name/version. Acquisition compares the complete observed manifest and every closure evidence field to the committed lock before extracting any package into the derived image. The strict OCI verifier bounds and checks the tar, Docker's required canonical `repositories` member, canonical OCI index bytes and exact two-annotation policy, manifest, config, layers, diff IDs, reported descriptor, and actually loaded image ID across two byte-identical builds. The repository index is one root-owned `0644` regular file of at most 512 bytes and must byte-exactly bind the sole `rar-preauth:<checked-out-head>` tag to the verified final layer; its bytes are covered by the canonical archive digest. The raw Docker export is validated before extraction and projected to the exact rooted graph. At the diagnosed closure, six inline content-addressed Docker-store blobs had no inbound edge and were excluded; the canonical archive contains only its four roots, sole config, six ordered layers, and unique OCI image manifest. A final archive containing any unreferenced valid-looking digest still fails closed. Diagnostics sort and cap normalized path/type/size/mode/ownership/digest/class/inbound facts and never print member content.
 
 Repository output ownership is specified in [preauth-output-ownership.md](preauth-output-ownership.md). The runner creates and validates the complete allowlisted `out/r0` hierarchy before the first container, records the guard hash and relative ownership map, and runs every repository-writing container as that same UID/GID with no capabilities and no-new-privileges. No container-root writable workspace mount or privileged output import exists.
 
-The selected profile SHA-256 is
-`8e7bc38fa513700556b7ea493ffd42b6df6b4adcaf0a4719a0c7fe11f7eb165f`,
-its typed command SHA-256 is
-`7d8e5f500c35b5da4de0d3f2a6d9b667563bb6e3ff7ed6503192ee8e69e0550d`,
-and its twice-built static artifact SHA-256 is
-`96b7705f1dd987060c34ac049afd5a0d20fa58d8aff6586ce9090dbdf8a989ea`.
-The deterministic seed and disposable child disk bytes both have SHA-256
-`141d4f9b5756451e4d5874ac2d68c5c59052b82e52494d29ef8624fa3402e766`;
-their content-bound disk record digest is
-`89e160c117154dded20d7daeaf75576dd082a9d83d5ade47f9254a6e35371826`.
-The prepared certification, execution-host record, and complete identity graph are canonical self-hashed records under `spec/lab/`. The graph binds every package/source/signature/license, tool, firmware, artifact, disk, profile, command, execution-host, authority-policy, resolver/spawner, prepared-certification, consumption-key, and source-tree edge. It remains `authorization_state=unissued`.
+No profile, command, artifact, archive, disk, host, graph, attestation, review, owner authorization, or session digest is current evidence until M2–M5 regenerate it through the frozen DAG. Legacy committed prepared records remain only as migration inputs to be deleted or hard-refused; they are not launch-authorizing and no new consumer may accept them.
 
 Every route records `target_execution=not-attempted`,
 `qemu_execution=not-attempted`, `emulator_execution=not-attempted`,

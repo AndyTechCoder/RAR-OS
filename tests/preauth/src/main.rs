@@ -10,10 +10,53 @@ use preauth::{
     consume_once, explicit_non_execution_evidence, synthetic_crash_recovery,
     synthetic_output_limit_cleanup, synthetic_timeout_cleanup, valid_repository_relative,
     StrictAuthorityRecord, sha256_hex,
+    InputLockV4, TransactionGraphV1, TRANSACTION_GRAPH_FIELDS,
 };
 
 fn hash(byte: char) -> String {
     std::iter::repeat_n(byte, 64).collect()
+}
+
+#[test]
+fn transaction_contract_v4_rejects_legacy_and_source_dependent_lock_fields() {
+    let lock = include_str!("../../../spec/lab/preauth/locks/r0-x86_64-preauth-input-v4.lock");
+    InputLockV4::parse(lock).expect("v4 input lock");
+    assert_eq!(
+        InputLockV4::parse(&lock.replacen("rar-preauth-closure-input-lock-v4", "rar-preauth-closure-v3", 1))
+            .unwrap_err().code,
+        "invalid-input-lock-v4"
+    );
+    let injected = lock.replace(
+        "launch_authority=none\n",
+        &format!("canonical_oci_archive_sha256={}\nlaunch_authority=none\n", hash('a')),
+    );
+    assert_eq!(InputLockV4::parse(&injected).unwrap_err().code, "transaction-field-count");
+}
+
+#[test]
+fn transaction_graph_is_once_hashed_typed_and_complete() {
+    let mut payload = String::new();
+    for name in &TRANSACTION_GRAPH_FIELDS[..TRANSACTION_GRAPH_FIELDS.len() - 1] {
+        let value = match *name {
+            "schema" => "rar-preauth-transaction-graph-v1".to_owned(),
+            "source_revision" => "a".repeat(40),
+            "raw_to_canonical_index_relation" =>
+                "strict-json-parse+canonical-serialize-v1".to_owned(),
+            _ => hash('b'),
+        };
+        payload.push_str(name); payload.push('='); payload.push_str(&value); payload.push('\n');
+    }
+    let graph = format!("{payload}record_sha256={}\n", sha256_hex(payload.as_bytes()));
+    let parsed = TransactionGraphV1::parse(&graph).expect("transaction graph v1");
+    assert_eq!(parsed.source_revision, "a".repeat(40));
+    for required in ["disk_seed_sha256", "disk_initial_sha256", "ovmf_code_sha256",
+        "ovmf_vars_sha256", "supervisor_sha256", "publication_receipt_sha256"] {
+        assert!(parsed.nodes.contains_key(required), "missing typed edge: {required}");
+    }
+    let old = graph.replacen("rar-preauth-transaction-graph-v1", "rar-preauth-identity-graph-v2", 1);
+    assert_eq!(TransactionGraphV1::parse(&old).unwrap_err().code, "invalid-transaction-graph-v1");
+    let changed = graph.replacen(&hash('b'), &hash('c'), 1);
+    assert_eq!(TransactionGraphV1::parse(&changed).unwrap_err().code, "transaction-graph-integrity");
 }
 
 fn graph() -> IdentityGraph {

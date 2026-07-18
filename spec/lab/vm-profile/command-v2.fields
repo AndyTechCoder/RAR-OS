@@ -1,0 +1,11 @@
+schema
+executable_slot
+firmware_code_slot
+firmware_vars_slot
+artifact_slot
+runtime_disk_slot
+argument_encoding
+argument_vector_sha256
+environment_sha256
+resource_controller_sha256
+record_sha256

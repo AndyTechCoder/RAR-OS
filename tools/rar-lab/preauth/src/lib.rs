@@ -5,11 +5,13 @@ use std::path::{Component, Path};
 
 mod contracts;
 mod json;
+mod transaction_contracts;
 pub use contracts::{
     AttestationRecord, ClosureLock, ExecutionHostRecord, IdentityGraph, PackageManifest,
     PreparedCertification, StrictAuthorityRecord, sha256_hex, sha256_reader,
 };
 pub use json::Json;
+pub use transaction_contracts::{InputLockV4, TransactionGraphV1, INPUT_LOCK_FIELDS, TRANSACTION_GRAPH_FIELDS};
 
 pub const AUTHORITY_SCHEMA: &str = "rar-external-authorization-v1";
 pub const CLOSURE_SCHEMA: &str = "rar-preauth-closure-v3";
@@ -35,7 +37,7 @@ pub struct PreauthError {
 }
 
 impl PreauthError {
-    fn new(code: &'static str) -> Self {
+    pub(crate) fn new(code: &'static str) -> Self {
         Self { code }
     }
 }

@@ -54,5 +54,6 @@ Status: Gate 0 approved on 2026-07-16
 - [ADR 0019: Release 0 External One-Shot Authority](adr/0019-release-0-external-one-shot-authority.md)
 - [ADR 0020: Release 0 Content-Bound Disposable Disk](adr/0020-release-0-content-bound-disposable-disk.md)
 - [ADR 0021: Release 0 Certified Execution-Host Boundary](adr/0021-release-0-certified-execution-host-boundary.md)
+- [ADR 0022: Release 0 Two-Boundary Preauthorization](adr/0022-release-0-two-boundary-preauthorization.md)
 
 Gate 0 approval makes the indexed direction and the Release 0 task packet implementation contracts. It does not approve later release-specific interfaces early, prevent ADR-governed evolution, or make a technical implementation permanently irreplaceable.

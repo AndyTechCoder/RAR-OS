@@ -46,6 +46,7 @@ docs/adr/0018-release-0-debian-snapshot-oci-closure.md
 docs/adr/0019-release-0-external-one-shot-authority.md
 docs/adr/0020-release-0-content-bound-disposable-disk.md
 docs/adr/0021-release-0-certified-execution-host-boundary.md
+docs/adr/0022-release-0-two-boundary-preauthorization.md
 docs/release-0/contracts/README.md
 spec/boot/handoff-v1.fields
 spec/hardware/rhd-v1.fields
@@ -60,6 +61,14 @@ sdk/generated/release-0/check.sh
 sdk/generated/release-0/lib.rs
 spec/lab/preauth/closure-v3.fields
 spec/lab/preauth/locks/r0-x86_64-preauth-v3.lock
+spec/lab/preauth/closure-input-lock-v4.fields
+spec/lab/preauth/transaction-graph-v1.fields
+spec/lab/preauth/transaction-bundle-v1.fields
+spec/lab/preauth/disk-v2.fields
+spec/lab/preauth/execution-host-v2.fields
+spec/lab/preauth/locks/r0-x86_64-preauth-input-v4.lock
+spec/lab/vm-profile/profile-v2.fields
+spec/lab/vm-profile/command-v2.fields
 spec/lab/preauth/locks/r0-x86_64-preauth-packages.v2
 spec/lab/preauth/locks/r0-x86_64-preauth-disk.v1
 spec/lab/vm-profile/examples/x86_64-preauth.command
@@ -81,10 +90,12 @@ spec/lab/preauth/prepared/r0-x86_64-preauth-v1.source-tree
 tools/rar-lab/preauth/src/lib.rs
 tools/rar-lab/preauth/src/contracts.rs
 tools/rar-lab/preauth/src/json.rs
+tools/rar-lab/preauth/src/transaction_contracts.rs
 tools/rar-lab/preauth/src/disk.rs
 tests/preauth/src/main.rs
 tests/preauth/src/records.rs
 tests/preauth/run.sh
+tests/preauth/transaction-contracts.sh
 tools/toolchain/acquire-preauth-closure.sh
 tools/toolchain/bind-preauth-head.sh
 tools/toolchain/verify-preauth-oci.sh
@@ -111,7 +122,7 @@ printf '%s\n' "$required_files" | while IFS= read -r file; do
     [ -s "$file" ] || fail "empty required file: $file"
 done
 
-for script in tools/ci/check-specs.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
+for script in tools/ci/check-specs.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh tests/preauth/transaction-contracts.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
     [ -x "$script" ] || fail "required script is not executable: $script"
 done
 
@@ -166,7 +177,7 @@ duplicates=$(printf '%s\n' "$index_targets" | sort | uniq -d)
 
 adr_files=$(sed -n 's/^- \[ADR [^]]*\](\(adr\/[^)]*\.md\))$/docs\/\1/p' docs/README.md)
 adr_count=$(printf '%s\n' "$adr_files" | awk 'NF { count++ } END { print count + 0 }')
-[ "$adr_count" -eq 21 ] || fail "expected exactly 21 indexed ADRs"
+[ "$adr_count" -eq 22 ] || fail "expected exactly 22 indexed ADRs"
 
 approval_date=$(sed -n 's/^Date: //p' docs/approval-record.md)
 case "$approval_date" in
@@ -204,14 +215,14 @@ grep -qx "Status: Ready — Gate 0 owner approval recorded $approval_date" docs/
 grep -qx 'Status: Approved for Prompt 2 after repository publication' docs/handoff-prompt.md || fail "handoff prompt status is inconsistent"
 grep -qx 'Status: Approved for execution; begins after repository publication and GitHub authentication' docs/v1-alpha-execution.md || fail "execution runbook status is inconsistent"
 
-for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0014 0015 0016 0017 0018 0019 0020 0021; do
+for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0014 0015 0016 0017 0018 0019 0020 0021 0022; do
     matches=$(printf '%s\n' "$adr_files" | grep -c "/$number-")
     [ "$matches" -eq 1 ] || fail "expected one indexed ADR for $number"
 done
 
-grep -q 'ADRs 0001–0021' docs/tasks/release-0.md || fail "Release 0 approved ADR range is stale"
+grep -q 'ADRs 0001–0022' docs/tasks/release-0.md || fail "Release 0 approved ADR range is stale"
 grep -q 'Build-plan and evidence schemas use version 3' docs/adr/0011-release-0-reproducibility-gate-phasing.md || fail "ADR 0011 build-plan/evidence schema version is stale"
-for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0014 0015 0016 0017 0018 0019 0020 0021; do
+for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0014 0015 0016 0017 0018 0019 0020 0021 0022; do
     if grep -q "ADR $number" docs/tasks/release-0.md; then
         printf '%s\n' "$adr_files" | grep -q "/$number-" || fail "task-referenced ADR $number is not indexed and approved"
     fi
@@ -221,7 +232,7 @@ printf '%s\n' "$adr_files" | while IFS= read -r adr; do
     [ -s "$adr" ] || fail "missing or empty indexed ADR: $adr"
     case "$adr" in
         docs/adr/0013-* | docs/adr/0014-* | docs/adr/0015-* | docs/adr/0016-*) adr_approval_date=2026-07-17 ;;
-        docs/adr/0017-* | docs/adr/0018-* | docs/adr/0019-* | docs/adr/0020-* | docs/adr/0021-*) adr_approval_date=2026-07-18 ;;
+        docs/adr/0017-* | docs/adr/0018-* | docs/adr/0019-* | docs/adr/0020-* | docs/adr/0021-* | docs/adr/0022-*) adr_approval_date=2026-07-18 ;;
         *) adr_approval_date=$approval_date ;;
     esac
     grep -qx "Status: Accepted — $adr_approval_date" "$adr" || fail "ADR status mismatch: $adr"
