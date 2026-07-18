@@ -43,15 +43,18 @@ apt_options="-o Dir::Etc::sourcelist=$sources -o Dir::Etc::sourceparts=- -o Dir:
 
 find "$output/apt-cache/archives" -maxdepth 1 -type f -name '*.deb' -exec cp {} "$output/debs/" \;
 deb_count=$(find "$output/debs" -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d ' ')
-[ "$deb_count" -ge 3 ] || { echo "incomplete acquired package set" >&2; exit 1; }
+[ "$deb_count" -eq 36 ] || { echo "acquired package closure is not the approved 36-package set" >&2; exit 1; }
 if find "$output" -type l | grep -q .; then
     echo "symlink in acquisition output" >&2
     exit 1
 fi
 
 package_manifest=$output/packages.v2
+license_manifest=$output/licenses.v2
 : > "$package_manifest"
+: > "$license_manifest"
 printf '%s\n' 'schema=rar-preauth-package-manifest-v2' >> "$package_manifest"
+printf '%s\n' 'schema=rar-preauth-license-manifest-v2' >> "$license_manifest"
 license_root=$output/licenses/root
 mkdir -p "$license_root"
 for deb in "$output"/debs/*.deb; do
@@ -73,6 +76,7 @@ for deb in "$output"/debs/*.deb; do
     [ "$before" = "$after" ] || { echo "same-inode mutation detected for $deb" >&2; exit 1; }
     printf 'package|%s|%s|%s|%s|%s|%s|%s\n' \
         "$name" "$version" "$architecture" "$(basename "$deb")" "$size" "$sha" "$license_sha" >> "$package_manifest"
+    printf 'license|%s|%s\n' "$name" "$license_sha" >> "$license_manifest"
 done
 LC_ALL=C /usr/bin/sort -o "$package_manifest.sorted" "$package_manifest"
 {
@@ -80,6 +84,12 @@ LC_ALL=C /usr/bin/sort -o "$package_manifest.sorted" "$package_manifest"
     /usr/bin/grep '^package|' "$package_manifest.sorted"
 } > "$package_manifest.canonical"
 mv "$package_manifest.canonical" "$package_manifest"
+LC_ALL=C /usr/bin/sort -o "$license_manifest.sorted" "$license_manifest"
+{
+    printf '%s\n' 'schema=rar-preauth-license-manifest-v2'
+    /usr/bin/grep '^license|' "$license_manifest.sorted"
+} > "$license_manifest.canonical"
+mv "$license_manifest.canonical" "$license_manifest"
 
 for required in \
     'lld-19|1:19.1.7-3+b1|' \
@@ -94,8 +104,27 @@ done
 base_manifest=$output/base-installed.v1
 /usr/bin/dpkg-query -W -f='${binary:Package}|${Version}|${Architecture}\n' | LC_ALL=C /usr/bin/sort > "$base_manifest"
 lists_manifest=$output/signed-metadata.sha256
-find "$output/apt-state/lists" -maxdepth 1 -type f -exec /usr/bin/sha256sum {} \; | LC_ALL=C /usr/bin/sort > "$lists_manifest"
+inrelease_manifest=$output/debian-inrelease.sha256
+security_inrelease_manifest=$output/debian-security-inrelease.sha256
+: > "$lists_manifest"
+: > "$inrelease_manifest"
+: > "$security_inrelease_manifest"
+for metadata in "$output"/apt-state/lists/*; do
+    [ -f "$metadata" ] || continue
+    metadata_sha=$(/usr/bin/sha256sum "$metadata" | /usr/bin/cut -d ' ' -f 1)
+    metadata_name=$(basename "$metadata")
+    printf '%s  %s\n' "$metadata_sha" "$metadata_name" >> "$lists_manifest"
+    case "$metadata_name" in
+        *debian-security*InRelease) printf '%s  %s\n' "$metadata_sha" "$metadata_name" >> "$security_inrelease_manifest" ;;
+        *InRelease) printf '%s  %s\n' "$metadata_sha" "$metadata_name" >> "$inrelease_manifest" ;;
+    esac
+done
+LC_ALL=C /usr/bin/sort -o "$lists_manifest" "$lists_manifest"
+LC_ALL=C /usr/bin/sort -o "$inrelease_manifest" "$inrelease_manifest"
+LC_ALL=C /usr/bin/sort -o "$security_inrelease_manifest" "$security_inrelease_manifest"
 [ "$(/usr/bin/grep -c 'InRelease' "$lists_manifest")" -ge 4 ] || { echo "signed InRelease evidence absent" >&2; exit 1; }
+[ "$(/usr/bin/wc -l < "$inrelease_manifest" | /usr/bin/tr -d ' ')" -eq 3 ] || { echo "Debian InRelease set is incomplete" >&2; exit 1; }
+[ "$(/usr/bin/wc -l < "$security_inrelease_manifest" | /usr/bin/tr -d ' ')" -eq 1 ] || { echo "Debian security InRelease set is incomplete" >&2; exit 1; }
 
 for deb in "$output"/debs/*.deb; do
     /usr/bin/dpkg-deb -x "$deb" "$output/derived-context/rootfs"
@@ -122,6 +151,11 @@ EOF
         "package_manifest_sha256=$(/usr/bin/sha256sum "$package_manifest" | /usr/bin/cut -d ' ' -f 1)" \
         "base_manifest_sha256=$(/usr/bin/sha256sum "$base_manifest" | /usr/bin/cut -d ' ' -f 1)" \
         "signed_metadata_manifest_sha256=$(/usr/bin/sha256sum "$lists_manifest" | /usr/bin/cut -d ' ' -f 1)" \
+        "debian_archive_keyring_sha256=$(/usr/bin/sha256sum /usr/share/keyrings/debian-archive-keyring.gpg | /usr/bin/cut -d ' ' -f 1)" \
+        "inrelease_sha256=$(/usr/bin/sha256sum "$inrelease_manifest" | /usr/bin/cut -d ' ' -f 1)" \
+        "security_inrelease_sha256=$(/usr/bin/sha256sum "$security_inrelease_manifest" | /usr/bin/cut -d ' ' -f 1)" \
+        "license_manifest_sha256=$(/usr/bin/sha256sum "$license_manifest" | /usr/bin/cut -d ' ' -f 1)" \
+        "acquisition_policy_sha256=$(/usr/bin/sha256sum "$root/tools/toolchain/acquire-preauth-closure.sh" | /usr/bin/cut -d ' ' -f 1)" \
         'signature_verification=apt-secure-passed' \
         'target_execution=not-attempted' \
         'qemu_execution=not-attempted' \
