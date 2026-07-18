@@ -14,6 +14,8 @@ const MAX_MEMBER: u64 = 1024 * 1024 * 1024;
 const MAX_MEMBERS: usize = 256;
 const MAX_INLINE: u64 = 8 * 1024 * 1024;
 const MAX_REPOSITORIES: u64 = 512;
+const MAX_DIAGNOSTIC_MEMBERS: usize = 32;
+const MAX_DIAGNOSTIC_REFS: usize = 8;
 
 struct TarEntry {
     data: Vec<u8>,
@@ -208,6 +210,51 @@ fn descriptor_digests(json: &str) -> Vec<String> {
     digests
 }
 
+fn record_inbound(
+    inbound: &mut BTreeMap<String, BTreeSet<String>>, digest: &str, source: &str,
+) {
+    inbound.entry(format!("blobs/sha256/{digest}")).or_default().insert(source.to_owned());
+}
+
+fn report_unreachable(
+    entries: &BTreeMap<String, TarEntry>, names: &[String], inbound: &BTreeMap<String, BTreeSet<String>>,
+    config_name: &str, layers: &[String], image_manifests: &BTreeSet<String>,
+) {
+    eprintln!(
+        "oci_unreachable_summary count={} reported={} cap={}",
+        names.len(), names.len().min(MAX_DIAGNOSTIC_MEMBERS), MAX_DIAGNOSTIC_MEMBERS,
+    );
+    for name in names.iter().take(MAX_DIAGNOSTIC_MEMBERS) {
+        let entry = entries.get(name).unwrap_or_else(|| fail("unreachable diagnostic member absent"));
+        let digest = blob_digest(name);
+        let class = if name == config_name {
+            "docker-config"
+        } else if layers.iter().any(|layer| layer == name) {
+            "docker-layer"
+        } else if digest.is_some_and(|value| image_manifests.contains(value)) {
+            "oci-image-manifest"
+        } else if digest.is_some() && entry.data.is_empty() {
+            "unreferenced-payload-blob"
+        } else if digest.is_some() {
+            "unreferenced-inline-blob"
+        } else {
+            "unrecognized-root-member"
+        };
+        let references = inbound.get(name).map_or_else(
+            || "none".to_owned(),
+            |values| {
+                let mut refs = values.iter().take(MAX_DIAGNOSTIC_REFS).cloned().collect::<Vec<_>>();
+                if values.len() > MAX_DIAGNOSTIC_REFS { refs.push("capped".to_owned()); }
+                refs.join(",")
+            },
+        );
+        eprintln!(
+            "oci_unreachable path={} type=regular size={} mode={:04o} uid={} gid={} sha256={} class={} inbound={}",
+            name, entry.size, entry.mode, entry.uid, entry.gid, entry.sha256, class, references,
+        );
+    }
+}
+
 fn verify_oci_layout(
     entries: &BTreeMap<String, TarEntry>, config_name: &str, layers: &[String], config_digest: &str,
 ) -> String {
@@ -226,8 +273,19 @@ fn verify_oci_layout(
             unexpected_member(name, entry);
         }
     }
+    let mut inbound = BTreeMap::<String, BTreeSet<String>>::new();
     let mut pending = descriptor_digests(index_text);
     if pending.is_empty() || pending.len() > 64 { fail("invalid OCI index descriptors"); }
+    for digest in &pending { record_inbound(&mut inbound, digest, "index.json"); }
+    if let Some(digest) = blob_digest(config_name) { record_inbound(&mut inbound, digest, "manifest.json:config"); }
+    for (index, layer) in layers.iter().enumerate() {
+        if let Some(digest) = blob_digest(layer) {
+            record_inbound(&mut inbound, digest, &format!("manifest.json:layer[{index}]"));
+        }
+    }
+    if let Some(layer) = layers.last().and_then(|value| blob_digest(value)) {
+        record_inbound(&mut inbound, layer, "repositories");
+    }
     let mut reachable = BTreeSet::new();
     let mut image_manifests = BTreeSet::new();
     while let Some(digest) = pending.pop() {
@@ -239,7 +297,9 @@ fn verify_oci_layout(
             let text = std::str::from_utf8(&entry.data).unwrap_or_else(|_| fail("OCI descriptor is not UTF-8"));
             let compact: String = text.chars().filter(|character| !character.is_ascii_whitespace()).collect();
             if compact.contains("\"config\":{") && compact.contains("\"layers\":[") { image_manifests.insert(digest.clone()); }
-            pending.extend(descriptor_digests(text));
+            let children = descriptor_digests(text);
+            for child in &children { record_inbound(&mut inbound, child, &path); }
+            pending.extend(children);
         }
     }
     if !reachable.contains(config_path_digest) { fail("OCI config is not index-reachable"); }
@@ -251,7 +311,11 @@ fn verify_oci_layout(
         ["index.json".to_owned(), "manifest.json".to_owned(), "oci-layout".to_owned(), "repositories".to_owned()].into_iter()
             .chain(reachable.iter().map(|digest| format!("blobs/sha256/{digest}"))),
     );
-    if entries.keys().any(|name| !expected.contains(name)) { fail("unreachable OCI archive member"); }
+    let unreachable = entries.keys().filter(|name| !expected.contains(*name)).cloned().collect::<Vec<_>>();
+    if !unreachable.is_empty() {
+        report_unreachable(entries, &unreachable, &inbound, config_name, layers, &image_manifests);
+        fail("unreachable OCI archive member");
+    }
     if image_manifests.len() != 1 { fail("OCI image manifest is not unique"); }
     image_manifests.into_iter().next().unwrap()
 }
