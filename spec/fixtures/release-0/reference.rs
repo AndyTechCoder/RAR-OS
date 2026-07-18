@@ -431,15 +431,19 @@ fn record_header(kind: u16, flags: u16, bytes: u32, id: u32) -> Vec<u8> {
     record
 }
 
-fn add_entry_descriptor(bytes: &mut Vec<u8>, critical: bool, inert: bool) {
+fn insert_entry_descriptor(bytes: &mut Vec<u8>, mut descriptor: Vec<u8>, position: usize) {
     let (entry, _, _, _) = bundle_offsets(bytes).expect("bundle offsets");
     let old_length = usize::try_from(u32_at(bytes, 12).expect("entry length")).expect("entry length usize");
     let count = u16_at(bytes, entry + 24).expect("descriptor count");
-    let insert = entry + old_length;
+    let insert = entry + 64 + position.min(usize::from(count)) * 32;
     put_u32(bytes, 12, u32::try_from(old_length + 32).expect("entry length u32"));
     put_u32(bytes, entry + 16, u32::try_from(old_length + 32).expect("entry total u32"));
     put_u16(bytes, entry + 24, count + 1);
     put_u16(bytes, entry + 10, 1);
+    bytes.splice(insert..insert, descriptor.drain(..));
+}
+
+fn add_entry_descriptor(bytes: &mut Vec<u8>, critical: bool, inert: bool) {
     let mut descriptor = vec![0; 32];
     put_u16(&mut descriptor, 16, 99);
     put_u16(&mut descriptor, 20, 1);
@@ -447,7 +451,14 @@ fn add_entry_descriptor(bytes: &mut Vec<u8>, critical: bool, inert: bool) {
     if !inert {
         put_u16(&mut descriptor, 18, 1);
     }
-    bytes.splice(insert..insert, descriptor);
+    insert_entry_descriptor(bytes, descriptor, usize::MAX);
+}
+
+fn add_exact_inert_descriptor(bytes: &mut Vec<u8>, purpose: u16, producer: u16, position: usize) {
+    let mut descriptor = vec![0; 32];
+    put_u16(&mut descriptor, 16, purpose);
+    put_u16(&mut descriptor, 20, producer);
+    insert_entry_descriptor(bytes, descriptor, position);
 }
 
 fn mutate_inert_descriptor(bytes: &mut Vec<u8>, field: &str) {
@@ -478,20 +489,35 @@ fn source_ceiling(purpose: u16) -> Option<u64> {
     }
 }
 
+fn is_known_source_purpose(purpose: u16) -> bool {
+    matches!(purpose, 1 | 2 | 3 | 4 | 5)
+}
+
+fn is_known_purpose(purpose: u16) -> bool {
+    is_known_source_purpose(purpose) || matches!(purpose, 6 | 7)
+}
+
 fn set_source_length(bytes: &mut [u8], purpose: u16, length: u64, base: Option<u64>) {
     let descriptor = descriptor_offset(bytes, purpose, 0, 0).expect("source descriptor");
     if let Some(base) = base { put_u64(bytes, descriptor, base); }
     put_u64(bytes, descriptor + 8, length);
 }
 
+fn swap_descriptor_positions(bytes: &mut [u8], first_index: usize, second_index: usize) {
+    let (entry, _, _, _) = bundle_offsets(bytes).expect("bundle offsets");
+    let count = usize::from(u16_at(bytes, entry + 24).expect("descriptor count"));
+    assert!(first_index < count && second_index < count, "descriptor position");
+    let first = entry + 64 + first_index * 32;
+    let second = entry + 64 + second_index * 32;
+    for index in 0..32 {
+        bytes.swap(first + index, second + index);
+    }
+}
+
 fn swap_descriptors(bytes: &mut [u8]) {
     let (entry, _, _, _) = bundle_offsets(bytes).expect("bundle offsets");
     let count = usize::from(u16_at(bytes, entry + 24).expect("descriptor count"));
-    let first = entry + 64;
-    let last = entry + 64 + (count - 1) * 32;
-    for index in 0..32 {
-        bytes.swap(first + index, last + index);
-    }
+    swap_descriptor_positions(bytes, 0, count - 1);
 }
 
 fn remove_entry_descriptor(bytes: &mut Vec<u8>, purpose: u16, owner_kind: u16, owner_id: u32) {
@@ -636,6 +662,26 @@ fn apply_mutation(bytes: &mut Vec<u8>, predicate: &str, behavior: &mut Behavior)
         "inert-entry-flags" => mutate_inert_descriptor(bytes, "flags"),
         "inert-entry-owner-id" => mutate_inert_descriptor(bytes, "owner-id"),
         "inert-entry-known-purpose" => mutate_inert_descriptor(bytes, "purpose"),
+        "inert-zero-root-after" => add_exact_inert_descriptor(bytes, 0, 1, usize::MAX),
+        "inert-zero-recovery-after" => add_exact_inert_descriptor(bytes, 0, 2, usize::MAX),
+        "inert-zero-before" => add_exact_inert_descriptor(bytes, 0, 1, 0),
+        "inert-zero-between" => add_exact_inert_descriptor(bytes, 0, 2, 3),
+        "inert-zero-multiple" => {
+            add_exact_inert_descriptor(bytes, 0, 1, 0);
+            add_exact_inert_descriptor(bytes, 0, 2, 4);
+            add_exact_inert_descriptor(bytes, 0, 1, usize::MAX);
+        }
+        "inert-zero-multiple-reordered" => {
+            add_exact_inert_descriptor(bytes, 0, 1, 0);
+            add_exact_inert_descriptor(bytes, 0, 2, 4);
+            add_exact_inert_descriptor(bytes, 0, 1, usize::MAX);
+            swap_descriptor_positions(bytes, 0, 1);
+        }
+        "inert-zero-invalid-rights" => {
+            add_exact_inert_descriptor(bytes, 0, 1, usize::MAX);
+            let descriptor = descriptor_offset(bytes, 0, 0, 0).expect("purpose-zero inert descriptor");
+            put_u16(bytes, descriptor + 18, 1);
+        }
         "handoff-source-boundary" => set_source_length(bytes, 1, MAX_HANDOFF_SOURCE_BYTES, None),
         "handoff-source-over-ceiling" => set_source_length(bytes, 1, MAX_HANDOFF_SOURCE_BYTES + 1, None),
         "map-source-boundary" => set_source_length(bytes, 2, MAX_MEMORY_MAP_SOURCE_BYTES, Some(0x0040_0000)),
@@ -896,7 +942,7 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         checked_end(descriptor.base, descriptor.length)?;
     }
 
-    let unknown: Vec<_> = descriptors.iter().filter(|descriptor| !(1..=7).contains(&descriptor.selector.purpose)).collect();
+    let unknown: Vec<_> = descriptors.iter().filter(|descriptor| !is_known_purpose(descriptor.selector.purpose)).collect();
     if entry_minor == 0 && !unknown.is_empty()
         || unknown.iter().any(|descriptor| {
             descriptor.base != 0
@@ -911,11 +957,12 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
     {
         return Err(Code::UnsupportedMinor);
     }
+    let known_descriptors: Vec<_> = descriptors.iter().filter(|descriptor| is_known_purpose(descriptor.selector.purpose)).collect();
 
     // All binding predicates are one whole-table stage and collapse to the
     // declared invalid-pointer-range code. Descriptor order cannot select a
     // different range, address-width, alignment, selector, or rights error.
-    if descriptors.iter().filter(|descriptor| (1..=7).contains(&descriptor.selector.purpose)).any(|descriptor| {
+    if known_descriptors.iter().any(|descriptor| {
         descriptor.length == 0
             || !address_fits(descriptor.base, descriptor.length, entry_address_bits).unwrap_or(false)
             || descriptor_space(descriptor.selector.purpose) == 1 && descriptor.base % 8 != 0
@@ -926,17 +973,17 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         return Err(Code::InvalidPointerRange);
     }
     let mut source_selectors = BTreeSet::new();
-    if descriptors.iter().filter(|descriptor| descriptor.selector.purpose <= 5).any(|descriptor| !source_selectors.insert(descriptor.selector)) {
+    if known_descriptors.iter().filter(|descriptor| is_known_source_purpose(descriptor.selector.purpose)).any(|descriptor| !source_selectors.insert(descriptor.selector)) {
         return Err(Code::InvalidPointerRange);
     }
-    for purpose in 1..=5 {
+    for purpose in [1, 2, 3, 4, 5] {
         if descriptors.iter().filter(|descriptor| descriptor.selector.purpose == purpose).count() != 1 {
             return Err(Code::InvalidPointerRange);
         }
     }
-    for descriptor in descriptors.iter().filter(|descriptor| descriptor.selector.purpose <= 7) {
+    for descriptor in &known_descriptors {
         let valid = match descriptor.selector.purpose {
-            1..=3 => descriptor.rights == 1 && descriptor.transfer == 1 && descriptor.flags == 3 && descriptor.selector.owner_kind == 0 && descriptor.selector.owner_id == 0,
+            1 | 2 | 3 => descriptor.rights == 1 && descriptor.transfer == 1 && descriptor.flags == 3 && descriptor.selector.owner_kind == 0 && descriptor.selector.owner_id == 0,
             4 => matches!((descriptor.rights, descriptor.transfer), (1, 1) | (3, 4)) && descriptor.flags == 3 && descriptor.selector.owner_kind == 0 && descriptor.selector.owner_id == 0,
             5 => descriptor.rights == 3 && descriptor.transfer == 2 && descriptor.flags == 3 && descriptor.selector.owner_kind == 0 && descriptor.selector.owner_id == 0,
             6 | 7 => descriptor.rights == 11 && descriptor.transfer == 3 && descriptor.flags == 0 && matches!(descriptor.selector.owner_kind, 3 | 5) && descriptor.selector.owner_id != 0,
@@ -947,16 +994,16 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         }
     }
 
-    for first in 0..descriptors.len() {
-        for second in first + 1..descriptors.len() {
-            if descriptor_space(descriptors[first].selector.purpose) == descriptor_space(descriptors[second].selector.purpose)
-                && overlaps((descriptors[first].base, descriptors[first].length), (descriptors[second].base, descriptors[second].length))?
+    for first in 0..known_descriptors.len() {
+        for second in first + 1..known_descriptors.len() {
+            if descriptor_space(known_descriptors[first].selector.purpose) == descriptor_space(known_descriptors[second].selector.purpose)
+                && overlaps((known_descriptors[first].base, known_descriptors[first].length), (known_descriptors[second].base, known_descriptors[second].length))?
             {
                 return Err(Code::Overlap);
             }
         }
     }
-    for descriptor in descriptors.iter().filter(|descriptor| descriptor_space(descriptor.selector.purpose) == 1) {
+    for descriptor in known_descriptors.iter().filter(|descriptor| descriptor_space(descriptor.selector.purpose) == 1) {
         if overlaps(
             (adapter.external_entry_address, u64::from(adapter.external_entry_bytes)),
             (descriptor.base, descriptor.length),
@@ -965,7 +1012,7 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         }
     }
 
-    let descriptor_by_selector: BTreeMap<_, _> = descriptors.iter().filter(|descriptor| descriptor.selector.purpose <= 5).map(|descriptor| (descriptor.selector, descriptor)).collect();
+    let descriptor_by_selector: BTreeMap<_, _> = known_descriptors.iter().filter(|descriptor| is_known_source_purpose(descriptor.selector.purpose)).map(|descriptor| (descriptor.selector, *descriptor)).collect();
     let required = |purpose| DescriptorSelector { purpose, owner_kind: 0, owner_id: 0 };
     let handoff_descriptor = *descriptor_by_selector.get(&required(1)).ok_or(Code::InvalidPointerRange)?;
     let map_descriptor = *descriptor_by_selector.get(&required(2)).ok_or(Code::InvalidPointerRange)?;
@@ -1065,7 +1112,7 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         map_by_base.push(memory);
     }
 
-    for descriptor in descriptors.iter().filter(|descriptor| (1..=5).contains(&descriptor.selector.purpose)) {
+    for descriptor in descriptors.iter().filter(|descriptor| is_known_source_purpose(descriptor.selector.purpose)) {
         if !map_by_base.iter().any(|memory| {
             memory.kind == 3
                 && memory.owner == descriptor.producer
