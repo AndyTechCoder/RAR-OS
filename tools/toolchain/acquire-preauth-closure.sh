@@ -49,6 +49,11 @@ fi
 package_manifest=$output/packages.v2
 : > "$package_manifest"
 printf '%s\n' 'schema=rar-preauth-package-manifest-v2' >> "$package_manifest"
+license_root=$output/licenses/root
+mkdir -p "$license_root"
+for deb in "$output"/debs/*.deb; do
+    /usr/bin/dpkg-deb -x "$deb" "$license_root"
+done
 for deb in "$output"/debs/*.deb; do
     before=$(/usr/bin/stat -c '%d:%i:%s:%Y' "$deb")
     sha=$(/usr/bin/sha256sum "$deb" | /usr/bin/cut -d ' ' -f 1)
@@ -56,12 +61,11 @@ for deb in "$output"/debs/*.deb; do
     version=$(/usr/bin/dpkg-deb -f "$deb" Version)
     architecture=$(/usr/bin/dpkg-deb -f "$deb" Architecture)
     size=$(/usr/bin/stat -c '%s' "$deb")
-    extracted=$output/licenses/$name
-    mkdir -p "$extracted"
-    /usr/bin/dpkg-deb -x "$deb" "$extracted"
-    copyright=$extracted/usr/share/doc/$name/copyright
-    [ -f "$copyright" ] && [ ! -L "$copyright" ] || { echo "license missing for $name" >&2; exit 1; }
-    license_sha=$(/usr/bin/sha256sum "$copyright" | /usr/bin/cut -d ' ' -f 1)
+    copyright=$license_root/usr/share/doc/$name/copyright
+    resolved_copyright=$(/usr/bin/realpath -e "$copyright") || { echo "license missing for $name" >&2; exit 1; }
+    case "$resolved_copyright" in "$license_root"/usr/share/doc/*) ;; *) echo "license path escape for $name" >&2; exit 1 ;; esac
+    [ -f "$resolved_copyright" ] || { echo "license target is not regular for $name" >&2; exit 1; }
+    license_sha=$(/usr/bin/sha256sum "$resolved_copyright" | /usr/bin/cut -d ' ' -f 1)
     after=$(/usr/bin/stat -c '%d:%i:%s:%Y' "$deb")
     [ "$before" = "$after" ] || { echo "same-inode mutation detected for $deb" >&2; exit 1; }
     printf 'package|%s|%s|%s|%s|%s|%s|%s\n' \
