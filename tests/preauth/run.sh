@@ -97,6 +97,7 @@ write_index() {
         "$1" "$2" "$head" "$head" | "$json_builder" --canonicalize-json bare > "$oci_test/root/index.json"
 }
 write_index "$manifest_digest" "$manifest_size"
+cp "$oci_test/root/index.json" "$oci_test/expected-canonical-index.json"
 write_manifest() {
     printf '[{"Config":"blobs/sha256/%s","RepoTags":["rar-preauth:%s"],"Layers":["blobs/sha256/%s"],"LayerSources":{"sha256:%s":{"mediaType":"application/vnd.oci.image.layer.v1.tar","digest":"sha256:%s","size":%s}}}]\n' \
         "$digest" "$head" "$layer_digest" "$layer_digest" "$layer_digest" "$layer_size" | \
@@ -310,7 +311,7 @@ for attempt in one two; do
         > /dev/null 2> "$oci_test/producer-index-diagnostic-$attempt.log"
     status=$?
     set -e
-    assert_status "fixture.producer-index-diagnostic.reject.$attempt" 73 "$status"
+    assert_status "fixture.producer-index-diagnostic.accept-source.$attempt" 0 "$status"
 done
 assert_files_equal fixture.producer-index-diagnostic.stable \
     "$oci_test/producer-index-diagnostic-one.log" "$oci_test/producer-index-diagnostic-two.log"
@@ -322,6 +323,18 @@ assert_file_line fixture.producer-index-diagnostic.root-order \
 assert_file_line fixture.producer-index-diagnostic.descriptor-order \
     'oci_index_key_order path=/manifests/0 count=4 keys=["mediaType", "digest", "size", "annotations"] cap=32' \
     "$oci_test/producer-index-diagnostic-one.log"
+expect_oci_rejection "raw producer index not replaced in canonical archive"
+out/r0/preauth/acquisition/host-tools/preauth-verify-oci --canonical-index \
+    "$oci_test/two/image.tar" "$oci_test/two/metadata.json" "$oci_test/two/image.id" - \
+    > "$oci_test/index.canonical.pending"
+assert_files_equal fixture.producer-index-canonicalization.bytes \
+    "$oci_test/expected-canonical-index.json" "$oci_test/index.canonical.pending"
+mv "$oci_test/index.canonical.pending" "$oci_test/root/index.json"
+build_two_archive
+mark_assertion fixture.producer-index-canonicalization.verify positive-verification success command-exit
+tools/toolchain/verify-preauth-oci.sh \
+    "$oci_test/one/image.tar" "$oci_test/one/metadata.json" "$oci_test/one/image.id" \
+    "$oci_test/two/image.tar" "$oci_test/two/metadata.json" "$oci_test/two/image.id" >/dev/null
 printf ' { "schemaVersion" : 2, "mediaType" : "application/vnd.oci.image.index.v1+json", "manifests" : [ { "mediaType" : "application/vnd.oci.image.manifest.v1+json", "digest" : "sha256:%s", "size" : %s, "annotations" : { "io.containerd.image.name" : "docker.io/library/rar-preauth:%s", "org.opencontainers.image.ref.name" : "%s" } } ] }\n' \
     "$manifest_digest" "$manifest_size" "$head" "$head" > "$oci_test/root/index.json"
 build_two_archive
@@ -331,12 +344,43 @@ out/r0/preauth/acquisition/host-tools/preauth-verify-oci --member-list \
     > /dev/null 2> "$oci_test/whitespace-index-diagnostic.log"
 status=$?
 set -e
-assert_status fixture.whitespace-index-diagnostic.reject 73 "$status"
+assert_status fixture.whitespace-index-diagnostic.accept-source 0 "$status"
 mark_assertion fixture.whitespace-index-diagnostic.semantic fixture-log true bounded-file-line
 /usr/bin/grep -F 'semantic_ast_equal=true' "$oci_test/whitespace-index-diagnostic.log" >/dev/null
 mark_assertion fixture.whitespace-index-diagnostic.encoding fixture-log whitespace bounded-file-line
 /usr/bin/grep -E 'oci_index_encoding whitespace_count=[1-9][0-9]* .*trailing_newline=true' \
     "$oci_test/whitespace-index-diagnostic.log" >/dev/null
+out/r0/preauth/acquisition/host-tools/preauth-verify-oci --canonical-index \
+    "$oci_test/two/image.tar" "$oci_test/two/metadata.json" "$oci_test/two/image.id" - \
+    > "$oci_test/index.whitespace.canonical"
+assert_files_equal fixture.whitespace-index-canonicalization.bytes \
+    "$oci_test/expected-canonical-index.json" "$oci_test/index.whitespace.canonical"
+printf '{"schemaVersion":2,"mediaType":"application\/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application\/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s,"annotations":{"io.containerd.image.name":"docker.io\/library\/rar-preauth:%s","org.opencontainers.image.ref.name":"%s"}}]}' \
+    "$manifest_digest" "$manifest_size" "$head" "$head" > "$oci_test/root/index.json"
+build_two_archive
+set +e
+out/r0/preauth/acquisition/host-tools/preauth-verify-oci --member-list \
+    "$oci_test/two/image.tar" "$oci_test/two/metadata.json" "$oci_test/two/image.id" - \
+    > /dev/null 2> "$oci_test/escape-index-diagnostic.log"
+status=$?
+set -e
+assert_status fixture.escape-index-diagnostic.accept-source 0 "$status"
+mark_assertion fixture.escape-index-diagnostic.encoding fixture-log escapes bounded-file-line
+/usr/bin/grep -E 'oci_index_encoding .*escape_count=[1-9][0-9]*' \
+    "$oci_test/escape-index-diagnostic.log" >/dev/null
+out/r0/preauth/acquisition/host-tools/preauth-verify-oci --canonical-index \
+    "$oci_test/two/image.tar" "$oci_test/two/metadata.json" "$oci_test/two/image.id" - \
+    > "$oci_test/index.escape.canonical"
+assert_files_equal fixture.escape-index-canonicalization.bytes \
+    "$oci_test/expected-canonical-index.json" "$oci_test/index.escape.canonical"
+printf '{"schemaVersion":02,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[]}' \
+    > "$oci_test/root/index.json"
+build_two_archive
+expect_oci_rejection "noncanonical OCI index number form"
+printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[]} trailing' \
+    > "$oci_test/root/index.json"
+build_two_archive
+expect_oci_rejection "OCI index trailing data"
 write_index "$manifest_digest" "$manifest_size"
 printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s,"annotations":{"org.opencontainers.image.ref.name":"%s"}}]}\n' \
     "$manifest_digest" "$manifest_size" "$head" > "$oci_test/root/index.json"

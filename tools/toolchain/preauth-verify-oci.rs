@@ -597,7 +597,7 @@ fn report_unreachable(
 fn verify_oci_layout(
     entries: &BTreeMap<String, TarEntry>, config_name: &str, layers: &[String], config_digest: &str,
     revision: &str, project_export: bool,
-) -> (String, String, BTreeSet<String>) {
+) -> (String, String, BTreeSet<String>, String) {
     let config_path_digest = blob_digest(config_name).unwrap_or_else(|| fail("invalid OCI config path"));
     if config_path_digest != config_digest { fail("OCI config name/digest mismatch"); }
     let layout = entries.get("oci-layout").unwrap_or_else(|| fail("OCI layout absent"));
@@ -709,18 +709,22 @@ fn verify_oci_layout(
     ), selected_digest, selected.size, revision, revision);
     let canonical_index = json(canonical_index_source.as_bytes()).canonical();
     if index.data != canonical_index.as_bytes() {
+        let semantic_equal = index_json == json(canonical_index.as_bytes());
         report_index_mapping(
             std::str::from_utf8(&index.data).unwrap_or(""), &canonical_index,
             &selected_digest, selected.size, revision,
         );
-        fail("OCI index descriptor mapping mismatch");
+        if !project_export || !semantic_equal { fail("OCI index descriptor mapping mismatch"); }
     }
-    (selected_digest, index.sha256.clone(), expected)
+    (
+        selected_digest, preauth::sha256_hex(canonical_index.as_bytes()), expected,
+        canonical_index,
+    )
 }
 
 fn verify_one(
     entries: &BTreeMap<String, TarEntry>, metadata: &Path, image_id_path: &Path, project_export: bool,
-) -> (String, String, String, String, String, BTreeSet<String>) {
+) -> (String, String, String, String, String, BTreeSet<String>, String) {
     let manifest = &entries.get("manifest.json").unwrap_or_else(|| fail("Docker manifest absent")).data;
     if manifest.is_empty() { fail("oversized Docker manifest"); }
     let manifest_json = json(manifest);
@@ -768,12 +772,12 @@ fn verify_one(
             expected.insert(format!("{directory}/json"));
         }
     }
-    let (reported_digest, index_digest, graph) = if modern_oci {
+    let (reported_digest, index_digest, graph, canonical_index) = if modern_oci {
         verify_oci_layout(&entries, &config_name, &layers, &config_digest, &revision, project_export)
     } else {
         if project_export { fail("legacy Docker archive projection unsupported"); }
         if entries.keys().any(|name| !expected.contains(name)) { fail("unexpected archive member"); }
-        (config_digest.clone(), String::new(), expected)
+        (config_digest.clone(), String::new(), expected, String::new())
     };
     let (metadata_config, metadata_digest, descriptor) = metadata_summary(metadata);
     let selected_path = format!("blobs/sha256/{reported_digest}");
@@ -804,7 +808,7 @@ fn verify_one(
     let diff_digests = diff_ids.iter().map(|value| value.strip_prefix("sha256:").unwrap().to_owned()).collect::<Vec<_>>();
     (
         config_digest, reported_digest, index_digest, typed_list_digest("layer_descriptor", &layer_digests),
-        typed_list_digest("rootfs_diff_id", &diff_digests), graph,
+        typed_list_digest("rootfs_diff_id", &diff_digests), graph, canonical_index,
     )
 }
 
@@ -824,9 +828,18 @@ fn main() {
         let archive = Path::new(&args[2]);
         let entries = tar_entries(archive, false);
         print_inventory(archive, &entries);
-        let (_, _, _, _, _, graph) = verify_one(&entries, Path::new(&args[3]), Path::new(&args[4]), true);
+        let (_, _, _, _, _, graph, _) = verify_one(&entries, Path::new(&args[3]), Path::new(&args[4]), true);
         if args[5] != "-" { fail("member-list output must be stdout"); }
         for name in graph { println!("{name}"); }
+        return;
+    }
+    if args.len() == 6 && args[1] == "--canonical-index" {
+        let archive = Path::new(&args[2]);
+        let entries = tar_entries(archive, false);
+        let (_, _, _, _, _, _, canonical) =
+            verify_one(&entries, Path::new(&args[3]), Path::new(&args[4]), true);
+        if args[5] != "-" { fail("canonical index output must be stdout"); }
+        print!("{canonical}");
         return;
     }
     if args.len() != 7 { fail("usage: preauth-verify-oci archive1 metadata1 image-id1 archive2 metadata2 image-id2"); }
@@ -835,8 +848,8 @@ fn main() {
     let entries_two = tar_entries(paths[3], true);
     print_inventory(paths[0], &entries_one);
     print_inventory(paths[3], &entries_two);
-    let (config_one, manifest_one, index_one, layers_one, diff_ids_one, _) = verify_one(&entries_one, paths[1], paths[2], false);
-    let (config_two, manifest_two, index_two, layers_two, diff_ids_two, _) = verify_one(&entries_two, paths[4], paths[5], false);
+    let (config_one, manifest_one, index_one, layers_one, diff_ids_one, _, _) = verify_one(&entries_one, paths[1], paths[2], false);
+    let (config_two, manifest_two, index_two, layers_two, diff_ids_two, _, _) = verify_one(&entries_two, paths[4], paths[5], false);
     if (config_one.clone(), manifest_one.clone(), index_one.clone(), layers_one.clone(), diff_ids_one.clone())
         != (config_two, manifest_two, index_two, layers_two, diff_ids_two)
         || digest_file(paths[0]) != digest_file(paths[3]) { fail("independent OCI builds differ"); }

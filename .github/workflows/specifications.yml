@@ -172,10 +172,27 @@ jobs:
             /usr/bin/tar -xf \
               "out/r0/preauth/acquisition/derived-build/$candidate/raw-image.tar" \
               -C "out/r0/preauth/acquisition/derived-build/$candidate/archive-root"
+            out/r0/preauth/acquisition/host-tools/preauth-verify-oci \
+              --canonical-index \
+              "out/r0/preauth/acquisition/derived-build/$candidate/raw-image.tar" \
+              "out/r0/preauth/acquisition/derived-build/$candidate/metadata.json" \
+              "out/r0/preauth/acquisition/derived-build/$candidate/image.id" - \
+              > "out/r0/preauth/acquisition/derived-build/$candidate/archive-root/index.json.pending"
+            /bin/mv \
+              "out/r0/preauth/acquisition/derived-build/$candidate/archive-root/index.json.pending" \
+              "out/r0/preauth/acquisition/derived-build/$candidate/archive-root/index.json"
             printf '%s\n' "$members" | /usr/bin/tar --sort=name --mtime='@1784332800' \
               --owner=0 --group=0 --numeric-owner --format=gnu \
               -cf "out/r0/preauth/acquisition/derived-build/$candidate/image.tar" \
               -C "out/r0/preauth/acquisition/derived-build/$candidate/archive-root" -T -
+            docker load \
+              --input "out/r0/preauth/acquisition/derived-build/$candidate/image.tar" \
+              > "out/r0/preauth/acquisition/derived-build/$candidate/load.evidence"
+            canonical_loaded_id=$(docker image inspect --format '{{.Id}}' \
+              "rar-preauth:${RAR_CHECKED_OUT_SOURCE_REVISION}")
+            IFS= read -r expected_loaded_id \
+              < "out/r0/preauth/acquisition/derived-build/$candidate/image.id"
+            [ "$canonical_loaded_id" = "$expected_loaded_id" ]
             /bin/rm -f "out/r0/preauth/acquisition/derived-build/$candidate/raw-image.tar"
             /bin/rm -rf "out/r0/preauth/acquisition/derived-build/$candidate/archive-root"
           done
