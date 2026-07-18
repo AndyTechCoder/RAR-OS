@@ -181,6 +181,42 @@ fn quoted_list(text: &str, marker: &str) -> Vec<String> {
     }).collect()
 }
 
+fn quoted_values(text: &str, marker: &str) -> Vec<String> {
+    let mut rest = text;
+    let mut values = Vec::new();
+    while let Some((_, after_marker)) = rest.split_once(marker) {
+        let end = after_marker.find('"').unwrap_or_else(|| fail("malformed JSON string"));
+        let value = &after_marker[..end];
+        if value.is_empty() || value.contains('\\') { fail("noncanonical JSON string"); }
+        values.push(value.to_owned());
+        if values.len() > 128 { fail("JSON value bound exceeded"); }
+        rest = &after_marker[end + 1..];
+    }
+    values
+}
+
+fn numeric_values(text: &str, marker: &str) -> Vec<u64> {
+    let mut rest = text;
+    let mut values = Vec::new();
+    while let Some((_, after_marker)) = rest.split_once(marker) {
+        let end = after_marker.bytes().position(|byte| !byte.is_ascii_digit())
+            .unwrap_or(after_marker.len());
+        if end == 0 { fail("malformed JSON number"); }
+        values.push(after_marker[..end].parse::<u64>().unwrap_or_else(|_| fail("JSON number overflow")));
+        if values.len() > 128 { fail("JSON value bound exceeded"); }
+        rest = &after_marker[end..];
+    }
+    values
+}
+
+fn typed_list_digest(kind: &str, values: &[String]) -> String {
+    let mut canonical = String::new();
+    for (index, value) in values.iter().enumerate() {
+        canonical.push_str(&format!("{kind}[{index}]=sha256:{value}\n"));
+    }
+    preauth::sha256_hex(canonical.as_bytes())
+}
+
 fn one_marker(text: &str, marker: &str) {
     if text.match_indices(marker).count() != 1 { fail("duplicate or missing JSON field"); }
 }
@@ -215,6 +251,13 @@ fn metadata_summary(path: &Path) -> (String, String, Option<(String, String, Str
     let text = fs::read_to_string(path).unwrap_or_else(|_| fail("unreadable OCI metadata"));
     if text.len() as u64 > MAX_INLINE { fail("oversized OCI metadata"); }
     let compact: String = text.chars().filter(|character| !character.is_ascii_whitespace()).collect();
+    let known_keys = [
+        "buildx.build.provenance", "buildx.build.ref", "containerimage.config.digest",
+        "containerimage.descriptor", "containerimage.digest", "image.name",
+    ];
+    let present = known_keys.into_iter().filter(|key| compact.contains(&format!("\"{key}\":")))
+        .collect::<Vec<_>>();
+    eprintln!("oci_buildx_metadata keys={}", present.join(","));
     let config = metadata_digest(path, "containerimage.config.digest");
     let digest = metadata_digest(path, "containerimage.digest");
     for value in [&config, &digest] {
@@ -370,12 +413,43 @@ fn verify_oci_layout(
         }
     }
     if image_manifests.len() != 1 { fail("OCI image manifest is not unique"); }
-    (image_manifests.into_iter().next().unwrap(), expected)
+    let selected_digest = image_manifests.into_iter().next().unwrap();
+    let selected_path = format!("blobs/sha256/{selected_digest}");
+    let selected = entries.get(&selected_path).unwrap_or_else(|| fail("selected OCI manifest absent"));
+    let selected_text = std::str::from_utf8(&selected.data).unwrap_or_else(|_| fail("selected OCI manifest is not UTF-8"));
+    let selected_compact: String = selected_text.chars().filter(|character| !character.is_ascii_whitespace()).collect();
+    let expected_digests = std::iter::once(config_digest.to_owned())
+        .chain(layers.iter().map(|layer| blob_digest(layer).unwrap().to_owned()))
+        .collect::<Vec<_>>();
+    if descriptor_digests(&selected_compact) != expected_digests { fail("OCI manifest descriptor mapping mismatch"); }
+    let media_types = quoted_values(&selected_compact, "\"mediaType\":\"");
+    if media_types.len() != layers.len() + 2
+        || media_types[0] != "application/vnd.oci.image.manifest.v1+json"
+        || media_types[1] != "application/vnd.oci.image.config.v1+json"
+        || !media_types[2..].iter().all(|value| value == "application/vnd.oci.image.layer.v1.tar")
+    { fail("OCI manifest media-type mapping mismatch"); }
+    let expected_sizes = std::iter::once(entries.get(config_name).unwrap().size)
+        .chain(layers.iter().map(|layer| entries.get(layer).unwrap().size))
+        .collect::<Vec<_>>();
+    if numeric_values(&selected_compact, "\"size\":") != expected_sizes {
+        fail("OCI manifest size mapping mismatch");
+    }
+    let index_compact: String = index_text.chars().filter(|character| !character.is_ascii_whitespace()).collect();
+    if descriptor_digests(&index_compact) != vec![selected_digest.clone()]
+        || numeric_values(&index_compact, "\"size\":") != vec![selected.size]
+        || quoted_values(&index_compact, "\"mediaType\":\"") != vec![
+            "application/vnd.oci.image.index.v1+json".to_owned(),
+            "application/vnd.oci.image.manifest.v1+json".to_owned(),
+        ]
+        || quoted_values(&index_compact, "\"architecture\":\"") != vec!["amd64".to_owned()]
+        || quoted_values(&index_compact, "\"os\":\"") != vec!["linux".to_owned()]
+    { fail("OCI index descriptor mapping mismatch"); }
+    (selected_digest, expected)
 }
 
 fn verify_one(
     entries: &BTreeMap<String, TarEntry>, metadata: &Path, image_id_path: &Path, project_export: bool,
-) -> (String, BTreeSet<String>) {
+) -> (String, String, String, String, BTreeSet<String>) {
     let manifest = &entries.get("manifest.json").unwrap_or_else(|| fail("Docker manifest absent")).data;
     if manifest.is_empty() { fail("oversized Docker manifest"); }
     let manifest = std::str::from_utf8(manifest).unwrap_or_else(|_| fail("manifest is not UTF-8"));
@@ -400,10 +474,10 @@ fn verify_one(
     let diff_ids = quoted_list(config_text, "\"diff_ids\":[");
     if diff_ids.len() != layers.len() { fail("layer/diff-id count mismatch"); }
     let mut expected = BTreeSet::from(["manifest.json".to_owned(), "repositories".to_owned(), config_name.clone()]);
-    for (layer, diff_id) in layers.iter().zip(diff_ids) {
+    for (layer, diff_id) in layers.iter().zip(&diff_ids) {
         if !safe_name(layer) || !diff_id.starts_with("sha256:") { fail("invalid layer identity"); }
         let entry = entries.get(layer).unwrap_or_else(|| fail("layer absent"));
-        if diff_id != format!("sha256:{}", entry.sha256) { fail("layer diff-id mismatch"); }
+        if diff_id != &format!("sha256:{}", entry.sha256) { fail("layer diff-id mismatch"); }
         expected.insert(layer.clone());
         if modern_oci {
             let digest = blob_digest(layer).unwrap_or_else(|| fail("invalid OCI layer path"));
@@ -444,11 +518,16 @@ fn verify_one(
         reported_digest, selected.size, selected_media_type, selected.sha256,
     );
     if metadata_config != config_digest
-        || descriptor.as_ref().is_some_and(|value| value.0 != metadata_digest)
-        || metadata_digest != reported_digest { fail("reported image digest mismatch"); }
+        || descriptor.is_some()
+        || metadata_digest != config_digest { fail("reported image digest mismatch"); }
     let image_id = fs::read_to_string(image_id_path).unwrap_or_else(|_| fail("loaded image identity absent"));
     if image_id.trim() != format!("sha256:{config_digest}") { fail("loaded image identity mismatch"); }
-    (config_digest, graph)
+    let layer_digests = layers.iter().map(|layer| blob_digest(layer).unwrap().to_owned()).collect::<Vec<_>>();
+    let diff_digests = diff_ids.iter().map(|value| value.strip_prefix("sha256:").unwrap().to_owned()).collect::<Vec<_>>();
+    (
+        config_digest, reported_digest, typed_list_digest("layer_descriptor", &layer_digests),
+        typed_list_digest("rootfs_diff_id", &diff_digests), graph,
+    )
 }
 
 fn main() {
@@ -457,7 +536,7 @@ fn main() {
         let archive = Path::new(&args[2]);
         let entries = tar_entries(archive, false);
         print_inventory(archive, &entries);
-        let (_, graph) = verify_one(&entries, Path::new(&args[3]), Path::new(&args[4]), true);
+        let (_, _, _, _, graph) = verify_one(&entries, Path::new(&args[3]), Path::new(&args[4]), true);
         if args[5] != "-" { fail("member-list output must be stdout"); }
         for name in graph { println!("{name}"); }
         return;
@@ -468,10 +547,17 @@ fn main() {
     let entries_two = tar_entries(paths[3], true);
     print_inventory(paths[0], &entries_one);
     print_inventory(paths[3], &entries_two);
-    let (digest_one, _) = verify_one(&entries_one, paths[1], paths[2], false);
-    let (digest_two, _) = verify_one(&entries_two, paths[4], paths[5], false);
-    if digest_one != digest_two || digest_file(paths[0]) != digest_file(paths[3]) { fail("independent OCI builds differ"); }
+    let (config_one, manifest_one, layers_one, diff_ids_one, _) = verify_one(&entries_one, paths[1], paths[2], false);
+    let (config_two, manifest_two, layers_two, diff_ids_two, _) = verify_one(&entries_two, paths[4], paths[5], false);
+    if (config_one.clone(), manifest_one.clone(), layers_one.clone(), diff_ids_one.clone())
+        != (config_two, manifest_two, layers_two, diff_ids_two)
+        || digest_file(paths[0]) != digest_file(paths[3]) { fail("independent OCI builds differ"); }
     println!("derived_oci_archive_sha256={}", digest_file(paths[0]));
-    println!("derived_oci_digest=sha256:{digest_one}");
-    println!("loaded_image_sha256={digest_one}");
+    println!("buildx_descriptor_kind=docker-config-id");
+    println!("buildx_descriptor_sha256={config_one}");
+    println!("docker_config_sha256={config_one}");
+    println!("selected_oci_manifest_sha256={manifest_one}");
+    println!("layer_descriptor_set_sha256={layers_one}");
+    println!("rootfs_diff_id_set_sha256={diff_ids_one}");
+    println!("loaded_image_config_sha256={config_one}");
 }

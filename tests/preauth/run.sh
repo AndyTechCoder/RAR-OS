@@ -43,7 +43,7 @@ printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+js
 manifest_digest=$(/usr/bin/sha256sum "$oci_test/root/image-manifest.pending" | /usr/bin/cut -d ' ' -f 1)
 mv "$oci_test/root/image-manifest.pending" "$oci_test/root/blobs/sha256/$manifest_digest"
 manifest_size=$(/usr/bin/wc -c < "$oci_test/root/blobs/sha256/$manifest_digest" | /usr/bin/tr -d ' ')
-printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s}]}\n' \
+printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s,"platform":{"architecture":"amd64","os":"linux"}}]}\n' \
     "$manifest_digest" "$manifest_size" > "$oci_test/root/index.json"
 printf '[{"Config":"blobs/sha256/%s","RepoTags":["rar-preauth:%s"],"Layers":["blobs/sha256/%s"]}]\n' \
     "$digest" "$head" "$layer_digest" > "$oci_test/root/manifest.json"
@@ -68,8 +68,8 @@ printf '%s\n' \
     /usr/bin/tar --sort=name --mtime='@1784332800' --owner=0 --group=0 \
         --numeric-owner --format=gnu -cf "$oci_test/one/image.tar" -C "$oci_test/root" -T -
 cp "$oci_test/one/image.tar" "$oci_test/two/image.tar"
-printf '{"containerimage.config.digest":"sha256:%s","containerimage.descriptor":{"digest":"sha256:%s","mediaType":"application/vnd.oci.image.manifest.v1+json","platform":{"architecture":"amd64","os":"linux"}},"containerimage.digest":"sha256:%s"}\n' \
-    "$digest" "$manifest_digest" "$manifest_digest" > "$oci_test/one/metadata.json"
+printf '{"containerimage.config.digest":"sha256:%s","containerimage.digest":"sha256:%s"}\n' \
+    "$digest" "$digest" > "$oci_test/one/metadata.json"
 cp "$oci_test/one/metadata.json" "$oci_test/two/metadata.json"
 printf 'sha256:%s\n' "$digest" > "$oci_test/one/image.id"
 cp "$oci_test/one/image.id" "$oci_test/two/image.id"
@@ -153,6 +153,34 @@ cp "$oci_test/one/image.tar" "$oci_test/two/image.tar"
 printf '{"containerimage.digest": "sha256:%064d"}\n' 0 > "$oci_test/two/metadata.json"
 expect_oci_rejection "derived OCI metadata substitution"
 cp "$oci_test/one/metadata.json" "$oci_test/two/metadata.json"
+printf '{"containerimage.config.digest":"sha256:%s","containerimage.digest":"sha256:%s"}\n' \
+    "$digest" "$manifest_digest" > "$oci_test/two/metadata.json"
+expect_oci_rejection "Buildx config identity relabeled as OCI manifest"
+printf '{"containerimage.config.digest":"sha256:%s","containerimage.descriptor":{"digest":"sha256:%s","mediaType":"application/vnd.oci.image.manifest.v1+json","platform":{"architecture":"amd64","os":"linux"}},"containerimage.digest":"sha256:%s"}\n' \
+    "$digest" "$digest" "$digest" > "$oci_test/two/metadata.json"
+expect_oci_rejection "metadata-only descriptor spoof"
+cp "$oci_test/one/metadata.json" "$oci_test/two/metadata.json"
+printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s,"platform":{"architecture":"arm64","os":"linux"}}]}\n' \
+    "$manifest_digest" "$manifest_size" > "$oci_test/root/index.json"
+build_two_archive
+expect_oci_rejection "Buildx platform substitution"
+printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s,"platform":{"architecture":"amd64","os":"linux"}}]}\n' \
+    "$manifest_digest" "$manifest_size" > "$oci_test/root/index.json"
+cp "$oci_test/root/blobs/sha256/$manifest_digest" "$oci_test/root/image-manifest.bad"
+/usr/bin/sed -i 's|application/vnd.oci.image.config.v1+json|application/vnd.oci.image.config.v1+json-spoof|' \
+    "$oci_test/root/image-manifest.bad"
+bad_manifest_digest=$(/usr/bin/sha256sum "$oci_test/root/image-manifest.bad" | /usr/bin/cut -d ' ' -f 1)
+bad_manifest_size=$(/usr/bin/wc -c < "$oci_test/root/image-manifest.bad" | /usr/bin/tr -d ' ')
+mv "$oci_test/root/image-manifest.bad" "$oci_test/root/blobs/sha256/$bad_manifest_digest"
+printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s,"platform":{"architecture":"amd64","os":"linux"}}]}\n' \
+    "$bad_manifest_digest" "$bad_manifest_size" > "$oci_test/root/index.json"
+build_two_members index.json manifest.json oci-layout repositories \
+    "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$bad_manifest_digest"
+expect_oci_rejection "transformed OCI media-type substitution"
+rm "$oci_test/root/blobs/sha256/$bad_manifest_digest"
+printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s,"platform":{"architecture":"amd64","os":"linux"}}]}\n' \
+    "$manifest_digest" "$manifest_size" > "$oci_test/root/index.json"
+build_two_archive
 printf 'sha256:%064d\n' 0 > "$oci_test/two/image.id"
 expect_oci_rejection "loaded image substitution"
 cp "$oci_test/one/image.id" "$oci_test/two/image.id"
@@ -248,8 +276,8 @@ expect_oci_rejection "repositories member mode"
     "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest"
 expect_oci_rejection "repositories member ownership"
 build_two_archive
-printf '{"containerimage.config.digest":"sha256:%s","containerimage.descriptor":{"digest":"sha256:%s","mediaType":"application/vnd.oci.image.manifest.v1+json","platform":{"architecture":"amd64","os":"linux"}},"containerimage.digest":"sha256:%s"}\n' \
-    "$digest" "$manifest_digest" "$manifest_digest" > "$oci_test/two/metadata.json"
+printf '{"containerimage.config.digest":"sha256:%s","containerimage.digest":"sha256:%s"}\n' \
+    "$digest" "$digest" > "$oci_test/two/metadata.json"
 printf '{"rar-preauth":{"%s":"%s"}}\n' "$head" "$digest" > "$oci_test/root/repositories"
 build_two_archive
 expect_oci_rejection "substituted repositories bytes with unchanged metadata"

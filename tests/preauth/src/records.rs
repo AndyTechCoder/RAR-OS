@@ -12,10 +12,13 @@ fn attestation(head: &str, event: &str, run: u64, archive: char, image: char) ->
     let payload = format!(concat!(
         "schema=rar-preauth-ci-attestation-v1\nphase=attested\n",
         "prepared_identity_graph_sha256={}\nsource_revision={}\nevent={}\nrun_id={}\n",
-        "archive_sha256={}\nimage_sha256={}\nloaded_image_sha256={}\n",
+        "archive_sha256={}\nbuildx_descriptor_kind=docker-config-id\n",
+        "buildx_descriptor_sha256={}\ndocker_config_sha256={}\nselected_oci_manifest_sha256={}\n",
+        "layer_descriptor_set_sha256={}\nrootfs_diff_id_set_sha256={}\nloaded_image_config_sha256={}\n",
         "package_manifest_sha256={}\nprofile_sha256={}\nartifact_sha256={}\n",
         "disk_sha256={}\nclosure_sha256={}\n"), graph_sha, head, event, run,
         archive.to_string().repeat(64), image.to_string().repeat(64), image.to_string().repeat(64),
+        "c".repeat(64), "d".repeat(64), "e".repeat(64), image.to_string().repeat(64),
         "a39ba029b4107d9c52d91ae90f36751b7dbb30ffff385e3e7209b266f8747fd5",
         "8e7bc38fa513700556b7ea493ffd42b6df6b4adcaf0a4719a0c7fe11f7eb165f",
         "96b7705f1dd987060c34ac049afd5a0d20fa58d8aff6586ce9090dbdf8a989ea",
@@ -89,9 +92,18 @@ fn main() {
     assert!(AttestationRecord::parse(&exact, head, "push", 43).is_err());
     let stale_phase = exact.replacen("phase=attested", "phase=prepared", 1);
     assert!(AttestationRecord::parse(&stale_phase, head, "push", 42).is_err());
-    let substituted_image = exact.replacen(&format!("loaded_image_sha256={}", "b".repeat(64)),
-        &format!("loaded_image_sha256={}", "c".repeat(64)), 1);
+    let substituted_image = exact.replacen(&format!("loaded_image_config_sha256={}", "b".repeat(64)),
+        &format!("loaded_image_config_sha256={}", "c".repeat(64)), 1);
     assert!(AttestationRecord::parse(&substituted_image, head, "push", 42).is_err());
+    let typed_substitutions = vec![
+        ("buildx_descriptor_kind=docker-config-id".to_owned(), "buildx_descriptor_kind=oci-manifest".to_owned()),
+        (format!("buildx_descriptor_sha256={}", "b".repeat(64)), format!("buildx_descriptor_sha256={}", "c".repeat(64))),
+        (format!("selected_oci_manifest_sha256={}", "c".repeat(64)), format!("selected_oci_manifest_sha256={}", "e".repeat(64))),
+        (format!("rootfs_diff_id_set_sha256={}", "e".repeat(64)), format!("rootfs_diff_id_set_sha256={}", "f".repeat(64))),
+    ];
+    for (field, replacement) in typed_substitutions {
+        assert!(AttestationRecord::parse(&exact.replacen(&field, &replacement, 1), head, "push", 42).is_err());
+    }
 
     for record in [closure, packages, host, certification, identity] {
         assert!(!record.contains("source_revision="));

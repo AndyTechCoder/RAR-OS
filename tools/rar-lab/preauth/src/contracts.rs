@@ -28,9 +28,10 @@ const IDENTITY_FIELDS: &[&str] = &[
 
 const ATTESTATION_FIELDS: &[&str] = &[
     "schema", "phase", "prepared_identity_graph_sha256", "source_revision", "event",
-    "run_id", "archive_sha256", "image_sha256", "loaded_image_sha256",
-    "package_manifest_sha256", "profile_sha256", "artifact_sha256", "disk_sha256",
-    "closure_sha256", "record_sha256",
+    "run_id", "archive_sha256", "buildx_descriptor_kind", "buildx_descriptor_sha256",
+    "docker_config_sha256", "selected_oci_manifest_sha256", "layer_descriptor_set_sha256",
+    "rootfs_diff_id_set_sha256", "loaded_image_config_sha256", "package_manifest_sha256",
+    "profile_sha256", "artifact_sha256", "disk_sha256", "closure_sha256", "record_sha256",
 ];
 
 const EXECUTION_HOST_FIELDS: &[&str] = &[
@@ -146,8 +147,12 @@ pub struct AttestationRecord {
     pub event: String,
     pub run_id: u64,
     pub archive_sha256: String,
-    pub image_sha256: String,
-    pub loaded_image_sha256: String,
+    pub buildx_descriptor_sha256: String,
+    pub docker_config_sha256: String,
+    pub selected_oci_manifest_sha256: String,
+    pub layer_descriptor_set_sha256: String,
+    pub rootfs_diff_id_set_sha256: String,
+    pub loaded_image_config_sha256: String,
     pub record_sha256: String,
 }
 
@@ -161,14 +166,17 @@ impl AttestationRecord {
             || values[3] != expected_head
             || values[4] != expected_event
             || run_id != expected_run
-            || !values[6..14].iter().all(|value| digest(value))
-            || values[7] != values[8]
-            || !digest(values[14])
+            || !digest(values[6])
+            || values[7] != "docker-config-id"
+            || !values[8..19].iter().all(|value| digest(value))
+            || values[8] != values[9]
+            || values[8] != values[13]
+            || !digest(values[19])
         {
             return Err(PreauthError::new("invalid-ci-attestation"));
         }
-        let payload = canonical_without_last(ATTESTATION_FIELDS, &values, 14);
-        if sha256_hex(payload.as_bytes()) != values[14] {
+        let payload = canonical_without_last(ATTESTATION_FIELDS, &values, 19);
+        if sha256_hex(payload.as_bytes()) != values[19] {
             return Err(PreauthError::new("ci-attestation-integrity"));
         }
         Ok(Self {
@@ -177,9 +185,13 @@ impl AttestationRecord {
             event: values[4].to_owned(),
             run_id,
             archive_sha256: values[6].to_owned(),
-            image_sha256: values[7].to_owned(),
-            loaded_image_sha256: values[8].to_owned(),
-            record_sha256: values[14].to_owned(),
+            buildx_descriptor_sha256: values[8].to_owned(),
+            docker_config_sha256: values[9].to_owned(),
+            selected_oci_manifest_sha256: values[10].to_owned(),
+            layer_descriptor_set_sha256: values[11].to_owned(),
+            rootfs_diff_id_set_sha256: values[12].to_owned(),
+            loaded_image_config_sha256: values[13].to_owned(),
+            record_sha256: values[19].to_owned(),
         })
     }
 }

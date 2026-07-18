@@ -5,8 +5,13 @@ source_revision
 event
 run_id
 archive_sha256
-image_sha256
-loaded_image_sha256
+buildx_descriptor_kind
+buildx_descriptor_sha256
+docker_config_sha256
+selected_oci_manifest_sha256
+layer_descriptor_set_sha256
+rootfs_diff_id_set_sha256
+loaded_image_config_sha256
 package_manifest_sha256
 profile_sha256
 artifact_sha256
