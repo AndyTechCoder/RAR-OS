@@ -58,7 +58,7 @@ fn main() {
     assert!(ClosureLock::parse(&closure.replacen("rar-preauth-closure-v3", "rar-preauth-closure-v2", 1), packages).is_err());
     let cross_type = closure
         .replace("canonical_oci_index_sha256=cb3d83784aa9576405feb9026dc8ed1aaa2633c350bf917079f2543ef544a298",
-                 "canonical_oci_index_sha256=4d59826fb248130555b99aa6bc034f17db7df4a6acbbe1ebc0a8175492476531");
+                 "canonical_oci_index_sha256=99e4294ce73d6eba59f4cdb0d88d248f4f19e9237b1cb1ec18302c73fcc8cf82");
     assert!(ClosureLock::parse(&cross_type, packages).is_err(), "config ID substituted for OCI index");
     let host_record = ExecutionHostRecord::parse(host).expect("strict execution-host leaf");
     let cert_record = PreparedCertification::parse(certification).expect("strict prepared certification");
