@@ -102,27 +102,41 @@ jobs:
         run: |
           host_uid=$(/usr/bin/id -u)
           host_gid=$(/usr/bin/id -g)
-          docker run --rm \
+          ownership=$(tools/toolchain/prepare-preauth-output.sh)
+          {
+            printf 'schema=rar-preauth-output-ownership-v1\n'
+            printf 'output_guard_sha256='; sha256sum tools/toolchain/prepare-preauth-output.sh | cut -d ' ' -f 1
+            printf '%s\n' "$ownership"
+          } > out/r0/preauth/output-ownership.evidence
+          docker run --rm --read-only \
+            --user "$host_uid:$host_gid" \
+            --security-opt no-new-privileges --cap-drop ALL \
+            --tmpfs /tmp:rw,exec,nosuid,nodev,size=256m,mode=1777 \
             --mount "type=bind,source=$GITHUB_WORKSPACE,target=/workspace" \
             --workdir /workspace \
+            --env HOME=/tmp/rar-home \
             --env RAR_CI_BOOTSTRAP_IMAGE \
             --env RAR_PREAUTH_ACQUISITION \
             --env RAR_OUTPUT_UID="$host_uid" \
             --env RAR_OUTPUT_GID="$host_gid" \
             rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 \
-            /usr/bin/dash -e tools/toolchain/acquire-preauth-closure.sh
+            /usr/bin/dash -e -c 'mkdir -p "$HOME"; exec tools/toolchain/acquire-preauth-closure.sh'
 
       - name: Produce immutable derived OCI image
         shell: /usr/bin/dash -e {0}
         run: |
-          mkdir -p out/r0/preauth/acquisition/derived-build/one \
-            out/r0/preauth/acquisition/derived-build/two \
-            out/r0/preauth/acquisition/host-tools
+          host_uid=$(/usr/bin/id -u)
+          host_gid=$(/usr/bin/id -g)
           docker run --rm --read-only --network none \
+            --user "$host_uid:$host_gid" \
+            --security-opt no-new-privileges --cap-drop ALL \
+            --tmpfs /tmp:rw,exec,nosuid,nodev,size=256m,mode=1777 \
             --mount "type=bind,source=$GITHUB_WORKSPACE,target=/workspace" \
             --workdir /workspace \
+            --env HOME=/tmp/rar-home \
             rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 \
             /usr/bin/dash -e -c '
+              mkdir -p "$HOME"
               /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc \
                 --edition=2024 tools/toolchain/preauth-verify-oci.rs \
                 -o out/r0/preauth/acquisition/host-tools/preauth-verify-oci
@@ -188,6 +202,7 @@ jobs:
         run: |
           docker run --rm --read-only --network none \
             --user "$(id -u):$(id -g)" \
+            --security-opt no-new-privileges --cap-drop ALL \
             --tmpfs /tmp:rw,exec,nosuid,nodev,size=256m,mode=1777 \
             --mount "type=bind,source=$GITHUB_WORKSPACE,target=/workspace" \
             --workdir /workspace \
@@ -197,9 +212,10 @@ jobs:
             --env GITHUB_ACTIONS \
             --env RAR_PREAUTH_BUILD_CONTAINER=rar-preauth-closure-v2 \
             --env RAR_TARGET_EXECUTION=prohibited \
+            --env HOME=/tmp/rar-home \
             "$RAR_VERIFIED_PREAUTH_IMAGE" \
             /usr/bin/dash -e -c '
-              mkdir -p out/r0/preauth/build/one out/r0/preauth/build/two out/r0/artifacts/x86_64 out/r0/vm/x86_64
+              mkdir -p "$HOME"
               /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition=2024 tools/rar-lab/preauth/src/disk.rs -o /tmp/rar-qcow2-writer
               /tmp/rar-qcow2-writer /workspace/out/r0/vm/x86_64/seed.qcow2
               cp out/r0/vm/x86_64/seed.qcow2 out/r0/vm/x86_64/launch-0001.qcow2

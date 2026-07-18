@@ -23,7 +23,7 @@ fn attestation(head: &str, event: &str, run: u64, archive: char, image: char) ->
         "8e7bc38fa513700556b7ea493ffd42b6df6b4adcaf0a4719a0c7fe11f7eb165f",
         "96b7705f1dd987060c34ac049afd5a0d20fa58d8aff6586ce9090dbdf8a989ea",
         "141d4f9b5756451e4d5874ac2d68c5c59052b82e52494d29ef8624fa3402e766",
-        "6fce29dad39d01bc08d134c6c3bbbad7201f9fa6c2b3448349d8010be477185a");
+        "2a74e8511dccc4f37cbf756280c13a78435f2b26cc5986d8aa418f7e2fc877a5");
     format!("{}record_sha256={}\n", payload, sha256_hex(payload.as_bytes()))
 }
 

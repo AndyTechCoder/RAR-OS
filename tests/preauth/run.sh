@@ -4,6 +4,8 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 cd "$root"
 
+tests/preauth/output-ownership.sh
+
 head=0123456789abcdef0123456789abcdef01234567
 merge=89abcdef0123456789abcdef0123456789abcdef
 [ "$(tools/toolchain/bind-preauth-head.sh push "$head" - "$head")" = "source_revision=$head" ]

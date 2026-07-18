@@ -6,13 +6,13 @@ set -eu
     exit 73
 }
 [ "${RAR_PREAUTH_ACQUISITION-}" = signed-snapshot-only ] || exit 73
-[ "$(id -u)" -eq 0 ] || {
-    echo "acquisition runs only inside the disposable OCI container" >&2
-    exit 73
-}
 case "${RAR_OUTPUT_UID-}:${RAR_OUTPUT_GID-}" in
     *[!0-9:]* | :* | *:) echo "invalid repository output ownership" >&2; exit 73 ;;
 esac
+[ "$(id -u)" = "$RAR_OUTPUT_UID" ] && [ "$(id -g)" = "$RAR_OUTPUT_GID" ] || {
+    echo "acquisition must run as the invoking repository owner" >&2
+    exit 73
+}
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 case "$root" in /workspace | /workspace/*) ;; *) echo "unexpected container workspace" >&2; exit 73 ;; esac
@@ -28,10 +28,22 @@ for path in "$root/out" "$root/out/r0" "$root/out/r0/preauth"; do
         exit 73
     }
 done
-[ ! -e "$output" ] && [ ! -L "$output" ] || {
-    echo "acquisition output must be absent before the transaction" >&2
+[ -d "$output" ] && [ ! -L "$output" ] || {
+    echo "acquisition output must be a direct pre-created directory" >&2
     exit 73
 }
+for path in "$output" "$output/apt-state" "$output/apt-state/lists" \
+    "$output/apt-state/lists/partial" "$output/apt-cache" \
+    "$output/apt-cache/archives" "$output/apt-cache/archives/partial" \
+    "$output/debs" "$output/licenses" "$output/derived-context" \
+    "$output/derived-context/rootfs" "$output/derived-build" \
+    "$output/derived-build/one" "$output/derived-build/two" "$output/host-tools"; do
+    [ -d "$path" ] && [ ! -L "$path" ] || { echo "unsafe acquisition output skeleton" >&2; exit 73; }
+    [ "$(/usr/bin/stat -c '%u:%g:%a' "$path")" = "$RAR_OUTPUT_UID:$RAR_OUTPUT_GID:755" ] || {
+        echo "acquisition output ownership or mode mismatch" >&2
+        exit 73
+    }
+done
 mkdir -p "$output/apt-state/lists/partial" "$output/apt-cache/archives/partial" "$output/debs" "$output/licenses" "$output/derived-context/rootfs"
 
 snapshot=20260630T000000Z
@@ -43,7 +55,7 @@ deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/$snapshot 
 deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/$snapshot trixie-security main
 EOF
 
-apt_options="-o Dir::Etc::sourcelist=$sources -o Dir::Etc::sourceparts=- -o Dir::State=$output/apt-state -o Dir::Cache=$output/apt-cache -o APT::Install-Recommends=false -o Acquire::Check-Valid-Until=false"
+apt_options="-o Dir::Etc::sourcelist=$sources -o Dir::Etc::sourceparts=- -o Dir::State=$output/apt-state -o Dir::Cache=$output/apt-cache -o APT::Install-Recommends=false -o Acquire::Check-Valid-Until=false -o Debug::NoLocking=1"
 # shellcheck disable=SC2086
 /usr/bin/apt-get $apt_options update
 # apt verifies InRelease signatures and Packages checksums before this download-only transaction.
@@ -233,7 +245,6 @@ EOF
         'vm_execution=not-attempted'
 } > "$output/discovery.evidence"
 
-# The disposable acquisition container needs root only for apt-secure and package
-# extraction. Return the repository-confined output to the invoking runner so
-# subsequent host-side tools can create files atomically without elevated access.
-/usr/bin/chown --recursive --no-dereference "$RAR_OUTPUT_UID:$RAR_OUTPUT_GID" "$output"
+# apt-secure, download-only APT, dpkg metadata reads, and dpkg-deb extraction
+# operate entirely in the pre-created repository-local state directories. None
+# requires host or container root, so every output inode retains runner ownership.
