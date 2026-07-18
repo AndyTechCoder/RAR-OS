@@ -143,6 +143,9 @@ jobs:
             docker image inspect --format '{{.Id}}' \
               "rar-preauth:${RAR_CHECKED_OUT_SOURCE_REVISION}" \
               > "out/r0/preauth/acquisition/derived-build/$candidate/image.id"
+            docker image inspect --format \
+              'oci_loaded_image id={{.Id}} os={{.Os}} architecture={{.Architecture}} repo_digest_count={{len .RepoDigests}} rootfs_diff_id_count={{len .RootFS.Layers}} rootfs_diff_ids={{json .RootFS.Layers}}' \
+              "rar-preauth:${RAR_CHECKED_OUT_SOURCE_REVISION}"
             docker save \
               --output "out/r0/preauth/acquisition/derived-build/$candidate/raw-image.tar" \
               "rar-preauth:${RAR_CHECKED_OUT_SOURCE_REVISION}"

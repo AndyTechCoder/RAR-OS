@@ -63,10 +63,11 @@ build_two_members() {
 }
 /usr/bin/tar --sort=name --mtime='@1784332800' --owner=0 --group=0 --numeric-owner --format=gnu \
     -cf "$oci_test/one/image.tar" -C "$oci_test/root" \
-    index.json manifest.json oci-layout repositories \
-    "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest"
+    "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest" \
+    index.json manifest.json oci-layout repositories
 cp "$oci_test/one/image.tar" "$oci_test/two/image.tar"
-printf '{"containerimage.config.digest":"sha256:%s","containerimage.digest":"sha256:%s"}\n' "$digest" "$manifest_digest" > "$oci_test/one/metadata.json"
+printf '{"containerimage.config.digest":"sha256:%s","containerimage.descriptor":{"digest":"sha256:%s","mediaType":"application/vnd.oci.image.manifest.v1+json","platform":{"architecture":"amd64","os":"linux"}},"containerimage.digest":"sha256:%s"}\n' \
+    "$digest" "$manifest_digest" "$manifest_digest" > "$oci_test/one/metadata.json"
 cp "$oci_test/one/metadata.json" "$oci_test/two/metadata.json"
 printf 'sha256:%s\n' "$digest" > "$oci_test/one/image.id"
 cp "$oci_test/one/image.id" "$oci_test/two/image.id"
@@ -245,8 +246,8 @@ expect_oci_rejection "repositories member mode"
     "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest"
 expect_oci_rejection "repositories member ownership"
 build_two_archive
-printf '{"containerimage.config.digest":"sha256:%s","containerimage.digest":"sha256:%s"}\n' \
-    "$digest" "$manifest_digest" > "$oci_test/two/metadata.json"
+printf '{"containerimage.config.digest":"sha256:%s","containerimage.descriptor":{"digest":"sha256:%s","mediaType":"application/vnd.oci.image.manifest.v1+json","platform":{"architecture":"amd64","os":"linux"}},"containerimage.digest":"sha256:%s"}\n' \
+    "$digest" "$manifest_digest" "$manifest_digest" > "$oci_test/two/metadata.json"
 printf '{"rar-preauth":{"%s":"%s"}}\n' "$head" "$digest" > "$oci_test/root/repositories"
 build_two_archive
 expect_oci_rejection "substituted repositories bytes with unchanged metadata"
