@@ -84,6 +84,25 @@ projection=$(out/r0/preauth/acquisition/host-tools/preauth-verify-oci \
     2> "$oci_test/projection.log")
 ! printf '%s\n' "$projection" | /usr/bin/grep -Fqx "blobs/sha256/$orphan_digest"
 /usr/bin/grep -Fqx 'oci_projection_omitted count=1' "$oci_test/projection.log"
+mkdir -p "$oci_test/raw-root/blobs/sha256"
+cp "$oci_test/root/index.json" "$oci_test/root/manifest.json" "$oci_test/root/oci-layout" \
+    "$oci_test/root/repositories" "$oci_test/raw-root/"
+cp "$oci_test/root/blobs/sha256/$digest" "$oci_test/root/blobs/sha256/$layer_digest" \
+    "$oci_test/root/blobs/sha256/$manifest_digest" "$oci_test/root/blobs/sha256/$orphan_digest" \
+    "$oci_test/raw-root/blobs/sha256/"
+/usr/bin/tar --sort=name --mtime='@1784332800' --owner=0 --group=0 --numeric-owner --format=gnu --no-recursion \
+    -cf "$oci_test/two/raw-with-directories.tar" -C "$oci_test/raw-root" \
+    index.json manifest.json oci-layout repositories blobs blobs/sha256 \
+    "blobs/sha256/$digest" "blobs/sha256/$layer_digest" \
+    "blobs/sha256/$manifest_digest" "blobs/sha256/$orphan_digest"
+directory_projection=$(out/r0/preauth/acquisition/host-tools/preauth-verify-oci \
+    --member-list "$oci_test/two/raw-with-directories.tar" \
+    "$oci_test/two/metadata.json" "$oci_test/two/image.id" - 2> "$oci_test/directory-projection.log")
+[ "$directory_projection" = "$projection" ]
+/usr/bin/grep -Fqx 'oci_raw_directory path=blobs type=directory size=0 mode=0755 uid=0 gid=0' \
+    "$oci_test/directory-projection.log"
+/usr/bin/grep -Fqx 'oci_raw_directory path=blobs/sha256 type=directory size=0 mode=0755 uid=0 gid=0' \
+    "$oci_test/directory-projection.log"
 printf '%s\n' "$projection" | /usr/bin/tar --sort=name --mtime='@1784332800' \
     --owner=0 --group=0 --numeric-owner --format=gnu \
     -cf "$oci_test/two/image.tar" -C "$oci_test/root" -T -

@@ -93,7 +93,17 @@ fn tar_entries(path: &Path, require_canonical: bool) -> BTreeMap<String, TarEntr
             fail("noncanonical tar member metadata");
         }
         if directory && size != 0 { fail("nonempty tar directory"); }
-        if directory { fail("directory tar member refused"); }
+        if directory {
+            if require_canonical { fail("directory tar member refused"); }
+            let normalized = name.trim_end_matches('/');
+            eprintln!(
+                "oci_raw_directory path={} type=directory size={} mode={:04o} uid={} gid={}",
+                normalized, size, mode, uid, gid,
+            );
+            if !matches!(normalized, "blobs" | "blobs/sha256")
+                || mode != 0o755 || uid != 0 || gid != 0
+            { fail("invalid OCI raw directory"); }
+        }
         total = total.checked_add(size).unwrap_or_else(|| fail("tar total overflow"));
         if size > MAX_MEMBER || total > MAX_ARCHIVE || entries.len() >= MAX_MEMBERS { fail("tar bound exceeded"); }
         if !directory {
