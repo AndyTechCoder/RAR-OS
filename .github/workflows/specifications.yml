@@ -81,6 +81,7 @@ jobs:
         shell: /usr/bin/dash -e {0}
         run: |
           tools/ci/check-preauth-cutover.sh
+          mkdir -p out/r0/preauth/input-delivery
           tools/toolchain/preauth-input-producer --produce one | tee out/r0/preauth/input-delivery/one.summary
           tools/toolchain/preauth-input-producer --produce two | tee out/r0/preauth/input-delivery/two.summary
           one=$(sha256sum out/r0/preauth/input-delivery/one/preauth-input-bundle-v1.tar | cut -d ' ' -f 1)
