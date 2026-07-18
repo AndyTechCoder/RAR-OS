@@ -104,10 +104,10 @@ fn tar_entries(path: &Path) -> BTreeMap<String, TarEntry> {
 }
 
 fn print_inventory(archive: &Path, entries: &BTreeMap<String, TarEntry>) {
-    println!("oci_member_inventory archive={} members={}", archive.display(), entries.len());
+    eprintln!("oci_member_inventory archive={} members={}", archive.display(), entries.len());
     for (name, entry) in entries {
         let kind = if matches!(entry.kind, 0 | b'0') { "regular" } else { "unsupported" };
-        println!(
+        eprintln!(
             "oci_member path={} type={} size={} mode={:04o} uid={} gid={} sha256={}",
             name, kind, entry.size, entry.mode, entry.uid, entry.gid, entry.sha256,
         );
