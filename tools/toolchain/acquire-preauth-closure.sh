@@ -10,6 +10,9 @@ set -eu
     echo "acquisition runs only inside the disposable OCI container" >&2
     exit 73
 }
+case "${RAR_OUTPUT_UID-}:${RAR_OUTPUT_GID-}" in
+    *[!0-9:]* | :* | *:) echo "invalid repository output ownership" >&2; exit 73 ;;
+esac
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 case "$root" in /workspace | /workspace/*) ;; *) echo "unexpected container workspace" >&2; exit 73 ;; esac
@@ -119,3 +122,8 @@ EOF
         'emulator_execution=not-attempted' \
         'vm_execution=not-attempted'
 } > "$output/discovery.evidence"
+
+# The disposable acquisition container needs root only for apt-secure and package
+# extraction. Return the repository-confined output to the invoking runner so
+# subsequent host-side tools can create files atomically without elevated access.
+/usr/bin/chown --recursive --no-dereference "$RAR_OUTPUT_UID:$RAR_OUTPUT_GID" "$output"

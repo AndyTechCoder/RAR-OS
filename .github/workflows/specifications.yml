@@ -88,11 +88,15 @@ jobs:
       - name: Acquire signed snapshot closure without installation on host
         shell: /usr/bin/dash -e {0}
         run: |
+          host_uid=$(/usr/bin/id -u)
+          host_gid=$(/usr/bin/id -g)
           docker run --rm \
             --mount "type=bind,source=$GITHUB_WORKSPACE,target=/workspace" \
             --workdir /workspace \
             --env RAR_CI_BOOTSTRAP_IMAGE \
             --env RAR_PREAUTH_ACQUISITION \
+            --env RAR_OUTPUT_UID="$host_uid" \
+            --env RAR_OUTPUT_GID="$host_gid" \
             rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 \
             /usr/bin/dash -e tools/toolchain/acquire-preauth-closure.sh
 
