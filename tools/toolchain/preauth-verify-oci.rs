@@ -16,7 +16,6 @@ const MAX_INLINE: u64 = 8 * 1024 * 1024;
 const MAX_REPOSITORIES: u64 = 512;
 const MAX_DIAGNOSTIC_MEMBERS: usize = 32;
 const MAX_DIAGNOSTIC_REFS: usize = 8;
-const MAX_DIAGNOSTIC_FIELDS: usize = 16;
 const SOURCE_DATE_EPOCH: u64 = 1_784_332_800;
 
 struct TarEntry {
@@ -171,45 +170,49 @@ fn exact_keys(document: &str, path: &str, value: &preauth::Json, required: &[&st
     }
 }
 
-fn json_type(value: &preauth::Json) -> &'static str {
-    match value {
-        preauth::Json::Null => "null",
-        preauth::Json::Bool(_) => "boolean",
-        preauth::Json::Number(_) => "number",
-        preauth::Json::String(_) => "string",
-        preauth::Json::Array(_) => "array",
-        preauth::Json::Object(_) => "object",
+fn validate_layer_sources(
+    manifest: &preauth::Json, diff_ids: &[String], layers: &[String],
+    entries: &BTreeMap<String, TarEntry>, config_digest: &str,
+) {
+    let sources = manifest.get("LayerSources").unwrap_or_else(|error| fail(error.code));
+    let sources = sources.object().unwrap_or_else(|error| fail(error.code));
+    if sources.len() != diff_ids.len() || sources.len() != layers.len() {
+        fail("Docker LayerSources count mismatch");
     }
-}
-
-/// Diagnose the pinned Docker export's optional compatibility map without using or accepting it.
-/// The caller must fail before returning success whenever this reports `true`.
-fn report_unclassified_layer_sources(manifest: &preauth::Json) -> bool {
-    let Ok(object) = manifest.object() else { return false };
-    let Some(sources) = object.get("LayerSources") else { return false };
-    eprintln!("docker_layer_sources path=/0/LayerSources type={}", json_type(sources));
-    let Ok(entries) = sources.object() else { return true };
-    if let Ok(Some(diagnostic)) = sources.key_set_diagnostic(
-        "docker-manifest", "/0/LayerSources", &[], &[],
-    ) {
-        eprintln!("{diagnostic}");
-    }
-    for (index, (key, value)) in entries.iter().take(MAX_DIAGNOSTIC_FIELDS).enumerate() {
-        eprintln!(
-            "docker_layer_source index={} key_bytes={} key_sha256={} value_type={}",
-            index, key.len(), preauth::sha256_hex(key.as_bytes()), json_type(value),
+    let authoritative_layers = layers.iter().map(|layer| {
+        blob_digest(layer).unwrap_or_else(|| fail("invalid OCI layer path"))
+    }).collect::<BTreeSet<_>>();
+    let mut source_digests = BTreeSet::new();
+    for diff_id in diff_ids {
+        if !diff_id.starts_with("sha256:") || diff_id.len() != 71 {
+            fail("invalid Docker LayerSources key");
+        }
+        let descriptor = sources.get(diff_id).unwrap_or_else(|| fail("Docker LayerSources key mismatch"));
+        exact_keys(
+            "docker-manifest", "/0/LayerSources/*", descriptor,
+            &["digest", "mediaType", "size"], &[],
         );
-        if let Ok(Some(diagnostic)) = value.key_set_diagnostic(
-            "docker-manifest", "/0/LayerSources/*", &[], &[],
-        ) {
-            eprintln!("{diagnostic}");
+        let digest = sha_digest(descriptor.get("digest").unwrap());
+        let media_type = descriptor.get("mediaType").and_then(preauth::Json::string)
+            .unwrap_or_else(|error| fail(error.code));
+        if media_type != "application/vnd.oci.image.layer.v1.tar+gzip" {
+            fail("Docker LayerSources media type mismatch");
+        }
+        let size = descriptor.get("size").and_then(preauth::Json::number)
+            .unwrap_or_else(|error| fail(error.code));
+        if size == 0 || size > MAX_MEMBER { fail("Docker LayerSources size bound exceeded"); }
+        if digest == config_digest || authoritative_layers.contains(digest.as_str())
+            || !source_digests.insert(digest.clone())
+        {
+            fail("Docker LayerSources identity collision");
+        }
+        let source_path = format!("blobs/sha256/{digest}");
+        if let Some(source) = entries.get(&source_path) {
+            if source.sha256 != digest || source.size != size {
+                fail("Docker LayerSources payload mismatch");
+            }
         }
     }
-    eprintln!(
-        "docker_layer_sources count={} reported={} cap={}",
-        entries.len(), entries.len().min(MAX_DIAGNOSTIC_FIELDS), MAX_DIAGNOSTIC_FIELDS,
-    );
-    true
 }
 
 fn string_array(value: &preauth::Json) -> Vec<String> {
@@ -538,9 +541,9 @@ fn verify_one(
     let manifest_items = manifest_json.array().unwrap_or_else(|error| fail(error.code));
     if manifest_items.len() != 1 { fail("invalid Docker manifest count"); }
     let manifest = &manifest_items[0];
-    let unclassified_layer_sources = report_unclassified_layer_sources(manifest);
     exact_keys(
-        "docker-manifest", "/0", manifest, &["Config", "RepoTags", "Layers"], &["LayerSources"],
+        "docker-manifest", "/0", manifest,
+        &["Config", "RepoTags", "Layers", "LayerSources"], &[],
     );
     let config_name = manifest.get("Config").and_then(preauth::Json::string).unwrap_or_else(|error| fail(error.code)).to_owned();
     let modern_oci = blob_digest(&config_name).is_some();
@@ -562,9 +565,7 @@ fn verify_one(
     if rootfs.get("type").and_then(preauth::Json::string).unwrap() != "layers" { fail("invalid rootfs type"); }
     let diff_ids = string_array(rootfs.get("diff_ids").unwrap());
     if diff_ids.len() != layers.len() { fail("layer/diff-id count mismatch"); }
-    if unclassified_layer_sources {
-        fail("docker LayerSources compatibility map is not yet classified");
-    }
+    validate_layer_sources(manifest, &diff_ids, &layers, entries, &config_digest);
     let mut expected = BTreeSet::from(["manifest.json".to_owned(), "repositories".to_owned(), config_name.clone()]);
     for (layer, diff_id) in layers.iter().zip(&diff_ids) {
         if !safe_name(layer) || !diff_id.starts_with("sha256:") { fail("invalid layer identity"); }

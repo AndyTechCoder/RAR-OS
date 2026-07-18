@@ -36,6 +36,10 @@ mkdir -p "$oci_test/root/blobs/sha256" \
 printf 'minimal deterministic layer\n' > "$oci_test/root/layer.pending"
 layer_digest=$(/usr/bin/sha256sum "$oci_test/root/layer.pending" | /usr/bin/cut -d ' ' -f 1)
 mv "$oci_test/root/layer.pending" "$oci_test/root/blobs/sha256/$layer_digest"
+printf 'synthetic compressed layer source\n' > "$oci_test/root/source.pending"
+source_digest=$(/usr/bin/sha256sum "$oci_test/root/source.pending" | /usr/bin/cut -d ' ' -f 1)
+source_size=$(/usr/bin/wc -c < "$oci_test/root/source.pending" | /usr/bin/tr -d ' ')
+mv "$oci_test/root/source.pending" "$oci_test/root/blobs/sha256/$source_digest"
 printf '{"rootfs":{"type":"layers","diff_ids":["sha256:%s"]}}\n' "$layer_digest" | \
     "$json_builder" --canonicalize-json line > "$oci_test/root/config.pending"
 digest=$(/usr/bin/sha256sum "$oci_test/root/config.pending" | /usr/bin/cut -d ' ' -f 1)
@@ -53,8 +57,12 @@ write_index() {
         "$1" "$2" "$head" "$head" | "$json_builder" --canonicalize-json bare > "$oci_test/root/index.json"
 }
 write_index "$manifest_digest" "$manifest_size"
-printf '[{"Config":"blobs/sha256/%s","RepoTags":["rar-preauth:%s"],"Layers":["blobs/sha256/%s"]}]\n' \
-    "$digest" "$head" "$layer_digest" | "$json_builder" --canonicalize-json line > "$oci_test/root/manifest.json"
+write_manifest() {
+    printf '[{"Config":"blobs/sha256/%s","RepoTags":["rar-preauth:%s"],"Layers":["blobs/sha256/%s"],"LayerSources":{"sha256:%s":{"mediaType":"application/vnd.oci.image.layer.v1.tar+gzip","digest":"sha256:%s","size":%s}}}]\n' \
+        "$digest" "$head" "$layer_digest" "$layer_digest" "$source_digest" "$source_size" | \
+        "$json_builder" --canonicalize-json line > "$oci_test/root/manifest.json"
+}
+write_manifest
 printf '{"imageLayoutVersion":"1.0.0"}\n' | "$json_builder" --canonicalize-json line > "$oci_test/root/oci-layout"
 write_repositories() {
     printf '{"rar-preauth":{"%s":"%s"}}\n' "$head" "$layer_digest" | \
@@ -90,23 +98,25 @@ orphan_digest=$(/usr/bin/sha256sum "$oci_test/root/orphan.pending" | /usr/bin/cu
 mv "$oci_test/root/orphan.pending" "$oci_test/root/blobs/sha256/$orphan_digest"
 build_two_members index.json manifest.json oci-layout repositories \
     "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest" \
-    "blobs/sha256/$orphan_digest"
+    "blobs/sha256/$source_digest" "blobs/sha256/$orphan_digest"
 projection=$(out/r0/preauth/acquisition/host-tools/preauth-verify-oci \
     --member-list "$oci_test/two/image.tar" "$oci_test/two/metadata.json" "$oci_test/two/image.id" - \
     2> "$oci_test/projection.log")
 ! printf '%s\n' "$projection" | /usr/bin/grep -Fqx "blobs/sha256/$orphan_digest"
-/usr/bin/grep -Fqx 'oci_projection_omitted count=1' "$oci_test/projection.log"
+/usr/bin/grep -Fqx 'oci_projection_omitted count=2' "$oci_test/projection.log"
 mkdir -p "$oci_test/raw-root/blobs/sha256"
 cp "$oci_test/root/index.json" "$oci_test/root/manifest.json" "$oci_test/root/oci-layout" \
     "$oci_test/root/repositories" "$oci_test/raw-root/"
 cp "$oci_test/root/blobs/sha256/$digest" "$oci_test/root/blobs/sha256/$layer_digest" \
-    "$oci_test/root/blobs/sha256/$manifest_digest" "$oci_test/root/blobs/sha256/$orphan_digest" \
+    "$oci_test/root/blobs/sha256/$manifest_digest" "$oci_test/root/blobs/sha256/$source_digest" \
+    "$oci_test/root/blobs/sha256/$orphan_digest" \
     "$oci_test/raw-root/blobs/sha256/"
 /usr/bin/tar --sort=name --mtime='@1784332800' --owner=0 --group=0 --numeric-owner --format=gnu --no-recursion \
     -cf "$oci_test/two/raw-with-directories.tar" -C "$oci_test/raw-root" \
     index.json manifest.json oci-layout repositories blobs blobs/sha256 \
     "blobs/sha256/$digest" "blobs/sha256/$layer_digest" \
-    "blobs/sha256/$manifest_digest" "blobs/sha256/$orphan_digest"
+    "blobs/sha256/$manifest_digest" "blobs/sha256/$source_digest" \
+    "blobs/sha256/$orphan_digest"
 directory_projection=$(out/r0/preauth/acquisition/host-tools/preauth-verify-oci \
     --member-list "$oci_test/two/raw-with-directories.tar" \
     "$oci_test/two/metadata.json" "$oci_test/two/image.id" - 2> "$oci_test/directory-projection.log")
@@ -156,6 +166,32 @@ expect_oci_rejection() {
     set -e
     [ "$status" -eq 73 ] || { echo "$description passed strict OCI verification" >&2; exit 1; }
 }
+printf '[{"Config":"blobs/sha256/%s","RepoTags":["rar-preauth:%s"],"Layers":["blobs/sha256/%s"]}]\n' \
+    "$digest" "$head" "$layer_digest" | "$json_builder" --canonicalize-json line > "$oci_test/root/manifest.json"
+build_two_archive
+expect_oci_rejection "missing Docker LayerSources"
+printf '[{"Config":"blobs/sha256/%s","RepoTags":["rar-preauth:%s"],"Layers":["blobs/sha256/%s"],"LayerSources":{"sha256:%s":{"mediaType":"application/vnd.oci.image.layer.v1.tar+gzip","digest":"sha256:%s","size":%s,"unknown":true}}}]\n' \
+    "$digest" "$head" "$layer_digest" "$layer_digest" "$source_digest" "$source_size" | \
+    "$json_builder" --canonicalize-json line > "$oci_test/root/manifest.json"
+build_two_archive
+expect_oci_rejection "unknown Docker LayerSources descriptor key"
+printf '[{"Config":"blobs/sha256/%s","RepoTags":["rar-preauth:%s"],"Layers":["blobs/sha256/%s"],"LayerSources":{"sha256:%064d":{"mediaType":"application/vnd.oci.image.layer.v1.tar+gzip","digest":"sha256:%s","size":%s}}}]\n' \
+    "$digest" "$head" "$layer_digest" 0 "$source_digest" "$source_size" | \
+    "$json_builder" --canonicalize-json line > "$oci_test/root/manifest.json"
+build_two_archive
+expect_oci_rejection "Docker LayerSources diff-id substitution"
+printf '[{"Config":"blobs/sha256/%s","RepoTags":["rar-preauth:%s"],"Layers":["blobs/sha256/%s"],"LayerSources":{"sha256:%s":{"mediaType":"application/vnd.oci.image.layer.v1.tar","digest":"sha256:%s","size":%s}}}]\n' \
+    "$digest" "$head" "$layer_digest" "$layer_digest" "$source_digest" "$source_size" | \
+    "$json_builder" --canonicalize-json line > "$oci_test/root/manifest.json"
+build_two_archive
+expect_oci_rejection "Docker LayerSources media-type substitution"
+printf '[{"Config":"blobs/sha256/%s","RepoTags":["rar-preauth:%s"],"Layers":["blobs/sha256/%s"],"LayerSources":{"sha256:%s":{"mediaType":"application/vnd.oci.image.layer.v1.tar+gzip","digest":"sha256:%s","size":"%s"}}}]\n' \
+    "$digest" "$head" "$layer_digest" "$layer_digest" "$source_digest" "$source_size" | \
+    "$json_builder" --canonicalize-json line > "$oci_test/root/manifest.json"
+build_two_archive
+expect_oci_rejection "Docker LayerSources size type confusion"
+write_manifest
+build_two_archive
 printf 'different-archive\n' > "$oci_test/two/image.tar"
 expect_oci_rejection "derived OCI byte mismatch"
 cp "$oci_test/one/image.tar" "$oci_test/two/image.tar"
