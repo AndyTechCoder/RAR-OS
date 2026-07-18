@@ -1,5 +1,9 @@
 schema=rar-preauth-cutover-v1
 production_entrypoint=tools/toolchain/preauth-transaction
+untrusted_delivery_entrypoint=tools/toolchain/preauth-input-producer
+input_bundle_contract=spec/lab/preauth/preauth-input-bundle-v1.fields
+input_object_contract=spec/lab/preauth/preauth-input-object-v1.fields
+input_delivery_policy=spec/lab/preauth/preauth-input-delivery-v1.policy
 production_library=tools/rar-lab/preauth/src/lib.rs
 input_contract=spec/lab/preauth/locks/r0-x86_64-preauth-input-v4.lock
 transaction_graph_contract=spec/lab/preauth/transaction-graph-v1.fields
@@ -24,4 +28,4 @@ allowed_inventory_source=spec/lab/preauth/cutover-v1.manifest
 allowed_required_file_index=tools/ci/check-specs.sh
 package_grammar_exception=spec/lab/preauth/package-v2.fields
 package_grammar_exception=spec/lab/preauth/locks/r0-x86_64-preauth-packages.v2
-status=m1.5-cutover-m2-incomplete
+status=m1.6-input-delivery-m2-incomplete

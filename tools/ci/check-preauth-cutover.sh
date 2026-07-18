@@ -12,9 +12,12 @@ manifest=spec/lab/preauth/cutover-v1.manifest
 [ -f "$manifest" ] && [ ! -L "$manifest" ] || fail manifest-missing
 [ "$(grep -c '^schema=rar-preauth-cutover-v1$' "$manifest")" -eq 1 ] || fail manifest-schema
 [ "$(grep -c '^production_entrypoint=tools/toolchain/preauth-transaction$' "$manifest")" -eq 1 ] || fail sole-entrypoint
-[ "$(grep -c '^status=m1.5-cutover-m2-incomplete$' "$manifest")" -eq 1 ] || fail completeness-status
+[ "$(grep -c '^status=m1.6-input-delivery-m2-incomplete$' "$manifest")" -eq 1 ] || fail completeness-status
+[ "$(grep -c '^untrusted_delivery_entrypoint=tools/toolchain/preauth-input-producer$' "$manifest")" -eq 1 ] || fail delivery-entrypoint
 
-for required in tools/toolchain/preauth-transaction tools/rar-lab/preauth/src/lib.rs \
+for required in tools/toolchain/preauth-transaction tools/toolchain/preauth-input-producer \
+ tools/rar-lab/preauth/src/lib.rs spec/lab/preauth/preauth-input-bundle-v1.fields \
+ spec/lab/preauth/preauth-input-object-v1.fields spec/lab/preauth/preauth-input-delivery-v1.policy \
  spec/lab/preauth/locks/r0-x86_64-preauth-input-v4.lock \
  spec/lab/preauth/transaction-graph-v1.fields spec/lab/preauth/transaction-bundle-v1.fields; do
  [ -f "$required" ] && [ ! -L "$required" ] || fail "unsafe-required:$required"
@@ -34,6 +37,8 @@ done
 
 workflow=.github/workflows/specifications.yml
 [ "$(grep -c 'tools/toolchain/preauth-transaction --prepare' "$workflow")" -eq 1 ] || fail workflow-entrypoint
+[ "$(grep -c 'tools/toolchain/preauth-input-producer --produce' "$workflow")" -eq 2 ] || fail workflow-delivery
+! grep -Eq 'preauth-input-producer.*(authority|session|graph|certificate)|preauth-transaction.*--network' "$workflow" || fail boundary-confusion
 ! grep -Eq 'eval|source[[:space:]]|^[[:space:]]*\.[[:space:]]|RAR_ALLOW_.*LEGACY|fallback' "$workflow" || fail workflow-indirection
 
 production_pattern='rar-preauth-closure-v3|rar-preauth-identity-graph-v2|rar-preauth-ci-attestation-v2|rar-preauth-prepared-certification-v1|rar-execution-host-v1|rar-disposable-disk-v1|rar-vm-profile-v1|rar-vm-certification-v1|rar-vm-owner-authorization-v1|AuthorizationRecord|AuthorizationConsumptionKey|DescriptorBinding'

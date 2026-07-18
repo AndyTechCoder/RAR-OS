@@ -6,7 +6,7 @@ use std::os::unix::fs::symlink;
 use super::preauth::{
     ArchiveEntry, ArchivePlan, DescriptorDir, FrozenTransactionGraph, InputLockV4, MemberKind,
     OwnedSnapshot, PreauthError, TransactionEffects, TransactionMachine, TransactionPhase,
-    TRANSACTION_GRAPH_FIELDS, plan_deb_ar, plan_tar, sha256_hex, snapshot_to_private,
+    TRANSACTION_GRAPH_FIELDS, parse_input_bundle_v1, plan_deb_ar, plan_tar, sha256_hex, snapshot_to_private,
     validate_closure_inputs,
 };
 
@@ -18,6 +18,91 @@ fn snapshot(slot: &str) -> OwnedSnapshot {
         writable_aliases: 0, source_identity_before: "1:2:16:3".into(),
         source_identity_after: "1:2:16:3".into(), source_link_count: 1,
     }
+}
+
+fn input_header(name: &str, bytes: &[u8]) -> [u8; 512] {
+    let mut header = [0u8; 512]; header[..name.len()].copy_from_slice(name.as_bytes());
+    header[100..108].copy_from_slice(b"0000644\0"); header[108..116].copy_from_slice(b"0000000\0");
+    header[116..124].copy_from_slice(b"0000000\0");
+    let size = format!("{:011o}\0", bytes.len()); header[124..136].copy_from_slice(size.as_bytes());
+    header[136..148].copy_from_slice(b"15226541000\0"); header[148..156].fill(b' '); header[156] = b'0';
+    header[257..263].copy_from_slice(b"ustar\0"); header[263..265].copy_from_slice(b"00");
+    let sum: u64 = header.iter().map(|byte| *byte as u64).sum();
+    header[148..156].copy_from_slice(format!("{sum:06o}\0 ").as_bytes()); header
+}
+
+fn input_bundle_fixture() -> Vec<u8> {
+    let mut logical: Vec<(String, Vec<u8>, String, [&str; 5])> = Vec::new();
+    let singleton = ["base-oci", "keyring", "inrelease", "inrelease", "inrelease", "security-inrelease",
+        "package-manifest", "license-manifest", "producer-tools", "license", "tool-lld", "tool-qemu", "firmware-code", "firmware-vars"];
+    for (index, role) in singleton.iter().enumerate() {
+        logical.push(((*role).into(), format!("{role}-{index}").into_bytes(), format!("origin-{index}"), ["-"; 5]));
+    }
+    for index in 0..36 {
+        logical.push(("deb".into(), format!("deb-{index}").into_bytes(), format!("snapshot-{index}"),
+            ["package", "version", "amd64", "source", "source-version"]));
+    }
+    let mut rows = Vec::new(); let mut files = Vec::new(); let mut aggregate = 0u64;
+    for (role, bytes, origin, metadata) in logical {
+        let digest = sha256_hex(&bytes); aggregate += bytes.len() as u64;
+        rows.push(format!("{role}|objects/{digest}|{}|{digest}|{origin}|{}|{}|{}|{}|{}", bytes.len(),
+            metadata[0], metadata[1], metadata[2], metadata[3], metadata[4]));
+        files.push((format!("objects/{digest}"), bytes));
+    }
+    rows.sort(); let objects = format!("{}\n", rows.join("\n")).into_bytes();
+    let lock = hash('a'); let policy = hash('b'); let base = hash('c');
+    let payload = format!(concat!(
+        "schema=rar-preauth-input-bundle-v1\ninput_lock_sha256={}\nproducer_policy_sha256={}\n",
+        "base_oci_index_sha256={}\ndebian_snapshot=20260630T000000Z\npackage_count=36\n",
+        "object_count={}\naggregate_bytes={}\nobjects_manifest_sha256={}\n"),
+        lock, policy, base, rows.len(), aggregate, sha256_hex(&objects));
+    let manifest = format!("{payload}record_sha256={}\n", sha256_hex(payload.as_bytes())).into_bytes();
+    files.push(("manifest.v1".into(), manifest)); files.push(("objects.v1".into(), objects)); files.sort_by(|a,b| a.0.cmp(&b.0));
+    let mut archive = Vec::new();
+    for (name, bytes) in files { archive.extend_from_slice(&input_header(&name, &bytes)); archive.extend_from_slice(&bytes); archive.resize(archive.len().div_ceil(512) * 512, 0); }
+    archive.resize(archive.len() + 1024, 0); archive
+}
+
+fn input_members(bytes: &[u8]) -> Vec<Vec<u8>> {
+    let mut at = 0usize; let mut members = Vec::new();
+    while bytes[at..at + 512].iter().any(|byte| *byte != 0) {
+        let raw = std::str::from_utf8(&bytes[at + 124..at + 136]).unwrap().trim_matches(char::from(0)).trim();
+        let size = usize::from_str_radix(raw, 8).unwrap(); let span = 512 + size.div_ceil(512) * 512;
+        members.push(bytes[at..at + span].to_vec()); at += span;
+    }
+    members
+}
+
+fn join_input_members(members: &[Vec<u8>]) -> Vec<u8> {
+    let mut bytes: Vec<u8> = members.iter().flatten().copied().collect(); bytes.resize(bytes.len() + 1024, 0); bytes
+}
+
+#[test]
+fn input_bundle_v1_is_canonical_complete_and_content_addressed() {
+    let valid = input_bundle_fixture(); let parsed = parse_input_bundle_v1(&valid).unwrap();
+    assert_eq!(parsed.package_count, 36); assert_eq!(parsed.objects.len(), 50);
+    assert_eq!(parsed.archive_sha256, sha256_hex(&valid));
+    let mut wrong_mode = valid.clone(); wrong_mode[100..108].copy_from_slice(b"0000600\0");
+    assert_eq!(parse_input_bundle_v1(&wrong_mode).unwrap_err().code, "input-bundle-tar-metadata");
+    let mut wrong_type = valid.clone(); wrong_type[156] = b'2';
+    assert_eq!(parse_input_bundle_v1(&wrong_type).unwrap_err().code, "input-bundle-tar-type");
+    let mut truncated = valid.clone(); truncated.truncate(truncated.len() - 800);
+    assert!(parse_input_bundle_v1(&truncated).is_err());
+
+    let members = input_members(&valid);
+    let mut reordered = members.clone(); reordered.swap(0, 1);
+    assert_eq!(parse_input_bundle_v1(&join_input_members(&reordered)).unwrap_err().code, "input-bundle-tar-order");
+    let mut missing = members.clone(); missing.pop();
+    assert!(matches!(parse_input_bundle_v1(&join_input_members(&missing)).unwrap_err().code,
+        "input-object-missing" | "input-bundle-inventory"));
+    let mut duplicate = members.clone(); duplicate.insert(1, duplicate[0].clone());
+    assert!(matches!(parse_input_bundle_v1(&join_input_members(&duplicate)).unwrap_err().code,
+        "input-bundle-tar-order" | "input-bundle-duplicate"));
+    let mut substituted = valid.clone();
+    let first_object = members.iter().find(|member| std::str::from_utf8(&member[..72]).unwrap_or("").starts_with("objects/")).unwrap();
+    let first_at = valid.windows(first_object.len()).position(|window| window == first_object).unwrap();
+    substituted[first_at + 512] ^= 1;
+    assert_eq!(parse_input_bundle_v1(&substituted).unwrap_err().code, "input-object-content");
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

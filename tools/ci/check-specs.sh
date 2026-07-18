@@ -62,6 +62,9 @@ sdk/generated/release-0/lib.rs
 spec/lab/preauth/closure-input-lock-v4.fields
 spec/lab/preauth/transaction-graph-v1.fields
 spec/lab/preauth/transaction-bundle-v1.fields
+spec/lab/preauth/preauth-input-bundle-v1.fields
+spec/lab/preauth/preauth-input-object-v1.fields
+spec/lab/preauth/preauth-input-delivery-v1.policy
 spec/lab/preauth/cutover-v1.manifest
 spec/lab/preauth/disk-v2.fields
 spec/lab/preauth/execution-host-v2.fields
@@ -73,6 +76,7 @@ spec/lab/preauth/package-v2.fields
 tools/rar-lab/preauth/src/lib.rs
 tools/rar-lab/preauth/src/descriptor_fs.rs
 tools/rar-lab/preauth/src/hash.rs
+tools/rar-lab/preauth/src/input_bundle.rs
 tools/rar-lab/preauth/src/json.rs
 tools/rar-lab/preauth/src/package.rs
 tools/rar-lab/preauth/src/transaction.rs
@@ -81,9 +85,12 @@ tools/rar-lab/preauth/src/disk.rs
 tests/preauth/src/main.rs
 tests/preauth/run.sh
 tests/preauth/transaction-contracts.sh
+tests/preauth/input-producer-contracts.sh
 tests/preauth/fixtures/cutover-mutations.v1
 tools/toolchain/acquire-preauth-closure.sh
 tools/toolchain/preauth-transaction
+tools/toolchain/preauth-transaction.rs
+tools/toolchain/preauth-input-producer
 tools/toolchain/bind-preauth-head.sh
 tools/toolchain/verify-preauth-oci.sh
 tools/toolchain/preauth-verify-oci.rs
@@ -111,7 +118,7 @@ printf '%s\n' "$required_files" | while IFS= read -r file; do
     [ -s "$file" ] || fail "empty required file: $file"
 done
 
-for script in tools/ci/check-specs.sh tools/ci/check-preauth-cutover.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh tests/preauth/run.sh tests/preauth/transaction-contracts.sh tools/toolchain/preauth-transaction spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
+for script in tools/ci/check-specs.sh tools/ci/check-preauth-cutover.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh tests/preauth/run.sh tests/preauth/transaction-contracts.sh tests/preauth/input-producer-contracts.sh tools/toolchain/preauth-transaction tools/toolchain/preauth-input-producer spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
     [ -x "$script" ] || fail "required script is not executable: $script"
 done
 

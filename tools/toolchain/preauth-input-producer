@@ -1,0 +1,213 @@
+#!/bin/sh
+set -eu
+
+fail(){ printf 'preauth-input-producer:%s\n' "$1" >&2; exit 73; }
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
+cd "$root"
+lock=spec/lab/preauth/locks/r0-x86_64-preauth-input-v4.lock
+packages=spec/lab/preauth/locks/r0-x86_64-preauth-packages.v2
+policy=spec/lab/preauth/preauth-input-delivery-v1.policy
+epoch=1784332800
+base=rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
+
+safe_slot(){ case "$1" in one|two) :;; *) fail invalid-slot;; esac; }
+no_authority_env(){
+ [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN-}" ] && [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL-}" ] \
+  && [ -z "${AWS_ACCESS_KEY_ID-}" ] && [ -z "${AWS_SECRET_ACCESS_KEY-}" ] \
+  && [ -z "${AWS_SESSION_TOKEN-}" ] && [ -z "${GH_TOKEN-}" ] && [ -z "${GITHUB_TOKEN-}" ] \
+  || fail authority-environment
+ [ -z "${RAR_GITHUB_ENVIRONMENT-}" ] || fail github-environment
+}
+lock_value(){
+ value=$(sed -n "s/^$1=//p" "$lock")
+ [ -n "$value" ] && [ "$(grep -c "^$1=" "$lock")" -eq 1 ] || fail "lock-field-$1"
+ printf '%s\n' "$value"
+}
+
+inside(){
+ stage=$1
+ case "$stage" in out/r0/preauth/input-delivery/.stage-one|out/r0/preauth/input-delivery/.stage-two) :;; *) fail stage-path;; esac
+ [ "${RAR_CI_BOOTSTRAP_IMAGE-}" = sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 ] || fail base-identity
+ [ "$(id -u)" = "${RAR_OUTPUT_UID-}" ] && [ "$(id -g)" = "${RAR_OUTPUT_GID-}" ] || fail output-owner
+ incoming=$stage/incoming
+ state=$stage/apt-state
+ cache=$stage/apt-cache
+ mkdir -m 700 "$state" "$state/lists" "$state/lists/partial" "$cache" "$cache/archives" "$cache/archives/partial" "$incoming/debs" "$stage/extracted"
+ sources=$stage/sources.list
+ {
+  printf '%s\n' \
+   'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260630T000000Z trixie main' \
+   'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260630T000000Z trixie-updates main' \
+   'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260630T000000Z trixie-proposed-updates main' \
+   'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260630T000000Z trixie-security main'
+ } > "$sources"
+ options="-o Dir::Etc::sourcelist=$sources -o Dir::Etc::sourceparts=- -o Dir::State=$state -o Dir::Cache=$cache -o APT::Install-Recommends=false -o Acquire::Check-Valid-Until=false -o Acquire::https::AllowRedirect=true -o Acquire::Retries=2 -o Debug::NoLocking=1"
+ # apt-secure validates the exact signed snapshot before download-only acquisition.
+ # shellcheck disable=SC2086
+ /usr/bin/apt-get $options update
+ # shellcheck disable=SC2086
+ /usr/bin/apt-get $options --yes --download-only --no-install-recommends install \
+  'lld-19=1:19.1.7-3+b1' 'qemu-system-x86=1:10.0.8+ds-0+deb13u1+b2' 'ovmf=2025.02-8+deb13u1'
+ find "$cache/archives" -maxdepth 1 -type f -name '*.deb' -exec /bin/cp --reflink=never {} "$incoming/debs/" \;
+ [ "$(find "$incoming/debs" -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d ' ')" -eq 36 ] || fail package-count
+ find "$state/lists" -maxdepth 1 -type f -name '*InRelease' -exec /bin/cp --reflink=never {} "$incoming/" \;
+ [ "$(find "$incoming" -maxdepth 1 -type f -name '*InRelease' | wc -l | tr -d ' ')" -eq 4 ] || fail inrelease-count
+ /bin/cp --reflink=never /usr/share/keyrings/debian-archive-keyring.gpg "$incoming/debian-archive-keyring.gpg"
+ observed=$stage/packages.observed
+ licenses=$stage/licenses.v2
+ archive_plan=$stage/deb-archive.plan
+ : > "$archive_plan"
+ printf '%s\n' schema=rar-preauth-package-manifest-v2 > "$observed"
+ printf '%s\n' schema=rar-preauth-license-manifest-v2 > "$licenses"
+ for deb in "$incoming"/debs/*.deb; do
+  sha=$(sha256sum "$deb" | cut -d ' ' -f1); name=$(/usr/bin/dpkg-deb -f "$deb" Package)
+  version=$(/usr/bin/dpkg-deb -f "$deb" Version); architecture=$(/usr/bin/dpkg-deb -f "$deb" Architecture)
+  source_field=$(/usr/bin/dpkg-deb -f "$deb" Source 2>/dev/null || :)
+  case "$source_field" in *' ('*')') source_name=${source_field%% *}; source_version=${source_field#* \(}; source_version=${source_version%\)};; '') source_name=$name; source_version=$version;; *) source_name=$source_field; source_version=$version;; esac
+  row=$(grep -F "package|$name|" "$packages"); [ "$(printf '%s\n' "$row" | wc -l | tr -d ' ')" -eq 1 ] || fail package-row
+  license_sha=$(printf '%s\n' "$row" | cut -d '|' -f8)
+  printf 'package|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$name" "$version" "$architecture" "$(basename "$deb")" "$(stat -c %s "$deb")" "$sha" "$license_sha" "$source_name" "$source_version" >> "$observed"
+  printf 'license|%s|%s\n' "$name" "$license_sha" >> "$licenses"
+  /usr/bin/dpkg-deb -c "$deb" | /usr/bin/awk '
+   function safe(path) { return path != "" && path !~ /^\// && path !~ /(^|\/)\.\.?(\/|$)/ && path !~ /\\/ && path !~ /:/ }
+   function safe_link(path,target, base,n,i,p,depth) {
+    if (target == "" || target ~ /^\// || target ~ /\\/ || target ~ /:/) return 0;
+    base=path; sub(/\/[^/]*$/, "", base); n=split(base "/" target,p,"/"); depth=0;
+    for(i=1;i<=n;i++){ if(p[i]==""||p[i]==".") continue; if(p[i]==".."){if(depth==0)return 0;depth--}else depth++ }
+    return 1
+   }
+   NF < 6 { exit 73 }
+   { path=$6; sub(/^\.\//,"",path); type=substr($1,1,1); if(type !~ /[-dl]/) exit 73;
+     if(path=="" && type=="d") next; if(!safe(path)) exit 73;
+     if(type=="l"){if($7!="->"||!safe_link(path,$8))exit 73; print path "|" type "|" $3 "|" $8}
+     else print path "|" type "|" $3 }
+  ' >> "$archive_plan" || fail deb-archive-plan
+ done
+ { sed -n '1p' "$observed"; sed -n '2,$p' "$observed" | LC_ALL=C sort; } > "$observed.canonical"; /bin/mv "$observed.canonical" "$observed"
+ { sed -n '1p' "$licenses"; sed -n '2,$p' "$licenses" | LC_ALL=C sort; } > "$licenses.canonical"; /bin/mv "$licenses.canonical" "$licenses"
+ /usr/bin/cmp -s "$observed" "$packages" || fail package-manifest
+ [ "$(wc -l < "$archive_plan" | tr -d ' ')" -le 200000 ] || fail archive-member-count
+ /usr/bin/awk -F '|' '
+  { if (($1 in kind) && (kind[$1] != "d" || $2 != "d")) exit 73; kind[$1]=$2;
+    if ($3 !~ /^[0-9]+$/) exit 73; total += $3; if (total > 8589934592) exit 73 }
+ ' "$archive_plan" || fail archive-plan-collision
+ for deb in "$incoming"/debs/*.deb; do /usr/bin/dpkg-deb -x "$deb" "$stage/extracted"; done
+ [ "$(sha256sum "$licenses" | cut -d ' ' -f1)" = "$(lock_value license_manifest_sha256)" ] || fail license-manifest
+ for row in $(grep '^package|' "$packages" | cut -d '|' -f2,8); do
+  name=${row%|*}; expected=${row#*|}; copyright=$stage/extracted/usr/share/doc/$name/copyright
+  resolved=$(/usr/bin/realpath -e "$copyright") || fail license-missing
+  case "$resolved" in "$root/$stage"/extracted/usr/share/doc/*) :;; *) fail license-escape;; esac
+  [ "$(sha256sum "$resolved" | cut -d ' ' -f1)" = "$expected" ] || fail license-digest
+  /bin/cp --reflink=never "$resolved" "$incoming/license-$expected"
+ done
+ for binding in \
+  '/usr/bin/ld.lld-19:lld_sha256:tool-lld' \
+  '/usr/bin/qemu-system-x86_64:qemu_sha256:tool-qemu' \
+  '/usr/share/OVMF/OVMF_CODE_4M.fd:ovmf_code_sha256:firmware-code' \
+  '/usr/share/OVMF/OVMF_VARS_4M.fd:ovmf_vars_sha256:firmware-vars'; do
+  path=${binding%%:*}; rest=${binding#*:}; key=${rest%%:*}; role=${rest#*:}; source=$stage/extracted$path
+  [ -f "$source" ] && [ ! -L "$source" ] || fail "$role-missing"
+  [ "$(sha256sum "$source" | cut -d ' ' -f1)" = "$(lock_value "$key")" ] || fail "$role-digest"
+  /bin/cp --reflink=never "$source" "$incoming/$role"
+ done
+ /bin/cp --reflink=never "$observed" "$incoming/packages.v2"
+ /bin/cp --reflink=never "$licenses" "$incoming/licenses.v2"
+ {
+  printf '%s\n' schema=rar-preauth-input-producer-tools-v1
+  for tool in /usr/bin/apt-get /usr/bin/dpkg-deb /usr/bin/tar /usr/bin/sha256sum; do
+   printf 'tool=%s|%s\n' "$tool" "$(sha256sum "$tool" | cut -d ' ' -f1)"
+  done
+ } > "$incoming/container-tools.v1"
+ printf '%s\n' acquisition-complete > "$stage/inside.complete"
+}
+
+assemble(){
+ slot=$1; stage=out/r0/preauth/input-delivery/.stage-$slot; incoming=$stage/incoming
+ [ -f "$stage/inside.complete" ] && [ -f "$incoming/base-oci.tar" ] || fail acquisition-incomplete
+ archive=$stage/archive; objects=$archive/objects; mkdir -m 700 "$archive" "$objects"
+ rows=$archive/objects.v1; : > "$rows.unsorted"
+ add_object(){
+  role=$1 source=$2 origin=$3 package=$4 version=$5 architecture=$6 source_package=$7 source_version=$8
+  [ -f "$source" ] && [ ! -L "$source" ] || fail object-source
+  size=$(stat -c %s "$source"); [ "$size" -le 2147483648 ] || fail object-size
+  sha=$(sha256sum "$source" | cut -d ' ' -f1); destination=$objects/$sha
+  if [ -e "$destination" ]; then /usr/bin/cmp -s "$source" "$destination" || fail digest-collision; else /bin/cp --reflink=never "$source" "$destination"; chmod 0644 "$destination"; fi
+  printf '%s|objects/%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$role" "$sha" "$size" "$sha" "$origin" "$package" "$version" "$architecture" "$source_package" "$source_version" >> "$rows.unsorted"
+ }
+ add_object base-oci "$incoming/base-oci.tar" docker.io/library/rust@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 - - - - -
+ add_object keyring "$incoming/debian-archive-keyring.gpg" debian-archive-keyring - - - - -
+ for metadata in "$incoming"/*InRelease; do case "$(basename "$metadata")" in *debian-security*) role=security-inrelease;; *) role=inrelease;; esac; add_object "$role" "$metadata" "snapshot.debian.org/$(basename "$metadata")" - - - - -; done
+ add_object package-manifest "$incoming/packages.v2" repository-lock - - - - -
+ add_object license-manifest "$incoming/licenses.v2" signed-package-closure - - - - -
+ add_object producer-tools "$incoming/producer-tools.v1" pinned-acquisition-tools - - - - -
+ for deb in "$incoming"/debs/*.deb; do
+  name=$(/usr/bin/dpkg-deb -f "$deb" Package); row=$(grep -F "package|$name|" "$packages")
+  add_object deb "$deb" "snapshot.debian.org/$(basename "$deb")" "$name" "$(printf '%s' "$row" | cut -d '|' -f3)" "$(printf '%s' "$row" | cut -d '|' -f4)" "$(printf '%s' "$row" | cut -d '|' -f9)" "$(printf '%s' "$row" | cut -d '|' -f10)"
+ done
+ for license in "$incoming"/license-*; do add_object license "$license" signed-package-copyright - - - - -; done
+ add_object tool-lld "$incoming/tool-lld" /usr/bin/ld.lld-19 lld-19 '1:19.1.7-3+b1' amd64 llvm-toolchain-19 '1:19.1.7-3'
+ add_object tool-qemu "$incoming/tool-qemu" /usr/bin/qemu-system-x86_64 qemu-system-x86 '1:10.0.8+ds-0+deb13u1+b2' amd64 qemu '1:10.0.8+ds-0+deb13u1'
+ add_object firmware-code "$incoming/firmware-code" /usr/share/OVMF/OVMF_CODE_4M.fd ovmf '2025.02-8+deb13u1' all edk2 '2025.02-8+deb13u1'
+ add_object firmware-vars "$incoming/firmware-vars" /usr/share/OVMF/OVMF_VARS_4M.fd ovmf '2025.02-8+deb13u1' all edk2 '2025.02-8+deb13u1'
+ LC_ALL=C sort -u "$rows.unsorted" > "$rows"; [ "$(wc -l < "$rows" | tr -d ' ')" -le 128 ] || fail object-count
+ aggregate=$(awk -F '|' '{ sum += $3 } END { printf "%.0f", sum }' "$rows"); [ "$aggregate" -le 4294967296 ] || fail aggregate-size
+ input_lock_sha=$(sha256sum "$lock" | cut -d ' ' -f1); policy_sha=$(sha256sum "$policy" | cut -d ' ' -f1); objects_sha=$(sha256sum "$rows" | cut -d ' ' -f1)
+ manifest=$archive/manifest.v1
+ {
+  printf '%s\n' \
+   schema=rar-preauth-input-bundle-v1 \
+   input_lock_sha256=$input_lock_sha \
+   producer_policy_sha256=$policy_sha \
+   base_oci_index_sha256=f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 \
+   debian_snapshot=20260630T000000Z \
+   package_count=36 \
+   object_count=$(wc -l < "$rows" | tr -d ' ') \
+   aggregate_bytes=$aggregate \
+   objects_manifest_sha256=$objects_sha
+ } > "$manifest.payload"
+ /bin/cp "$manifest.payload" "$manifest"; printf 'record_sha256=%s\n' "$(sha256sum "$manifest.payload" | cut -d ' ' -f1)" >> "$manifest"
+ list=$stage/archive.list; { printf '%s\n' manifest.v1 objects.v1; sed -n 's/^[^|]*|\([^|]*\)|.*/\1/p' "$rows" | LC_ALL=C sort -u; } > "$list"
+ bundle=$stage/preauth-input-bundle-v1.tar
+ /usr/bin/tar --sort=name --mtime="@$epoch" --owner=0 --group=0 --numeric-owner --mode=0644 --format=ustar --no-recursion -cf "$bundle" -C "$archive" -T "$root/$list"
+ chmod 0444 "$bundle"; sync -f "$bundle"
+ publish=$stage/publish; mkdir -m 700 "$publish"; /bin/cp --reflink=never "$bundle" "$publish/preauth-input-bundle-v1.tar"; chmod 0444 "$publish/preauth-input-bundle-v1.tar"; sync -f "$publish/preauth-input-bundle-v1.tar"; sync -f "$publish"
+ final=out/r0/preauth/input-delivery/$slot
+ /bin/mv -T -n "$publish" "$final"; [ ! -e "$publish" ] || fail publication-collision
+ sync -f "$final"; sync -f out/r0/preauth/input-delivery
+ printf 'input_bundle_sha256=%s\n' "$(sha256sum "$final/preauth-input-bundle-v1.tar" | cut -d ' ' -f1)"
+ printf 'input_object_count=%s\n' "$(wc -l < "$rows" | tr -d ' ')"
+ printf '%s\n' 'target_execution=not-attempted' 'qemu_execution=not-attempted' 'emulator_execution=not-attempted' 'vm_execution=not-attempted' 'aws_calls=not-attempted'
+ /bin/rm -rf "$stage"
+}
+
+produce(){
+ slot=$1; safe_slot "$slot"; no_authority_env
+ [ "$(uname -s)" = Linux ] || fail linux-ci-only
+ command -v docker >/dev/null 2>&1 || fail docker-unavailable
+ parent=out/r0/preauth/input-delivery; mkdir -p "$parent"; [ -d "$parent" ] && [ ! -L "$parent" ] || fail output-parent
+ stage=$parent/.stage-$slot; [ ! -e "$stage" ] && [ ! -L "$stage" ] || fail stage-exists
+ mkdir -m 700 "$stage" "$stage/incoming" "$stage/docker-config" "$stage/home"
+ export DOCKER_CONFIG=$root/$stage/docker-config
+  docker image inspect "$base" >/dev/null 2>&1 || docker pull "$base" >/dev/null
+  docker save --output "$stage/incoming/base-oci.tar" "$base"
+ {
+  printf '%s\n' schema=rar-preauth-input-producer-tools-v1
+  printf 'tool=docker-client|%s|%s\n' "$(docker version --format '{{.Client.Version}}')" "$(sha256sum "$(command -v docker)" | cut -d ' ' -f1)"
+ } > "$stage/incoming/host-tools.v1"
+ host_uid=$(id -u); host_gid=$(id -g)
+ docker run --rm --read-only \
+  --user "$host_uid:$host_gid" --security-opt no-new-privileges --cap-drop ALL \
+  --tmpfs "/tmp:rw,nosuid,nodev,size=512m,uid=$host_uid,gid=$host_gid,mode=1777" \
+  --mount "type=bind,source=$root,target=/workspace" --workdir /workspace \
+  --env RAR_CI_BOOTSTRAP_IMAGE=sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 \
+  --env RAR_OUTPUT_UID="$host_uid" --env RAR_OUTPUT_GID="$host_gid" --env HOME="/workspace/$stage/home" \
+  "$base" /usr/bin/dash -e tools/toolchain/preauth-input-producer --inside "$stage"
+ { sed -n '1p' "$stage/incoming/host-tools.v1"; sed -n '2,$p' "$stage/incoming/host-tools.v1"; sed -n '2,$p' "$stage/incoming/container-tools.v1"; } > "$stage/incoming/producer-tools.v1"
+  assemble "$slot"
+}
+
+case "${1-}" in
+ --produce) [ "$#" -eq 2 ] || fail usage; produce "$2";;
+ --inside) [ "$#" -eq 2 ] || fail usage; inside "$2";;
+ *) fail usage;;
+esac

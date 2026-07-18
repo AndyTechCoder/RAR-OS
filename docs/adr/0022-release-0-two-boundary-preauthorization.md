@@ -71,6 +71,14 @@ Prompt 7A proves refusal when either is absent.
 
 ## Boundary 1: preauth-transaction
 
+An untrusted `preauth-input-bundle-v1` may be produced before this boundary by the
+separately networked `preauth-input-producer`.  That producer is delivery, not a
+preparation or trust boundary: it cannot build source, emit a transaction graph,
+or receive authority.  Push and pull-request CI run it without secrets, OIDC,
+environment authority or credentials.  The completed bundle is then handed to a
+separate least-privilege `--network none` transaction process.  All producer checks
+are repeated independently by the transaction; no producer verdict is trusted.
+
 The transaction owns each untrusted source exactly once: no-follow open, private
 exclusive snapshot, complete bounded parse and merged plan, then consumption only
 from the owned snapshot.  A public path is never reopened after validation.  An

@@ -3,6 +3,7 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 cd "$root"
 tests/preauth/transaction-contracts.sh
+tests/preauth/input-producer-contracts.sh
 tools/ci/check-preauth-cutover.sh
 mkdir -p out/r0
 if [ -x /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc ]; then

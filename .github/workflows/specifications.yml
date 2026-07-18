@@ -65,9 +65,11 @@ jobs:
               tests/preauth/run.sh
             '
 
-  preauth-cutover:
-    name: preauth-transaction-cutover-refusal
+  preauth-input-delivery:
+    name: preauth-input-delivery-and-networkless-refusal
     runs-on: ubuntu-24.04
+    env:
+      RAR_CI_BOOTSTRAP_IMAGE: sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
     steps:
       - name: Check out exact source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -75,16 +77,37 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
 
-      - name: Prove sole transaction entrypoint refuses until M2
+      - name: Acquire two deterministic untrusted input bundles
         shell: /usr/bin/dash -e {0}
         run: |
           tools/ci/check-preauth-cutover.sh
+          tools/toolchain/preauth-input-producer --produce one | tee out/r0/preauth/input-delivery/one.summary
+          tools/toolchain/preauth-input-producer --produce two | tee out/r0/preauth/input-delivery/two.summary
+          one=$(sha256sum out/r0/preauth/input-delivery/one/preauth-input-bundle-v1.tar | cut -d ' ' -f 1)
+          two=$(sha256sum out/r0/preauth/input-delivery/two/preauth-input-bundle-v1.tar | cut -d ' ' -f 1)
+          [ "$one" = "$two" ]
+          printf 'RAR_INPUT_BUNDLE_SHA256=%s\n' "$one" >> "$GITHUB_ENV"
+
+      - name: Parse delivery in a separate networkless transaction boundary
+        shell: /usr/bin/dash -e {0}
+        run: |
+          host_uid=$(/usr/bin/id -u)
+          host_gid=$(/usr/bin/id -g)
           set +e
-          output=$(tools/toolchain/preauth-transaction --prepare 2>&1)
+          output=$(docker run --rm --read-only --network none \
+            --user "$host_uid:$host_gid" --security-opt no-new-privileges --cap-drop ALL \
+            --tmpfs "/tmp:rw,nosuid,nodev,size=128m,uid=$host_uid,gid=$host_gid,mode=1777" \
+            --mount "type=bind,source=$GITHUB_WORKSPACE,target=/workspace" --workdir /workspace \
+            --env RAR_TRANSACTION_NETWORK=none \
+            rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 \
+            /usr/bin/dash -e tools/toolchain/preauth-transaction --prepare \
+            out/r0/preauth/input-delivery/one/preauth-input-bundle-v1.tar 2>&1)
           status=$?
           set -e
           [ "$status" -eq 73 ]
-          [ "$output" = preauth-transaction-m2-incomplete ]
+          printf '%s\n' "$output" | grep -qx "input_bundle_sha256=$RAR_INPUT_BUNDLE_SHA256"
+          printf '%s\n' "$output" | grep -qx 'input_package_count=36'
+          printf '%s\n' "$output" | grep -qx 'preauth-transaction:m2-incomplete'
           printf '%s\n' \
             'target_execution=not-attempted' \
             'qemu_execution=not-attempted' \

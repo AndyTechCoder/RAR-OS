@@ -117,6 +117,21 @@ impl DescriptorDir {
         open_at(&self.0, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC, 0)
     }
 
+    pub fn open_relative_file(&self, path: &str) -> io::Result<File> {
+        if path.is_empty() || path.starts_with('/') || path.contains('\\') || path.contains(':') {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid relative path"));
+        }
+        let mut parts = path.split('/').peekable();
+        let first = parts.next().ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "empty path"))?;
+        if parts.peek().is_none() { return self.open_file(first); }
+        let mut directory = self.open_dir(first)?;
+        while let Some(part) = parts.next() {
+            if parts.peek().is_none() { return directory.open_file(part); }
+            directory = directory.open_dir(part)?;
+        }
+        Err(io::Error::new(io::ErrorKind::InvalidInput, "path names a directory"))
+    }
+
     pub fn create_private_dir(&self, name: &str) -> io::Result<Self> {
         let name_c = component(name)?;
         // SAFETY: self is a live directory and name_c is one validated component.

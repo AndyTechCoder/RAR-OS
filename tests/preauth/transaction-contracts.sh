@@ -18,6 +18,14 @@ expected_keys=$(sed -n '1,$p' "$fields")
 [ "$(grep -c '^schema=' "$lock")" -eq 1 ] || fail 'input-lock schema is duplicated'
 grep -qx 'schema=rar-preauth-closure-input-lock-v4' "$lock" || fail 'wrong input-lock schema'
 grep -qx 'launch_authority=none' "$lock" || fail 'transaction lock grants authority'
+policy=spec/lab/preauth/preauth-input-delivery-v1.policy
+policy_sha=$(sha256sum "$policy" | cut -d ' ' -f 1)
+grep -qx "acquisition_policy_sha256=$policy_sha" "$lock" || fail 'input delivery policy hash mismatch'
+grep -qx 'network_phase=producer-only' "$policy" || fail 'producer network phase absent'
+grep -qx 'transaction_network=none' "$policy" || fail 'transaction network prohibition absent'
+for forbidden in authority graph certification attestation owner session artifact disk profile command; do
+ ! grep -q "^$forbidden=" spec/lab/preauth/preauth-input-bundle-v1.fields || fail "input bundle authority leak: $forbidden"
+done
 
 for forbidden in \
     canonical_oci_archive_sha256 canonical_oci_index_sha256 selected_oci_manifest_sha256 \

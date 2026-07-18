@@ -1,0 +1,10 @@
+schema
+input_lock_sha256
+producer_policy_sha256
+base_oci_index_sha256
+debian_snapshot
+package_count
+object_count
+aggregate_bytes
+objects_manifest_sha256
+record_sha256
