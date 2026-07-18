@@ -53,10 +53,13 @@ write_repositories() {
 }
 write_repositories
 build_two_archive() {
-    /usr/bin/tar --sort=name --mtime='@1784332800' --owner=0 --group=0 --numeric-owner --format=gnu \
-        -cf "$oci_test/two/image.tar" -C "$oci_test/root" \
-        index.json manifest.json oci-layout repositories \
+    build_two_members index.json manifest.json oci-layout repositories \
         "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest"
+}
+build_two_members() {
+    printf '%s\n' "$@" | /usr/bin/tar --sort=name --mtime='@1784332800' \
+        --owner=0 --group=0 --numeric-owner --format=gnu \
+        -cf "$oci_test/two/image.tar" -C "$oci_test/root" -T -
 }
 /usr/bin/tar --sort=name --mtime='@1784332800' --owner=0 --group=0 --numeric-owner --format=gnu \
     -cf "$oci_test/one/image.tar" -C "$oci_test/root" \
@@ -70,6 +73,48 @@ cp "$oci_test/one/image.id" "$oci_test/two/image.id"
 tools/toolchain/verify-preauth-oci.sh \
     "$oci_test/one/image.tar" "$oci_test/one/metadata.json" "$oci_test/one/image.id" \
     "$oci_test/two/image.tar" "$oci_test/two/metadata.json" "$oci_test/two/image.id" >/dev/null
+printf 'dangling graph member\n' > "$oci_test/root/orphan.pending"
+orphan_digest=$(/usr/bin/sha256sum "$oci_test/root/orphan.pending" | /usr/bin/cut -d ' ' -f 1)
+mv "$oci_test/root/orphan.pending" "$oci_test/root/blobs/sha256/$orphan_digest"
+build_two_members index.json manifest.json oci-layout repositories \
+    "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest" \
+    "blobs/sha256/$orphan_digest"
+projection=$(out/r0/preauth/acquisition/host-tools/preauth-verify-oci \
+    --member-list "$oci_test/two/image.tar" "$oci_test/two/metadata.json" "$oci_test/two/image.id" - \
+    2> "$oci_test/projection.log")
+! printf '%s\n' "$projection" | /usr/bin/grep -Fqx "blobs/sha256/$orphan_digest"
+/usr/bin/grep -Fqx 'oci_projection_omitted count=1' "$oci_test/projection.log"
+printf '%s\n' "$projection" | /usr/bin/tar --sort=name --mtime='@1784332800' \
+    --owner=0 --group=0 --numeric-owner --format=gnu \
+    -cf "$oci_test/two/image.tar" -C "$oci_test/root" -T -
+cmp "$oci_test/one/image.tar" "$oci_test/two/image.tar"
+rm "$oci_test/root/blobs/sha256/$orphan_digest"
+dangling_members=
+for number in $(/usr/bin/seq 1 40); do
+    printf 'bounded-diagnostic-%02d\n' "$number" > "$oci_test/root/orphan.pending"
+    orphan_digest=$(/usr/bin/sha256sum "$oci_test/root/orphan.pending" | /usr/bin/cut -d ' ' -f 1)
+    mv "$oci_test/root/orphan.pending" "$oci_test/root/blobs/sha256/$orphan_digest"
+    dangling_members="$dangling_members blobs/sha256/$orphan_digest"
+done
+# shellcheck disable=SC2086
+build_two_members index.json manifest.json oci-layout repositories \
+    "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest" \
+    $dangling_members
+for attempt in one two; do
+    set +e
+    tools/toolchain/verify-preauth-oci.sh \
+        "$oci_test/one/image.tar" "$oci_test/one/metadata.json" "$oci_test/one/image.id" \
+        "$oci_test/two/image.tar" "$oci_test/two/metadata.json" "$oci_test/two/image.id" \
+        > /dev/null 2> "$oci_test/diagnostic-$attempt.log"
+    status=$?
+    set -e
+    [ "$status" -eq 73 ]
+done
+cmp "$oci_test/diagnostic-one.log" "$oci_test/diagnostic-two.log"
+/usr/bin/grep -Fqx 'oci_unreachable_summary count=40 reported=32 cap=32' "$oci_test/diagnostic-one.log"
+[ "$(/usr/bin/grep -c '^oci_unreachable path=' "$oci_test/diagnostic-one.log")" -eq 32 ]
+for member in $dangling_members; do rm "$oci_test/root/$member"; done
+cp "$oci_test/one/image.tar" "$oci_test/two/image.tar"
 expect_oci_rejection() {
     description=$1
     set +e
@@ -104,6 +149,25 @@ rm "$oci_test/root/repositories"
     "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest"
 expect_oci_rejection "missing repositories index"
 write_repositories
+build_two_members manifest.json oci-layout repositories \
+    "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest"
+expect_oci_rejection "missing OCI index"
+build_two_members index.json oci-layout repositories \
+    "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest"
+expect_oci_rejection "missing Docker manifest"
+build_two_members index.json manifest.json repositories \
+    "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest"
+expect_oci_rejection "missing OCI layout"
+build_two_members index.json manifest.json oci-layout repositories \
+    "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest"
+expect_oci_rejection "missing config"
+build_two_members index.json manifest.json oci-layout repositories \
+    "blobs/sha256/$digest" "blobs/sha256/$manifest_digest"
+expect_oci_rejection "missing layer"
+build_two_members index.json manifest.json oci-layout repositories \
+    "blobs/sha256/$digest" "blobs/sha256/$layer_digest"
+expect_oci_rejection "missing OCI image manifest"
+build_two_archive
 printf '{' > "$oci_test/root/repositories"
 build_two_archive
 expect_oci_rejection "malformed repositories index"
@@ -136,6 +200,11 @@ rm "$oci_test/root/extra-member"
     index.json manifest.json oci-layout repositories repositories \
     "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest"
 expect_oci_rejection "duplicate archive member"
+/usr/bin/tar --mtime='@1784332800' --owner=0 --group=0 --numeric-owner --format=gnu \
+    -cf "$oci_test/two/image.tar" -C "$oci_test/root" \
+    manifest.json index.json oci-layout repositories \
+    "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest"
+expect_oci_rejection "noncanonical archive member order"
 /usr/bin/head -c 513 /dev/zero > "$oci_test/root/repositories"
 build_two_archive
 expect_oci_rejection "oversized repositories member"

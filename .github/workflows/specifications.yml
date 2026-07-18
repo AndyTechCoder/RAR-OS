@@ -146,15 +146,19 @@ jobs:
             docker save \
               --output "out/r0/preauth/acquisition/derived-build/$candidate/raw-image.tar" \
               "rar-preauth:${RAR_CHECKED_OUT_SOURCE_REVISION}"
+            members=$(out/r0/preauth/acquisition/host-tools/preauth-verify-oci \
+              --member-list \
+              "out/r0/preauth/acquisition/derived-build/$candidate/raw-image.tar" \
+              "out/r0/preauth/acquisition/derived-build/$candidate/metadata.json" \
+              "out/r0/preauth/acquisition/derived-build/$candidate/image.id" -)
             mkdir "out/r0/preauth/acquisition/derived-build/$candidate/archive-root"
             /usr/bin/tar -xf \
               "out/r0/preauth/acquisition/derived-build/$candidate/raw-image.tar" \
               -C "out/r0/preauth/acquisition/derived-build/$candidate/archive-root"
-            /usr/bin/tar --sort=name --mtime='@1784332800' \
+            printf '%s\n' "$members" | /usr/bin/tar --sort=name --mtime='@1784332800' \
               --owner=0 --group=0 --numeric-owner --format=gnu \
               -cf "out/r0/preauth/acquisition/derived-build/$candidate/image.tar" \
-              -C "out/r0/preauth/acquisition/derived-build/$candidate/archive-root" \
-              $(cd "out/r0/preauth/acquisition/derived-build/$candidate/archive-root" && find . -type f -printf '%P\n' | LC_ALL=C sort)
+              -C "out/r0/preauth/acquisition/derived-build/$candidate/archive-root" -T -
             /bin/rm -f "out/r0/preauth/acquisition/derived-build/$candidate/raw-image.tar"
             /bin/rm -rf "out/r0/preauth/acquisition/derived-build/$candidate/archive-root"
           done

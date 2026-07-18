@@ -16,6 +16,7 @@ const MAX_INLINE: u64 = 8 * 1024 * 1024;
 const MAX_REPOSITORIES: u64 = 512;
 const MAX_DIAGNOSTIC_MEMBERS: usize = 32;
 const MAX_DIAGNOSTIC_REFS: usize = 8;
+const SOURCE_DATE_EPOCH: u64 = 1_784_332_800;
 
 struct TarEntry {
     data: Vec<u8>,
@@ -49,12 +50,13 @@ fn safe_name(name: &str) -> bool {
         && Path::new(name).components().all(|c| matches!(c, Component::Normal(_)))
 }
 
-fn tar_entries(path: &Path) -> BTreeMap<String, TarEntry> {
+fn tar_entries(path: &Path, require_canonical: bool) -> BTreeMap<String, TarEntry> {
     let mut file = File::open(path).unwrap_or_else(|_| fail("unreadable OCI archive"));
     let mut entries = BTreeMap::new();
     let mut header = [0_u8; 512];
     let mut offset = 0_u64;
     let mut total = 0_u64;
+    let mut previous_name: Option<String> = None;
     loop {
         file.read_exact(&mut header).unwrap_or_else(|_| fail("truncated tar header"));
         offset += 512;
@@ -76,12 +78,20 @@ fn tar_entries(path: &Path) -> BTreeMap<String, TarEntry> {
         let end = header[..100].iter().position(|byte| *byte == 0).unwrap_or(100);
         let name = std::str::from_utf8(&header[..end]).unwrap_or_else(|_| fail("non-UTF8 tar path"));
         if !safe_name(name) { fail("unsafe tar path"); }
+        if require_canonical && previous_name.as_deref().is_some_and(|previous| previous >= name) {
+            fail("noncanonical tar member order");
+        }
+        previous_name = Some(name.to_owned());
         let directory = header[156] == b'5';
         if !matches!(header[156], 0 | b'0' | b'5') { fail("unsupported tar member type"); }
         let mode = parse_octal(&header[100..108]);
         let uid = parse_octal(&header[108..116]);
         let gid = parse_octal(&header[116..124]);
         let size = parse_octal(&header[124..136]);
+        let mtime = parse_octal(&header[136..148]);
+        if require_canonical && (mode != 0o644 || uid != 0 || gid != 0 || mtime != SOURCE_DATE_EPOCH) {
+            fail("noncanonical tar member metadata");
+        }
         if directory && size != 0 { fail("nonempty tar directory"); }
         if directory { fail("directory tar member refused"); }
         total = total.checked_add(size).unwrap_or_else(|| fail("tar total overflow"));
@@ -108,8 +118,11 @@ fn tar_entries(path: &Path) -> BTreeMap<String, TarEntry> {
 }
 
 fn print_inventory(archive: &Path, entries: &BTreeMap<String, TarEntry>) {
-    eprintln!("oci_member_inventory archive={} members={}", archive.display(), entries.len());
-    for (name, entry) in entries {
+    eprintln!(
+        "oci_member_inventory archive={} members={} reported={} cap={}",
+        archive.display(), entries.len(), entries.len().min(MAX_DIAGNOSTIC_MEMBERS), MAX_DIAGNOSTIC_MEMBERS,
+    );
+    for (name, entry) in entries.iter().take(MAX_DIAGNOSTIC_MEMBERS) {
         let kind = if matches!(entry.kind, 0 | b'0') { "regular" } else { "unsupported" };
         eprintln!(
             "oci_member path={} type={} size={} mode={:04o} uid={} gid={} sha256={}",
@@ -257,7 +270,8 @@ fn report_unreachable(
 
 fn verify_oci_layout(
     entries: &BTreeMap<String, TarEntry>, config_name: &str, layers: &[String], config_digest: &str,
-) -> String {
+    project_export: bool,
+) -> (String, BTreeSet<String>) {
     let config_path_digest = blob_digest(config_name).unwrap_or_else(|| fail("invalid OCI config path"));
     if config_path_digest != config_digest { fail("OCI config name/digest mismatch"); }
     let layout = entries.get("oci-layout").unwrap_or_else(|| fail("OCI layout absent"));
@@ -314,13 +328,19 @@ fn verify_oci_layout(
     let unreachable = entries.keys().filter(|name| !expected.contains(*name)).cloned().collect::<Vec<_>>();
     if !unreachable.is_empty() {
         report_unreachable(entries, &unreachable, &inbound, config_name, layers, &image_manifests);
-        fail("unreachable OCI archive member");
+        if project_export {
+            eprintln!("oci_projection_omitted count={}", unreachable.len());
+        } else {
+            fail("unreachable OCI archive member");
+        }
     }
     if image_manifests.len() != 1 { fail("OCI image manifest is not unique"); }
-    image_manifests.into_iter().next().unwrap()
+    (image_manifests.into_iter().next().unwrap(), expected)
 }
 
-fn verify_one(entries: &BTreeMap<String, TarEntry>, metadata: &Path, image_id_path: &Path) -> String {
+fn verify_one(
+    entries: &BTreeMap<String, TarEntry>, metadata: &Path, image_id_path: &Path, project_export: bool,
+) -> (String, BTreeSet<String>) {
     let manifest = &entries.get("manifest.json").unwrap_or_else(|| fail("Docker manifest absent")).data;
     if manifest.is_empty() { fail("oversized Docker manifest"); }
     let manifest = std::str::from_utf8(manifest).unwrap_or_else(|_| fail("manifest is not UTF-8"));
@@ -360,29 +380,39 @@ fn verify_one(entries: &BTreeMap<String, TarEntry>, metadata: &Path, image_id_pa
             expected.insert(format!("{directory}/json"));
         }
     }
-    let reported_digest = if modern_oci {
-        verify_oci_layout(&entries, &config_name, &layers, &config_digest)
+    let (reported_digest, graph) = if modern_oci {
+        verify_oci_layout(&entries, &config_name, &layers, &config_digest, project_export)
     } else {
+        if project_export { fail("legacy Docker archive projection unsupported"); }
         if entries.keys().any(|name| !expected.contains(name)) { fail("unexpected archive member"); }
-        config_digest.clone()
+        (config_digest.clone(), expected)
     };
     if metadata_digest(metadata, "containerimage.config.digest") != config_digest
         || metadata_digest(metadata, "containerimage.digest") != reported_digest { fail("reported image digest mismatch"); }
     let image_id = fs::read_to_string(image_id_path).unwrap_or_else(|_| fail("loaded image identity absent"));
     if image_id.trim() != format!("sha256:{config_digest}") { fail("loaded image identity mismatch"); }
-    config_digest
+    (config_digest, graph)
 }
 
 fn main() {
     let args: Vec<_> = env::args().collect();
+    if args.len() == 6 && args[1] == "--member-list" {
+        let archive = Path::new(&args[2]);
+        let entries = tar_entries(archive, false);
+        print_inventory(archive, &entries);
+        let (_, graph) = verify_one(&entries, Path::new(&args[3]), Path::new(&args[4]), true);
+        if args[5] != "-" { fail("member-list output must be stdout"); }
+        for name in graph { println!("{name}"); }
+        return;
+    }
     if args.len() != 7 { fail("usage: preauth-verify-oci archive1 metadata1 image-id1 archive2 metadata2 image-id2"); }
     let paths: Vec<_> = args[1..].iter().map(Path::new).collect();
-    let entries_one = tar_entries(paths[0]);
-    let entries_two = tar_entries(paths[3]);
+    let entries_one = tar_entries(paths[0], true);
+    let entries_two = tar_entries(paths[3], true);
     print_inventory(paths[0], &entries_one);
     print_inventory(paths[3], &entries_two);
-    let digest_one = verify_one(&entries_one, paths[1], paths[2]);
-    let digest_two = verify_one(&entries_two, paths[4], paths[5]);
+    let (digest_one, _) = verify_one(&entries_one, paths[1], paths[2], false);
+    let (digest_two, _) = verify_one(&entries_two, paths[4], paths[5], false);
     if digest_one != digest_two || digest_file(paths[0]) != digest_file(paths[3]) { fail("independent OCI builds differ"); }
     println!("derived_oci_archive_sha256={}", digest_file(paths[0]));
     println!("derived_oci_digest=sha256:{digest_one}");
