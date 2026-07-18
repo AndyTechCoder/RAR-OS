@@ -7,7 +7,7 @@ set -eu
 }
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-verifier=$root/out/r0/preauth/host-tools/preauth-verify-oci
+verifier=$root/out/r0/preauth/acquisition/host-tools/preauth-verify-oci
 [ -x "$verifier" ] && [ ! -L "$verifier" ] || {
     echo "strict OCI verifier has not been built by the pinned host compiler" >&2
     exit 73

@@ -23,10 +23,10 @@ done
 
 test_dir=out/r0/preauth/host-tests
 mkdir -p "$test_dir"
-mkdir -p out/r0/preauth/host-tools
+mkdir -p out/r0/preauth/acquisition/host-tools
 /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc \
     --edition=2024 tools/toolchain/preauth-verify-oci.rs \
-    -o out/r0/preauth/host-tools/preauth-verify-oci
+    -o out/r0/preauth/acquisition/host-tools/preauth-verify-oci
 oci_test=out/r0/preauth/acquisition/derived-build/host-test
 mkdir -p "$oci_test/root/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
     "$oci_test/one" "$oci_test/two"
