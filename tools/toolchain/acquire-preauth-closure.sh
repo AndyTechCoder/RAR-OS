@@ -23,6 +23,8 @@ snapshot=20260718T000000Z
 sources=$output/sources.list
 cat > "$sources" <<EOF
 deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/$snapshot trixie main
+deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/$snapshot trixie-updates main
+deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/$snapshot trixie-proposed-updates main
 deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/$snapshot trixie-security main
 EOF
 
@@ -86,7 +88,7 @@ base_manifest=$output/base-installed.v1
 /usr/bin/dpkg-query -W -f='${binary:Package}|${Version}|${Architecture}\n' | LC_ALL=C /usr/bin/sort > "$base_manifest"
 lists_manifest=$output/signed-metadata.sha256
 find "$output/apt-state/lists" -maxdepth 1 -type f -exec /usr/bin/sha256sum {} \; | LC_ALL=C /usr/bin/sort > "$lists_manifest"
-[ "$(/usr/bin/grep -c 'InRelease' "$lists_manifest")" -ge 2 ] || { echo "signed InRelease evidence absent" >&2; exit 1; }
+[ "$(/usr/bin/grep -c 'InRelease' "$lists_manifest")" -ge 4 ] || { echo "signed InRelease evidence absent" >&2; exit 1; }
 
 cp "$output"/debs/*.deb "$output/derived-context/debs/"
 cat > "$output/derived-context/Dockerfile" <<'EOF'

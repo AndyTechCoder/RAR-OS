@@ -121,7 +121,7 @@ jobs:
             "rar-preauth:${GITHUB_SHA}" \
             /usr/bin/dash -e -c '
               mkdir -p out/r0/preauth/build/one out/r0/preauth/build/two out/r0/artifacts/x86_64 out/r0/vm/x86_64
-              rustc --edition=2024 tools/rar-lab/preauth/src/disk.rs -o /tmp/rar-qcow2-writer
+              /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition=2024 tools/rar-lab/preauth/src/disk.rs -o /tmp/rar-qcow2-writer
               /tmp/rar-qcow2-writer /workspace/out/r0/vm/x86_64/seed.qcow2
               cp out/r0/vm/x86_64/seed.qcow2 out/r0/vm/x86_64/launch-0001.qcow2
               nucleus/arch/x86_64/build-preauth.sh /workspace/out/r0/preauth/build/one
