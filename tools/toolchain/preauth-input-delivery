@@ -20,7 +20,7 @@ run_phase(){
  [ "$status" -eq 0 ] || exit "$status"
 }
 [ "${1-}" = --acquire-pair ] && [ "$#" -eq 1 ] || { phase=usage; exit 73; }
-run_phase cutover tools/ci/check-preauth-cutover.sh
+run_phase cutover tools/ci/check-preauth-cutover.sh 1>&2
 phase=output-parent
 mkdir -p out/r0/preauth/input-delivery
 [ -d out/r0/preauth/input-delivery ] && [ ! -L out/r0/preauth/input-delivery ] || exit 73
