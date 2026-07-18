@@ -5,6 +5,12 @@ package_manifest_sha256
 source_manifest_sha256
 signature_manifest_sha256
 license_manifest_sha256
+canonical_oci_archive_sha256
+canonical_oci_index_sha256
+selected_oci_manifest_sha256
+docker_config_sha256
+compressed_layer_descriptor_set_sha256
+rootfs_diff_id_set_sha256
 lld_sha256
 qemu_sha256
 ovmf_code_sha256

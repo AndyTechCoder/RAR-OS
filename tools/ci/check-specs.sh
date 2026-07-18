@@ -58,8 +58,8 @@ spec/fixtures/release-0/conformance-scenarios.v1
 sdk/generated/release-0/generate.sh
 sdk/generated/release-0/check.sh
 sdk/generated/release-0/lib.rs
-spec/lab/preauth/closure-v2.fields
-spec/lab/preauth/locks/r0-x86_64-preauth-v2.lock
+spec/lab/preauth/closure-v3.fields
+spec/lab/preauth/locks/r0-x86_64-preauth-v3.lock
 spec/lab/preauth/locks/r0-x86_64-preauth-packages.v2
 spec/lab/preauth/locks/r0-x86_64-preauth-disk.v1
 spec/lab/vm-profile/examples/x86_64-preauth.command
@@ -68,8 +68,8 @@ spec/lab/preauth/package-v2.fields
 spec/lab/preauth/authority-v1.fields
 spec/lab/preauth/disk-v1.fields
 spec/lab/preauth/execution-host-v1.fields
-spec/lab/preauth/identity-graph-v1.fields
-spec/lab/preauth/ci-attestation-v1.fields
+spec/lab/preauth/identity-graph-v2.fields
+spec/lab/preauth/ci-attestation-v2.fields
 spec/lab/preauth/prepared-certification-v1.fields
 spec/lab/preauth/authorization-identity-v1.fields
 spec/lab/preauth/consumption-key-v1.fields
@@ -80,6 +80,7 @@ spec/lab/preauth/prepared/r0-x86_64-preauth-v1.consumption-key
 spec/lab/preauth/prepared/r0-x86_64-preauth-v1.source-tree
 tools/rar-lab/preauth/src/lib.rs
 tools/rar-lab/preauth/src/contracts.rs
+tools/rar-lab/preauth/src/json.rs
 tools/rar-lab/preauth/src/disk.rs
 tests/preauth/src/main.rs
 tests/preauth/src/records.rs

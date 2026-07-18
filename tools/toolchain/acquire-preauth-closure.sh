@@ -79,12 +79,6 @@ license_manifest=$output/licenses.v2
 : > "$license_manifest"
 printf '%s\n' 'schema=rar-preauth-package-manifest-v2' >> "$package_manifest"
 printf '%s\n' 'schema=rar-preauth-license-manifest-v2' >> "$license_manifest"
-license_root=$output/licenses/root
-mkdir -p "$license_root"
-for deb in "$output"/debs/*.deb; do
-    [ "$(/usr/bin/stat -c '%h' "$deb")" -eq 1 ] || { echo "hard-linked package refused" >&2; exit 1; }
-    /usr/bin/dpkg-deb -x "$deb" "$license_root"
-done
 for deb in "$output"/debs/*.deb; do
     before=$(/usr/bin/stat -c '%d:%i:%s:%Y' "$deb")
     sha=$(/usr/bin/sha256sum "$deb" | /usr/bin/cut -d ' ' -f 1)
@@ -108,11 +102,9 @@ for deb in "$output"/debs/*.deb; do
             ;;
     esac
     size=$(/usr/bin/stat -c '%s' "$deb")
-    copyright=$license_root/usr/share/doc/$name/copyright
-    resolved_copyright=$(/usr/bin/realpath -e "$copyright") || { echo "license missing for $name" >&2; exit 1; }
-    case "$resolved_copyright" in "$license_root"/usr/share/doc/*) ;; *) echo "license path escape for $name" >&2; exit 1 ;; esac
-    [ -f "$resolved_copyright" ] || { echo "license target is not regular for $name" >&2; exit 1; }
-    license_sha=$(/usr/bin/sha256sum "$resolved_copyright" | /usr/bin/cut -d ' ' -f 1)
+    approved_row=$(/usr/bin/grep -F "package|$name|" "$approved_packages")
+    [ "$(printf '%s\n' "$approved_row" | /usr/bin/wc -l | /usr/bin/tr -d ' ')" -eq 1 ] || { echo "package identity absent or duplicated" >&2; exit 1; }
+    license_sha=$(printf '%s\n' "$approved_row" | /usr/bin/cut -d '|' -f 8)
     after=$(/usr/bin/stat -c '%d:%i:%s:%Y' "$deb")
     [ "$before" = "$after" ] || { echo "same-inode mutation detected for $deb" >&2; exit 1; }
     printf 'package|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
@@ -179,8 +171,8 @@ LC_ALL=C /usr/bin/sort -o "$security_inrelease_manifest" "$security_inrelease_ma
 
 lock_value() {
     key=$1
-    value=$(/usr/bin/sed -n "s/^$key=//p" "$root/spec/lab/preauth/locks/r0-x86_64-preauth-v2.lock")
-    [ -n "$value" ] && [ "$(/usr/bin/grep -c "^$key=" "$root/spec/lab/preauth/locks/r0-x86_64-preauth-v2.lock")" -eq 1 ] || {
+    value=$(/usr/bin/sed -n "s/^$key=//p" "$root/spec/lab/preauth/locks/r0-x86_64-preauth-v3.lock")
+    [ -n "$value" ] && [ "$(/usr/bin/grep -c "^$key=" "$root/spec/lab/preauth/locks/r0-x86_64-preauth-v3.lock")" -eq 1 ] || {
         echo "closure lock field missing or duplicated: $key" >&2
         exit 1
     }
@@ -194,23 +186,85 @@ assert_lock() {
         exit 1
     }
 }
-[ "$(/usr/bin/wc -l < "$root/spec/lab/preauth/locks/r0-x86_64-preauth-v2.lock" | /usr/bin/tr -d ' ')" -eq 25 ] || {
+[ "$(/usr/bin/wc -l < "$root/spec/lab/preauth/locks/r0-x86_64-preauth-v3.lock" | /usr/bin/tr -d ' ')" -eq 32 ] || {
     echo "closure lock field count mismatch" >&2
     exit 1
 }
 assert_lock base_oci_index_sha256 "${RAR_CI_BOOTSTRAP_IMAGE#sha256:}"
+assert_lock schema rar-preauth-closure-v3
+assert_lock debian_archive snapshot.debian.org/archive/debian
 assert_lock debian_snapshot "$snapshot"
+assert_lock debian_suite trixie
+assert_lock debian_security_archive snapshot.debian.org/archive/debian-security
 assert_lock debian_security_snapshot "$snapshot"
+assert_lock debian_security_suite trixie-security
 assert_lock package_manifest_sha256 "$(/usr/bin/sha256sum "$package_manifest" | /usr/bin/cut -d ' ' -f 1)"
 assert_lock license_manifest_sha256 "$(/usr/bin/sha256sum "$license_manifest" | /usr/bin/cut -d ' ' -f 1)"
 assert_lock debian_archive_keyring_sha256 "$(/usr/bin/sha256sum /usr/share/keyrings/debian-archive-keyring.gpg | /usr/bin/cut -d ' ' -f 1)"
 assert_lock inrelease_sha256 "$(/usr/bin/sha256sum "$inrelease_manifest" | /usr/bin/cut -d ' ' -f 1)"
 assert_lock security_inrelease_sha256 "$(/usr/bin/sha256sum "$security_inrelease_manifest" | /usr/bin/cut -d ' ' -f 1)"
 assert_lock acquisition_policy_sha256 "$(/usr/bin/sha256sum "$root/tools/toolchain/acquire-preauth-closure.sh" | /usr/bin/cut -d ' ' -f 1)"
+assert_lock lld_path /usr/bin/ld.lld-19
+assert_lock qemu_path /usr/bin/qemu-system-x86_64
+assert_lock ovmf_code_path /usr/share/OVMF/OVMF_CODE_4M.fd
+assert_lock ovmf_vars_path /usr/share/OVMF/OVMF_VARS_4M.fd
+assert_lock target_linked_dependencies none
+assert_lock certifiable true
 
+# Build and validate the complete package archive plan before any extraction. Package bytes are
+# copied once into a private container staging directory under content-addressed names, verified
+# again, and only those immutable staged bytes are consumed. No mutable repository path is
+# reopened by an extractor after validation.
+private_stage=/tmp/rar-preauth-private-stage
+[ ! -e "$private_stage" ] || { echo "private acquisition stage already exists" >&2; exit 73; }
+/usr/bin/mkdir -m 700 "$private_stage" "$private_stage/debs" "$private_stage/rootfs"
+trap '/bin/rm -rf "$private_stage"' EXIT HUP INT TERM
+archive_plan=$private_stage/archive.plan
+: > "$archive_plan"
 for deb in "$output"/debs/*.deb; do
-    /usr/bin/dpkg-deb -x "$deb" "$output/derived-context/rootfs"
+    name=$(/usr/bin/dpkg-deb -f "$deb" Package)
+    expected_sha=$(/usr/bin/awk -F '|' -v name="$name" '$1 == "package" && $2 == name { print $7 }' "$approved_packages")
+    observed_sha=$(/usr/bin/sha256sum "$deb" | /usr/bin/cut -d ' ' -f 1)
+    [ "$expected_sha" = "$observed_sha" ] || { echo "package changed before immutable staging" >&2; exit 73; }
+    staged=$private_stage/debs/$observed_sha.deb
+    /usr/bin/cp --reflink=never "$deb" "$staged"
+    [ "$(/usr/bin/stat -c '%h:%a' "$staged")" = '1:600' ] || /usr/bin/chmod 600 "$staged"
+    [ "$(/usr/bin/sha256sum "$staged" | /usr/bin/cut -d ' ' -f 1)" = "$observed_sha" ] || { echo "staged package mutation" >&2; exit 73; }
+    /usr/bin/dpkg-deb -c "$staged" | /usr/bin/awk '
+        function safe(path) { return path != "" && path !~ /^\// && path !~ /(^|\/)\.\.?(\/|$)/ && path !~ /\\/ && path !~ /:/ }
+        function safe_link(path, target, base,n,i,p,depth) {
+          if (target == "" || target ~ /^\// || target ~ /\\/ || target ~ /:/) return 0;
+          base=path; sub(/\/[^/]*$/, "", base); n=split(base "/" target, p, "/"); depth=0;
+          for (i=1;i<=n;i++) { if (p[i]=="" || p[i]==".") continue; if (p[i]=="..") { if (depth==0) return 0; depth-- } else depth++ }
+          return 1
+        }
+        NF < 6 { exit 73 }
+        { path=$6; sub(/^\.\//, "", path); if (!safe(path)) exit 73;
+          type=substr($1,1,1); if (type !~ /[-dl]/) exit 73;
+          if (type == "l") { if ($7 != "->" || !safe_link(path,$8)) exit 73; print path "|" type "|" $8 }
+          else print path "|" type }
+    ' >> "$archive_plan" || { echo "unsafe package archive plan" >&2; exit 73; }
 done
+[ "$(/usr/bin/wc -l < "$archive_plan" | /usr/bin/tr -d ' ')" -le 200000 ] || { echo "package archive member bound exceeded" >&2; exit 73; }
+/usr/bin/awk -F '|' '{ if (($1 in kind) && (kind[$1] != "d" || $2 != "d")) exit 73; kind[$1]=$2 }' "$archive_plan" || { echo "package archive destination collision" >&2; exit 73; }
+
+for staged in "$private_stage"/debs/*.deb; do /usr/bin/dpkg-deb -x "$staged" "$private_stage/rootfs"; done
+for row in $(/usr/bin/grep '^package|' "$approved_packages" | /usr/bin/cut -d '|' -f 2,8); do
+    name=${row%|*}; expected=${row#*|}; copyright=$private_stage/rootfs/usr/share/doc/$name/copyright
+    resolved=$(/usr/bin/realpath -e "$copyright") || { echo "license missing for $name" >&2; exit 73; }
+    case "$resolved" in "$private_stage"/rootfs/usr/share/doc/*) ;; *) echo "license path escape" >&2; exit 73 ;; esac
+    [ -f "$resolved" ] && [ "$(/usr/bin/sha256sum "$resolved" | /usr/bin/cut -d ' ' -f 1)" = "$expected" ] || { echo "license digest mismatch for $name" >&2; exit 73; }
+done
+for binding in \
+    "/usr/bin/ld.lld-19:lld_sha256" \
+    "/usr/bin/qemu-system-x86_64:qemu_sha256" \
+    "/usr/share/OVMF/OVMF_CODE_4M.fd:ovmf_code_sha256" \
+    "/usr/share/OVMF/OVMF_VARS_4M.fd:ovmf_vars_sha256"; do
+    path=${binding%:*}; key=${binding#*:}; staged=$private_stage/rootfs$path
+    [ -f "$staged" ] && [ "$(/usr/bin/sha256sum "$staged" | /usr/bin/cut -d ' ' -f 1)" = "$(lock_value "$key")" ] || { echo "derived tool byte mismatch: $key" >&2; exit 73; }
+done
+
+/usr/bin/cp -a "$private_stage/rootfs/." "$output/derived-context/rootfs/"
 /usr/bin/find "$output/derived-context/rootfs" ! -type d \
     -exec /usr/bin/touch -h -d '@1784332800' {} +
 /usr/bin/find "$output/derived-context/rootfs" -depth -type d \
@@ -219,7 +273,7 @@ cat > "$output/derived-context/Dockerfile" <<'EOF'
 FROM rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
 ARG SOURCE_DATE_EPOCH=1784332800
 COPY rootfs/ /
-ENV RAR_PREAUTH_BUILD_CONTAINER=rar-preauth-closure-v2
+ENV RAR_PREAUTH_BUILD_CONTAINER=rar-preauth-closure-v3
 ENV RAR_TARGET_EXECUTION=prohibited
 EOF
 

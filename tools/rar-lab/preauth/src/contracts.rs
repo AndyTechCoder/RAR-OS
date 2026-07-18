@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::io::Read;
 
@@ -18,6 +18,8 @@ fn package_token(value: &str) -> bool {
 const IDENTITY_FIELDS: &[&str] = &[
     "schema", "phase", "closure_sha256", "package_manifest_sha256",
     "source_manifest_sha256", "signature_manifest_sha256", "license_manifest_sha256",
+    "canonical_oci_archive_sha256", "canonical_oci_index_sha256", "selected_oci_manifest_sha256",
+    "docker_config_sha256", "compressed_layer_descriptor_set_sha256", "rootfs_diff_id_set_sha256",
     "lld_sha256", "qemu_sha256", "ovmf_code_sha256", "ovmf_vars_sha256",
     "artifact_sha256", "disk_seed_sha256", "disk_child_sha256", "disk_record_sha256",
     "profile_sha256", "command_sha256", "execution_host_sha256", "authority_policy_sha256",
@@ -27,7 +29,7 @@ const IDENTITY_FIELDS: &[&str] = &[
 ];
 
 const ATTESTATION_FIELDS: &[&str] = &[
-    "schema", "phase", "prepared_identity_graph_sha256", "source_revision", "event",
+    "schema", "phase", "attested_identity_graph_sha256", "source_revision", "event",
     "run_id", "archive_sha256", "buildx_descriptor_kind", "buildx_descriptor_sha256",
     "docker_config_sha256", "selected_oci_manifest_sha256", "canonical_oci_index_sha256", "layer_descriptor_set_sha256",
     "rootfs_diff_id_set_sha256", "loaded_image_config_sha256", "package_manifest_sha256",
@@ -58,8 +60,10 @@ const CLOSURE_FIELDS: &[&str] = &[
     "schema", "base_oci_index_sha256", "debian_archive", "debian_snapshot", "debian_suite",
     "debian_security_archive", "debian_security_snapshot", "debian_security_suite",
     "debian_archive_keyring_sha256", "inrelease_sha256", "security_inrelease_sha256",
-    "package_manifest_sha256", "license_manifest_sha256", "derived_oci_index_sha256",
-    "lld_path", "lld_sha256", "qemu_path", "qemu_sha256", "ovmf_code_path",
+    "package_manifest_sha256", "license_manifest_sha256", "canonical_oci_archive_sha256",
+    "canonical_oci_index_sha256", "selected_oci_manifest_sha256", "docker_config_sha256",
+    "buildx_config_sha256", "loaded_image_config_sha256", "compressed_layer_descriptor_set_sha256",
+    "rootfs_diff_id_set_sha256", "lld_path", "lld_sha256", "qemu_path", "qemu_sha256", "ovmf_code_path",
     "ovmf_code_sha256", "ovmf_vars_path", "ovmf_vars_sha256", "acquisition_policy_sha256",
     "target_linked_dependencies", "certifiable",
 ];
@@ -109,40 +113,43 @@ fn canonical_without_last(names: &[&str], values: &[&str], count: usize) -> Stri
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IdentityGraph {
+    pub phase: String,
+    pub document_sha256: String,
     pub record_sha256: String,
-    pub digests: Vec<String>,
+    pub nodes: BTreeMap<String, String>,
 }
 
 impl IdentityGraph {
     pub fn parse(input: &str) -> Result<Self> {
         let values = strict_fields(input, IDENTITY_FIELDS, 8192)?;
-        if values[0] != "rar-preauth-identity-graph-v1"
-            || values[1] != "prepared"
-            || values[20] != "unissued"
-            || !values[2..20].iter().all(|value| digest(value))
-            || !values[21..26].iter().all(|value| digest(value))
-            || !digest(values[26])
+        if values[0] != "rar-preauth-identity-graph-v2"
+            || !matches!(values[1], "prepared" | "attested")
+            || values[26] != "unissued"
+            || !values[2..26].iter().all(|value| digest(value))
+            || !values[27..32].iter().all(|value| digest(value))
+            || !digest(values[32])
         {
             return Err(PreauthError::new("invalid-identity-graph"));
         }
-        let payload = canonical_without_last(IDENTITY_FIELDS, &values, 26);
-        if sha256_hex(payload.as_bytes()) != values[26] {
+        let payload = canonical_without_last(IDENTITY_FIELDS, &values, 32);
+        if sha256_hex(payload.as_bytes()) != values[32] {
             return Err(PreauthError::new("identity-graph-integrity"));
         }
-        Ok(Self {
-            record_sha256: values[26].to_owned(),
-            digests: values[2..20]
-                .iter()
-                .chain(values[21..26].iter())
-                .map(|value| (*value).to_owned())
-                .collect(),
-        })
+        let nodes = IDENTITY_FIELDS[2..26].iter().zip(&values[2..26])
+            .chain(IDENTITY_FIELDS[27..32].iter().zip(&values[27..32]))
+            .map(|(name, value)| ((*name).to_owned(), (*value).to_owned())).collect();
+        Ok(Self { phase: values[1].to_owned(), document_sha256: sha256_hex(input.as_bytes()), record_sha256: values[32].to_owned(), nodes })
+    }
+
+    pub fn require(&self, kind: &str, digest_value: &str) -> Result<()> {
+        if self.nodes.get(kind).is_some_and(|value| value == digest_value) { Ok(()) }
+        else { Err(PreauthError::new("identity-edge-mismatch")) }
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AttestationRecord {
-    pub prepared_identity_graph_sha256: String,
+    pub attested_identity_graph_sha256: String,
     pub source_revision: String,
     pub event: String,
     pub run_id: u64,
@@ -154,6 +161,11 @@ pub struct AttestationRecord {
     pub layer_descriptor_set_sha256: String,
     pub rootfs_diff_id_set_sha256: String,
     pub loaded_image_config_sha256: String,
+    pub package_manifest_sha256: String,
+    pub profile_sha256: String,
+    pub artifact_sha256: String,
+    pub disk_sha256: String,
+    pub closure_sha256: String,
     pub record_sha256: String,
 }
 
@@ -161,7 +173,7 @@ impl AttestationRecord {
     pub fn parse(input: &str, expected_head: &str, expected_event: &str, expected_run: u64) -> Result<Self> {
         let values = strict_fields(input, ATTESTATION_FIELDS, 4096)?;
         let run_id = values[5].parse::<u64>().map_err(|_| PreauthError::new("invalid-run-id"))?;
-        if values[0] != "rar-preauth-ci-attestation-v1"
+        if values[0] != "rar-preauth-ci-attestation-v2"
             || values[1] != "attested"
             || !digest(values[2])
             || values[3] != expected_head
@@ -181,7 +193,7 @@ impl AttestationRecord {
             return Err(PreauthError::new("ci-attestation-integrity"));
         }
         Ok(Self {
-            prepared_identity_graph_sha256: values[2].to_owned(),
+            attested_identity_graph_sha256: values[2].to_owned(),
             source_revision: values[3].to_owned(),
             event: values[4].to_owned(),
             run_id,
@@ -193,10 +205,43 @@ impl AttestationRecord {
             layer_descriptor_set_sha256: values[12].to_owned(),
             rootfs_diff_id_set_sha256: values[13].to_owned(),
             loaded_image_config_sha256: values[14].to_owned(),
+            package_manifest_sha256: values[15].to_owned(), profile_sha256: values[16].to_owned(),
+            artifact_sha256: values[17].to_owned(), disk_sha256: values[18].to_owned(),
+            closure_sha256: values[19].to_owned(),
             record_sha256: values[20].to_owned(),
         })
     }
+
+    pub fn validate_graph(&self, graph: &IdentityGraph) -> Result<()> {
+        if graph.phase != "attested" || self.attested_identity_graph_sha256 != graph.document_sha256 {
+            return Err(PreauthError::new("attestation-identity-mismatch"));
+        }
+        for (kind, value) in [
+            ("package_manifest_sha256", graph.nodes.get("package_manifest_sha256")),
+            ("profile_sha256", graph.nodes.get("profile_sha256")),
+            ("artifact_sha256", graph.nodes.get("artifact_sha256")),
+            ("closure_sha256", graph.nodes.get("closure_sha256")),
+        ] {
+            let actual = match kind {
+                "package_manifest_sha256" => &self.package_manifest_sha256,
+                "profile_sha256" => &self.profile_sha256,
+                "artifact_sha256" => &self.artifact_sha256,
+                _ => &self.closure_sha256,
+            };
+            if value != Some(actual) { return Err(PreauthError::new("attestation-edge-mismatch")); }
+        }
+        for (kind, actual) in [
+            ("canonical_oci_archive_sha256", &self.archive_sha256),
+            ("canonical_oci_index_sha256", &self.canonical_oci_index_sha256),
+            ("selected_oci_manifest_sha256", &self.selected_oci_manifest_sha256),
+            ("docker_config_sha256", &self.docker_config_sha256),
+            ("compressed_layer_descriptor_set_sha256", &self.layer_descriptor_set_sha256),
+            ("rootfs_diff_id_set_sha256", &self.rootfs_diff_id_set_sha256),
+        ] { graph.require(kind, actual)?; }
+        Ok(())
+    }
 }
+
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExecutionHostRecord {
@@ -251,6 +296,7 @@ pub struct StrictAuthorityRecord {
     pub authorization_id: String,
     pub state: String,
     pub transition_version: u64,
+    pub expires_at: u64,
     pub record_sha256: String,
 }
 
@@ -291,6 +337,7 @@ impl StrictAuthorityRecord {
             authorization_id: values[1].to_owned(),
             state: values[2].to_owned(),
             transition_version,
+            expires_at: expires,
             record_sha256: values[32].to_owned(),
         })
     }
@@ -298,6 +345,30 @@ impl StrictAuthorityRecord {
     pub fn signature_input(&self) -> String {
         let refs: Vec<_> = self.values.iter().map(String::as_str).collect();
         canonical_without_last(AUTHORITY_FIELDS, &refs, 33)
+    }
+
+    pub fn field(&self, name: &str) -> Result<&str> {
+        AUTHORITY_FIELDS.iter().position(|candidate| *candidate == name)
+            .map(|index| self.values[index].as_str())
+            .ok_or_else(|| PreauthError::new("unknown-authority-field"))
+    }
+
+    pub fn validate_graph(&self, graph: &IdentityGraph) -> Result<()> {
+        if self.field("identity_graph_sha256")? != graph.document_sha256 {
+            return Err(PreauthError::new("authority-identity-mismatch"));
+        }
+        for (authority, identity) in [
+            ("certification_sha256", "prepared_certification_sha256"),
+            ("profile_sha256", "profile_sha256"), ("command_sha256", "command_sha256"),
+            ("artifact_sha256", "artifact_sha256"), ("disk_sha256", "disk_child_sha256"),
+            ("firmware_code_sha256", "ovmf_code_sha256"), ("firmware_vars_sha256", "ovmf_vars_sha256"),
+            ("closure_sha256", "closure_sha256"), ("execution_host_sha256", "execution_host_sha256"),
+            ("resolver_sha256", "resolver_sha256"), ("spawner_sha256", "spawner_sha256"),
+            ("consumption_key_sha256", "consumption_key_sha256"),
+        ] {
+            graph.require(identity, self.field(authority)?)?;
+        }
+        Ok(())
     }
 }
 
@@ -336,7 +407,12 @@ pub struct PackageManifest {
 pub struct ClosureLock {
     pub package_manifest_sha256: String,
     pub license_manifest_sha256: String,
-    pub image_sha256: String,
+    pub canonical_archive_sha256: String,
+    pub canonical_index_sha256: String,
+    pub selected_manifest_sha256: String,
+    pub docker_config_sha256: String,
+    pub compressed_layers_sha256: String,
+    pub rootfs_diff_ids_sha256: String,
     pub lld_sha256: String,
     pub qemu_sha256: String,
     pub ovmf_code_sha256: String,
@@ -382,7 +458,7 @@ impl PreparedCertification {
 impl ClosureLock {
     pub fn parse(input: &str, package_manifest: &str) -> Result<Self> {
         let values = strict_fields(input, CLOSURE_FIELDS, 8192)?;
-        if values[0] != "rar-preauth-closure-v2"
+        if values[0] != "rar-preauth-closure-v3"
             || values[1] != super::BASE_OCI_INDEX_SHA256
             || values[2] != "snapshot.debian.org/archive/debian"
             || values[3] != "20260630T000000Z"
@@ -390,29 +466,27 @@ impl ClosureLock {
             || values[5] != "snapshot.debian.org/archive/debian-security"
             || values[6] != "20260630T000000Z"
             || values[7] != "trixie-security"
-            || !values[8..14].iter().all(|value| digest(value))
+            || !values[8..21].iter().all(|value| digest(value))
             || values[11] != sha256_hex(package_manifest.as_bytes())
-            || values[14] != "/usr/bin/ld.lld-19"
-            || !digest(values[15])
-            || values[16] != "/usr/bin/qemu-system-x86_64"
-            || !digest(values[17])
-            || values[18] != "/usr/share/OVMF/OVMF_CODE_4M.fd"
-            || !digest(values[19])
-            || values[20] != "/usr/share/OVMF/OVMF_VARS_4M.fd"
-            || !values[21..23].iter().all(|value| digest(value))
-            || values[23] != "none"
-            || values[24] != "true"
+            || values[16] != values[17] || values[16] != values[18]
+            || BTreeSet::from([values[13], values[14], values[15], values[16], values[19], values[20]]).len() != 6
+            || values[21] != "/usr/bin/ld.lld-19" || !digest(values[22])
+            || values[23] != "/usr/bin/qemu-system-x86_64" || !digest(values[24])
+            || values[25] != "/usr/share/OVMF/OVMF_CODE_4M.fd" || !digest(values[26])
+            || values[27] != "/usr/share/OVMF/OVMF_VARS_4M.fd"
+            || !values[28..30].iter().all(|value| digest(value))
+            || values[30] != "none" || values[31] != "true"
         {
             return Err(PreauthError::new("invalid-closure-lock"));
         }
         Ok(Self {
             package_manifest_sha256: values[11].to_owned(),
             license_manifest_sha256: values[12].to_owned(),
-            image_sha256: values[13].to_owned(),
-            lld_sha256: values[15].to_owned(),
-            qemu_sha256: values[17].to_owned(),
-            ovmf_code_sha256: values[19].to_owned(),
-            ovmf_vars_sha256: values[21].to_owned(),
+            canonical_archive_sha256: values[13].to_owned(), canonical_index_sha256: values[14].to_owned(),
+            selected_manifest_sha256: values[15].to_owned(), docker_config_sha256: values[16].to_owned(),
+            compressed_layers_sha256: values[19].to_owned(), rootfs_diff_ids_sha256: values[20].to_owned(),
+            lld_sha256: values[22].to_owned(), qemu_sha256: values[24].to_owned(),
+            ovmf_code_sha256: values[26].to_owned(), ovmf_vars_sha256: values[28].to_owned(),
         })
     }
 }

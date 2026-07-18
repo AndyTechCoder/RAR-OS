@@ -189,7 +189,7 @@ jobs:
             > out/r0/preauth/acquisition/derived-verification.evidence
           verified_image=$(sed -n 's/^loaded_image_config_sha256=//p' out/r0/preauth/acquisition/derived-verification.evidence)
           [ "${#verified_image}" -eq 64 ]
-          expected_image=$(sed -n 's/^derived_oci_index_sha256=//p' spec/lab/preauth/locks/r0-x86_64-preauth-v2.lock)
+          expected_image=$(sed -n 's/^docker_config_sha256=//p' spec/lab/preauth/locks/r0-x86_64-preauth-v3.lock)
           [ "$verified_image" = "$expected_image" ]
           printf 'RAR_VERIFIED_PREAUTH_IMAGE=sha256:%s\n' "$verified_image" >> "$GITHUB_ENV"
           cp out/r0/preauth/acquisition/derived-build/one/metadata.json \
@@ -210,7 +210,7 @@ jobs:
             --env RAR_CHECKED_OUT_SOURCE_REVISION \
             --env CI \
             --env GITHUB_ACTIONS \
-            --env RAR_PREAUTH_BUILD_CONTAINER=rar-preauth-closure-v2 \
+            --env RAR_PREAUTH_BUILD_CONTAINER=rar-preauth-closure-v3 \
             --env RAR_TARGET_EXECUTION=prohibited \
             --env HOME=/tmp/rar-home \
             "$RAR_VERIFIED_PREAUTH_IMAGE" \
@@ -249,15 +249,35 @@ jobs:
         run: |
           validator=out/r0/preauth/acquisition/host-tools/preauth-validate-record
           "$validator" packages spec/lab/preauth/locks/r0-x86_64-preauth-packages.v2
-          "$validator" closure spec/lab/preauth/locks/r0-x86_64-preauth-v2.lock \
+          "$validator" closure spec/lab/preauth/locks/r0-x86_64-preauth-v3.lock \
             spec/lab/preauth/locks/r0-x86_64-preauth-packages.v2
           "$validator" host spec/lab/preauth/prepared/r0-x86_64-preauth-v1.host
           "$validator" prepared spec/lab/vm-profile/prepared/r0-x86_64-preauth-v1.cert
           "$validator" identity spec/lab/preauth/prepared/r0-x86_64-preauth-v1.identity
+          attested_identity=out/r0/preauth/exact-head.identity
+          cp spec/lab/preauth/prepared/r0-x86_64-preauth-v1.identity "$attested_identity.work"
+          sed -i 's/^phase=prepared$/phase=attested/' "$attested_identity.work"
+          for pair in \
+            canonical_oci_archive_sha256:derived_oci_archive_sha256 \
+            canonical_oci_index_sha256:canonical_oci_index_sha256 \
+            selected_oci_manifest_sha256:selected_oci_manifest_sha256 \
+            docker_config_sha256:docker_config_sha256 \
+            compressed_layer_descriptor_set_sha256:layer_descriptor_set_sha256 \
+            rootfs_diff_id_set_sha256:rootfs_diff_id_set_sha256; do
+            identity_key=${pair%%:*}; evidence_key=${pair#*:}
+            value=$(sed -n "s/^$evidence_key=//p" out/r0/preauth/acquisition/derived-verification.evidence)
+            [ "${#value}" -eq 64 ]
+            sed -i "s/^$identity_key=.*/$identity_key=$value/" "$attested_identity.work"
+          done
+          sed '/^record_sha256=/d' "$attested_identity.work" > "$attested_identity.payload"
+          cp "$attested_identity.payload" "$attested_identity"
+          printf 'record_sha256=' >> "$attested_identity"
+          sha256sum "$attested_identity.payload" | cut -d ' ' -f 1 >> "$attested_identity"
+          "$validator" identity "$attested_identity"
           attestation=out/r0/preauth/exact-head.attestation
           {
-            printf 'schema=rar-preauth-ci-attestation-v1\nphase=attested\n'
-            printf 'prepared_identity_graph_sha256='; sha256sum spec/lab/preauth/prepared/r0-x86_64-preauth-v1.identity | cut -d ' ' -f 1
+            printf 'schema=rar-preauth-ci-attestation-v2\nphase=attested\n'
+            printf 'attested_identity_graph_sha256='; sha256sum "$attested_identity" | cut -d ' ' -f 1
             printf 'source_revision=%s\nevent=%s\nrun_id=%s\n' "$RAR_CHECKED_OUT_SOURCE_REVISION" "$RAR_EVENT_NAME" "$GITHUB_RUN_ID"
             printf 'archive_sha256='; sha256sum out/r0/preauth/acquisition/derived-image.tar | cut -d ' ' -f 1
             sed -n '/^buildx_descriptor_kind=/p;/^buildx_descriptor_sha256=/p;/^docker_config_sha256=/p;/^selected_oci_manifest_sha256=/p;/^canonical_oci_index_sha256=/p;/^layer_descriptor_set_sha256=/p;/^rootfs_diff_id_set_sha256=/p;/^loaded_image_config_sha256=/p' \
@@ -266,13 +286,13 @@ jobs:
             printf 'profile_sha256='; sha256sum spec/lab/vm-profile/examples/x86_64-preauth.profile | cut -d ' ' -f 1
             printf 'artifact_sha256='; sha256sum out/r0/artifacts/x86_64/rar-r0-x86_64-preauth.elf | cut -d ' ' -f 1
             printf 'disk_sha256='; sha256sum out/r0/vm/x86_64/launch-0001.qcow2 | cut -d ' ' -f 1
-            printf 'closure_sha256='; sha256sum spec/lab/preauth/locks/r0-x86_64-preauth-v2.lock | cut -d ' ' -f 1
+            printf 'closure_sha256='; sha256sum spec/lab/preauth/locks/r0-x86_64-preauth-v3.lock | cut -d ' ' -f 1
           } > "$attestation.payload"
           cp "$attestation.payload" "$attestation"
           printf 'record_sha256=' >> "$attestation"
           sha256sum "$attestation.payload" | cut -d ' ' -f 1 >> "$attestation"
-          "$validator" attestation "$attestation" "$RAR_CHECKED_OUT_SOURCE_REVISION" "$RAR_EVENT_NAME" "$GITHUB_RUN_ID"
-          rm -f "$attestation.payload"
+          "$validator" attestation "$attestation" "$RAR_CHECKED_OUT_SOURCE_REVISION" "$RAR_EVENT_NAME" "$GITHUB_RUN_ID" "$attested_identity"
+          rm -f "$attestation.payload" "$attested_identity.payload" "$attested_identity.work"
 
       - name: Print canonical closure evidence
         shell: /usr/bin/dash -e {0}

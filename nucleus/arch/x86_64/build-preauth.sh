@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-[ "${RAR_PREAUTH_BUILD_CONTAINER-}" = rar-preauth-closure-v2 ] || {
+[ "${RAR_PREAUTH_BUILD_CONTAINER-}" = rar-preauth-closure-v3 ] || {
     echo "refusing outside the pinned Prompt 7A build container" >&2
     exit 73
 }

@@ -1,6 +1,6 @@
 schema
 phase
-prepared_identity_graph_sha256
+attested_identity_graph_sha256
 source_revision
 event
 run_id

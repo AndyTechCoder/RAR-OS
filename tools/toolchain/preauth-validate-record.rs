@@ -16,9 +16,10 @@ fn main() {
         Some("identity") if args.len() == 3 => preauth::IdentityGraph::parse(&read(&args[2])).map(|_| ()),
         Some("closure") if args.len() == 4 => preauth::ClosureLock::parse(&read(&args[2]), &read(&args[3])).map(|_| ()),
         Some("packages") if args.len() == 3 => preauth::PackageManifest::parse(&read(&args[2])).map(|_| ()),
-        Some("attestation") if args.len() == 6 => {
+        Some("attestation") if args.len() == 7 => {
             let run = args[5].parse::<u64>().expect("run id");
-            preauth::AttestationRecord::parse(&read(&args[2]), &args[3], &args[4], run).map(|_| ())
+            preauth::AttestationRecord::parse(&read(&args[2]), &args[3], &args[4], run)
+                .and_then(|record| preauth::IdentityGraph::parse(&read(&args[6])).and_then(|graph| record.validate_graph(&graph)))
         }
         _ => panic!("invalid preauth record validator invocation"),
     };

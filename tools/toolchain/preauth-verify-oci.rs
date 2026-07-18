@@ -158,99 +158,43 @@ fn unexpected_member(name: &str, entry: &TarEntry) -> ! {
     fail("unexpected OCI archive member");
 }
 
-fn after<'a>(text: &'a str, marker: &str) -> &'a str {
-    text.split_once(marker).map(|(_, value)| value).unwrap_or_else(|| fail("missing JSON field"))
+fn json(input: &[u8]) -> preauth::Json {
+    preauth::Json::parse(input).unwrap_or_else(|error| fail(error.code))
 }
 
-fn quoted(text: &str, marker: &str) -> String {
-    let rest = after(text, marker);
-    let end = rest.find('"').unwrap_or_else(|| fail("malformed JSON string"));
-    let value = &rest[..end];
-    if value.is_empty() || value.contains('\\') { fail("noncanonical JSON string"); }
-    value.to_owned()
+fn string_array(value: &preauth::Json) -> Vec<String> {
+    value.array().unwrap_or_else(|error| fail(error.code)).iter().map(|item|
+        item.string().unwrap_or_else(|error| fail(error.code)).to_owned()).collect()
 }
 
-fn quoted_list(text: &str, marker: &str) -> Vec<String> {
-    let rest = after(text, marker);
-    let end = rest.find(']').unwrap_or_else(|| fail("malformed JSON list"));
-    let inner = &rest[..end];
-    if inner.is_empty() { return Vec::new(); }
-    inner.split(',').map(|part| {
-        let part = part.trim();
-        if !part.starts_with('"') || !part.ends_with('"') { fail("malformed JSON list item"); }
-        part[1..part.len()-1].to_owned()
+fn sha_digest(value: &preauth::Json) -> String {
+    let value = value.string().unwrap_or_else(|error| fail(error.code));
+    let digest = value.strip_prefix("sha256:").unwrap_or_else(|| fail("digest algorithm mismatch"));
+    if digest.len() != 64 || !digest.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()) {
+        fail("invalid JSON digest");
+    }
+    digest.to_owned()
+}
+
+fn annotation_pairs(index: &preauth::Json) -> Vec<(String, String)> {
+    let descriptor = &index.get("manifests").unwrap_or_else(|error| fail(error.code))
+        .array().unwrap_or_else(|error| fail(error.code))[0];
+    let Some(annotations) = descriptor.object().unwrap().get("annotations") else { return Vec::new() };
+    annotations.object().unwrap_or_else(|error| fail(error.code)).iter().map(|(key, value)| {
+        let value = value.string().unwrap_or_else(|error| fail(error.code));
+        if key.len() > 128 || value.len() > 512 { fail("OCI index annotation bound exceeded"); }
+        (key.clone(), value.to_owned())
     }).collect()
 }
 
-fn quoted_values(text: &str, marker: &str) -> Vec<String> {
-    let mut rest = text;
-    let mut values = Vec::new();
-    while let Some((_, after_marker)) = rest.split_once(marker) {
-        let end = after_marker.find('"').unwrap_or_else(|| fail("malformed JSON string"));
-        let value = &after_marker[..end];
-        if value.is_empty() || value.contains('\\') { fail("noncanonical JSON string"); }
-        values.push(value.to_owned());
-        if values.len() > 128 { fail("JSON value bound exceeded"); }
-        rest = &after_marker[end + 1..];
-    }
-    values
-}
-
-fn numeric_values(text: &str, marker: &str) -> Vec<u64> {
-    let mut rest = text;
-    let mut values = Vec::new();
-    while let Some((_, after_marker)) = rest.split_once(marker) {
-        let end = after_marker.bytes().position(|byte| !byte.is_ascii_digit())
-            .unwrap_or(after_marker.len());
-        if end == 0 { fail("malformed JSON number"); }
-        values.push(after_marker[..end].parse::<u64>().unwrap_or_else(|_| fail("JSON number overflow")));
-        if values.len() > 128 { fail("JSON value bound exceeded"); }
-        rest = &after_marker[end..];
-    }
-    values
-}
-
-fn optional_quoted_values(text: &str, marker: &str) -> Vec<String> {
-    if text.contains(marker) { quoted_values(text, marker) } else { Vec::new() }
-}
-
-fn annotation_pairs(text: &str) -> Vec<(String, String)> {
-    let Some((_, rest)) = text.split_once("\"annotations\":{") else { return Vec::new() };
-    let end = rest.find('}').unwrap_or_else(|| fail("malformed OCI index annotations"));
-    let body = &rest[..end];
-    if body.is_empty() { return Vec::new(); }
-    let mut pairs = BTreeMap::new();
-    for item in body.split(',') {
-        let (key, value) = item.split_once(':').unwrap_or_else(|| fail("malformed OCI index annotation"));
-        if key.len() < 2 || value.len() < 2 || !key.starts_with('"') || !key.ends_with('"')
-            || !value.starts_with('"') || !value.ends_with('"')
-        { fail("malformed OCI index annotation"); }
-        let key = &key[1..key.len() - 1];
-        let value = &value[1..value.len() - 1];
-        if key.is_empty() || key.len() > 128 || value.len() > 512
-            || key.contains('\\') || value.contains('\\')
-        { fail("noncanonical OCI index annotation"); }
-        if pairs.insert(key.to_owned(), value.to_owned()).is_some() { fail("duplicate OCI index annotation"); }
-        if pairs.len() > MAX_DIAGNOSTIC_FIELDS { fail("OCI index annotation bound exceeded"); }
-    }
-    pairs.into_iter().collect()
-}
-
 fn report_index_mapping(index: &str, expected_digest: &str, expected_size: u64, revision: &str) {
-    let schema = numeric_values(index, "\"schemaVersion\":");
-    let media = optional_quoted_values(index, "\"mediaType\":\"");
-    let digests = descriptor_digests(index);
-    let sizes = numeric_values(index, "\"size\":");
-    let architecture = optional_quoted_values(index, "\"architecture\":\"");
-    let os = optional_quoted_values(index, "\"os\":\"");
-    let variant = optional_quoted_values(index, "\"variant\":\"");
-    let os_version = optional_quoted_values(index, "\"os.version\":\"");
-    let os_features = if index.contains("\"os.features\":[") {
-        quoted_list(index, "\"os.features\":[")
-    } else { Vec::new() };
-    let features = if index.contains("\"features\":[") {
-        quoted_list(index, "\"features\":[")
-    } else { Vec::new() };
+    let parsed = json(index.as_bytes());
+    let schema = vec![parsed.get("schemaVersion").and_then(preauth::Json::number).unwrap_or(0)];
+    let media = parsed.get("mediaType").and_then(preauth::Json::string).map_or_else(|_| Vec::new(), |v| vec![v.to_owned()]);
+    let descriptors = parsed.get("manifests").and_then(preauth::Json::array).unwrap_or(&[]);
+    let digests = descriptors.iter().map(|value| sha_digest(value.get("digest").unwrap())).collect::<Vec<_>>();
+    let sizes = descriptors.iter().map(|value| value.get("size").and_then(preauth::Json::number).unwrap_or(0)).collect::<Vec<_>>();
+    let (architecture, os, variant, os_version, os_features, features) = (Vec::<String>::new(), Vec::<String>::new(), Vec::<String>::new(), Vec::<String>::new(), Vec::<String>::new(), Vec::<String>::new());
     eprintln!(
         "oci_index_mapping actual_schema={schema:?} expected_schema=[2] expected_schema_source=oci-image-spec actual_media={media:?} expected_media=[application/vnd.oci.image.index.v1+json,application/vnd.oci.image.manifest.v1+json] expected_media_source=validated-index-and-selected-manifest",
     );
@@ -261,7 +205,7 @@ fn report_index_mapping(index: &str, expected_digest: &str, expected_size: u64, 
     eprintln!(
         "oci_index_platform actual_os={os:?} expected_os=[] expected_os_source=canonical-index-omission-platform-bound-by-config actual_architecture={architecture:?} expected_architecture=[] expected_architecture_source=canonical-index-omission-platform-bound-by-config actual_variant={variant:?} expected_variant=[] actual_os_version={os_version:?} expected_os_version=[] actual_os_features={os_features:?} expected_os_features=[] actual_features={features:?} expected_features=[]",
     );
-    let annotations = annotation_pairs(index);
+    let annotations = annotation_pairs(&parsed);
     let summaries = annotations.iter().map(|(key, value)| {
         format!("{key}:len={}:sha256={}", value.len(), preauth::sha256_hex(value.as_bytes()))
     }).collect::<Vec<_>>();
@@ -284,9 +228,6 @@ fn typed_list_digest(kind: &str, values: &[String]) -> String {
     preauth::sha256_hex(canonical.as_bytes())
 }
 
-fn one_marker(text: &str, marker: &str) {
-    if text.match_indices(marker).count() != 1 { fail("duplicate or missing JSON field"); }
-}
 
 fn repositories_binding(entries: &BTreeMap<String, TarEntry>, repo_tag: &str, layer: &str) -> String {
     let entry = entries.get("repositories").unwrap_or_else(|| fail("Docker repositories index absent"));
@@ -303,27 +244,30 @@ fn repositories_binding(entries: &BTreeMap<String, TarEntry>, repo_tag: &str, la
         || !layer_identity.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
     { fail("invalid Docker top-layer identity"); }
     let canonical = format!("{{\"rar-preauth\":{{\"{revision}\":\"{layer_identity}\"}}}}\n");
+    let parsed = json(&entry.data);
+    parsed.exact_keys(&["rar-preauth"], &[]).unwrap_or_else(|error| fail(error.code));
+    parsed.get("rar-preauth").unwrap().exact_keys(&[revision], &[]).unwrap_or_else(|error| fail(error.code));
     if entry.data != canonical.as_bytes() { fail("Docker repositories binding mismatch"); }
     revision.to_owned()
 }
 
 fn metadata_digest(path: &Path, field: &str) -> String {
-    let text = fs::read_to_string(path).unwrap_or_else(|_| fail("unreadable OCI metadata"));
-    let compact: String = text.chars().filter(|character| !character.is_ascii_whitespace()).collect();
-    let value = quoted(&compact, &format!("\"{field}\":\"sha256:"));
-    if value.len() != 64 || !value.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()) { fail("invalid OCI metadata digest"); }
-    value
+    let bytes = fs::read(path).unwrap_or_else(|_| fail("unreadable OCI metadata"));
+    let parsed = json(&bytes);
+    sha_digest(parsed.get(field).unwrap_or_else(|error| fail(error.code)))
 }
 
 fn metadata_summary(path: &Path) -> (String, String, Option<(String, String, String, String)>) {
-    let text = fs::read_to_string(path).unwrap_or_else(|_| fail("unreadable OCI metadata"));
-    if text.len() as u64 > MAX_INLINE { fail("oversized OCI metadata"); }
-    let compact: String = text.chars().filter(|character| !character.is_ascii_whitespace()).collect();
+    let bytes = fs::read(path).unwrap_or_else(|_| fail("unreadable OCI metadata"));
+    if bytes.len() as u64 > MAX_INLINE { fail("oversized OCI metadata"); }
+    let parsed = json(&bytes);
+    let object = parsed.object().unwrap_or_else(|error| fail(error.code));
     let known_keys = [
         "buildx.build.provenance", "buildx.build.ref", "containerimage.config.digest",
         "containerimage.descriptor", "containerimage.digest", "image.name",
     ];
-    let present = known_keys.into_iter().filter(|key| compact.contains(&format!("\"{key}\":")))
+    if object.keys().any(|key| !known_keys.contains(&key.as_str())) { fail("unknown OCI metadata key"); }
+    let present = known_keys.into_iter().filter(|key| object.contains_key(*key))
         .collect::<Vec<_>>();
     eprintln!("oci_buildx_metadata keys={}", present.join(","));
     let config = metadata_digest(path, "containerimage.config.digest");
@@ -333,16 +277,13 @@ fn metadata_summary(path: &Path) -> (String, String, Option<(String, String, Str
             fail("invalid OCI metadata descriptor digest");
         }
     }
-    let descriptor = compact.split_once("\"containerimage.descriptor\":{").map(|(_, value)| {
-        let descriptor_digest = quoted(value, "\"digest\":\"sha256:");
-        let media_type = quoted(value, "\"mediaType\":\"");
-        let platform = after(value, "\"platform\":{");
-        let architecture = quoted(platform, "\"architecture\":\"");
-        let os = quoted(platform, "\"os\":\"");
-        if descriptor_digest.len() != 64
-            || !descriptor_digest.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-        { fail("invalid OCI metadata descriptor digest"); }
-        (descriptor_digest, media_type, architecture, os)
+    let descriptor = object.get("containerimage.descriptor").map(|value| {
+        value.exact_keys(&["digest", "mediaType", "platform"], &[]).unwrap_or_else(|error| fail(error.code));
+        let platform = value.get("platform").unwrap();
+        platform.exact_keys(&["architecture", "os"], &[]).unwrap_or_else(|error| fail(error.code));
+        (sha_digest(value.get("digest").unwrap()), value.get("mediaType").and_then(preauth::Json::string).unwrap().to_owned(),
+         platform.get("architecture").and_then(preauth::Json::string).unwrap().to_owned(),
+         platform.get("os").and_then(preauth::Json::string).unwrap().to_owned())
     });
     (config, digest, descriptor)
 }
@@ -354,19 +295,18 @@ fn blob_digest(path: &str) -> Option<&str> {
     { Some(digest) } else { None }
 }
 
-fn descriptor_digests(json: &str) -> Vec<String> {
-    let compact: String = json.chars().filter(|character| !character.is_ascii_whitespace()).collect();
-    let marker = "\"digest\":\"sha256:";
-    let mut rest = compact.as_str();
-    let mut digests = Vec::new();
-    while let Some((_, after_marker)) = rest.split_once(marker) {
-        if after_marker.len() < 65 || after_marker.as_bytes()[64] != b'\"' { fail("malformed OCI descriptor digest"); }
-        let digest = &after_marker[..64];
-        if !digest.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()) { fail("invalid OCI descriptor digest"); }
-        digests.push(digest.to_owned());
-        rest = &after_marker[65..];
+fn descriptor_digests(value: &preauth::Json) -> Vec<String> {
+    fn walk(value: &preauth::Json, output: &mut Vec<String>) {
+        match value {
+            preauth::Json::Object(object) => {
+                if let Some(value) = object.get("digest") { output.push(sha_digest(value)); }
+                for (key, child) in object { if key != "digest" { walk(child, output); } }
+            }
+            preauth::Json::Array(values) => for value in values { walk(value, output); },
+            _ => {}
+        }
     }
-    digests
+    let mut output = Vec::new(); walk(value, &mut output); output
 }
 
 fn record_inbound(
@@ -421,11 +361,11 @@ fn verify_oci_layout(
     let config_path_digest = blob_digest(config_name).unwrap_or_else(|| fail("invalid OCI config path"));
     if config_path_digest != config_digest { fail("OCI config name/digest mismatch"); }
     let layout = entries.get("oci-layout").unwrap_or_else(|| fail("OCI layout absent"));
-    let layout_text = std::str::from_utf8(&layout.data).unwrap_or_else(|_| fail("OCI layout is not UTF-8"));
-    let compact_layout: String = layout_text.chars().filter(|character| !character.is_ascii_whitespace()).collect();
-    if compact_layout != "{\"imageLayoutVersion\":\"1.0.0\"}" { fail("unsupported OCI layout"); }
+    let layout_json = json(&layout.data);
+    layout_json.exact_keys(&["imageLayoutVersion"], &[]).unwrap_or_else(|error| fail(error.code));
+    if layout_json.get("imageLayoutVersion").and_then(preauth::Json::string).unwrap() != "1.0.0" { fail("unsupported OCI layout"); }
     let index = entries.get("index.json").unwrap_or_else(|| fail("OCI index absent"));
-    let index_text = std::str::from_utf8(&index.data).unwrap_or_else(|_| fail("OCI index is not UTF-8"));
+    let index_json = json(&index.data);
     for (name, entry) in entries {
         if let Some(digest) = blob_digest(name) {
             if digest != entry.sha256 { fail("OCI blob name/digest mismatch"); }
@@ -434,7 +374,7 @@ fn verify_oci_layout(
         }
     }
     let mut inbound = BTreeMap::<String, BTreeSet<String>>::new();
-    let mut pending = descriptor_digests(index_text);
+    let mut pending = descriptor_digests(&index_json);
     if pending.is_empty() || pending.len() > 64 { fail("invalid OCI index descriptors"); }
     for digest in &pending { record_inbound(&mut inbound, digest, "index.json"); }
     if let Some(digest) = blob_digest(config_name) { record_inbound(&mut inbound, digest, "manifest.json:config"); }
@@ -454,10 +394,10 @@ fn verify_oci_layout(
         let path = format!("blobs/sha256/{digest}");
         let entry = entries.get(&path).unwrap_or_else(|| fail("OCI descriptor target absent"));
         if !entry.data.is_empty() {
-            let text = std::str::from_utf8(&entry.data).unwrap_or_else(|_| fail("OCI descriptor is not UTF-8"));
-            let compact: String = text.chars().filter(|character| !character.is_ascii_whitespace()).collect();
-            if compact.contains("\"config\":{") && compact.contains("\"layers\":[") { image_manifests.insert(digest.clone()); }
-            let children = descriptor_digests(text);
+            let parsed = json(&entry.data);
+            let object = parsed.object().unwrap_or_else(|error| fail(error.code));
+            if object.contains_key("config") && object.contains_key("layers") { image_manifests.insert(digest.clone()); }
+            let children = descriptor_digests(&parsed);
             for child in &children { record_inbound(&mut inbound, child, &path); }
             pending.extend(children);
         }
@@ -484,13 +424,21 @@ fn verify_oci_layout(
     let selected_digest = image_manifests.into_iter().next().unwrap();
     let selected_path = format!("blobs/sha256/{selected_digest}");
     let selected = entries.get(&selected_path).unwrap_or_else(|| fail("selected OCI manifest absent"));
-    let selected_text = std::str::from_utf8(&selected.data).unwrap_or_else(|_| fail("selected OCI manifest is not UTF-8"));
-    let selected_compact: String = selected_text.chars().filter(|character| !character.is_ascii_whitespace()).collect();
+    let selected_json = json(&selected.data);
+    selected_json.exact_keys(&["schemaVersion", "mediaType", "config", "layers"], &[]).unwrap_or_else(|error| fail(error.code));
+    let config_descriptor = selected_json.get("config").unwrap();
+    config_descriptor.exact_keys(&["mediaType", "digest", "size"], &[]).unwrap_or_else(|error| fail(error.code));
+    let layer_descriptors = selected_json.get("layers").and_then(preauth::Json::array).unwrap();
+    for descriptor in layer_descriptors { descriptor.exact_keys(&["mediaType", "digest", "size"], &[]).unwrap_or_else(|error| fail(error.code)); }
     let expected_digests = std::iter::once(config_digest.to_owned())
         .chain(layers.iter().map(|layer| blob_digest(layer).unwrap().to_owned()))
         .collect::<Vec<_>>();
-    if descriptor_digests(&selected_compact) != expected_digests { fail("OCI manifest descriptor mapping mismatch"); }
-    let media_types = quoted_values(&selected_compact, "\"mediaType\":\"");
+    let actual_digests = std::iter::once(sha_digest(config_descriptor.get("digest").unwrap()))
+        .chain(layer_descriptors.iter().map(|value| sha_digest(value.get("digest").unwrap()))).collect::<Vec<_>>();
+    if actual_digests != expected_digests { fail("OCI manifest descriptor mapping mismatch"); }
+    let media_types = std::iter::once(selected_json.get("mediaType").and_then(preauth::Json::string).unwrap().to_owned())
+        .chain(std::iter::once(config_descriptor.get("mediaType").and_then(preauth::Json::string).unwrap().to_owned()))
+        .chain(layer_descriptors.iter().map(|value| value.get("mediaType").and_then(preauth::Json::string).unwrap().to_owned())).collect::<Vec<_>>();
     if media_types.len() != layers.len() + 2
         || media_types[0] != "application/vnd.oci.image.manifest.v1+json"
         || media_types[1] != "application/vnd.oci.image.config.v1+json"
@@ -499,10 +447,11 @@ fn verify_oci_layout(
     let expected_sizes = std::iter::once(entries.get(config_name).unwrap().size)
         .chain(layers.iter().map(|layer| entries.get(layer).unwrap().size))
         .collect::<Vec<_>>();
-    if numeric_values(&selected_compact, "\"size\":") != expected_sizes {
+    let actual_sizes = std::iter::once(config_descriptor.get("size").and_then(preauth::Json::number).unwrap())
+        .chain(layer_descriptors.iter().map(|value| value.get("size").and_then(preauth::Json::number).unwrap())).collect::<Vec<_>>();
+    if actual_sizes != expected_sizes {
         fail("OCI manifest size mapping mismatch");
     }
-    let index_compact: String = index_text.chars().filter(|character| !character.is_ascii_whitespace()).collect();
     let canonical_index = format!(concat!(
         "{{\"schemaVersion\":2,\"mediaType\":\"application/vnd.oci.image.index.v1+json\",",
         "\"manifests\":[{{\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\",",
@@ -511,7 +460,7 @@ fn verify_oci_layout(
         "\"org.opencontainers.image.ref.name\":\"{}\"}}}}]}}",
     ), selected_digest, selected.size, revision, revision);
     if index.data != canonical_index.as_bytes() {
-        report_index_mapping(&index_compact, &selected_digest, selected.size, revision);
+        report_index_mapping(std::str::from_utf8(&index.data).unwrap_or(""), &selected_digest, selected.size, revision);
         fail("OCI index descriptor mapping mismatch");
     }
     (selected_digest, index.sha256.clone(), expected)
@@ -522,17 +471,17 @@ fn verify_one(
 ) -> (String, String, String, String, String, BTreeSet<String>) {
     let manifest = &entries.get("manifest.json").unwrap_or_else(|| fail("Docker manifest absent")).data;
     if manifest.is_empty() { fail("oversized Docker manifest"); }
-    let manifest = std::str::from_utf8(manifest).unwrap_or_else(|_| fail("manifest is not UTF-8"));
-    let compact_manifest: String = manifest.chars().filter(|character| !character.is_ascii_whitespace()).collect();
-    one_marker(&compact_manifest, "\"Config\":\"");
-    one_marker(&compact_manifest, "\"RepoTags\":[");
-    one_marker(&compact_manifest, "\"Layers\":[");
-    let config_name = quoted(manifest, "\"Config\":\"");
+    let manifest_json = json(manifest);
+    let manifest_items = manifest_json.array().unwrap_or_else(|error| fail(error.code));
+    if manifest_items.len() != 1 { fail("invalid Docker manifest count"); }
+    let manifest = &manifest_items[0];
+    manifest.exact_keys(&["Config", "RepoTags", "Layers"], &[]).unwrap_or_else(|error| fail(error.code));
+    let config_name = manifest.get("Config").and_then(preauth::Json::string).unwrap_or_else(|error| fail(error.code)).to_owned();
     let modern_oci = blob_digest(&config_name).is_some();
     if !safe_name(&config_name) || (!modern_oci && !config_name.ends_with(".json")) { fail("invalid config path"); }
-    let layers = quoted_list(manifest, "\"Layers\":[");
+    let layers = string_array(manifest.get("Layers").unwrap());
     if layers.is_empty() || layers.len() > 64 { fail("invalid layer count"); }
-    let repo_tags = quoted_list(manifest, "\"RepoTags\":[");
+    let repo_tags = string_array(manifest.get("RepoTags").unwrap());
     if repo_tags.len() != 1 { fail("invalid repository tag count"); }
     let revision = repositories_binding(entries, &repo_tags[0], layers.last().unwrap());
     let config_entry = entries.get(&config_name).unwrap_or_else(|| fail("config absent"));
@@ -540,8 +489,12 @@ fn verify_one(
     let config = &config_entry.data;
     let config_digest = config_entry.sha256.clone();
     if !modern_oci && config_name != format!("{config_digest}.json") { fail("config name/digest mismatch"); }
-    let config_text = std::str::from_utf8(config).unwrap_or_else(|_| fail("config is not UTF-8"));
-    let diff_ids = quoted_list(config_text, "\"diff_ids\":[");
+    let config_json = json(config);
+    config_json.exact_keys(&["rootfs"], &["architecture", "os", "config", "created", "history"]).unwrap_or_else(|error| fail(error.code));
+    let rootfs = config_json.get("rootfs").unwrap();
+    rootfs.exact_keys(&["type", "diff_ids"], &[]).unwrap_or_else(|error| fail(error.code));
+    if rootfs.get("type").and_then(preauth::Json::string).unwrap() != "layers" { fail("invalid rootfs type"); }
+    let diff_ids = string_array(rootfs.get("diff_ids").unwrap());
     if diff_ids.len() != layers.len() { fail("layer/diff-id count mismatch"); }
     let mut expected = BTreeSet::from(["manifest.json".to_owned(), "repositories".to_owned(), config_name.clone()]);
     for (layer, diff_id) in layers.iter().zip(&diff_ids) {
@@ -569,9 +522,8 @@ fn verify_one(
     let (metadata_config, metadata_digest, descriptor) = metadata_summary(metadata);
     let selected_path = format!("blobs/sha256/{reported_digest}");
     let selected = entries.get(&selected_path).unwrap_or_else(|| fail("selected OCI manifest absent"));
-    let selected_text = std::str::from_utf8(&selected.data).unwrap_or_else(|_| fail("selected OCI manifest is not UTF-8"));
-    let selected_compact: String = selected_text.chars().filter(|character| !character.is_ascii_whitespace()).collect();
-    let selected_media_type = quoted(&selected_compact, "\"mediaType\":\"");
+    let selected_json = json(&selected.data);
+    let selected_media_type = selected_json.get("mediaType").and_then(preauth::Json::string).unwrap();
     if let Some((descriptor_digest, descriptor_media_type, architecture, os)) = &descriptor {
         eprintln!(
             "oci_buildx_descriptor digest=sha256:{} descriptor_digest=sha256:{} config=sha256:{} media_type={} platform={}/{} descriptor_object=present",

@@ -11,7 +11,14 @@ inrelease_sha256
 security_inrelease_sha256
 package_manifest_sha256
 license_manifest_sha256
-derived_oci_index_sha256
+canonical_oci_archive_sha256
+canonical_oci_index_sha256
+selected_oci_manifest_sha256
+docker_config_sha256
+buildx_config_sha256
+loaded_image_config_sha256
+compressed_layer_descriptor_set_sha256
+rootfs_diff_id_set_sha256
 lld_path
 lld_sha256
 qemu_path

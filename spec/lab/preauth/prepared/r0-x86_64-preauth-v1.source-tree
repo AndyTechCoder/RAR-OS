@@ -1,4 +1,4 @@
 schema=rar-preauth-source-tree-v1
-source|nucleus/arch/x86_64/build-preauth.sh|dc06bb848558bb06cff399a200786f2116573a31d229e82147d948f1d1a5bdd8
+source|nucleus/arch/x86_64/build-preauth.sh|7ae3cd633ee20cf4ea17e3ad067ee48df6f70ac5d2a6c130200cf96a482d883f
 source|nucleus/arch/x86_64/preauth.ld|53956de2ef339f90026fedfc236e318c1b8e24e331c3a4889a2e5c73b58dad91
 source|nucleus/arch/x86_64/preauth_entry.S|5d190c98a0b1c42caeab776a44c8d6fd55d061629049b47ed2a3280cc66c26f3

@@ -4,13 +4,15 @@ use std::collections::BTreeMap;
 use std::path::{Component, Path};
 
 mod contracts;
+mod json;
 pub use contracts::{
     AttestationRecord, ClosureLock, ExecutionHostRecord, IdentityGraph, PackageManifest,
     PreparedCertification, StrictAuthorityRecord, sha256_hex, sha256_reader,
 };
+pub use json::Json;
 
 pub const AUTHORITY_SCHEMA: &str = "rar-external-authorization-v1";
-pub const CLOSURE_SCHEMA: &str = "rar-preauth-closure-v2";
+pub const CLOSURE_SCHEMA: &str = "rar-preauth-closure-v3";
 pub const DISK_SCHEMA: &str = "rar-disposable-disk-v1";
 pub const EXECUTION_HOST_SCHEMA: &str = "rar-execution-host-v1";
 pub const BASE_OCI_INDEX_SHA256: &str =
@@ -55,216 +57,61 @@ fn token(value: &str) -> bool {
         })
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct LaunchBindings {
-    pub certification_sha256: String,
-    pub profile_sha256: String,
-    pub command_sha256: String,
-    pub artifact_sha256: String,
-    pub disk_sha256: String,
-    pub firmware_sha256: String,
-    pub closure_sha256: String,
-    pub package_manifest_sha256: String,
-    pub source_manifest_sha256: String,
-    pub signature_manifest_sha256: String,
-    pub license_manifest_sha256: String,
-    pub disk_record_sha256: String,
-    pub firmware_vars_sha256: String,
-    pub execution_host_sha256: String,
-    pub resolver_sha256: String,
-    pub spawner_sha256: String,
-    pub identity_graph_sha256: String,
-}
-
-impl LaunchBindings {
-    pub fn validate(&self) -> Result<()> {
-        if [
-            &self.certification_sha256,
-            &self.profile_sha256,
-            &self.command_sha256,
-            &self.artifact_sha256,
-            &self.disk_sha256,
-            &self.firmware_sha256,
-            &self.closure_sha256,
-            &self.package_manifest_sha256,
-            &self.source_manifest_sha256,
-            &self.signature_manifest_sha256,
-            &self.license_manifest_sha256,
-            &self.disk_record_sha256,
-            &self.firmware_vars_sha256,
-            &self.execution_host_sha256,
-            &self.resolver_sha256,
-            &self.spawner_sha256,
-            &self.identity_graph_sha256,
-        ]
-        .into_iter()
-        .all(|value| digest(value))
-        {
-            Ok(())
-        } else {
-            Err(PreauthError::new("invalid-binding"))
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AuthorityState {
     Issued,
     Consumed,
     Revoked,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AuthorityRecord {
-    pub authorization_id: String,
-    pub state: AuthorityState,
-    pub bindings: LaunchBindings,
-    pub nonce: String,
-    pub expires_at: u64,
-    pub repository: String,
-    pub workflow: String,
-    pub git_ref: String,
-    pub environment: String,
-    pub oidc_subject: String,
-    pub oidc_issuer: String,
-    pub oidc_audience: String,
-    pub kms_key_arn: String,
-    pub kms_algorithm: String,
-    pub kms_context_sha256: String,
-    pub kms_signature_sha256: String,
-    pub cloudtrail_evidence_sha256: String,
-    pub transition_version: u64,
-}
-
-impl AuthorityRecord {
-    pub fn validate(&self) -> Result<()> {
-        self.bindings.validate()?;
-        if self.state != AuthorityState::Issued
-            || self.transition_version != 1
-            || !token(&self.authorization_id)
-            || !token(&self.nonce)
-            || self.expires_at == 0
-            || self.repository != "AndyTechCoder/RAR-OS"
-            || self.workflow != AUTHORITY_WORKFLOW
-            || self.git_ref != AUTHORITY_REF
-            || self.environment != AUTHORITY_ENVIRONMENT
-            || self.oidc_issuer != OIDC_ISSUER
-            || self.oidc_audience != OIDC_AUDIENCE
-            || self.oidc_subject != OIDC_SUBJECT
-            || self.kms_key_arn != KMS_KEY_ARN
-            || self.kms_algorithm != KMS_ALGORITHM
-            || !digest(&self.kms_context_sha256)
-            || !digest(&self.kms_signature_sha256)
-            || !digest(&self.cloudtrail_evidence_sha256)
-        {
-            return Err(PreauthError::new("invalid-authority-record"));
-        }
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ConditionalResult {
-    Committed(AuthorityRecord),
-    ConditionFailed,
     Uncertain,
 }
 
-pub trait ConditionalLedger {
-    fn transition(
-        &mut self,
-        authorization_id: &str,
-        expected_state: AuthorityState,
-        expected_version: u64,
-        new_state: AuthorityState,
-    ) -> ConditionalResult;
-}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TransitionReceipt { pub state: AuthorityState, pub version: u64, pub record_sha256: String }
 
-pub fn consume_once<L: ConditionalLedger>(
-    ledger: &mut L,
-    record: &AuthorityRecord,
-    presented: &LaunchBindings,
-    now: u64,
-) -> Result<AuthorityRecord> {
-    record.validate()?;
-    presented.validate()?;
-    if record.bindings != *presented {
-        return Err(PreauthError::new("authority-binding-mismatch"));
-    }
-    if now >= record.expires_at {
-        return Err(PreauthError::new("authority-expired"));
-    }
-    match ledger.transition(
-        &record.authorization_id,
-        AuthorityState::Issued,
-        record.transition_version,
-        AuthorityState::Consumed,
-    ) {
-        ConditionalResult::Committed(committed)
-            if committed.state == AuthorityState::Consumed
-                && committed.transition_version == record.transition_version + 1
-                && committed.bindings == record.bindings => Ok(committed),
-        ConditionalResult::Committed(_) => Err(PreauthError::new("authority-commit-mismatch")),
-        ConditionalResult::ConditionFailed => Err(PreauthError::new("authority-replay-or-revoked")),
-        ConditionalResult::Uncertain => Err(PreauthError::new("authority-commit-uncertain")),
-    }
-}
+#[derive(Clone)]
+struct LedgerItem { record: StrictAuthorityRecord, state: AuthorityState, version: u64 }
 
 #[derive(Default)]
-pub struct SyntheticLedger {
-    records: BTreeMap<String, AuthorityRecord>,
-    uncertain: bool,
-}
+pub struct SyntheticLedger { records: BTreeMap<String, LedgerItem>, uncertain: bool }
 
 impl SyntheticLedger {
-    pub fn issue(&mut self, record: AuthorityRecord) -> Result<()> {
-        record.validate()?;
+    /// Validates the complete canonical, signature-bound record and identity graph before insert.
+    pub fn issue(&mut self, record: StrictAuthorityRecord, graph: &IdentityGraph) -> Result<()> {
+        if graph.phase != "attested" { return Err(PreauthError::new("authority-requires-attested-identity")); }
+        record.validate_graph(graph)?;
+        if record.state != "issued" || record.transition_version != 1 {
+            return Err(PreauthError::new("invalid-authority-state"));
+        }
         if self.records.contains_key(&record.authorization_id) {
             return Err(PreauthError::new("duplicate-authorization"));
         }
-        self.records.insert(record.authorization_id.clone(), record);
+        self.records.insert(record.authorization_id.clone(), LedgerItem {
+            version: record.transition_version, record, state: AuthorityState::Issued,
+        });
         Ok(())
     }
 
     pub fn revoke(&mut self, authorization_id: &str) -> Result<()> {
-        let record = self
-            .records
-            .get_mut(authorization_id)
-            .ok_or_else(|| PreauthError::new("authorization-absent"))?;
-        if record.state != AuthorityState::Issued {
-            return Err(PreauthError::new("authority-replay-or-revoked"));
-        }
-        record.state = AuthorityState::Revoked;
-        record.transition_version += 1;
-        Ok(())
+        let item = self.records.get_mut(authorization_id).ok_or_else(|| PreauthError::new("authorization-absent"))?;
+        if item.state != AuthorityState::Issued { return Err(PreauthError::new("authority-replay-or-revoked")); }
+        item.state = AuthorityState::Revoked; item.version += 1; Ok(())
     }
-
-    pub fn make_uncertain(&mut self) {
-        self.uncertain = true;
-    }
+    pub fn make_uncertain(&mut self) { self.uncertain = true; }
 }
 
-impl ConditionalLedger for SyntheticLedger {
-    fn transition(
-        &mut self,
-        authorization_id: &str,
-        expected_state: AuthorityState,
-        expected_version: u64,
-        new_state: AuthorityState,
-    ) -> ConditionalResult {
-        if self.uncertain {
-            return ConditionalResult::Uncertain;
-        }
-        let Some(record) = self.records.get_mut(authorization_id) else {
-            return ConditionalResult::ConditionFailed;
-        };
-        if record.state != expected_state || record.transition_version != expected_version {
-            return ConditionalResult::ConditionFailed;
-        }
-        record.state = new_state;
-        record.transition_version += 1;
-        ConditionalResult::Committed(record.clone())
+pub fn consume_once(
+    ledger: &mut SyntheticLedger, record: &StrictAuthorityRecord, graph: &IdentityGraph, now: u64,
+) -> Result<TransitionReceipt> {
+    record.validate_graph(graph)?;
+    if record.state != "issued" || now >= record.expires_at { return Err(PreauthError::new("authority-expired-or-state")); }
+    if ledger.uncertain { return Err(PreauthError::new("authority-commit-uncertain")); }
+    let item = ledger.records.get_mut(&record.authorization_id)
+        .ok_or_else(|| PreauthError::new("authority-absent"))?;
+    if item.record != *record || item.state != AuthorityState::Issued || item.version != record.transition_version {
+        return Err(PreauthError::new("authority-replay-or-revoked"));
     }
+    item.state = AuthorityState::Consumed; item.version += 1;
+    Ok(TransitionReceipt { state: item.state, version: item.version, record_sha256: item.record.record_sha256.clone() })
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -313,6 +160,7 @@ pub fn valid_repository_relative(value: &str, prefix: &str, suffix: &str) -> boo
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LifecycleEvent {
+    Authorize,
     Resolve,
     Spawn,
     OutputLimit,
@@ -325,6 +173,45 @@ pub enum LifecycleEvent {
     RefuseRetry,
     Cleanup,
     Quarantine,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LifecycleState {
+    Prepared, Authorized, Resolving, Running, Terminating, Exited, Cleaning,
+    Consumed, Refused, Quarantined,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LifecycleMachine { state: LifecycleState, cleanup_required: bool }
+
+impl LifecycleMachine {
+    pub fn prepared() -> Self { Self { state: LifecycleState::Prepared, cleanup_required: false } }
+    pub fn state(&self) -> LifecycleState { self.state }
+    pub fn apply(&mut self, event: LifecycleEvent) -> Result<LifecycleState> {
+        use LifecycleEvent::*; use LifecycleState::*;
+        let next = match (self.state, event) {
+            (Prepared, Authorize) => Authorized,
+            (Authorized, Resolve) => Resolving,
+            (Resolving, Spawn) => { self.cleanup_required = true; Running }
+            (Running, ExitObserved) => Exited,
+            (Running, Timeout | OutputLimit | Terminate) => Terminating,
+            (Terminating, Kill | ExitObserved) => Exited,
+            (Running | Resolving | Terminating, Crash) => Quarantined,
+            (Exited | Quarantined, Cleanup) => { self.cleanup_required = false; Cleaning }
+            (Cleaning, Reconcile) if !self.cleanup_required => Consumed,
+            (Prepared | Authorized | Resolving, RefuseRetry) => Refused,
+            (_, Quarantine) => Quarantined,
+            (Consumed | Refused | Quarantined, _) => return Err(PreauthError::new("lifecycle-terminal")),
+            _ => return Err(PreauthError::new("lifecycle-order")),
+        };
+        self.state = next; Ok(next)
+    }
+
+    pub fn finish(&self) -> Result<()> {
+        if matches!(self.state, LifecycleState::Consumed | LifecycleState::Refused)
+            && !self.cleanup_required { Ok(()) }
+        else { Err(PreauthError::new("lifecycle-not-terminal-clean")) }
+    }
 }
 
 pub trait LifecycleBackend {
@@ -375,7 +262,7 @@ pub fn synthetic_crash_recovery<B: LifecycleBackend>(backend: &mut B) -> Result<
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DescriptorBinding {
-    pub identity_graph_sha256: String,
+    pub identity_graph: IdentityGraph,
     pub execution_host_sha256: String,
     pub resolver_sha256: String,
     pub spawner_sha256: String,
@@ -388,12 +275,19 @@ pub struct DescriptorBinding {
 
 impl DescriptorBinding {
     pub fn validate(&self) -> Result<()> {
+        if self.identity_graph.phase != "attested" { return Err(PreauthError::new("descriptor-requires-attested-identity")); }
         if [
-            &self.identity_graph_sha256, &self.execution_host_sha256,
+            &self.execution_host_sha256,
             &self.resolver_sha256, &self.spawner_sha256, &self.executable_sha256,
             &self.artifact_sha256, &self.disk_sha256, &self.firmware_code_sha256,
             &self.firmware_vars_sha256,
         ].into_iter().all(|value| digest(value)) {
+            for (kind, actual) in [
+                ("execution_host_sha256", &self.execution_host_sha256), ("resolver_sha256", &self.resolver_sha256),
+                ("spawner_sha256", &self.spawner_sha256), ("qemu_sha256", &self.executable_sha256),
+                ("artifact_sha256", &self.artifact_sha256), ("disk_child_sha256", &self.disk_sha256),
+                ("ovmf_code_sha256", &self.firmware_code_sha256), ("ovmf_vars_sha256", &self.firmware_vars_sha256),
+            ] { self.identity_graph.require(kind, actual)?; }
             Ok(())
         } else {
             Err(PreauthError::new("invalid-descriptor-binding"))
