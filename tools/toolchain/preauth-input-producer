@@ -26,16 +26,35 @@ lock_value(){
 
 inside(){
  phase=setup
- trap 'status=$?; if [ "$status" -ne 0 ]; then printf "preauth-input-producer:phase=%s:status=%s\n" "$phase" "$status" >&2; fi' 0
  relative_stage=$1
  case "$relative_stage" in out/r0/preauth/input-delivery/.stage-one|out/r0/preauth/input-delivery/.stage-two) :;; *) fail stage-path;; esac
  stage=$root/$relative_stage
+ status_file=$stage/inside-status.v1
+ telemetry(){
+  phase=$1
+  files=$(find "$stage" -xdev -type f 2>/dev/null | wc -l | tr -d ' ')
+  bytes=$(du -sk "$stage" 2>/dev/null | awk '{ printf "%d", $1 * 1024 }')
+  set -- $(df -Pk "$stage" | awk 'NR==2 { print $2 * 1024, $3 * 1024, $4 * 1024 }')
+  printf 'phase=%s\nfiles=%s\naggregate_bytes=%s\ncapacity_bytes=%s\nused_bytes=%s\navailable_bytes=%s\n' \
+   "$phase" "$files" "$bytes" "$1" "$2" "$3" > "$status_file.next"
+  /bin/mv "$status_file.next" "$status_file"
+  printf 'preauth-input-producer:telemetry:phase=%s:files=%s:bytes=%s:available=%s\n' "$phase" "$files" "$bytes" "$3" >&2
+ }
+ inside_exit(){
+  status=$?
+  trap - 0
+  printf 'exit_status=%s\n' "$status" >> "$status_file" 2>/dev/null || :
+  if [ "$status" -ne 0 ]; then printf 'preauth-input-producer:phase=%s:status=%s\n' "$phase" "$status" >&2; fi
+  exit "$status"
+ }
+ trap inside_exit 0
  [ "${RAR_CI_BOOTSTRAP_IMAGE-}" = sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 ] || fail base-identity
  [ "$(id -u)" = "${RAR_OUTPUT_UID-}" ] && [ "$(id -g)" = "${RAR_OUTPUT_GID-}" ] || fail output-owner
  incoming=$stage/incoming
  state=$stage/apt-state
  cache=$stage/apt-cache
  mkdir -m 700 "$state" "$state/lists" "$state/lists/partial" "$cache" "$cache/archives" "$cache/archives/partial" "$incoming/debs" "$stage/extracted"
+ telemetry setup-complete
  sources=$stage/sources.list
  {
   printf '%s\n' \
@@ -49,10 +68,12 @@ inside(){
  # shellcheck disable=SC2086
  phase=apt-update
  /usr/bin/apt-get $options update
+ telemetry apt-update-complete
  # shellcheck disable=SC2086
  phase=apt-download
  /usr/bin/apt-get $options --yes --download-only --no-install-recommends install \
   'lld-19=1:19.1.7-3+b1' 'qemu-system-x86=1:10.0.8+ds-0+deb13u1+b2' 'ovmf=2025.02-8+deb13u1'
+ telemetry apt-download-complete
  phase=inventory
  find "$cache/archives" -maxdepth 1 -type f -name '*.deb' -exec /bin/cp --reflink=never {} "$incoming/debs/" \;
  [ "$(find "$incoming/debs" -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d ' ')" -eq 36 ] || fail package-count
@@ -98,8 +119,10 @@ inside(){
   { if (($1 in kind) && (kind[$1] != "d" || $2 != "d")) exit 73; kind[$1]=$2;
     if ($3 !~ /^[0-9]+$/) exit 73; total += $3; if (total > 8589934592) exit 73 }
  ' "$archive_plan" || fail archive-plan-collision
+ telemetry archive-plan-complete
  phase=extract
  for deb in "$incoming"/debs/*.deb; do /usr/bin/dpkg-deb -x "$deb" "$stage/extracted"; done
+ telemetry extract-complete
  [ "$(sha256sum "$licenses" | cut -d ' ' -f1)" = "$(lock_value license_manifest_sha256)" ] || fail license-manifest
  phase=licenses
  for row in $(grep '^package|' "$packages" | cut -d '|' -f2,8); do
@@ -109,6 +132,7 @@ inside(){
   [ "$(sha256sum "$resolved" | cut -d ' ' -f1)" = "$expected" ] || fail license-digest
   /bin/cp --reflink=never "$resolved" "$incoming/license-$expected"
  done
+ telemetry bindings-complete
  phase=bindings
  for binding in \
   '/usr/bin/ld.lld-19:lld_sha256:tool-lld' \
@@ -203,22 +227,60 @@ produce(){
  stage=$parent/.stage-$slot; [ ! -e "$stage" ] && [ ! -L "$stage" ] || fail stage-exists
  mkdir -m 700 "$stage" "$stage/incoming" "$stage/docker-config" "$stage/home"
  export DOCKER_CONFIG=$root/$stage/docker-config
-  docker image inspect "$base" >/dev/null 2>&1 || docker pull "$base" >/dev/null
+ container_id=
+ host_phase=base-image
+ host_exit(){
+  status=$?
+  trap - 0 1 2 15
+  set +e
+  if [ -n "$container_id" ]; then
+   printf 'preauth-input-producer:container-state:' >&2
+   docker inspect --format 'exit={{.State.ExitCode}} oom={{.State.OOMKilled}} error={{json .State.Error}} finished={{.State.FinishedAt}} network={{.HostConfig.NetworkMode}} readonly={{.HostConfig.ReadonlyRootfs}}' "$container_id" >&2 || printf 'inspect=unavailable\n' >&2
+   docker logs --tail 120 "$container_id" >&2 || :
+   docker rm -f "$container_id" >/dev/null 2>&1 || :
+   if docker inspect "$container_id" >/dev/null 2>&1; then printf 'preauth-input-producer:cleanup=failed\n' >&2; else printf 'preauth-input-producer:cleanup=complete\n' >&2; fi
+  fi
+  if [ "$status" -ne 0 ]; then printf 'preauth-input-producer:host-phase=%s:status=%s:container=%s\n' "$host_phase" "$status" "${container_id:+present}" >&2; fi
+  exit "$status"
+ }
+ trap host_exit 0 1 2 15
+ docker image inspect "$base" >/dev/null 2>&1 || docker pull "$base" >/dev/null
+ host_phase=base-export
   docker save --output "$stage/incoming/base-oci.tar" "$base"
  {
   printf '%s\n' schema=rar-preauth-input-producer-tools-v1
   printf 'tool=docker-client|%s|%s\n' "$(docker version --format '{{.Client.Version}}')" "$(sha256sum "$(command -v docker)" | cut -d ' ' -f1)"
  } > "$stage/incoming/host-tools.v1"
  host_uid=$(id -u); host_gid=$(id -g)
- docker run --rm --read-only \
+ host_phase=container-create
+ container_name=rar-preauth-input-$slot-${GITHUB_RUN_ID-local}-${GITHUB_RUN_ATTEMPT-0}
+ case "$container_name" in *[!A-Za-z0-9_.-]*) fail container-name;; esac
+ container_id=$(docker create --name "$container_name" --read-only \
   --user "$host_uid:$host_gid" --security-opt no-new-privileges --cap-drop ALL \
   --tmpfs "/tmp:rw,nosuid,nodev,size=512m,uid=$host_uid,gid=$host_gid,mode=1777" \
   --mount "type=bind,source=$root,target=/workspace" --workdir /workspace \
   --env RAR_CI_BOOTSTRAP_IMAGE=sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 \
   --env RAR_OUTPUT_UID="$host_uid" --env RAR_OUTPUT_GID="$host_gid" --env HOME="/workspace/$stage/home" \
-  "$base" /usr/bin/dash -e tools/toolchain/preauth-input-producer --inside "$stage"
+  "$base" /usr/bin/dash -e tools/toolchain/preauth-input-producer --inside "$stage")
+ host_phase=container-start-wait
+ set +e
+ docker start -a "$container_id"
+ attached_status=$?
+ waited_status=$(docker wait "$container_id")
+ wait_status=$?
+ set -e
+ docker inspect --format 'preauth-input-producer:container-state:exit={{.State.ExitCode}} oom={{.State.OOMKilled}} error={{json .State.Error}} finished={{.State.FinishedAt}} network={{.HostConfig.NetworkMode}} readonly={{.HostConfig.ReadonlyRootfs}}' "$container_id" >&2
+ [ "$wait_status" -eq 0 ] || fail container-wait
+ [ "$attached_status" -eq 0 ] && [ "$waited_status" -eq 0 ] || fail "container-exit-$waited_status"
+ host_phase=container-cleanup
+ docker rm "$container_id" >/dev/null
+ container_id=
+ if docker inspect "$container_name" >/dev/null 2>&1; then fail container-cleanup; fi
+ host_phase=host-assembly
  { sed -n '1p' "$stage/incoming/host-tools.v1"; sed -n '2,$p' "$stage/incoming/host-tools.v1"; sed -n '2,$p' "$stage/incoming/container-tools.v1"; } > "$stage/incoming/producer-tools.v1"
+ host_phase=publication
   assemble "$slot"
+ host_phase=complete
 }
 
 case "${1-}" in

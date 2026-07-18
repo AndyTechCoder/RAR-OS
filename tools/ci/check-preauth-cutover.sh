@@ -14,8 +14,9 @@ manifest=spec/lab/preauth/cutover-v1.manifest
 [ "$(grep -c '^production_entrypoint=tools/toolchain/preauth-transaction$' "$manifest")" -eq 1 ] || fail sole-entrypoint
 [ "$(grep -c '^status=m1.6-input-delivery-m2-incomplete$' "$manifest")" -eq 1 ] || fail completeness-status
 [ "$(grep -c '^untrusted_delivery_entrypoint=tools/toolchain/preauth-input-producer$' "$manifest")" -eq 1 ] || fail delivery-entrypoint
+[ "$(grep -c '^untrusted_delivery_runner=tools/toolchain/preauth-input-delivery$' "$manifest")" -eq 1 ] || fail delivery-runner
 
-for required in tools/toolchain/preauth-transaction tools/toolchain/preauth-input-producer \
+for required in tools/toolchain/preauth-transaction tools/toolchain/preauth-input-producer tools/toolchain/preauth-input-delivery \
  tools/rar-lab/preauth/src/lib.rs spec/lab/preauth/preauth-input-bundle-v1.fields \
  spec/lab/preauth/preauth-input-object-v1.fields spec/lab/preauth/preauth-input-delivery-v1.policy \
  spec/lab/preauth/locks/r0-x86_64-preauth-input-v4.lock \
@@ -37,7 +38,8 @@ done
 
 workflow=.github/workflows/specifications.yml
 [ "$(grep -c 'tools/toolchain/preauth-transaction --prepare' "$workflow")" -eq 1 ] || fail workflow-entrypoint
-[ "$(grep -c 'tools/toolchain/preauth-input-producer --produce' "$workflow")" -eq 2 ] || fail workflow-delivery
+[ "$(grep -c 'tools/toolchain/preauth-input-delivery --acquire-pair' "$workflow")" -eq 1 ] || fail workflow-delivery
+[ "$(grep -c 'tools/toolchain/preauth-input-producer --produce' tools/toolchain/preauth-input-delivery)" -eq 2 ] || fail runner-delivery
 ! grep -Eq 'preauth-input-producer.*(authority|session|graph|certificate)|preauth-transaction.*--network' "$workflow" || fail boundary-confusion
 ! grep -Eq 'eval|source[[:space:]]|^[[:space:]]*\.[[:space:]]|RAR_ALLOW_.*LEGACY|fallback' "$workflow" || fail workflow-indirection
 

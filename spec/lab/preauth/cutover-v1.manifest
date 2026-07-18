@@ -1,6 +1,7 @@
 schema=rar-preauth-cutover-v1
 production_entrypoint=tools/toolchain/preauth-transaction
 untrusted_delivery_entrypoint=tools/toolchain/preauth-input-producer
+untrusted_delivery_runner=tools/toolchain/preauth-input-delivery
 input_bundle_contract=spec/lab/preauth/preauth-input-bundle-v1.fields
 input_object_contract=spec/lab/preauth/preauth-input-object-v1.fields
 input_delivery_policy=spec/lab/preauth/preauth-input-delivery-v1.policy

@@ -1,0 +1,34 @@
+#!/bin/sh
+set -eu
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
+cd "$root"
+phase=initialization
+host_exit(){
+ status=$?
+ trap - 0 1 2 15
+ if [ "$status" -ne 0 ]; then printf 'preauth-input-delivery:phase=%s:status=%s\n' "$phase" "$status" >&2; fi
+ exit "$status"
+}
+trap host_exit 0 1 2 15
+run_phase(){
+ phase=$1
+ shift
+ set +e
+ "$@"
+ status=$?
+ set -e
+ [ "$status" -eq 0 ] || exit "$status"
+}
+[ "${1-}" = --acquire-pair ] && [ "$#" -eq 1 ] || { phase=usage; exit 73; }
+run_phase cutover tools/ci/check-preauth-cutover.sh
+phase=output-parent
+mkdir -p out/r0/preauth/input-delivery
+[ -d out/r0/preauth/input-delivery ] && [ ! -L out/r0/preauth/input-delivery ] || exit 73
+run_phase producer-one tools/toolchain/preauth-input-producer --produce one
+run_phase producer-two tools/toolchain/preauth-input-producer --produce two
+phase=host-validation
+one=$(sha256sum out/r0/preauth/input-delivery/one/preauth-input-bundle-v1.tar | cut -d ' ' -f 1)
+two=$(sha256sum out/r0/preauth/input-delivery/two/preauth-input-bundle-v1.tar | cut -d ' ' -f 1)
+[ -n "$one" ] && [ "$one" = "$two" ] || exit 73
+printf 'input_bundle_sha256=%s\n' "$one"
+phase=complete

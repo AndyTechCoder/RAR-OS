@@ -5,6 +5,7 @@ cd "$root"
 fail(){ printf 'input-producer-contract:%s\n' "$1" >&2; exit 1; }
 policy=spec/lab/preauth/preauth-input-delivery-v1.policy
 producer=tools/toolchain/preauth-input-producer
+delivery=tools/toolchain/preauth-input-delivery
 for exact in \
  schema=rar-preauth-input-delivery-policy-v1 \
  base_oci=rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 \
@@ -26,6 +27,15 @@ set +e; output=$(AWS_ACCESS_KEY_ID=forbidden "$producer" --produce one 2>&1); st
 [ "$status" -eq 73 ] && [ "$output" = preauth-input-producer:authority-environment ] || fail credential-refusal
 after=$(find out/r0/preauth/input-delivery -type f 2>/dev/null | sort || :)
 [ "$before" = "$after" ] || fail credential-side-effect
+grep -q 'docker create' "$producer" || fail lifecycle-create
+grep -q 'docker start -a' "$producer" || fail lifecycle-start
+grep -q 'docker wait' "$producer" || fail lifecycle-wait
+grep -q 'State.OOMKilled' "$producer" || fail lifecycle-oom
+grep -q 'docker rm -f' "$producer" || fail lifecycle-cleanup
+grep -q 'preauth-input-delivery:phase=' "$delivery" || fail host-phase-diagnostic
+for phase in setup-complete apt-update-complete apt-download-complete archive-plan-complete extract-complete bindings-complete; do
+ grep -q "telemetry $phase" "$producer" || fail "telemetry:$phase"
+done
 for mutation in stale-snapshot unknown-origin package-substitution source-substitution license-substitution key-substitution signature-substitution checksum-substitution base-oci-substitution redirect-downgrade; do
  case "$mutation" in
   stale-snapshot|unknown-origin|package-substitution|source-substitution|license-substitution|key-substitution|signature-substitution|checksum-substitution|base-oci-substitution|redirect-downgrade) :;;
