@@ -29,6 +29,19 @@ run_phase producer-two tools/toolchain/preauth-input-producer --produce two
 phase=host-validation
 one=$(sha256sum out/r0/preauth/input-delivery/one/preauth-input-bundle-v1.tar | cut -d ' ' -f 1)
 two=$(sha256sum out/r0/preauth/input-delivery/two/preauth-input-bundle-v1.tar | cut -d ' ' -f 1)
-[ -n "$one" ] && [ "$one" = "$two" ] || exit 73
+[ -n "$one" ] || exit 73
+if [ "$one" != "$two" ]; then
+ diagnostic=out/r0/preauth/input-delivery/.pair-diagnostic
+ mkdir -m 700 "$diagnostic"
+ tar -xOf out/r0/preauth/input-delivery/one/preauth-input-bundle-v1.tar objects.v1 > "$diagnostic/one.objects"
+ tar -xOf out/r0/preauth/input-delivery/two/preauth-input-bundle-v1.tar objects.v1 > "$diagnostic/two.objects"
+ [ "$(wc -l < "$diagnostic/one.objects" | tr -d ' ')" -le 128 ] || exit 73
+ [ "$(wc -l < "$diagnostic/two.objects" | tr -d ' ')" -le 128 ] || exit 73
+ printf 'preauth-input-delivery:bundle-mismatch:one=%s:two=%s\n' "$one" "$two" >&2
+ LC_ALL=C comm -3 "$diagnostic/one.objects" "$diagnostic/two.objects" | sed -n '1,80p' >&2
+ rm -f "$diagnostic/one.objects" "$diagnostic/two.objects"
+ rmdir "$diagnostic"
+ exit 73
+fi
 printf 'input_bundle_sha256=%s\n' "$one"
 phase=complete

@@ -33,6 +33,8 @@ grep -q 'docker wait' "$producer" || fail lifecycle-wait
 grep -q 'State.OOMKilled' "$producer" || fail lifecycle-oom
 grep -q 'docker rm -f' "$producer" || fail lifecycle-cleanup
 grep -q 'preauth-input-delivery:phase=' "$delivery" || fail host-phase-diagnostic
+grep -q 'preauth-input-delivery:bundle-mismatch:' "$delivery" || fail bundle-mismatch-diagnostic
+grep -q "comm -3" "$delivery" || fail bundle-member-diagnostic
 for phase in setup-complete apt-update-complete apt-download-complete archive-plan-complete extract-complete bindings-complete; do
  grep -q "telemetry $phase" "$producer" || fail "telemetry:$phase"
 done
