@@ -45,12 +45,22 @@ mv "$oci_test/root/image-manifest.pending" "$oci_test/root/blobs/sha256/$manifes
 manifest_size=$(/usr/bin/wc -c < "$oci_test/root/blobs/sha256/$manifest_digest" | /usr/bin/tr -d ' ')
 printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s}]}\n' \
     "$manifest_digest" "$manifest_size" > "$oci_test/root/index.json"
-printf '[{"Config":"blobs/sha256/%s","RepoTags":["fixture:latest"],"Layers":["blobs/sha256/%s"]}]\n' \
-    "$digest" "$layer_digest" > "$oci_test/root/manifest.json"
+printf '[{"Config":"blobs/sha256/%s","RepoTags":["rar-preauth:%s"],"Layers":["blobs/sha256/%s"]}]\n' \
+    "$digest" "$head" "$layer_digest" > "$oci_test/root/manifest.json"
 printf '{"imageLayoutVersion":"1.0.0"}\n' > "$oci_test/root/oci-layout"
+write_repositories() {
+    printf '{"rar-preauth":{"%s":"%s"}}\n' "$head" "$layer_digest" > "$oci_test/root/repositories"
+}
+write_repositories
+build_two_archive() {
+    /usr/bin/tar --sort=name --mtime='@1784332800' --owner=0 --group=0 --numeric-owner --format=gnu \
+        -cf "$oci_test/two/image.tar" -C "$oci_test/root" \
+        index.json manifest.json oci-layout repositories \
+        "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest"
+}
 /usr/bin/tar --sort=name --mtime='@1784332800' --owner=0 --group=0 --numeric-owner --format=gnu \
     -cf "$oci_test/one/image.tar" -C "$oci_test/root" \
-    index.json manifest.json oci-layout \
+    index.json manifest.json oci-layout repositories \
     "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest"
 cp "$oci_test/one/image.tar" "$oci_test/two/image.tar"
 printf '{"containerimage.config.digest":"sha256:%s","containerimage.digest":"sha256:%s"}\n' "$digest" "$manifest_digest" > "$oci_test/one/metadata.json"
@@ -87,10 +97,78 @@ cp "$oci_test/one/image.tar" "$oci_test/two/image.tar"
     -C "$oci_test/root" manifest.json
 expect_oci_rejection "archive path escape"
 cp "$oci_test/one/image.tar" "$oci_test/two/image.tar"
-printf 'changed layer\n' > "$oci_test/root/blobs/sha256/$layer_digest"
+rm "$oci_test/root/repositories"
 /usr/bin/tar --sort=name --mtime='@1784332800' --owner=0 --group=0 --numeric-owner --format=gnu \
     -cf "$oci_test/two/image.tar" -C "$oci_test/root" \
     index.json manifest.json oci-layout \
+    "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest"
+expect_oci_rejection "missing repositories index"
+write_repositories
+printf '{' > "$oci_test/root/repositories"
+build_two_archive
+expect_oci_rejection "malformed repositories index"
+printf '{"rar-preauth":{"%s":"%s"},"extra":{}}\n' "$head" "$layer_digest" > "$oci_test/root/repositories"
+build_two_archive
+expect_oci_rejection "extra repositories key"
+printf '{"rar-preauth":{"%s":"%s"},"rar-preauth":{"%s":"%s"}}\n' \
+    "$head" "$layer_digest" "$head" "$layer_digest" > "$oci_test/root/repositories"
+build_two_archive
+expect_oci_rejection "duplicate repositories key"
+printf '{ "rar-preauth" : { "%s" : "%s" } }\n' "$head" "$layer_digest" > "$oci_test/root/repositories"
+build_two_archive
+expect_oci_rejection "noncanonical repositories encoding"
+printf '{"rar-preauth":{"%s":"%s"}}\n' "$merge" "$layer_digest" > "$oci_test/root/repositories"
+build_two_archive
+expect_oci_rejection "wrong repositories tag"
+printf '{"rar-preauth":{"%s":"%s"}}\n' "$head" "$digest" > "$oci_test/root/repositories"
+build_two_archive
+expect_oci_rejection "repositories config substitution"
+write_repositories
+printf 'unexpected\n' > "$oci_test/root/extra-member"
+/usr/bin/tar --sort=name --mtime='@1784332800' --owner=0 --group=0 --numeric-owner --format=gnu \
+    -cf "$oci_test/two/image.tar" -C "$oci_test/root" \
+    index.json manifest.json oci-layout repositories extra-member \
+    "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest"
+expect_oci_rejection "extra archive member"
+rm "$oci_test/root/extra-member"
+/usr/bin/tar --sort=name --mtime='@1784332800' --owner=0 --group=0 --numeric-owner --format=gnu \
+    -cf "$oci_test/two/image.tar" -C "$oci_test/root" \
+    index.json manifest.json oci-layout repositories repositories \
+    "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest"
+expect_oci_rejection "duplicate archive member"
+/usr/bin/head -c 513 /dev/zero > "$oci_test/root/repositories"
+build_two_archive
+expect_oci_rejection "oversized repositories member"
+write_repositories
+mkdir "$oci_test/root/repositories-directory"
+/usr/bin/tar --sort=name --mtime='@1784332800' --owner=0 --group=0 --numeric-owner --format=gnu \
+    --transform='s|repositories-directory|repositories|' -cf "$oci_test/two/image.tar" \
+    -C "$oci_test/root" repositories-directory
+expect_oci_rejection "repositories member type"
+rmdir "$oci_test/root/repositories-directory"
+/usr/bin/tar --sort=name --mtime='@1784332800' --mode=0600 --owner=0 --group=0 --numeric-owner --format=gnu \
+    -cf "$oci_test/two/image.tar" -C "$oci_test/root" \
+    index.json manifest.json oci-layout repositories \
+    "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest"
+expect_oci_rejection "repositories member mode"
+/usr/bin/tar --sort=name --mtime='@1784332800' --owner=1 --group=1 --numeric-owner --format=gnu \
+    -cf "$oci_test/two/image.tar" -C "$oci_test/root" \
+    index.json manifest.json oci-layout repositories \
+    "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest"
+expect_oci_rejection "repositories member ownership"
+build_two_archive
+printf '{"containerimage.config.digest":"sha256:%s","containerimage.digest":"sha256:%s"}\n' \
+    "$digest" "$manifest_digest" > "$oci_test/two/metadata.json"
+printf '{"rar-preauth":{"%s":"%s"}}\n' "$head" "$digest" > "$oci_test/root/repositories"
+build_two_archive
+expect_oci_rejection "substituted repositories bytes with unchanged metadata"
+write_repositories
+build_two_archive
+cp "$oci_test/one/metadata.json" "$oci_test/two/metadata.json"
+printf 'changed layer\n' > "$oci_test/root/blobs/sha256/$layer_digest"
+/usr/bin/tar --sort=name --mtime='@1784332800' --owner=0 --group=0 --numeric-owner --format=gnu \
+    -cf "$oci_test/two/image.tar" -C "$oci_test/root" \
+    index.json manifest.json oci-layout repositories \
     "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest"
 expect_oci_rejection "layer diff-id substitution"
 /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc \

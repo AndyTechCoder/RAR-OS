@@ -13,6 +13,7 @@ const MAX_ARCHIVE: u64 = 2 * 1024 * 1024 * 1024;
 const MAX_MEMBER: u64 = 1024 * 1024 * 1024;
 const MAX_MEMBERS: usize = 256;
 const MAX_INLINE: u64 = 8 * 1024 * 1024;
+const MAX_REPOSITORIES: u64 = 512;
 
 struct TarEntry {
     data: Vec<u8>,
@@ -80,6 +81,7 @@ fn tar_entries(path: &Path) -> BTreeMap<String, TarEntry> {
         let gid = parse_octal(&header[116..124]);
         let size = parse_octal(&header[124..136]);
         if directory && size != 0 { fail("nonempty tar directory"); }
+        if directory { fail("directory tar member refused"); }
         total = total.checked_add(size).unwrap_or_else(|| fail("tar total overflow"));
         if size > MAX_MEMBER || total > MAX_ARCHIVE || entries.len() >= MAX_MEMBERS { fail("tar bound exceeded"); }
         if !directory {
@@ -154,6 +156,28 @@ fn quoted_list(text: &str, marker: &str) -> Vec<String> {
     }).collect()
 }
 
+fn one_marker(text: &str, marker: &str) {
+    if text.match_indices(marker).count() != 1 { fail("duplicate or missing JSON field"); }
+}
+
+fn repositories_binding(entries: &BTreeMap<String, TarEntry>, repo_tag: &str, layer: &str) {
+    let entry = entries.get("repositories").unwrap_or_else(|| fail("Docker repositories index absent"));
+    if !matches!(entry.kind, 0 | b'0') || entry.mode != 0o644 || entry.uid != 0 || entry.gid != 0
+        || entry.size == 0 || entry.size > MAX_REPOSITORIES || entry.data.len() as u64 != entry.size
+    { fail("invalid Docker repositories member"); }
+    let revision = repo_tag.strip_prefix("rar-preauth:").unwrap_or_else(|| fail("invalid Docker image tag"));
+    if revision.len() != 40
+        || !revision.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    { fail("invalid Docker image revision tag"); }
+    let layer_identity = blob_digest(layer).or_else(|| layer.strip_suffix("/layer.tar"))
+        .unwrap_or_else(|| fail("invalid Docker top-layer identity"));
+    if layer_identity.len() != 64
+        || !layer_identity.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    { fail("invalid Docker top-layer identity"); }
+    let canonical = format!("{{\"rar-preauth\":{{\"{revision}\":\"{layer_identity}\"}}}}\n");
+    if entry.data != canonical.as_bytes() { fail("Docker repositories binding mismatch"); }
+}
+
 fn metadata_digest(path: &Path, field: &str) -> String {
     let text = fs::read_to_string(path).unwrap_or_else(|_| fail("unreadable OCI metadata"));
     let compact: String = text.chars().filter(|character| !character.is_ascii_whitespace()).collect();
@@ -198,7 +222,7 @@ fn verify_oci_layout(
     for (name, entry) in entries {
         if let Some(digest) = blob_digest(name) {
             if digest != entry.sha256 { fail("OCI blob name/digest mismatch"); }
-        } else if !matches!(name.as_str(), "index.json" | "manifest.json" | "oci-layout") {
+        } else if !matches!(name.as_str(), "index.json" | "manifest.json" | "oci-layout" | "repositories") {
             unexpected_member(name, entry);
         }
     }
@@ -224,7 +248,7 @@ fn verify_oci_layout(
         if !reachable.contains(digest) { fail("OCI layer is not index-reachable"); }
     }
     let expected = BTreeSet::from_iter(
-        ["index.json".to_owned(), "manifest.json".to_owned(), "oci-layout".to_owned()].into_iter()
+        ["index.json".to_owned(), "manifest.json".to_owned(), "oci-layout".to_owned(), "repositories".to_owned()].into_iter()
             .chain(reachable.iter().map(|digest| format!("blobs/sha256/{digest}"))),
     );
     if entries.keys().any(|name| !expected.contains(name)) { fail("unreachable OCI archive member"); }
@@ -236,11 +260,18 @@ fn verify_one(entries: &BTreeMap<String, TarEntry>, metadata: &Path, image_id_pa
     let manifest = &entries.get("manifest.json").unwrap_or_else(|| fail("Docker manifest absent")).data;
     if manifest.is_empty() { fail("oversized Docker manifest"); }
     let manifest = std::str::from_utf8(manifest).unwrap_or_else(|_| fail("manifest is not UTF-8"));
+    let compact_manifest: String = manifest.chars().filter(|character| !character.is_ascii_whitespace()).collect();
+    one_marker(&compact_manifest, "\"Config\":\"");
+    one_marker(&compact_manifest, "\"RepoTags\":[");
+    one_marker(&compact_manifest, "\"Layers\":[");
     let config_name = quoted(manifest, "\"Config\":\"");
     let modern_oci = blob_digest(&config_name).is_some();
     if !safe_name(&config_name) || (!modern_oci && !config_name.ends_with(".json")) { fail("invalid config path"); }
     let layers = quoted_list(manifest, "\"Layers\":[");
     if layers.is_empty() || layers.len() > 64 { fail("invalid layer count"); }
+    let repo_tags = quoted_list(manifest, "\"RepoTags\":[");
+    if repo_tags.len() != 1 { fail("invalid repository tag count"); }
+    repositories_binding(entries, &repo_tags[0], layers.last().unwrap());
     let config_entry = entries.get(&config_name).unwrap_or_else(|| fail("config absent"));
     if config_entry.data.is_empty() { fail("oversized image config"); }
     let config = &config_entry.data;
