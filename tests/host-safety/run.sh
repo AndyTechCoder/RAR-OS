@@ -8,6 +8,22 @@ rar_load_selected_bootstrap_root "$root"
 rar_verify_selected_bootstrap_root
 rar_verify_ci_execution_boundary
 rar_verify_ci_source_snapshot
+require_test_helper_root() {
+    if [ "${rar_root-}" != "$root" ]; then
+        printf '%s\n' 'host-safety:missing-rar-root-context' >&2
+        return 2
+    fi
+}
+set +e
+missing_root_output=$(unset rar_root; require_test_helper_root 2>&1)
+missing_root_status=$?
+set -e
+if [ "$missing_root_status" -ne 2 ] || [ "$missing_root_output" != host-safety:missing-rar-root-context ]; then
+    printf '%s\n' 'host-safety:missing-rar-root-negative-test-failed' >&2
+    exit 2
+fi
+rar_root=$root
+require_test_helper_root
 rar_prepare_output_parent "$root/out/r0"
 rar_prepare_output_parent "$root/out/r0/host-tests"
 directory=$(rar_allocate_private_directory "$root/out/r0/host-tests" host-cutover)
