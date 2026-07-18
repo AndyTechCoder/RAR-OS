@@ -3,6 +3,11 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 cd "$root"
 fail(){ printf 'preauth-cutover:%s\n' "$1" >&2; exit 1; }
+if [ -x /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc ]; then
+ rustc_path=/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc
+else
+ rustc_path=$(command -v rustc) || fail rustc-unavailable
+fi
 manifest=spec/lab/preauth/cutover-v1.manifest
 [ -f "$manifest" ] && [ ! -L "$manifest" ] || fail manifest-missing
 [ "$(grep -c '^schema=rar-preauth-cutover-v1$' "$manifest")" -eq 1 ] || fail manifest-schema
@@ -53,13 +58,13 @@ mkdir -p out/r0/cutover
 for removed_type in AuthorizationRecord AuthorizationConsumptionKey DescriptorBinding IdentityGraph ClosureLock PreparedCertification ExecutionHostRecord StrictAuthorityRecord; do
  snippet=out/r0/cutover/removed-api-$removed_type.rs
  printf '%s\n' '#[path="../../../tools/rar-lab/preauth/src/lib.rs"] mod preauth;' "use preauth::$removed_type;" 'fn main(){}' > "$snippet"
- if rustc --edition=2024 "$snippet" -o "out/r0/cutover/removed-api-$removed_type" 2>"out/r0/cutover/removed-api-$removed_type.stderr"; then
+ if "$rustc_path" --edition=2024 "$snippet" -o "out/r0/cutover/removed-api-$removed_type" 2>"out/r0/cutover/removed-api-$removed_type.stderr"; then
   fail "old-api-exported:$removed_type"
  fi
 done
-rustc --edition=2024 tools/toolchain/preauth-validate-record.rs -o out/r0/cutover/record-refusal
-rustc --edition=2024 tools/toolchain/preauth-verify-oci.rs -o out/r0/cutover/oci-refusal
-rustc --edition=2024 tools/rar-lab/preauth/src/disk.rs -o out/r0/cutover/disk-refusal
+"$rustc_path" --edition=2024 tools/toolchain/preauth-validate-record.rs -o out/r0/cutover/record-refusal
+"$rustc_path" --edition=2024 tools/toolchain/preauth-verify-oci.rs -o out/r0/cutover/oci-refusal
+"$rustc_path" --edition=2024 tools/rar-lab/preauth/src/disk.rs -o out/r0/cutover/disk-refusal
 for executable in out/r0/cutover/record-refusal out/r0/cutover/oci-refusal out/r0/cutover/disk-refusal; do
  set +e; output=$($executable 2>&1); status=$?; set -e
  [ "$status" -eq 73 ] && [ "$output" = legacy-preauth-version-refused ] || fail "compiled-refusal:$executable"
