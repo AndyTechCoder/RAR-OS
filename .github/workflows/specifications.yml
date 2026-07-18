@@ -120,6 +120,8 @@ jobs:
             --workdir /workspace \
             --env SOURCE_DATE_EPOCH=1784332800 \
             --env GITHUB_SHA \
+            --env CI \
+            --env GITHUB_ACTIONS \
             --env RAR_PREAUTH_BUILD_CONTAINER=rar-preauth-closure-v2 \
             --env RAR_TARGET_EXECUTION=prohibited \
             "rar-preauth:${GITHUB_SHA}" \
