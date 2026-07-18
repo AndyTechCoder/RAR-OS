@@ -4,6 +4,14 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 guard=$root/tools/toolchain/prepare-preauth-output.sh
 tests=$root/out/r0/preauth/ownership-tests
+for parent in "$root/out" "$root/out/r0" "$root/out/r0/preauth"; do
+    [ ! -L "$parent" ] || { echo "ownership test parent is indirect" >&2; exit 73; }
+    if [ ! -e "$parent" ]; then
+        /usr/bin/mkdir "$parent"
+        /usr/bin/chmod 0755 "$parent"
+    fi
+    [ -d "$parent" ] || { echo "ownership test parent is not a directory" >&2; exit 73; }
+done
 [ ! -e "$tests" ] && [ ! -L "$tests" ] || { echo "ownership test output already exists" >&2; exit 73; }
 /usr/bin/mkdir "$tests"
 
