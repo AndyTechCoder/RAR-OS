@@ -1,6 +1,43 @@
 #!/bin/sh
 set -eu
 
+assertion_id=bootstrap
+assertion_category=setup
+assertion_expected=script-completes
+assertion_actual=command-exit
+report_assertion_failure() {
+    status=$?
+    trap - 0
+    if [ "$status" -ne 0 ]; then
+        printf 'ASSERTION_FAIL id=%s category=%s expected=%s actual=%s status=%s\n' \
+            "$assertion_id" "$assertion_category" "$assertion_expected" "$assertion_actual" "$status" >&2
+    fi
+    exit "$status"
+}
+trap report_assertion_failure 0
+mark_assertion() {
+    assertion_id=$1
+    assertion_category=$2
+    assertion_expected=$3
+    assertion_actual=${4:-pending}
+}
+assert_equal() {
+    mark_assertion "$1" "$2" "$3" "$4"
+    [ "$3" = "$4" ]
+}
+assert_status() {
+    mark_assertion "$1" rejection "$2" "$3"
+    [ "$2" -eq "$3" ]
+}
+assert_file_line() {
+    mark_assertion "$1" fixture-log "$2" bounded-file-line
+    /usr/bin/grep -Fqx "$2" "$3"
+}
+assert_files_equal() {
+    mark_assertion "$1" deterministic-bytes equal "$2,$3"
+    cmp "$2" "$3"
+}
+
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 cd "$root"
 
@@ -8,8 +45,13 @@ tests/preauth/output-ownership.sh
 
 head=0123456789abcdef0123456789abcdef01234567
 merge=89abcdef0123456789abcdef0123456789abcdef
-[ "$(tools/toolchain/bind-preauth-head.sh push "$head" - "$head")" = "source_revision=$head" ]
-[ "$(tools/toolchain/bind-preauth-head.sh pull_request "$merge" "$head" "$head")" = "source_revision=$head" ]
+mark_assertion head.push positive-binding "source_revision=$head"
+actual=$(tools/toolchain/bind-preauth-head.sh push "$head" - "$head")
+assert_equal head.push positive-binding "source_revision=$head" "$actual"
+mark_assertion head.pull_request positive-binding "source_revision=$head"
+actual=$(tools/toolchain/bind-preauth-head.sh pull_request "$merge" "$head" "$head")
+assert_equal head.pull_request positive-binding "source_revision=$head" "$actual"
+rejected_index=0
 for rejected in \
     "push $head - $merge" \
     "pull_request $merge $head $merge" \
@@ -20,9 +62,11 @@ for rejected in \
     tools/toolchain/bind-preauth-head.sh $rejected >/dev/null 2>&1
     status=$?
     set -e
-    [ "$status" -eq 73 ] || { echo "source binding rejection failed: $rejected" >&2; exit 1; }
+    rejected_index=$((rejected_index + 1))
+    assert_status "head.reject.$rejected_index" 73 "$status"
 done
 
+mark_assertion fixture.setup setup success command-exit
 test_dir=out/r0/preauth/host-tests
 mkdir -p "$test_dir"
 mkdir -p out/r0/preauth/acquisition/host-tools
@@ -90,6 +134,7 @@ printf '{"containerimage.config.digest":"sha256:%s","containerimage.digest":"sha
 cp "$oci_test/one/metadata.json" "$oci_test/two/metadata.json"
 printf 'sha256:%s\n' "$digest" > "$oci_test/one/image.id"
 cp "$oci_test/one/image.id" "$oci_test/two/image.id"
+mark_assertion fixture.positive-verifier positive-verification success command-exit
 tools/toolchain/verify-preauth-oci.sh \
     "$oci_test/one/image.tar" "$oci_test/one/metadata.json" "$oci_test/one/image.id" \
     "$oci_test/two/image.tar" "$oci_test/two/metadata.json" "$oci_test/two/image.id" >/dev/null
@@ -99,11 +144,14 @@ mv "$oci_test/root/orphan.pending" "$oci_test/root/blobs/sha256/$orphan_digest"
 build_two_members index.json manifest.json oci-layout repositories \
     "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest" \
     "blobs/sha256/$source_digest" "blobs/sha256/$orphan_digest"
+mark_assertion fixture.projection verifier-projection success command-exit
 projection=$(out/r0/preauth/acquisition/host-tools/preauth-verify-oci \
     --member-list "$oci_test/two/image.tar" "$oci_test/two/metadata.json" "$oci_test/two/image.id" - \
     2> "$oci_test/projection.log")
-! printf '%s\n' "$projection" | /usr/bin/grep -Fqx "blobs/sha256/$orphan_digest"
-/usr/bin/grep -Fqx 'oci_projection_omitted count=2' "$oci_test/projection.log"
+mark_assertion fixture.projection.orphan-excluded graph-authority absent bounded-member-list
+if printf '%s\n' "$projection" | /usr/bin/grep -Fqx "blobs/sha256/$orphan_digest"; then false; fi
+assert_file_line fixture.projection.omitted-count 'oci_projection_omitted count=2' "$oci_test/projection.log"
+mark_assertion fixture.raw-directory-setup setup success command-exit
 mkdir -p "$oci_test/raw-root/blobs/sha256"
 cp "$oci_test/root/index.json" "$oci_test/root/manifest.json" "$oci_test/root/oci-layout" \
     "$oci_test/root/repositories" "$oci_test/raw-root/"
@@ -117,18 +165,23 @@ cp "$oci_test/root/blobs/sha256/$digest" "$oci_test/root/blobs/sha256/$layer_dig
     "blobs/sha256/$digest" "blobs/sha256/$layer_digest" \
     "blobs/sha256/$manifest_digest" "blobs/sha256/$source_digest" \
     "blobs/sha256/$orphan_digest"
+mark_assertion fixture.directory-projection verifier-projection success command-exit
 directory_projection=$(out/r0/preauth/acquisition/host-tools/preauth-verify-oci \
     --member-list "$oci_test/two/raw-with-directories.tar" \
     "$oci_test/two/metadata.json" "$oci_test/two/image.id" - 2> "$oci_test/directory-projection.log")
+mark_assertion fixture.directory-projection.members deterministic-graph equal member-list-mismatch
 [ "$directory_projection" = "$projection" ]
-/usr/bin/grep -Fqx 'oci_raw_directory path=blobs type=directory size=0 mode=0755 uid=0 gid=0' \
+assert_file_line fixture.directory-projection.blobs \
+    'oci_raw_directory path=blobs type=directory size=0 mode=0755 uid=0 gid=0' \
     "$oci_test/directory-projection.log"
-/usr/bin/grep -Fqx 'oci_raw_directory path=blobs/sha256 type=directory size=0 mode=0755 uid=0 gid=0' \
+assert_file_line fixture.directory-projection.sha256 \
+    'oci_raw_directory path=blobs/sha256 type=directory size=0 mode=0755 uid=0 gid=0' \
     "$oci_test/directory-projection.log"
+mark_assertion fixture.canonical-projection setup success command-exit
 printf '%s\n' "$projection" | /usr/bin/tar --sort=name --mtime='@1784332800' \
     --owner=0 --group=0 --numeric-owner --format=gnu \
     -cf "$oci_test/two/image.tar" -C "$oci_test/root" -T -
-cmp "$oci_test/one/image.tar" "$oci_test/two/image.tar"
+assert_files_equal fixture.canonical-projection.bytes "$oci_test/one/image.tar" "$oci_test/two/image.tar"
 rm "$oci_test/root/blobs/sha256/$orphan_digest"
 dangling_members=
 for number in $(/usr/bin/seq 1 40); do
@@ -149,23 +202,28 @@ for attempt in one two; do
         > /dev/null 2> "$oci_test/diagnostic-$attempt.log"
     status=$?
     set -e
-    [ "$status" -eq 73 ]
+    assert_status "fixture.unreachable.reject.$attempt" 73 "$status"
 done
-cmp "$oci_test/diagnostic-one.log" "$oci_test/diagnostic-two.log"
-/usr/bin/grep -Fqx 'oci_unreachable_summary count=40 reported=32 cap=32' "$oci_test/diagnostic-one.log"
-[ "$(/usr/bin/grep -c '^oci_unreachable path=' "$oci_test/diagnostic-one.log")" -eq 32 ]
+assert_files_equal fixture.unreachable.diagnostic-stable "$oci_test/diagnostic-one.log" "$oci_test/diagnostic-two.log"
+assert_file_line fixture.unreachable.summary 'oci_unreachable_summary count=40 reported=32 cap=32' "$oci_test/diagnostic-one.log"
+actual=$(/usr/bin/grep -c '^oci_unreachable path=' "$oci_test/diagnostic-one.log")
+assert_equal fixture.unreachable.cap bounded-diagnostics 32 "$actual"
 for member in $dangling_members; do rm "$oci_test/root/$member"; done
 cp "$oci_test/one/image.tar" "$oci_test/two/image.tar"
 expect_oci_rejection() {
     description=$1
+    negative_index=$((negative_index + 1))
+    mark_assertion "fixture.negative.$negative_index" negative-rejection "$description" pending
     set +e
     tools/toolchain/verify-preauth-oci.sh \
         "$oci_test/one/image.tar" "$oci_test/one/metadata.json" "$oci_test/one/image.id" \
         "$oci_test/two/image.tar" "$oci_test/two/metadata.json" "$oci_test/two/image.id" >/dev/null 2>&1
     status=$?
     set -e
-    [ "$status" -eq 73 ] || { echo "$description passed strict OCI verification" >&2; exit 1; }
+    assertion_actual=$status
+    [ "$status" -eq 73 ]
 }
+negative_index=0
 printf '[{"Config":"blobs/sha256/%s","RepoTags":["rar-preauth:%s"],"Layers":["blobs/sha256/%s"]}]\n' \
     "$digest" "$head" "$layer_digest" | "$json_builder" --canonicalize-json line > "$oci_test/root/manifest.json"
 build_two_archive
@@ -215,13 +273,16 @@ for attempt in one two; do
         > /dev/null 2> "$oci_test/index-diagnostic-$attempt.log"
     status=$?
     set -e
-    [ "$status" -eq 73 ]
+    assert_status "fixture.index-diagnostic.reject.$attempt" 73 "$status"
 done
-cmp "$oci_test/index-diagnostic-one.log" "$oci_test/index-diagnostic-two.log"
+assert_files_equal fixture.index-diagnostic.stable "$oci_test/index-diagnostic-one.log" "$oci_test/index-diagnostic-two.log"
+mark_assertion fixture.index-diagnostic.descriptor fixture-log present bounded-file-line
 /usr/bin/grep -F 'oci_index_descriptor count=1 order=archive-index-order' \
     "$oci_test/index-diagnostic-one.log" >/dev/null
+mark_assertion fixture.index-diagnostic.architecture fixture-log present bounded-file-line
 /usr/bin/grep -F 'actual_architecture=["arm64"] expected_architecture=[]' \
     "$oci_test/index-diagnostic-one.log" >/dev/null
+mark_assertion fixture.index-diagnostic.annotations fixture-log present bounded-file-line
 /usr/bin/grep -F 'oci_index_annotations count=0 keys_and_value_hashes=[]' \
     "$oci_test/index-diagnostic-one.log" >/dev/null
 expect_oci_rejection "Buildx platform substitution"
@@ -365,12 +426,17 @@ printf 'changed layer\n' > "$oci_test/root/blobs/sha256/$layer_digest"
     index.json manifest.json oci-layout repositories \
     "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest"
 expect_oci_rejection "layer diff-id substitution"
+mark_assertion host-tests.compile rust-host-tests success command-exit
 /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc \
     --edition=2024 --test tests/preauth/src/main.rs -o "$test_dir/preauth-tests"
+mark_assertion host-tests.run rust-host-tests pass command-exit
 "$test_dir/preauth-tests" --test-threads=1
+mark_assertion records.compile record-host-tests success command-exit
 /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc \
     --edition=2024 tests/preauth/src/records.rs -o "$test_dir/preauth-records"
+mark_assertion records.run record-host-tests pass command-exit
 "$test_dir/preauth-records"
+mark_assertion safety.evidence non-execution-evidence emitted command-exit
 printf '%s\n' \
     'target_execution=not-attempted' \
     'qemu_execution=not-attempted' \

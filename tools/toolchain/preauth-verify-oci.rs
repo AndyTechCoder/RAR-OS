@@ -170,6 +170,20 @@ fn exact_keys(document: &str, path: &str, value: &preauth::Json, required: &[&st
     }
 }
 
+fn diagnostic_text(value: &str) -> String {
+    const CAP: usize = 128;
+    let mut output = String::new();
+    for byte in value.as_bytes().iter().take(CAP) {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'/' | b'+' | b'-' | b'_') {
+            output.push(char::from(*byte));
+        } else {
+            output.push_str(&format!("\\x{byte:02x}"));
+        }
+    }
+    if value.len() > CAP { output.push_str("..."); }
+    output
+}
+
 fn validate_layer_sources(
     manifest: &preauth::Json, diff_ids: &[String], layers: &[String],
     entries: &BTreeMap<String, TarEntry>, config_digest: &str,
@@ -183,7 +197,8 @@ fn validate_layer_sources(
         blob_digest(layer).unwrap_or_else(|| fail("invalid OCI layer path"))
     }).collect::<BTreeSet<_>>();
     let mut source_digests = BTreeSet::new();
-    for diff_id in diff_ids {
+    let mut media_mismatches = Vec::new();
+    for (position, diff_id) in diff_ids.iter().enumerate() {
         if !diff_id.starts_with("sha256:") || diff_id.len() != 71 {
             fail("invalid Docker LayerSources key");
         }
@@ -195,9 +210,6 @@ fn validate_layer_sources(
         let digest = sha_digest(descriptor.get("digest").unwrap());
         let media_type = descriptor.get("mediaType").and_then(preauth::Json::string)
             .unwrap_or_else(|error| fail(error.code));
-        if media_type != "application/vnd.oci.image.layer.v1.tar+gzip" {
-            fail("Docker LayerSources media type mismatch");
-        }
         let size = descriptor.get("size").and_then(preauth::Json::number)
             .unwrap_or_else(|error| fail(error.code));
         if size == 0 || size > MAX_MEMBER { fail("Docker LayerSources size bound exceeded"); }
@@ -207,11 +219,33 @@ fn validate_layer_sources(
             fail("Docker LayerSources identity collision");
         }
         let source_path = format!("blobs/sha256/{digest}");
-        if let Some(source) = entries.get(&source_path) {
+        let source = entries.get(&source_path);
+        if let Some(source) = source {
             if source.sha256 != digest || source.size != size {
                 fail("Docker LayerSources payload mismatch");
             }
         }
+        if media_type != "application/vnd.oci.image.layer.v1.tar+gzip" {
+            let key_digest = diff_id.strip_prefix("sha256:").unwrap();
+            let layer_digest = blob_digest(&layers[position]);
+            media_mismatches.push(format!(
+                "layer_sources_media_mismatch path=/0/LayerSources/* map_index={} manifest_position={} key_prefix={} key_sha256={} actual={} actual_bytes={} expected=application/vnd.oci.image.layer.v1.tar+gzip digest_payload_match={} size_payload_match={} key_matches_manifest_layer={}",
+                position, position, &key_digest[..12], preauth::sha256_hex(diff_id.as_bytes()),
+                diagnostic_text(media_type), media_type.len(),
+                source.map(|entry| entry.sha256 == digest).map_or("absent", |value| if value { "true" } else { "false" }),
+                source.map(|entry| entry.size == size).map_or("absent", |value| if value { "true" } else { "false" }),
+                layer_digest == Some(key_digest),
+            ));
+        }
+    }
+    if !media_mismatches.is_empty() {
+        media_mismatches.sort();
+        for diagnostic in media_mismatches.iter().take(16) { eprintln!("{diagnostic}"); }
+        eprintln!(
+            "layer_sources_media_summary mismatch_count={} reported={} cap=16",
+            media_mismatches.len(), media_mismatches.len().min(16),
+        );
+        fail("Docker LayerSources media type mismatch");
     }
 }
 
