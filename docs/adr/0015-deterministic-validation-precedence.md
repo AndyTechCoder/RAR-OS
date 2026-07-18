@@ -54,7 +54,7 @@ Each row defines:
 - whether failure permits evidence fields beyond the code;
 - compatibility behavior for unknown minor, optional, and critical fields.
 
-The entry-framing row binds the owned entry architecture and address width to the already validated trusted adapter tuple before descriptor arithmetic or acquisition. The descriptor binding row is a whole-table predicate that deliberately collapses zero length, address-width, alignment, selector/cardinality, rights, producer, transfer, and flag failures to `invalid-pointer-range`. RHD rows are likewise whole-table stages: framing precedes compatibility, identity, references, CPU, interrupt, timer, serial, boot source, canonical order, and cross-artifact checks. Reordering descriptors or records cannot select a different first error within those stages.
+The entry-framing row binds the owned entry architecture and address width to the already validated trusted adapter tuple before descriptor arithmetic or acquisition. Descriptor minor compatibility is one whole-table reduction: every unknown descriptor addition, critical or noncritical, returns its allocated `unsupported-minor`; the descriptor binding row deliberately collapses zero length, address-width, alignment, selector/cardinality, rights, producer, transfer, and flag failures to `invalid-pointer-range`. The memory-map row is a total whole-map reduction to `invalid-memory-map`, including framing, checked arithmetic, identity, canonical ordering, overlap, ownership semantics, and boot-owned containment of source descriptors. RHD rows are likewise whole-table stages: framing precedes the globally reduced critical-extension row, then the globally reduced unsupported-minor row, identity, references, CPU, interrupt, timer, serial, boot source, canonical order, and cross-artifact checks. Reordering descriptors, map entries, or records cannot select a different first error within those stages.
 
 Changing precedence or the meaning of an existing failure is a breaking public-contract change. Adding a new predicate requires an explicitly allocated position and compatibility analysis.
 
@@ -72,6 +72,8 @@ The recommendation prevents decoders from reading unvalidated locations merely t
 ## Compatibility and migration
 
 This decision revises the unmerged v1 draft. After freeze, changing precedence or code meaning requires a new major validation contract; old and new decoders may coexist only with version-selected corpora.
+
+The pre-merge conformance correction allocates one additional RHD `minor-support` predicate immediately after `critical-extension`, increasing the canonical matrix from 36/35 to 37 predicates/36 adjacent edges. It does not change a wire field or numeric validation code: it makes the already specified `unsupported-minor` outcome explicit and fixes its precedence after `unknown-critical`. No released reader or persistent artifact requires migration.
 
 ## Validation
 

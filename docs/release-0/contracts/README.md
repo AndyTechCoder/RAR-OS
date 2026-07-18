@@ -16,8 +16,8 @@ Out of scope and absent: target boot code, Nucleus implementation, Tier 0 layout
 - `spec/hardware/rhd-v1.fields` and `rhd-v1.md`: normalized RHD, sole record identity, typed register windows, and model rules.
 - `sdk/generated/release-0/lib.rs`: byte-for-byte regenerated owned Rust representation; Rust layout is not wire ABI.
 - `spec/fixtures/release-0/bin/*.bin`: valid and malformed raw binary fixture bundles.
-- `spec/fixtures/release-0/validation-precedence.v1`: executable declarations for all 36 focused predicates, all 35 adjacent edges, and eight security-sensitive non-adjacent pairs.
-- `spec/fixtures/release-0/conformance-scenarios.v1`: 60 executed both-architecture adapter, provider, compatibility, ordering, cardinality, authority-equality, access-log, and effect-sink cases.
+- `spec/fixtures/release-0/validation-precedence.v1`: executable declarations for all 37 focused predicates, all 36 adjacent edges, and eight security-sensitive non-adjacent pairs.
+- `spec/fixtures/release-0/conformance-scenarios.v1`: 120 executed both-architecture adapter, provider, descriptor/map/RHD reduction, compatibility, ordering, cardinality, authority-equality, access-log, and effect-sink cases.
 
 The authoritative boot memory map describes dynamic range ownership. RHD memory records describe the same normalized topology and must compare equal. An RHD register window is descriptive only: access also requires its exact Boot Entry authority descriptor, and system-memory windows require device-owned MMIO map containment. Entropy is explicitly untrusted seed input. The trace channel is only a bounded versioned byte sink; its record format belongs to R0-008.
 
@@ -28,7 +28,7 @@ The authoritative boot memory map describes dynamic range ownership. RHD memory 
 | CPU, memory, interrupts, timers, serial, boot source, reserved ownership | sole-ID RHD records plus authoritative memory-map kinds/owners |
 | Trusted entry and immutable snapshot | independently transported architecture-adapter tuple, inline `BootEntryV1` descriptors, descriptor-keyed provider, enforced one-copy rule, predicate access budgets, and empty rejected-effect logs |
 | Device description without authority escalation | typed RHD windows cross-checked against owner-bound MMIO/I/O descriptors |
-| Bounds, alignment, ownership, deterministic failure | staged 36-row predicate table executed on both architecture baselines as 72 single runs, 70 adjacent runs, and eight non-adjacent pairs per architecture |
+| Bounds, alignment, ownership, deterministic failure | staged 37-row predicate table executed on both architecture baselines as 74 single runs, 72 adjacent runs, and eight non-adjacent pairs per architecture |
 | x86-64/AArch64 normalized categories | valid APIC/16550-I/O and GICv3/PL011 raw bundles decoded by one oracle |
 | Required malformed classes | both-architecture adapter/entry binding, malformed address width/page size, framing, alias, globally staged reordered descriptors, reordered known/unknown records, provider faults, representable compatible/critical register roles, CPU hardware identity, checked interrupt bounds/overlap, singleton cardinality, model/reference, exact handoff/descriptor equality, map bounds, register overflow, consistency, and architecture cases |
 | No unverified pointer execution | host oracle uses byte slices and checked `u64` arithmetic; fixture addresses are never dereferenced |
@@ -39,8 +39,6 @@ Host-only checks:
 ```sh
 /bin/sh spec/fixtures/release-0/run.sh
 /bin/sh sdk/generated/release-0/check.sh
-rustc --edition 2024 -D warnings -o out/r0-002-reference-local spec/fixtures/release-0/reference.rs
-out/r0-002-reference-local spec/fixtures/release-0
 /bin/sh -n spec/fixtures/release-0/generate.sh
 /bin/sh -n spec/fixtures/release-0/run.sh
 /bin/sh -n sdk/generated/release-0/generate.sh
@@ -48,7 +46,7 @@ out/r0-002-reference-local spec/fixtures/release-0
 tools/ci/check-specs.sh
 ```
 
-The host oracle reports 23 raw fixtures, 96 instrumented scenarios, 36 focused predicates executed on each of two architecture baselines, and all 35 adjacent precedence edges executed on each baseline. The required `Specifications` workflow additionally runs `spec/fixtures/release-0/run.sh --ci` and `sdk/generated/release-0/check.sh --compile` in the pinned Rust 1.95.0 read-only Linux container. The workflow binds checkout and evidence to the PR head through `RAR_EXPECTED_SOURCE_REVISION`. Generated Rust receives metadata-only host compilation; the host-only reference oracle runs against committed binary fixtures. No RAR target code is compiled or executed on the physical Mac or in CI.
+The host oracle reports 23 raw fixtures, 120 instrumented scenarios, 37 focused predicates executed on each of two architecture baselines, and all 36 adjacent precedence edges executed on each baseline. The required `Specifications` workflow additionally runs `spec/fixtures/release-0/run.sh --ci` and `sdk/generated/release-0/check.sh --compile` in the pinned Rust 1.95.0 read-only Linux container. The workflow binds checkout and evidence to the exact PR head through `RAR_EXPECTED_SOURCE_REVISION`; the resulting Actions run is the durable source-revision evidence. Generated Rust receives metadata-only host compilation; the host-only reference oracle runs against committed binary fixtures. Local macOS validation is deliberately limited to non-executing regeneration, policy, specification, syntax, and diff checks. No RAR target code is compiled or executed on the physical Mac or in CI.
 
 ## Security, unsafe, dependencies, and recovery
 

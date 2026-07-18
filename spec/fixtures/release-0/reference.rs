@@ -3,6 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 
 const BUNDLE_MAGIC: &[u8; 8] = b"R0FXBIN\0";
@@ -496,10 +497,10 @@ fn apply_mutation(bytes: &mut Vec<u8>, predicate: &str, behavior: &mut Behavior)
         }
         "rhd.records.critical-extension" => {
             let boot = record_offset(bytes, 6, 1).expect("boot record");
-            put_u16(bytes, rhd + 10, 1);
             put_u16(bytes, boot, 99);
             put_u16(bytes, boot + 2, 1);
         }
+        "rhd.records.minor-support" => insert_rhd_record(bytes, record_header(99, 0, 24, 1)),
         "rhd.records.identity" => {
             let window = record_offset(bytes, 7, 2).expect("second window");
             put_u32(bytes, window + 8, 1);
@@ -573,6 +574,7 @@ fn apply_mutation(bytes: &mut Vec<u8>, predicate: &str, behavior: &mut Behavior)
             put_u64(bytes, map_descriptor, 8193);
         }
         "compatible-entry-minor" => add_entry_descriptor(bytes, false, true),
+        "critical-entry-minor" => add_entry_descriptor(bytes, true, true),
         "compatible-rhd-minor" => {
             put_u16(bytes, rhd + 10, 1);
             insert_rhd_record(bytes, record_header(99, 0, 24, 1));
@@ -593,6 +595,15 @@ fn apply_mutation(bytes: &mut Vec<u8>, predicate: &str, behavior: &mut Behavior)
             put_u16(bytes, rhd + 10, 1);
             insert_rhd_record(bytes, record_header(99, 1, 24, 1));
         }
+        "known-window-critical" => {
+            let window = record_offset(bytes, 7, 1).expect("known window");
+            put_u16(bytes, window + 2, 1);
+        }
+        "rhd-compatibility-compound" => {
+            insert_rhd_record(bytes, record_header(99, 1, 24, 1));
+            insert_rhd_record(bytes, record_header(99, 0, 24, 2));
+        }
+        "rhd-compatibility-reorder" => swap_equal_rhd_records(bytes, 99, 1, 2),
         "secondary-cpu-reference" => {
             let cpu = record_offset(bytes, 1, 2).expect("second CPU");
             put_u32(bytes, cpu + 36, 99);
@@ -648,6 +659,18 @@ fn apply_mutation(bytes: &mut Vec<u8>, predicate: &str, behavior: &mut Behavior)
             put_u16(bytes, first_unknown, 101);
         }
         "map-count-over-limit" => put_u32(bytes, handoff + 40, 257),
+        "map-region-overflow" => {
+            put_u64(bytes, map, u64::MAX);
+            put_u64(bytes, map + 8, 2);
+        }
+        "map-source-containment" => put_u64(bytes, map + 8, 64),
+        "map-record-reordered" => {
+            let count = usize::try_from(u32_at(bytes, handoff + 40).expect("map count")).expect("map count usize");
+            let last = map + (count - 1) * 32;
+            for index in 0..32 {
+                bytes.swap(map + index, last + index);
+            }
+        }
         "map-address-mismatch" => put_u64(bytes, handoff + 32, 8192 + 32),
         "rhd-address-mismatch" => put_u64(bytes, handoff + 48, 12288 + 8),
         "rhd-length-mismatch" => {
@@ -791,9 +814,6 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
     }
 
     let unknown: Vec<_> = descriptors.iter().filter(|descriptor| !(1..=7).contains(&descriptor.selector.purpose)).collect();
-    if unknown.iter().any(|descriptor| descriptor.flags & 4 != 0) {
-        return Err(Code::UnknownCritical);
-    }
     if entry_minor == 0 && !unknown.is_empty()
         || unknown.iter().any(|descriptor| descriptor.rights != 0 || descriptor.transfer != 0 || descriptor.selector.owner_kind != 0 || descriptor.selector.owner_id != 0 || descriptor.flags != 0)
     {
@@ -898,8 +918,7 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
     {
         return Err(Code::InvalidMemoryMap);
     }
-    let mut map_by_id = BTreeMap::new();
-    let mut map_by_base = Vec::with_capacity(map_count);
+    let mut map_entries = Vec::with_capacity(map_count);
     for index in 0..map_count {
         let at = index * 32;
         let memory = Memory {
@@ -910,6 +929,24 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
             attributes: u16_at(&map, at + 18).ok_or(Code::InvalidMemoryMap)?,
             owner: u16_at(&map, at + 20).ok_or(Code::InvalidMemoryMap)?,
         };
+        map_entries.push((memory, at));
+    }
+
+    // The sole map predicate is a total whole-table reduction. Arithmetic is
+    // checked for every entry before semantic, identity, ordering, overlap,
+    // ownership, or source-containment facts are evaluated. Every failure in
+    // this stage has the allocated invalid-memory-map result.
+    if map_entries.iter().any(|(memory, _)| {
+        memory.length == 0
+            || checked_end(memory.base, memory.length).is_err()
+            || !address_fits(memory.base, memory.length, adapter.address_bits).unwrap_or(false)
+    }) {
+        return Err(Code::InvalidMemoryMap);
+    }
+
+    let mut map_by_id = BTreeMap::new();
+    let mut map_by_base = Vec::with_capacity(map_count);
+    for (memory, at) in map_entries {
         let exact_authority = match memory.kind {
             1 => memory.attributes == 11 && memory.owner == 0,
             2 => memory.attributes == 9 && memory.owner == 4,
@@ -920,8 +957,6 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
             _ => false,
         };
         if memory.id == 0
-            || memory.length == 0
-            || !address_fits(memory.base, memory.length, adapter.address_bits)?
             || !exact_authority
             || map.get(at + 22..at + 24) != Some([0; 2].as_slice())
             || map.get(at + 28..at + 32) != Some([0; 4].as_slice())
@@ -944,7 +979,7 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
                 && memory.base <= descriptor.base
                 && checked_end(memory.base, memory.length).is_ok_and(|end| checked_end(descriptor.base, descriptor.length).is_ok_and(|source_end| source_end <= end))
         }) {
-            return Err(Code::InvalidPointerRange);
+            return Err(Code::InvalidMemoryMap);
         }
     }
 
@@ -1007,24 +1042,35 @@ fn validate(adapter: AdapterInputs, provider: &mut SourceProvider<'_>, sink: &mu
         return Err(Code::BadCountOrLength);
     }
 
-    // Compatibility is evaluated globally after every record is safely
-    // framed. Unknown records and unknown register roles share the existing
-    // criticality bit. Optional higher-minor additions are skipped and can
-    // never contribute references, windows, or authority.
+    // Known-record flag legality belongs to framing and is reduced globally
+    // before compatibility, independent of physical record order.
+    if records.iter().any(|(kind, _, offset, _)| {
+        let flags = u16_at(&rhd, *offset + 2).unwrap_or(u16::MAX);
+        let known_role = *kind == 7 && matches!(u16_at(&rhd, *offset + 18), Some(1..=5));
+        ((1..=6).contains(kind) || known_role) && flags != 0
+    }) {
+        return Err(Code::BadCountOrLength);
+    }
+
+    // Compatibility facts are collected across the complete framed table,
+    // then reduced in the canonical row order. Wire order cannot choose the
+    // result. Optional additions remain excluded from semantic authority.
+    let mut has_unknown_critical = false;
+    let mut has_unsupported_minor = false;
     for &(kind, _, offset, _) in &records {
         let flags = u16_at(&rhd, offset + 2).ok_or(Code::BadCountOrLength)?;
         let unknown_record = !(1..=7).contains(&kind);
         let unknown_role = kind == 7 && !matches!(u16_at(&rhd, offset + 18), Some(1..=5));
         if unknown_record || unknown_role {
-            if flags & 1 != 0 {
-                return Err(Code::UnknownCritical);
-            }
-            if rhd_minor == 0 {
-                return Err(Code::UnsupportedMinor);
-            }
-        } else if flags != 0 {
-            return Err(Code::BadCountOrLength);
+            has_unknown_critical |= flags & 1 != 0;
+            has_unsupported_minor |= rhd_minor == 0 && flags & 1 == 0;
         }
+    }
+    if has_unknown_critical {
+        return Err(Code::UnknownCritical);
+    }
+    if has_unsupported_minor {
+        return Err(Code::UnsupportedMinor);
     }
 
     let semantic_records: Vec<_> = records.iter().copied().filter(|(kind, _, offset, _)| {
@@ -1353,7 +1399,9 @@ fn run_bytes(bytes: &[u8], behavior: Behavior) -> Result<(u16, Vec<AccessKey>, V
     let adapter = adapter_for(&bundle, behavior);
     let mut provider = SourceProvider::new(&bundle, behavior);
     let mut sink = EffectSink::default();
-    let code = validate(adapter, &mut provider, &mut sink).map_or_else(|code| code as u16, |()| 0);
+    let result = catch_unwind(AssertUnwindSafe(|| validate(adapter, &mut provider, &mut sink)))
+        .map_err(|_| "validation panicked".to_string())?;
+    let code = result.map_or_else(|code| code as u16, |()| 0);
     Ok((code, provider.reads, sink.effects))
 }
 
@@ -1372,7 +1420,7 @@ fn check_precedence(root: &Path) -> Result<(), String> {
     let fields = fs::read_to_string(root.join("../../boot/handoff-v1.fields")).map_err(|error| error.to_string())?;
     let fixture = fs::read_to_string(root.join("validation-precedence.v1")).map_err(|error| error.to_string())?;
     let predicates = predicate_rows(&fields);
-    if predicates.len() != 36 { return Err("canonical predicate count is not 36".into()); }
+    if predicates.len() != 37 { return Err("canonical predicate count is not 37".into()); }
     for architecture in ["x86_64", "aarch64"] {
       let baseline = fs::read(root.join(format!("bin/valid-{architecture}.bin"))).map_err(|error| error.to_string())?;
       for (index, (order, predicate, expected)) in predicates.iter().enumerate() {
@@ -1483,5 +1531,5 @@ fn main() {
     if count != 23 { eprintln!("fixture count is {count}, expected 23"); failures += 1; }
     if scenario_count < 24 { eprintln!("scenario count is {scenario_count}, expected at least 24"); failures += 1; }
     if failures != 0 { std::process::exit(1); }
-    println!("R0-002 conformance passed: {count} raw fixtures, {scenario_count} scenarios, 36 singles x 2 architectures, 35 adjacent edges x 2 architectures");
+    println!("R0-002 conformance passed: {count} raw fixtures, {scenario_count} scenarios, 37 singles x 2 architectures, 36 adjacent edges x 2 architectures");
 }
