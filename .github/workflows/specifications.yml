@@ -34,6 +34,7 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Validate host-only specifications and cutover
         shell: /usr/bin/dash -e {0}
@@ -76,14 +77,17 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Acquire two deterministic untrusted input bundles
         shell: /usr/bin/dash -e {0}
         run: |
           tools/ci/check-preauth-cutover.sh
           mkdir -p out/r0/preauth/input-delivery
-          tools/toolchain/preauth-input-producer --produce one | tee out/r0/preauth/input-delivery/one.summary
-          tools/toolchain/preauth-input-producer --produce two | tee out/r0/preauth/input-delivery/two.summary
+          tools/toolchain/preauth-input-producer --produce one > out/r0/preauth/input-delivery/one.summary
+          tools/toolchain/preauth-input-producer --produce two > out/r0/preauth/input-delivery/two.summary
+          sed -n '1,20p' out/r0/preauth/input-delivery/one.summary
+          sed -n '1,20p' out/r0/preauth/input-delivery/two.summary
           one=$(sha256sum out/r0/preauth/input-delivery/one/preauth-input-bundle-v1.tar | cut -d ' ' -f 1)
           two=$(sha256sum out/r0/preauth/input-delivery/two/preauth-input-bundle-v1.tar | cut -d ' ' -f 1)
           [ "$one" = "$two" ]

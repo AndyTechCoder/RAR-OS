@@ -106,8 +106,11 @@ inside(){
   '/usr/bin/qemu-system-x86_64:qemu_sha256:tool-qemu' \
   '/usr/share/OVMF/OVMF_CODE_4M.fd:ovmf_code_sha256:firmware-code' \
   '/usr/share/OVMF/OVMF_VARS_4M.fd:ovmf_vars_sha256:firmware-vars'; do
-  path=${binding%%:*}; rest=${binding#*:}; key=${rest%%:*}; role=${rest#*:}; source=$stage/extracted$path
-  [ -f "$source" ] && [ ! -L "$source" ] || fail "$role-missing"
+  path=${binding%%:*}; rest=${binding#*:}; key=${rest%%:*}; role=${rest#*:}
+  candidate=$stage/extracted$path
+  source=$(/usr/bin/realpath -e "$candidate") || fail "$role-missing"
+  case "$source" in "$stage"/extracted/*) :;; *) fail "$role-escape";; esac
+  [ -f "$source" ] || fail "$role-missing"
   [ "$(sha256sum "$source" | cut -d ' ' -f1)" = "$(lock_value "$key")" ] || fail "$role-digest"
   /bin/cp --reflink=never "$source" "$incoming/$role"
  done
