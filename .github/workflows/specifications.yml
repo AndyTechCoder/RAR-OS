@@ -205,9 +205,15 @@ jobs:
             out/r0/preauth/acquisition/derived-build/two/image.id \
             > out/r0/preauth/acquisition/derived-verification.evidence
           verified_image=$(sed -n 's/^loaded_image_config_sha256=//p' out/r0/preauth/acquisition/derived-verification.evidence)
-          [ "${#verified_image}" -eq 64 ]
+          if [ "${#verified_image}" -ne 64 ]; then
+            echo 'assertion=closure.loaded-config.length expected=64 actual=invalid' >&2
+            exit 1
+          fi
           expected_image=$(sed -n 's/^docker_config_sha256=//p' spec/lab/preauth/locks/r0-x86_64-preauth-v3.lock)
-          [ "$verified_image" = "$expected_image" ]
+          if [ "$verified_image" != "$expected_image" ]; then
+            echo "assertion=closure.loaded-config.digest expected=$expected_image actual=$verified_image" >&2
+            exit 1
+          fi
           printf 'RAR_VERIFIED_PREAUTH_IMAGE=sha256:%s\n' "$verified_image" >> "$GITHUB_ENV"
           cp out/r0/preauth/acquisition/derived-build/one/metadata.json \
             out/r0/preauth/acquisition/derived-image.metadata.json
