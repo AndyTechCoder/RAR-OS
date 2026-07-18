@@ -30,31 +30,35 @@ mkdir -p out/r0/preauth/acquisition/host-tools
     --edition=2024 tools/toolchain/preauth-verify-oci.rs \
     -o out/r0/preauth/acquisition/host-tools/preauth-verify-oci
 oci_test=out/r0/preauth/acquisition/derived-build/host-test
+json_builder=out/r0/preauth/acquisition/host-tools/preauth-verify-oci
 mkdir -p "$oci_test/root/blobs/sha256" \
     "$oci_test/one" "$oci_test/two"
 printf 'minimal deterministic layer\n' > "$oci_test/root/layer.pending"
 layer_digest=$(/usr/bin/sha256sum "$oci_test/root/layer.pending" | /usr/bin/cut -d ' ' -f 1)
 mv "$oci_test/root/layer.pending" "$oci_test/root/blobs/sha256/$layer_digest"
-printf '{"rootfs":{"type":"layers","diff_ids":["sha256:%s"]}}\n' "$layer_digest" > "$oci_test/root/config.pending"
+printf '{"rootfs":{"type":"layers","diff_ids":["sha256:%s"]}}\n' "$layer_digest" | \
+    "$json_builder" --canonicalize-json line > "$oci_test/root/config.pending"
 digest=$(/usr/bin/sha256sum "$oci_test/root/config.pending" | /usr/bin/cut -d ' ' -f 1)
 mv "$oci_test/root/config.pending" "$oci_test/root/blobs/sha256/$digest"
 config_size=$(/usr/bin/wc -c < "$oci_test/root/blobs/sha256/$digest" | /usr/bin/tr -d ' ')
 layer_size=$(/usr/bin/wc -c < "$oci_test/root/blobs/sha256/$layer_digest" | /usr/bin/tr -d ' ')
 printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.image.config.v1+json","digest":"sha256:%s","size":%s},"layers":[{"mediaType":"application/vnd.oci.image.layer.v1.tar","digest":"sha256:%s","size":%s}]}\n' \
-    "$digest" "$config_size" "$layer_digest" "$layer_size" > "$oci_test/root/image-manifest.pending"
+    "$digest" "$config_size" "$layer_digest" "$layer_size" | \
+    "$json_builder" --canonicalize-json line > "$oci_test/root/image-manifest.pending"
 manifest_digest=$(/usr/bin/sha256sum "$oci_test/root/image-manifest.pending" | /usr/bin/cut -d ' ' -f 1)
 mv "$oci_test/root/image-manifest.pending" "$oci_test/root/blobs/sha256/$manifest_digest"
 manifest_size=$(/usr/bin/wc -c < "$oci_test/root/blobs/sha256/$manifest_digest" | /usr/bin/tr -d ' ')
 write_index() {
     printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s,"annotations":{"io.containerd.image.name":"docker.io/library/rar-preauth:%s","org.opencontainers.image.ref.name":"%s"}}]}' \
-        "$1" "$2" "$head" "$head" > "$oci_test/root/index.json"
+        "$1" "$2" "$head" "$head" | "$json_builder" --canonicalize-json bare > "$oci_test/root/index.json"
 }
 write_index "$manifest_digest" "$manifest_size"
 printf '[{"Config":"blobs/sha256/%s","RepoTags":["rar-preauth:%s"],"Layers":["blobs/sha256/%s"]}]\n' \
-    "$digest" "$head" "$layer_digest" > "$oci_test/root/manifest.json"
-printf '{"imageLayoutVersion":"1.0.0"}\n' > "$oci_test/root/oci-layout"
+    "$digest" "$head" "$layer_digest" | "$json_builder" --canonicalize-json line > "$oci_test/root/manifest.json"
+printf '{"imageLayoutVersion":"1.0.0"}\n' | "$json_builder" --canonicalize-json line > "$oci_test/root/oci-layout"
 write_repositories() {
-    printf '{"rar-preauth":{"%s":"%s"}}\n' "$head" "$layer_digest" > "$oci_test/root/repositories"
+    printf '{"rar-preauth":{"%s":"%s"}}\n' "$head" "$layer_digest" | \
+        "$json_builder" --canonicalize-json line > "$oci_test/root/repositories"
 }
 write_repositories
 build_two_archive() {
@@ -74,7 +78,7 @@ printf '%s\n' \
         --numeric-owner --format=gnu -cf "$oci_test/one/image.tar" -C "$oci_test/root" -T -
 cp "$oci_test/one/image.tar" "$oci_test/two/image.tar"
 printf '{"containerimage.config.digest":"sha256:%s","containerimage.digest":"sha256:%s"}\n' \
-    "$digest" "$digest" > "$oci_test/one/metadata.json"
+    "$digest" "$digest" | "$json_builder" --canonicalize-json line > "$oci_test/one/metadata.json"
 cp "$oci_test/one/metadata.json" "$oci_test/two/metadata.json"
 printf 'sha256:%s\n' "$digest" > "$oci_test/one/image.id"
 cp "$oci_test/one/image.id" "$oci_test/two/image.id"

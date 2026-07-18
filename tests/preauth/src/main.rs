@@ -253,6 +253,26 @@ fn bounded_json_rejects_structural_spoofs_and_canonicalizes() {
     ] { assert!(Json::parse(rejected).is_err()); }
     let deep = format!("{}0{}", "[".repeat(34), "]".repeat(34));
     assert_eq!(Json::parse(deep.as_bytes()).unwrap_err().code, "json-depth-limit");
+
+    let keys = Json::parse(br#"{"z/control\n":1,"a":2,"\u2603":3}"#).unwrap();
+    let diagnostic = keys.key_set_diagnostic("test-document", "/outer~name", &["required"], &["a"])
+        .unwrap().unwrap();
+    assert_eq!(diagnostic, concat!(
+        "json_key_set document=test-document path=/outer~0name actual_count=3 actual_reported=3 ",
+        "actual=[\"a\", \"z\\\\x2fcontrol\\\\x0a\", \"\\\\xe2\\\\x98\\\\x83\"] allowed_count=2 allowed_reported=2 ",
+        "allowed=[\"a\", \"required\"] missing_count=1 missing_reported=1 missing=[\"required\"] ",
+        "unknown_count=2 unknown_reported=2 unknown=[\"z\\\\x2fcontrol\\\\x0a\", \"\\\\xe2\\\\x98\\\\x83\"] key_cap=32 key_byte_cap=96",
+    ));
+    let many = format!("{{{}}}", (0..40).map(|index| format!("\"key{index:02}\":0")).collect::<Vec<_>>().join(","));
+    let first = Json::parse(many.as_bytes()).unwrap().key_set_diagnostic("test-document", "/", &[], &[]).unwrap().unwrap();
+    let second = Json::parse(many.as_bytes()).unwrap().key_set_diagnostic("test-document", "/", &[], &[]).unwrap().unwrap();
+    assert_eq!(first, second);
+    assert!(first.contains("actual_count=40 actual_reported=32"));
+    assert!(first.contains("unknown_count=40 unknown_reported=32"));
+    let oversized_key = format!("{{\"{}\":0}}", "é".repeat(60));
+    let bounded = Json::parse(oversized_key.as_bytes()).unwrap()
+        .key_set_diagnostic("test-document", "/", &[], &[]).unwrap().unwrap();
+    assert!(bounded.len() < 2_000 && bounded.contains("..."));
 }
 
 #[test]

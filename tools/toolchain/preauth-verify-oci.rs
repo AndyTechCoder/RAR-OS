@@ -162,6 +162,15 @@ fn json(input: &[u8]) -> preauth::Json {
     preauth::Json::parse(input).unwrap_or_else(|error| fail(error.code))
 }
 
+fn exact_keys(document: &str, path: &str, value: &preauth::Json, required: &[&str], optional: &[&str]) {
+    match value.key_set_diagnostic(document, path, required, optional)
+        .unwrap_or_else(|error| fail(error.code))
+    {
+        None => {}
+        Some(diagnostic) => { eprintln!("{diagnostic}"); fail("json-key-set"); }
+    }
+}
+
 fn string_array(value: &preauth::Json) -> Vec<String> {
     value.array().unwrap_or_else(|error| fail(error.code)).iter().map(|item|
         item.string().unwrap_or_else(|error| fail(error.code)).to_owned()).collect()
@@ -245,8 +254,8 @@ fn repositories_binding(entries: &BTreeMap<String, TarEntry>, repo_tag: &str, la
     { fail("invalid Docker top-layer identity"); }
     let canonical = format!("{{\"rar-preauth\":{{\"{revision}\":\"{layer_identity}\"}}}}\n");
     let parsed = json(&entry.data);
-    parsed.exact_keys(&["rar-preauth"], &[]).unwrap_or_else(|error| fail(error.code));
-    parsed.get("rar-preauth").unwrap().exact_keys(&[revision], &[]).unwrap_or_else(|error| fail(error.code));
+    exact_keys("docker-repositories", "/", &parsed, &["rar-preauth"], &[]);
+    exact_keys("docker-repositories", "/rar-preauth", parsed.get("rar-preauth").unwrap(), &[revision], &[]);
     if entry.data != canonical.as_bytes() { fail("Docker repositories binding mismatch"); }
     revision.to_owned()
 }
@@ -266,7 +275,11 @@ fn metadata_summary(path: &Path) -> (String, String, Option<(String, String, Str
         "buildx.build.provenance", "buildx.build.ref", "containerimage.config.digest",
         "containerimage.descriptor", "containerimage.digest", "image.name",
     ];
-    if object.keys().any(|key| !known_keys.contains(&key.as_str())) { fail("unknown OCI metadata key"); }
+    exact_keys(
+        "buildx-metadata", "/", &parsed,
+        &["containerimage.config.digest", "containerimage.digest"],
+        &["buildx.build.provenance", "buildx.build.ref", "containerimage.descriptor", "image.name"],
+    );
     let present = known_keys.into_iter().filter(|key| object.contains_key(*key))
         .collect::<Vec<_>>();
     eprintln!("oci_buildx_metadata keys={}", present.join(","));
@@ -278,9 +291,9 @@ fn metadata_summary(path: &Path) -> (String, String, Option<(String, String, Str
         }
     }
     let descriptor = object.get("containerimage.descriptor").map(|value| {
-        value.exact_keys(&["digest", "mediaType", "platform"], &[]).unwrap_or_else(|error| fail(error.code));
+        exact_keys("buildx-metadata", "/containerimage.descriptor", value, &["digest", "mediaType", "platform"], &[]);
         let platform = value.get("platform").unwrap();
-        platform.exact_keys(&["architecture", "os"], &[]).unwrap_or_else(|error| fail(error.code));
+        exact_keys("buildx-metadata", "/containerimage.descriptor/platform", platform, &["architecture", "os"], &[]);
         (sha_digest(value.get("digest").unwrap()), value.get("mediaType").and_then(preauth::Json::string).unwrap().to_owned(),
          platform.get("architecture").and_then(preauth::Json::string).unwrap().to_owned(),
          platform.get("os").and_then(preauth::Json::string).unwrap().to_owned())
@@ -362,7 +375,7 @@ fn verify_oci_layout(
     if config_path_digest != config_digest { fail("OCI config name/digest mismatch"); }
     let layout = entries.get("oci-layout").unwrap_or_else(|| fail("OCI layout absent"));
     let layout_json = json(&layout.data);
-    layout_json.exact_keys(&["imageLayoutVersion"], &[]).unwrap_or_else(|error| fail(error.code));
+    exact_keys("oci-layout", "/", &layout_json, &["imageLayoutVersion"], &[]);
     if layout_json.get("imageLayoutVersion").and_then(preauth::Json::string).unwrap() != "1.0.0" { fail("unsupported OCI layout"); }
     let index = entries.get("index.json").unwrap_or_else(|| fail("OCI index absent"));
     let index_json = json(&index.data);
@@ -375,6 +388,9 @@ fn verify_oci_layout(
     }
     let mut inbound = BTreeMap::<String, BTreeSet<String>>::new();
     let mut pending = descriptor_digests(&index_json);
+    let leaf_digests = std::iter::once(config_path_digest.to_owned())
+        .chain(layers.iter().map(|layer| blob_digest(layer).unwrap_or_else(|| fail("invalid OCI layer path")).to_owned()))
+        .collect::<BTreeSet<_>>();
     if pending.is_empty() || pending.len() > 64 { fail("invalid OCI index descriptors"); }
     for digest in &pending { record_inbound(&mut inbound, digest, "index.json"); }
     if let Some(digest) = blob_digest(config_name) { record_inbound(&mut inbound, digest, "manifest.json:config"); }
@@ -393,7 +409,10 @@ fn verify_oci_layout(
         if reachable.len() > MAX_MEMBERS { fail("OCI graph bound exceeded"); }
         let path = format!("blobs/sha256/{digest}");
         let entry = entries.get(&path).unwrap_or_else(|| fail("OCI descriptor target absent"));
-        if !entry.data.is_empty() {
+        // Config and layer payloads are terminal typed nodes. They are validated by their
+        // dedicated schemas below and must never be reinterpreted as descriptor JSON merely
+        // because a small fixture payload fits within the inline archive bound.
+        if !leaf_digests.contains(&digest) && !entry.data.is_empty() {
             let parsed = json(&entry.data);
             let object = parsed.object().unwrap_or_else(|error| fail(error.code));
             if object.contains_key("config") && object.contains_key("layers") { image_manifests.insert(digest.clone()); }
@@ -425,11 +444,13 @@ fn verify_oci_layout(
     let selected_path = format!("blobs/sha256/{selected_digest}");
     let selected = entries.get(&selected_path).unwrap_or_else(|| fail("selected OCI manifest absent"));
     let selected_json = json(&selected.data);
-    selected_json.exact_keys(&["schemaVersion", "mediaType", "config", "layers"], &[]).unwrap_or_else(|error| fail(error.code));
+    exact_keys("oci-manifest", "/", &selected_json, &["schemaVersion", "mediaType", "config", "layers"], &[]);
     let config_descriptor = selected_json.get("config").unwrap();
-    config_descriptor.exact_keys(&["mediaType", "digest", "size"], &[]).unwrap_or_else(|error| fail(error.code));
+    exact_keys("oci-manifest", "/config", config_descriptor, &["mediaType", "digest", "size"], &[]);
     let layer_descriptors = selected_json.get("layers").and_then(preauth::Json::array).unwrap();
-    for descriptor in layer_descriptors { descriptor.exact_keys(&["mediaType", "digest", "size"], &[]).unwrap_or_else(|error| fail(error.code)); }
+    for (index, descriptor) in layer_descriptors.iter().enumerate() {
+        exact_keys("oci-manifest", &format!("/layers/{index}"), descriptor, &["mediaType", "digest", "size"], &[]);
+    }
     let expected_digests = std::iter::once(config_digest.to_owned())
         .chain(layers.iter().map(|layer| blob_digest(layer).unwrap().to_owned()))
         .collect::<Vec<_>>();
@@ -475,7 +496,7 @@ fn verify_one(
     let manifest_items = manifest_json.array().unwrap_or_else(|error| fail(error.code));
     if manifest_items.len() != 1 { fail("invalid Docker manifest count"); }
     let manifest = &manifest_items[0];
-    manifest.exact_keys(&["Config", "RepoTags", "Layers"], &[]).unwrap_or_else(|error| fail(error.code));
+    exact_keys("docker-manifest", "/0", manifest, &["Config", "RepoTags", "Layers"], &[]);
     let config_name = manifest.get("Config").and_then(preauth::Json::string).unwrap_or_else(|error| fail(error.code)).to_owned();
     let modern_oci = blob_digest(&config_name).is_some();
     if !safe_name(&config_name) || (!modern_oci && !config_name.ends_with(".json")) { fail("invalid config path"); }
@@ -490,9 +511,9 @@ fn verify_one(
     let config_digest = config_entry.sha256.clone();
     if !modern_oci && config_name != format!("{config_digest}.json") { fail("config name/digest mismatch"); }
     let config_json = json(config);
-    config_json.exact_keys(&["rootfs"], &["architecture", "os", "config", "created", "history"]).unwrap_or_else(|error| fail(error.code));
+    exact_keys("docker-config", "/", &config_json, &["rootfs"], &["architecture", "os", "config", "created", "history"]);
     let rootfs = config_json.get("rootfs").unwrap();
-    rootfs.exact_keys(&["type", "diff_ids"], &[]).unwrap_or_else(|error| fail(error.code));
+    exact_keys("docker-config", "/rootfs", rootfs, &["type", "diff_ids"], &[]);
     if rootfs.get("type").and_then(preauth::Json::string).unwrap() != "layers" { fail("invalid rootfs type"); }
     let diff_ids = string_array(rootfs.get("diff_ids").unwrap());
     if diff_ids.len() != layers.len() { fail("layer/diff-id count mismatch"); }
@@ -554,6 +575,16 @@ fn verify_one(
 
 fn main() {
     let args: Vec<_> = env::args().collect();
+    if args.len() == 3 && args[1] == "--canonicalize-json" {
+        if !matches!(args[2].as_str(), "bare" | "line") { fail("invalid canonical JSON mode"); }
+        let mut input = Vec::new();
+        std::io::stdin().take(MAX_INLINE + 1).read_to_end(&mut input).unwrap_or_else(|_| fail("unreadable JSON fixture"));
+        if input.len() as u64 > MAX_INLINE { fail("oversized JSON fixture"); }
+        let parsed = preauth::Json::parse(&input).unwrap_or_else(|error| fail(error.code));
+        print!("{}", parsed.canonical());
+        if args[2] == "line" { println!(); }
+        return;
+    }
     if args.len() == 6 && args[1] == "--member-list" {
         let archive = Path::new(&args[2]);
         let entries = tar_entries(archive, false);

@@ -13,6 +13,9 @@ const MAX_BYTES: usize = 8 * 1024 * 1024;
 const MAX_DEPTH: usize = 32;
 const MAX_ITEMS: usize = 512;
 const MAX_STRING: usize = 16 * 1024;
+const MAX_DIAGNOSTIC_KEYS: usize = 32;
+const MAX_DIAGNOSTIC_KEY_BYTES: usize = 96;
+const MAX_DIAGNOSTIC_PATH_BYTES: usize = 192;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Json {
@@ -61,6 +64,36 @@ impl Json {
         }
         Ok(())
     }
+    /// Returns a value-redacted, deterministic key-set diagnostic for a failed exact-key check.
+    ///
+    /// `document` and `path` are caller-owned schema labels, never input-derived filesystem paths.
+    /// Actual keys are already bounded by the parser; this report adds smaller count and byte caps
+    /// so even adversarial Unicode/control-key inputs cannot create unbounded logs.
+    pub fn key_set_diagnostic(
+        &self, document: &str, path: &str, required: &[&str], optional: &[&str],
+    ) -> Result<Option<String>> {
+        let object = self.object()?;
+        let mut allowed = required.iter().chain(optional).copied().collect::<Vec<_>>();
+        allowed.sort_unstable();
+        allowed.dedup();
+        let mut missing = required.iter().copied().filter(|key| !object.contains_key(*key)).collect::<Vec<_>>();
+        missing.sort_unstable();
+        let unknown = object.keys().filter(|key| !allowed.contains(&key.as_str())).map(String::as_str).collect::<Vec<_>>();
+        if missing.is_empty() && unknown.is_empty() { return Ok(None); }
+        if document.is_empty() || document.len() > 64
+            || !document.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+            || path.is_empty() || path.len() > MAX_DIAGNOSTIC_PATH_BYTES || !path.starts_with('/')
+        { return Err(PreauthError::new("json-diagnostic-label")); }
+        let actual = object.keys().map(String::as_str).collect::<Vec<_>>();
+        Ok(Some(format!(
+            "json_key_set document={} path={} actual_count={} actual_reported={} actual={:?} allowed_count={} allowed_reported={} allowed={:?} missing_count={} missing_reported={} missing={:?} unknown_count={} unknown_reported={} unknown={:?} key_cap={} key_byte_cap={}",
+            document, escape_path(path), actual.len(), actual.len().min(MAX_DIAGNOSTIC_KEYS), diagnostic_keys(&actual),
+            allowed.len(), allowed.len().min(MAX_DIAGNOSTIC_KEYS), diagnostic_keys(&allowed),
+            missing.len(), missing.len().min(MAX_DIAGNOSTIC_KEYS), diagnostic_keys(&missing),
+            unknown.len(), unknown.len().min(MAX_DIAGNOSTIC_KEYS), diagnostic_keys(&unknown),
+            MAX_DIAGNOSTIC_KEYS, MAX_DIAGNOSTIC_KEY_BYTES,
+        )))
+    }
     pub fn get(&self, key: &str) -> Result<&Json> {
         self.object()?.get(key).ok_or_else(|| PreauthError::new("json-missing-key"))
     }
@@ -96,6 +129,27 @@ impl Json {
             }
         }
     }
+}
+
+fn diagnostic_keys(values: &[&str]) -> Vec<String> {
+    values.iter().take(MAX_DIAGNOSTIC_KEYS).map(|value| escape_key(value)).collect()
+}
+
+fn escape_key(value: &str) -> String {
+    let mut output = String::new();
+    for byte in value.as_bytes().iter().take(MAX_DIAGNOSTIC_KEY_BYTES) {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-') {
+            output.push(char::from(*byte));
+        } else {
+            output.push_str(&format!("\\x{byte:02x}"));
+        }
+    }
+    if value.len() > MAX_DIAGNOSTIC_KEY_BYTES { output.push_str("..."); }
+    output
+}
+
+fn escape_path(value: &str) -> String {
+    value.split('/').map(|component| component.replace('~', "~0").replace('/', "~1")).collect::<Vec<_>>().join("/")
 }
 
 fn write_string(output: &mut String, value: &str) {
