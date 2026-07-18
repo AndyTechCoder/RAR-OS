@@ -24,8 +24,8 @@ run_phase cutover tools/ci/check-preauth-cutover.sh
 phase=output-parent
 mkdir -p out/r0/preauth/input-delivery
 [ -d out/r0/preauth/input-delivery ] && [ ! -L out/r0/preauth/input-delivery ] || exit 73
-run_phase producer-one tools/toolchain/preauth-input-producer --produce one
-run_phase producer-two tools/toolchain/preauth-input-producer --produce two
+run_phase producer-one tools/toolchain/preauth-input-producer --produce one 1>&2
+run_phase producer-two tools/toolchain/preauth-input-producer --produce two 1>&2
 phase=host-validation
 one=$(sha256sum out/r0/preauth/input-delivery/one/preauth-input-bundle-v1.tar | cut -d ' ' -f 1)
 two=$(sha256sum out/r0/preauth/input-delivery/two/preauth-input-bundle-v1.tar | cut -d ' ' -f 1)
