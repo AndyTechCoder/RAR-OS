@@ -300,6 +300,43 @@ mark_assertion fixture.index-diagnostic.annotations fixture-log present bounded-
 /usr/bin/grep -F 'oci_index_annotations count=0 keys_and_value_hashes=[]' \
     "$oci_test/index-diagnostic-one.log" >/dev/null
 expect_oci_rejection "Buildx platform substitution"
+printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s,"annotations":{"io.containerd.image.name":"docker.io/library/rar-preauth:%s","org.opencontainers.image.ref.name":"%s"}}]}' \
+    "$manifest_digest" "$manifest_size" "$head" "$head" > "$oci_test/root/index.json"
+build_two_archive
+for attempt in one two; do
+    set +e
+    out/r0/preauth/acquisition/host-tools/preauth-verify-oci --member-list \
+        "$oci_test/two/image.tar" "$oci_test/two/metadata.json" "$oci_test/two/image.id" - \
+        > /dev/null 2> "$oci_test/producer-index-diagnostic-$attempt.log"
+    status=$?
+    set -e
+    assert_status "fixture.producer-index-diagnostic.reject.$attempt" 73 "$status"
+done
+assert_files_equal fixture.producer-index-diagnostic.stable \
+    "$oci_test/producer-index-diagnostic-one.log" "$oci_test/producer-index-diagnostic-two.log"
+mark_assertion fixture.producer-index-diagnostic.semantic fixture-log true bounded-file-line
+/usr/bin/grep -F 'semantic_ast_equal=true' "$oci_test/producer-index-diagnostic-one.log" >/dev/null
+assert_file_line fixture.producer-index-diagnostic.root-order \
+    'oci_index_key_order path=/ count=3 keys=["schemaVersion", "mediaType", "manifests"] cap=32' \
+    "$oci_test/producer-index-diagnostic-one.log"
+assert_file_line fixture.producer-index-diagnostic.descriptor-order \
+    'oci_index_key_order path=/manifests/0 count=4 keys=["mediaType", "digest", "size", "annotations"] cap=32' \
+    "$oci_test/producer-index-diagnostic-one.log"
+printf ' { "schemaVersion" : 2, "mediaType" : "application/vnd.oci.image.index.v1+json", "manifests" : [ { "mediaType" : "application/vnd.oci.image.manifest.v1+json", "digest" : "sha256:%s", "size" : %s, "annotations" : { "io.containerd.image.name" : "docker.io/library/rar-preauth:%s", "org.opencontainers.image.ref.name" : "%s" } } ] }\n' \
+    "$manifest_digest" "$manifest_size" "$head" "$head" > "$oci_test/root/index.json"
+build_two_archive
+set +e
+out/r0/preauth/acquisition/host-tools/preauth-verify-oci --member-list \
+    "$oci_test/two/image.tar" "$oci_test/two/metadata.json" "$oci_test/two/image.id" - \
+    > /dev/null 2> "$oci_test/whitespace-index-diagnostic.log"
+status=$?
+set -e
+assert_status fixture.whitespace-index-diagnostic.reject 73 "$status"
+mark_assertion fixture.whitespace-index-diagnostic.semantic fixture-log true bounded-file-line
+/usr/bin/grep -F 'semantic_ast_equal=true' "$oci_test/whitespace-index-diagnostic.log" >/dev/null
+mark_assertion fixture.whitespace-index-diagnostic.encoding fixture-log whitespace bounded-file-line
+/usr/bin/grep -E 'oci_index_encoding whitespace_count=[1-9][0-9]* .*trailing_newline=true' \
+    "$oci_test/whitespace-index-diagnostic.log" >/dev/null
 write_index "$manifest_digest" "$manifest_size"
 printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s,"annotations":{"org.opencontainers.image.ref.name":"%s"}}]}\n' \
     "$manifest_digest" "$manifest_size" "$head" > "$oci_test/root/index.json"

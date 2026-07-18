@@ -184,6 +184,131 @@ fn diagnostic_text(value: &str) -> String {
     output
 }
 
+fn diagnostic_bytes(value: &[u8]) -> String {
+    const CAP: usize = 48;
+    let mut output = String::new();
+    for byte in value.iter().take(CAP) {
+        if byte.is_ascii_graphic() && !matches!(byte, b'\\' | b'"') {
+            output.push(char::from(*byte));
+        } else {
+            output.push_str(&format!("\\x{byte:02x}"));
+        }
+    }
+    if value.len() > CAP { output.push_str("..."); }
+    output
+}
+
+fn index_key_orders(input: &[u8]) -> Vec<Vec<String>> {
+    let mut orders = vec![Vec::new(), Vec::new(), Vec::new()];
+    let mut depth = 0_usize;
+    let mut at = 0_usize;
+    while at < input.len() {
+        match input[at] {
+            b'{' => { depth = depth.saturating_add(1); at += 1; }
+            b'}' => { depth = depth.saturating_sub(1); at += 1; }
+            b'"' => {
+                let start = at + 1;
+                at += 1;
+                let mut escaped = false;
+                while at < input.len() {
+                    let byte = input[at];
+                    if escaped { escaped = false; at += 1; continue; }
+                    if byte == b'\\' { escaped = true; at += 1; continue; }
+                    if byte == b'"' { break; }
+                    at += 1;
+                }
+                if at >= input.len() { break; }
+                let end = at;
+                at += 1;
+                let mut next = at;
+                while input.get(next).is_some_and(u8::is_ascii_whitespace) { next += 1; }
+                if input.get(next) == Some(&b':') && (1..=orders.len()).contains(&depth)
+                    && orders[depth - 1].len() < 32
+                {
+                    orders[depth - 1].push(diagnostic_bytes(&input[start..end]));
+                }
+            }
+            _ => at += 1,
+        }
+    }
+    orders
+}
+
+fn report_byte_representation(raw: &[u8], canonical: &[u8], semantic_equal: bool) {
+    let common = raw.len().min(canonical.len());
+    let mut mismatch_offsets = Vec::new();
+    let mut spans = 0_usize;
+    let mut previous = None;
+    for offset in 0..common {
+        if raw[offset] != canonical[offset] {
+            if previous != Some(offset.saturating_sub(1)) { spans += 1; }
+            if mismatch_offsets.len() < 16 { mismatch_offsets.push(offset); }
+            previous = Some(offset);
+        }
+    }
+    if raw.len() != canonical.len() {
+        if previous != Some(common.saturating_sub(1)) { spans += 1; }
+        if mismatch_offsets.len() < 16 { mismatch_offsets.push(common); }
+    }
+    let first = mismatch_offsets.first().copied();
+    let context = |bytes: &[u8]| first.map_or_else(|| "none".to_owned(), |offset| {
+        let begin = offset.saturating_sub(16).min(bytes.len());
+        let end = offset.saturating_add(17).min(bytes.len());
+        diagnostic_bytes(&bytes[begin..end])
+    });
+    eprintln!(
+        "oci_index_bytes raw_len={} raw_sha256={} canonical_len={} canonical_sha256={} semantic_ast_equal={} first_mismatch={} mismatch_spans={} mismatch_offsets={:?} cap=16 raw_context={} canonical_context={}",
+        raw.len(), preauth::sha256_hex(raw), canonical.len(), preauth::sha256_hex(canonical),
+        semantic_equal, first.map_or_else(|| "none".to_owned(), |value| value.to_string()),
+        spans, mismatch_offsets, context(raw), context(canonical),
+    );
+    let paths = ["/", "/manifests/0", "/manifests/0/annotations"];
+    for (path, keys) in paths.iter().zip(index_key_orders(raw)) {
+        eprintln!("oci_index_key_order path={path} count={} keys={keys:?} cap=32", keys.len());
+    }
+    let mut whitespace = Vec::new();
+    let mut escapes = Vec::new();
+    let mut numbers = Vec::new();
+    let mut in_string = false;
+    let mut escaped = false;
+    let mut at = 0_usize;
+    while at < raw.len() {
+        let byte = raw[at];
+        if in_string {
+            if escaped {
+                if escapes.len() < 16 { escapes.push(format!("{at}:{}", diagnostic_bytes(&[byte]))); }
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                in_string = false;
+            }
+            at += 1;
+            continue;
+        }
+        if byte == b'"' { in_string = true; at += 1; continue; }
+        if byte.is_ascii_whitespace() {
+            if whitespace.len() < 32 { whitespace.push(format!("{at}:{}", diagnostic_bytes(&[byte]))); }
+            at += 1;
+            continue;
+        }
+        if byte.is_ascii_digit() {
+            let start = at;
+            while raw.get(at).is_some_and(u8::is_ascii_digit) { at += 1; }
+            if numbers.len() < 16 {
+                numbers.push(format!("{start}:{}", diagnostic_bytes(&raw[start..at])));
+            }
+            continue;
+        }
+        at += 1;
+    }
+    eprintln!(
+        "oci_index_encoding whitespace_count={} whitespace={whitespace:?} escape_count={} escapes={escapes:?} number_count={} numbers={numbers:?} trailing_newline={} trailing_whitespace_bytes={} caps=32/16/16",
+        raw.iter().filter(|byte| byte.is_ascii_whitespace()).count(), escapes.len(), numbers.len(),
+        raw.last() == Some(&b'\n'), raw.iter().rev().take_while(|byte| byte.is_ascii_whitespace()).count(),
+    );
+}
+
 fn validate_layer_sources(
     manifest: &preauth::Json, diff_ids: &[String], layers: &[String],
     entries: &BTreeMap<String, TarEntry>, config_digest: &str,
@@ -272,8 +397,10 @@ fn annotation_pairs(index: &preauth::Json) -> Vec<(String, String)> {
     }).collect()
 }
 
-fn report_index_mapping(index: &str, expected_digest: &str, expected_size: u64, revision: &str) {
+fn report_index_mapping(index: &str, canonical: &str, expected_digest: &str, expected_size: u64, revision: &str) {
     let parsed = json(index.as_bytes());
+    let canonical_parsed = json(canonical.as_bytes());
+    report_byte_representation(index.as_bytes(), canonical.as_bytes(), parsed == canonical_parsed);
     let schema = vec![parsed.get("schemaVersion").and_then(preauth::Json::number).unwrap_or(0)];
     let media = parsed.get("mediaType").and_then(preauth::Json::string).map_or_else(|_| Vec::new(), |v| vec![v.to_owned()]);
     let descriptors = parsed.get("manifests").and_then(preauth::Json::array).unwrap_or(&[]);
@@ -582,7 +709,10 @@ fn verify_oci_layout(
     ), selected_digest, selected.size, revision, revision);
     let canonical_index = json(canonical_index_source.as_bytes()).canonical();
     if index.data != canonical_index.as_bytes() {
-        report_index_mapping(std::str::from_utf8(&index.data).unwrap_or(""), &selected_digest, selected.size, revision);
+        report_index_mapping(
+            std::str::from_utf8(&index.data).unwrap_or(""), &canonical_index,
+            &selected_digest, selected.size, revision,
+        );
         fail("OCI index descriptor mapping mismatch");
     }
     (selected_digest, index.sha256.clone(), expected)
