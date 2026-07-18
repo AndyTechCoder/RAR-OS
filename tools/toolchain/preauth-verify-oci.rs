@@ -213,9 +213,7 @@ fn validate_layer_sources(
         let size = descriptor.get("size").and_then(preauth::Json::number)
             .unwrap_or_else(|error| fail(error.code));
         if size == 0 || size > MAX_MEMBER { fail("Docker LayerSources size bound exceeded"); }
-        if digest == config_digest || authoritative_layers.contains(digest.as_str())
-            || !source_digests.insert(digest.clone())
-        {
+        if digest == config_digest || !source_digests.insert(digest.clone()) {
             fail("Docker LayerSources identity collision");
         }
         let source_path = format!("blobs/sha256/{digest}");
@@ -229,12 +227,12 @@ fn validate_layer_sources(
             let key_digest = diff_id.strip_prefix("sha256:").unwrap();
             let layer_digest = blob_digest(&layers[position]);
             media_mismatches.push(format!(
-                "layer_sources_media_mismatch path=/0/LayerSources/* map_index={} manifest_position={} key_prefix={} key_sha256={} actual={} actual_bytes={} expected=application/vnd.oci.image.layer.v1.tar+gzip digest_payload_match={} size_payload_match={} key_matches_manifest_layer={}",
+                "layer_sources_media_mismatch path=/0/LayerSources/* map_index={} manifest_position={} key_prefix={} key_sha256={} actual={} actual_bytes={} expected=application/vnd.oci.image.layer.v1.tar+gzip digest_payload_match={} size_payload_match={} key_matches_manifest_layer={} descriptor_digest_matches_manifest_layer={}",
                 position, position, &key_digest[..12], preauth::sha256_hex(diff_id.as_bytes()),
                 diagnostic_text(media_type), media_type.len(),
                 source.map(|entry| entry.sha256 == digest).map_or("absent", |value| if value { "true" } else { "false" }),
                 source.map(|entry| entry.size == size).map_or("absent", |value| if value { "true" } else { "false" }),
-                layer_digest == Some(key_digest),
+                layer_digest == Some(key_digest), authoritative_layers.contains(digest.as_str()),
             ));
         }
     }
