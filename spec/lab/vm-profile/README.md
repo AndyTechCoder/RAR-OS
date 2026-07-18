@@ -92,5 +92,7 @@ provisioned external authority and the owner issues one exact authorization.
 ## Current certification state
 
 No profile is authorized for execution. Prompt 7A prepares one x86-64 candidate from the
-ADR 0018 closure without executing QEMU, firmware, a target binary, or a RAR artifact. Other
-profiles remain uncertified. A prepared certification is not an owner authorization.
+ADR 0018 closure without executing QEMU, firmware, a target binary, or a RAR artifact. The
+record under `prepared/` deliberately names `pending-independent-review`; it is testable
+content-addressed preparation evidence, not a reviewed certification at the accepted `out/`
+path. Other profiles remain uncertified. A prepared certification is not an owner authorization.

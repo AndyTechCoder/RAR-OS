@@ -1,0 +1,10 @@
+schema=rar-preauth-disk-v1
+format=qcow2
+virtual_bytes=67108864
+seed_path=out/r0/vm/x86_64/seed.qcow2
+seed_sha256=141d4f9b5756451e4d5874ac2d68c5c59052b82e52494d29ef8624fa3402e766
+child_path=out/r0/vm/x86_64/launch-0001.qcow2
+child_sha256=141d4f9b5756451e4d5874ac2d68c5c59052b82e52494d29ef8624fa3402e766
+single_use=true
+cleanup=required
+record_sha256=89e160c117154dded20d7daeaf75576dd082a9d83d5ade47f9254a6e35371826

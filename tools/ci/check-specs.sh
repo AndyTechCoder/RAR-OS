@@ -59,6 +59,11 @@ sdk/generated/release-0/generate.sh
 sdk/generated/release-0/check.sh
 sdk/generated/release-0/lib.rs
 spec/lab/preauth/closure-v2.fields
+spec/lab/preauth/locks/r0-x86_64-preauth-v2.lock
+spec/lab/preauth/locks/r0-x86_64-preauth-packages.v2
+spec/lab/preauth/locks/r0-x86_64-preauth-disk.v1
+spec/lab/vm-profile/examples/x86_64-preauth.command
+spec/lab/vm-profile/prepared/r0-x86_64-preauth-v1.cert
 spec/lab/preauth/package-v2.fields
 spec/lab/preauth/authority-v1.fields
 spec/lab/preauth/disk-v1.fields
