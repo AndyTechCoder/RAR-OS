@@ -16,11 +16,11 @@ fn attestation(head: &str, event: &str, run: u64, archive: char, image: char) ->
         "package_manifest_sha256={}\nprofile_sha256={}\nartifact_sha256={}\n",
         "disk_sha256={}\nclosure_sha256={}\n"), graph_sha, head, event, run,
         archive.to_string().repeat(64), image.to_string().repeat(64), image.to_string().repeat(64),
-        "b8ffab89ce2bba5e9ff4e3e83544523f865d7921536e0c070f2deec36e3d522e",
+        "a39ba029b4107d9c52d91ae90f36751b7dbb30ffff385e3e7209b266f8747fd5",
         "8e7bc38fa513700556b7ea493ffd42b6df6b4adcaf0a4719a0c7fe11f7eb165f",
         "96b7705f1dd987060c34ac049afd5a0d20fa58d8aff6586ce9090dbdf8a989ea",
         "141d4f9b5756451e4d5874ac2d68c5c59052b82e52494d29ef8624fa3402e766",
-        "7175265450eca608390ea3e1e0d9e812bfd0c55da0b016a5176bdd9399cc5b96");
+        "6fce29dad39d01bc08d134c6c3bbbad7201f9fa6c2b3448349d8010be477185a");
     format!("{}record_sha256={}\n", payload, sha256_hex(payload.as_bytes()))
 }
 

@@ -1522,7 +1522,7 @@ impl ProcessSpawner for OriginalResourceSpawner {
                 .and_then(safety::VerifiedResource::sha256),
             Some(sha256_hex(FIRMWARE_BYTES).as_str())
         );
-        assert_eq!(command.disk.sha256(), None);
+        assert_eq!(command.disk.sha256(), Some(sha256_hex(DISK_BYTES).as_str()));
         assert!(command.arguments.contains(&SpawnArgument::FirmwareHandle));
         assert!(
             command
