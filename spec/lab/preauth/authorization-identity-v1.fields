@@ -1,0 +1,14 @@
+schema
+phase
+state
+repository
+workflow
+ref
+environment
+oidc_issuer
+oidc_audience
+oidc_subject
+kms_key_arn
+kms_algorithm
+kms_context_sha256
+record_sha256

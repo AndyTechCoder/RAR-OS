@@ -1,4 +1,5 @@
 schema
+phase
 host_id
 os_class
 architecture
@@ -10,6 +11,7 @@ resolver_sha256
 spawner_sha256
 wrapper_sha256
 environment_sha256
+resource_controller_sha256
 timeout_seconds
 termination_grace_seconds
 output_bytes

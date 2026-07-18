@@ -1065,6 +1065,7 @@ pub struct LaunchRequest<'a> {
     pub authorization: Option<RecordInput<'a>>,
     pub pins: &'a CertificationPins,
     pub artifact_sha256: &'a str,
+    pub disk_sha256: &'a str,
     pub source_revision: &'a str,
 }
 
@@ -1123,6 +1124,7 @@ pub struct AuthorizationConsumptionKey<'a> {
     certification_sha256: &'a str,
     profile_sha256: &'a str,
     artifact_sha256: &'a str,
+    disk_sha256: &'a str,
 }
 
 impl AuthorizationConsumptionKey<'_> {
@@ -1144,6 +1146,10 @@ impl AuthorizationConsumptionKey<'_> {
 
     pub fn artifact_sha256(&self) -> &str {
         self.artifact_sha256
+    }
+
+    pub fn disk_sha256(&self) -> &str {
+        self.disk_sha256
     }
 }
 
@@ -1263,7 +1269,9 @@ fn authorize_then_delegate_inner<
 
     let profile = VmProfile::parse(request.profile)?;
     request.pins.validate_for(&profile)?;
-    if !is_lower_hex(request.artifact_sha256, 64) || !is_source_revision(request.source_revision) {
+    if !is_lower_hex(request.artifact_sha256, 64)
+        || !is_lower_hex(request.disk_sha256, 64)
+        || !is_source_revision(request.source_revision) {
         return Err(SafetyError::new(
             "invalid-launch-input",
             "artifact digest or source revision is invalid",
@@ -1360,7 +1368,7 @@ fn authorize_then_delegate_inner<
     let disk = verify_workspace_resource(
         &workspace_root,
         profile.disk_path.as_str(),
-        None,
+        Some(request.disk_sha256),
         "disk-content-mismatch",
         "disposable disk bytes changed while being opened",
     )?;
@@ -1371,6 +1379,7 @@ fn authorize_then_delegate_inner<
         certification_sha256: &authorization.certification_sha256,
         profile_sha256: &authorization.profile_sha256,
         artifact_sha256: &authorization.artifact_sha256,
+        disk_sha256: request.disk_sha256,
     };
     authorization_consumer.consume_once(&consumption_key)?;
 

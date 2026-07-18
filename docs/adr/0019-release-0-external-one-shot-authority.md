@@ -20,7 +20,9 @@ A repository-local authorization marker can be rolled back and cannot prove irre
 
 ## Decision
 
-A future owner-provisioned AWS authority stores one record per authorization. Issuance creates `issued`; revocation conditionally changes `issued` to `revoked`; consumption conditionally changes `issued` to `consumed` exactly once while binding certification, profile, command, artifact, disk, firmware, closure, nonce, expiry, GitHub environment, repository, workflow, ref, and OIDC subject. KMS signs canonical records. CloudTrail digest-chain evidence is required for certification review. GitHub receives short-lived credentials only from an owner-approved protected environment and exact OIDC claims.
+A future owner-provisioned AWS authority stores one record per authorization. Issuance creates `issued`; revocation conditionally changes `issued` to `revoked`; consumption conditionally changes `issued` to `consumed` exactly once while binding the complete prepared identity graph, certification, profile, command, artifact, disk record and bytes, both firmware images, closure, execution host, resolver, spawner, irreversible consumption key, nonce, issue/expiry times, and exact GitHub identity. The accepted identity is repository `AndyTechCoder/RAR-OS`, workflow `AndyTechCoder/RAR-OS/.github/workflows/first-boot.yml@refs/heads/main`, ref `refs/heads/codex/r0-prompt7a-preauth`, protected environment `rar-r0-first-boot`, issuer `https://token.actions.githubusercontent.com`, audience `sts.amazonaws.com`, and subject `repo:AndyTechCoder/RAR-OS:environment:rar-r0-first-boot`.
+
+The authority record is the canonical LF-terminated field order in `spec/lab/preauth/authority-v1.fields`. Its self-digest covers every field through `transition_version`; the KMS signature input additionally includes that self-digest. KMS uses the named key, `RSASSA_PSS_SHA_256`, and the exact context digest. Every versioned DynamoDB transition is conditional on the prior state and version. Validation completes before issuance has any effect. A rejected issue, consume, revoke, reissue, replay, race, partial response, or uncertain result grants no authority. CloudTrail evidence includes a prior-evidence digest and must maintain an independently verified integrity chain.
 
 Prompt 7A implements schemas, deterministic state transitions, request/response validation, and synthetic clients only. It makes no AWS call and accesses no credential.
 
@@ -38,7 +40,7 @@ Authority schema changes require a new major schema and fresh authorization. Exi
 
 ## Validation
 
-Synthetic tests cover issuance, signature binding, claim mismatch, stale/duplicate/replay consume, revocation, timeout, uncertain commit, crash recovery, and evidence-chain mismatch.
+Synthetic tests cover canonical parsing and signature input, every OIDC/KMS/context binding, issuance side-effect freedom, stale/duplicate/replay/racing consume, revocation, terminal-state reissue refusal, partial/uncertain transitions, confused-deputy substitutions, crash recovery, and evidence-chain mismatch.
 
 ## Replacement path
 

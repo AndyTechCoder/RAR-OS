@@ -17,9 +17,21 @@ esac
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 case "$root" in /workspace | /workspace/*) ;; *) echo "unexpected container workspace" >&2; exit 73 ;; esac
 output=$root/out/r0/preauth/acquisition
-for path in "$root/out" "$root/out/r0" "$root/out/r0/preauth" "$output"; do
-    [ ! -L "$path" ] || { echo "symlink output refused: $path" >&2; exit 2; }
+approved_packages=$root/spec/lab/preauth/locks/r0-x86_64-preauth-packages.v2
+[ -f "$approved_packages" ] && [ ! -L "$approved_packages" ] || {
+    echo "approved package manifest is absent or indirect" >&2
+    exit 73
+}
+for path in "$root/out" "$root/out/r0" "$root/out/r0/preauth"; do
+    [ ! -e "$path" ] || { [ -d "$path" ] && [ ! -L "$path" ]; } || {
+        echo "unsafe acquisition ancestor: $path" >&2
+        exit 73
+    }
 done
+[ ! -e "$output" ] && [ ! -L "$output" ] || {
+    echo "acquisition output must be absent before the transaction" >&2
+    exit 73
+}
 mkdir -p "$output/apt-state/lists/partial" "$output/apt-cache/archives/partial" "$output/debs" "$output/licenses" "$output/derived-context/rootfs"
 
 snapshot=20260630T000000Z
@@ -58,6 +70,7 @@ printf '%s\n' 'schema=rar-preauth-license-manifest-v2' >> "$license_manifest"
 license_root=$output/licenses/root
 mkdir -p "$license_root"
 for deb in "$output"/debs/*.deb; do
+    [ "$(/usr/bin/stat -c '%h' "$deb")" -eq 1 ] || { echo "hard-linked package refused" >&2; exit 1; }
     /usr/bin/dpkg-deb -x "$deb" "$license_root"
 done
 for deb in "$output"/debs/*.deb; do
@@ -66,6 +79,22 @@ for deb in "$output"/debs/*.deb; do
     name=$(/usr/bin/dpkg-deb -f "$deb" Package)
     version=$(/usr/bin/dpkg-deb -f "$deb" Version)
     architecture=$(/usr/bin/dpkg-deb -f "$deb" Architecture)
+    source_field=$(/usr/bin/dpkg-deb -f "$deb" Source 2>/dev/null || true)
+    case "$source_field" in
+        *' ('*')')
+            source_name=${source_field%% *}
+            source_version=${source_field#* (}
+            source_version=${source_version%)}
+            ;;
+        '')
+            source_name=$name
+            source_version=$version
+            ;;
+        *)
+            source_name=$source_field
+            source_version=$version
+            ;;
+    esac
     size=$(/usr/bin/stat -c '%s' "$deb")
     copyright=$license_root/usr/share/doc/$name/copyright
     resolved_copyright=$(/usr/bin/realpath -e "$copyright") || { echo "license missing for $name" >&2; exit 1; }
@@ -74,8 +103,9 @@ for deb in "$output"/debs/*.deb; do
     license_sha=$(/usr/bin/sha256sum "$resolved_copyright" | /usr/bin/cut -d ' ' -f 1)
     after=$(/usr/bin/stat -c '%d:%i:%s:%Y' "$deb")
     [ "$before" = "$after" ] || { echo "same-inode mutation detected for $deb" >&2; exit 1; }
-    printf 'package|%s|%s|%s|%s|%s|%s|%s\n' \
-        "$name" "$version" "$architecture" "$(basename "$deb")" "$size" "$sha" "$license_sha" >> "$package_manifest"
+    printf 'package|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
+        "$name" "$version" "$architecture" "$(basename "$deb")" "$size" "$sha" "$license_sha" \
+        "$source_name" "$source_version" >> "$package_manifest"
     printf 'license|%s|%s\n' "$name" "$license_sha" >> "$license_manifest"
 done
 LC_ALL=C /usr/bin/sort -o "$package_manifest.sorted" "$package_manifest"
@@ -90,6 +120,15 @@ LC_ALL=C /usr/bin/sort -o "$license_manifest.sorted" "$license_manifest"
     /usr/bin/grep '^license|' "$license_manifest.sorted"
 } > "$license_manifest.canonical"
 mv "$license_manifest.canonical" "$license_manifest"
+
+# Package bytes, binary identity, signed-snapshot source provenance and license
+# digests must match the approved immutable manifest before any package is used
+# to construct the derived root filesystem.
+/usr/bin/cmp -s "$package_manifest" "$approved_packages" || {
+    echo "observed package closure differs from the approved manifest" >&2
+    /usr/bin/diff -u "$approved_packages" "$package_manifest" >&2 || true
+    exit 1
+}
 
 for required in \
     'lld-19|1:19.1.7-3+b1|' \
@@ -125,6 +164,37 @@ LC_ALL=C /usr/bin/sort -o "$security_inrelease_manifest" "$security_inrelease_ma
 [ "$(/usr/bin/grep -c 'InRelease' "$lists_manifest")" -ge 4 ] || { echo "signed InRelease evidence absent" >&2; exit 1; }
 [ "$(/usr/bin/wc -l < "$inrelease_manifest" | /usr/bin/tr -d ' ')" -eq 3 ] || { echo "Debian InRelease set is incomplete" >&2; exit 1; }
 [ "$(/usr/bin/wc -l < "$security_inrelease_manifest" | /usr/bin/tr -d ' ')" -eq 1 ] || { echo "Debian security InRelease set is incomplete" >&2; exit 1; }
+
+lock_value() {
+    key=$1
+    value=$(/usr/bin/sed -n "s/^$key=//p" "$root/spec/lab/preauth/locks/r0-x86_64-preauth-v2.lock")
+    [ -n "$value" ] && [ "$(/usr/bin/grep -c "^$key=" "$root/spec/lab/preauth/locks/r0-x86_64-preauth-v2.lock")" -eq 1 ] || {
+        echo "closure lock field missing or duplicated: $key" >&2
+        exit 1
+    }
+    printf '%s\n' "$value"
+}
+assert_lock() {
+    key=$1
+    observed=$2
+    [ "$(lock_value "$key")" = "$observed" ] || {
+        echo "closure evidence mismatch: $key" >&2
+        exit 1
+    }
+}
+[ "$(/usr/bin/wc -l < "$root/spec/lab/preauth/locks/r0-x86_64-preauth-v2.lock" | /usr/bin/tr -d ' ')" -eq 25 ] || {
+    echo "closure lock field count mismatch" >&2
+    exit 1
+}
+assert_lock base_oci_index_sha256 "${RAR_CI_BOOTSTRAP_IMAGE#sha256:}"
+assert_lock debian_snapshot "$snapshot"
+assert_lock debian_security_snapshot "$snapshot"
+assert_lock package_manifest_sha256 "$(/usr/bin/sha256sum "$package_manifest" | /usr/bin/cut -d ' ' -f 1)"
+assert_lock license_manifest_sha256 "$(/usr/bin/sha256sum "$license_manifest" | /usr/bin/cut -d ' ' -f 1)"
+assert_lock debian_archive_keyring_sha256 "$(/usr/bin/sha256sum /usr/share/keyrings/debian-archive-keyring.gpg | /usr/bin/cut -d ' ' -f 1)"
+assert_lock inrelease_sha256 "$(/usr/bin/sha256sum "$inrelease_manifest" | /usr/bin/cut -d ' ' -f 1)"
+assert_lock security_inrelease_sha256 "$(/usr/bin/sha256sum "$security_inrelease_manifest" | /usr/bin/cut -d ' ' -f 1)"
+assert_lock acquisition_policy_sha256 "$(/usr/bin/sha256sum "$root/tools/toolchain/acquire-preauth-closure.sh" | /usr/bin/cut -d ' ' -f 1)"
 
 for deb in "$output"/debs/*.deb; do
     /usr/bin/dpkg-deb -x "$deb" "$output/derived-context/rootfs"

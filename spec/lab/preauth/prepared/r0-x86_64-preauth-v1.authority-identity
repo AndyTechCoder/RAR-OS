@@ -1,0 +1,14 @@
+schema=rar-preauth-authorization-identity-v1
+phase=prepared
+state=unissued
+repository=AndyTechCoder/RAR-OS
+workflow=AndyTechCoder/RAR-OS/.github/workflows/first-boot.yml@refs/heads/main
+ref=refs/heads/codex/r0-prompt7a-preauth
+environment=rar-r0-first-boot
+oidc_issuer=https://token.actions.githubusercontent.com
+oidc_audience=sts.amazonaws.com
+oidc_subject=repo:AndyTechCoder/RAR-OS:environment:rar-r0-first-boot
+kms_key_arn=arn:aws:kms:eu-central-1:000000000000:key/rar-r0-first-boot-synthetic
+kms_algorithm=RSASSA_PSS_SHA_256
+kms_context_sha256=61e155ae285e012e481a0ab3469d1941b32387e41faf4d6af5702d369b7e219f
+record_sha256=f77ec1520375b90332c9733254e000b5096d476885da4e5e36caabab50666b00

@@ -1,0 +1,15 @@
+schema
+phase
+prepared_identity_graph_sha256
+source_revision
+event
+run_id
+archive_sha256
+image_sha256
+loaded_image_sha256
+package_manifest_sha256
+profile_sha256
+artifact_sha256
+disk_sha256
+closure_sha256
+record_sha256

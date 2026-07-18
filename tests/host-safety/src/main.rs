@@ -730,6 +730,7 @@ struct ValidGateFixture {
     policy: LaunchPolicy,
     pins: CertificationPins,
     artifact_sha256: String,
+    disk_sha256: String,
     source_revision: String,
     artifact_path: PathBuf,
     firmware_path: PathBuf,
@@ -793,6 +794,7 @@ impl ValidGateFixture {
         fs::write(&disk_path, DISK_BYTES).expect("write synthetic disk");
         fs::write(&emulator_path, EMULATOR_BYTES).expect("write synthetic emulator input");
         let artifact_sha256 = sha256_hex(ARTIFACT_BYTES);
+        let disk_sha256 = sha256_hex(DISK_BYTES);
         let firmware_sha256 = sha256_hex(FIRMWARE_BYTES);
         let source_revision = "b".repeat(40);
         let pins = CertificationPins {
@@ -849,6 +851,7 @@ impl ValidGateFixture {
             policy,
             pins,
             artifact_sha256,
+            disk_sha256,
             source_revision,
             artifact_path,
             firmware_path,
@@ -872,6 +875,7 @@ impl ValidGateFixture {
             }),
             pins: &self.pins,
             artifact_sha256: &self.artifact_sha256,
+            disk_sha256: &self.disk_sha256,
             source_revision: &self.source_revision,
         }
     }
@@ -929,6 +933,7 @@ fn shipped_policy_refuses_before_record_parsing_resolution_or_spawn() {
         authorization: None,
         pins: &fixture.pins,
         artifact_sha256: "not-a-hash",
+        disk_sha256: "not-a-hash",
         source_revision: "invalid",
     };
     assert_refused_before_resolution(

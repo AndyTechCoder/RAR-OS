@@ -95,4 +95,9 @@ No profile is authorized for execution. Prompt 7A prepares one x86-64 candidate 
 ADR 0018 closure without executing QEMU, firmware, a target binary, or a RAR artifact. The
 record under `prepared/` deliberately names `pending-independent-review`; it is testable
 content-addressed preparation evidence, not a reviewed certification at the accepted `out/`
-path. Other profiles remain uncertified. A prepared certification is not an owner authorization.
+path. Its acyclic identity graph binds the closure, all package/source/signature/license
+evidence, tools, both firmware images, artifact, disk record and bytes, profile, typed command,
+unprovisioned execution-host leaf, exact unissued authority identity, resolver/spawner leaves,
+prepared certification, source tree, and irreversible consumption key. Exact-head CI emits a
+separate attestation so no committed record claims its own enclosing commit. Other profiles
+remain uncertified. A prepared certification is not an owner authorization.

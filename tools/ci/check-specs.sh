@@ -68,7 +68,18 @@ spec/lab/preauth/package-v2.fields
 spec/lab/preauth/authority-v1.fields
 spec/lab/preauth/disk-v1.fields
 spec/lab/preauth/execution-host-v1.fields
+spec/lab/preauth/identity-graph-v1.fields
+spec/lab/preauth/ci-attestation-v1.fields
+spec/lab/preauth/prepared-certification-v1.fields
+spec/lab/preauth/authorization-identity-v1.fields
+spec/lab/preauth/consumption-key-v1.fields
+spec/lab/preauth/prepared/r0-x86_64-preauth-v1.host
+spec/lab/preauth/prepared/r0-x86_64-preauth-v1.identity
+spec/lab/preauth/prepared/r0-x86_64-preauth-v1.authority-identity
+spec/lab/preauth/prepared/r0-x86_64-preauth-v1.consumption-key
+spec/lab/preauth/prepared/r0-x86_64-preauth-v1.source-tree
 tools/rar-lab/preauth/src/lib.rs
+tools/rar-lab/preauth/src/contracts.rs
 tools/rar-lab/preauth/src/disk.rs
 tests/preauth/src/main.rs
 tests/preauth/src/records.rs
@@ -76,6 +87,8 @@ tests/preauth/run.sh
 tools/toolchain/acquire-preauth-closure.sh
 tools/toolchain/bind-preauth-head.sh
 tools/toolchain/verify-preauth-oci.sh
+tools/toolchain/preauth-verify-oci.rs
+tools/toolchain/preauth-validate-record.rs
 tools/ci/check-specs.sh
 tools/ci/check-host-policy.sh
 tools/ci/test-host-policy.sh

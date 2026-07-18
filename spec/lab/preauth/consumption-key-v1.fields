@@ -1,0 +1,14 @@
+schema
+certification_sha256
+profile_sha256
+command_sha256
+artifact_sha256
+disk_sha256
+firmware_code_sha256
+firmware_vars_sha256
+closure_sha256
+execution_host_sha256
+resolver_sha256
+spawner_sha256
+authorization_identity_sha256
+record_sha256

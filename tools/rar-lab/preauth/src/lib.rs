@@ -1,6 +1,13 @@
 #![deny(unsafe_code)]
 
 use std::collections::BTreeMap;
+use std::path::{Component, Path};
+
+mod contracts;
+pub use contracts::{
+    AttestationRecord, ClosureLock, ExecutionHostRecord, IdentityGraph, PackageManifest,
+    PreparedCertification, StrictAuthorityRecord, sha256_hex, sha256_reader,
+};
 
 pub const AUTHORITY_SCHEMA: &str = "rar-external-authorization-v1";
 pub const CLOSURE_SCHEMA: &str = "rar-preauth-closure-v2";
@@ -8,6 +15,17 @@ pub const DISK_SCHEMA: &str = "rar-disposable-disk-v1";
 pub const EXECUTION_HOST_SCHEMA: &str = "rar-execution-host-v1";
 pub const BASE_OCI_INDEX_SHA256: &str =
     "f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3";
+pub const AUTHORITY_REPOSITORY: &str = "AndyTechCoder/RAR-OS";
+pub const AUTHORITY_REF: &str = "refs/heads/codex/r0-prompt7a-preauth";
+pub const AUTHORITY_ENVIRONMENT: &str = "rar-r0-first-boot";
+pub const AUTHORITY_WORKFLOW: &str =
+    "AndyTechCoder/RAR-OS/.github/workflows/first-boot.yml@refs/heads/main";
+pub const OIDC_ISSUER: &str = "https://token.actions.githubusercontent.com";
+pub const OIDC_AUDIENCE: &str = "sts.amazonaws.com";
+pub const OIDC_SUBJECT: &str = "repo:AndyTechCoder/RAR-OS:environment:rar-r0-first-boot";
+pub const KMS_KEY_ARN: &str =
+    "arn:aws:kms:eu-central-1:000000000000:key/rar-r0-first-boot-synthetic";
+pub const KMS_ALGORITHM: &str = "RSASSA_PSS_SHA_256";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PreauthError {
@@ -46,6 +64,16 @@ pub struct LaunchBindings {
     pub disk_sha256: String,
     pub firmware_sha256: String,
     pub closure_sha256: String,
+    pub package_manifest_sha256: String,
+    pub source_manifest_sha256: String,
+    pub signature_manifest_sha256: String,
+    pub license_manifest_sha256: String,
+    pub disk_record_sha256: String,
+    pub firmware_vars_sha256: String,
+    pub execution_host_sha256: String,
+    pub resolver_sha256: String,
+    pub spawner_sha256: String,
+    pub identity_graph_sha256: String,
 }
 
 impl LaunchBindings {
@@ -58,6 +86,16 @@ impl LaunchBindings {
             &self.disk_sha256,
             &self.firmware_sha256,
             &self.closure_sha256,
+            &self.package_manifest_sha256,
+            &self.source_manifest_sha256,
+            &self.signature_manifest_sha256,
+            &self.license_manifest_sha256,
+            &self.disk_record_sha256,
+            &self.firmware_vars_sha256,
+            &self.execution_host_sha256,
+            &self.resolver_sha256,
+            &self.spawner_sha256,
+            &self.identity_graph_sha256,
         ]
         .into_iter()
         .all(|value| digest(value))
@@ -88,7 +126,11 @@ pub struct AuthorityRecord {
     pub git_ref: String,
     pub environment: String,
     pub oidc_subject: String,
+    pub oidc_issuer: String,
+    pub oidc_audience: String,
     pub kms_key_arn: String,
+    pub kms_algorithm: String,
+    pub kms_context_sha256: String,
     pub kms_signature_sha256: String,
     pub cloudtrail_evidence_sha256: String,
     pub transition_version: u64,
@@ -103,10 +145,15 @@ impl AuthorityRecord {
             || !token(&self.nonce)
             || self.expires_at == 0
             || self.repository != "AndyTechCoder/RAR-OS"
-            || !self.git_ref.starts_with("refs/heads/codex/")
-            || self.environment != "rar-r0-first-boot"
-            || !self.oidc_subject.starts_with("repo:AndyTechCoder/RAR-OS:environment:")
-            || !self.kms_key_arn.starts_with("arn:aws:kms:")
+            || self.workflow != AUTHORITY_WORKFLOW
+            || self.git_ref != AUTHORITY_REF
+            || self.environment != AUTHORITY_ENVIRONMENT
+            || self.oidc_issuer != OIDC_ISSUER
+            || self.oidc_audience != OIDC_AUDIENCE
+            || self.oidc_subject != OIDC_SUBJECT
+            || self.kms_key_arn != KMS_KEY_ARN
+            || self.kms_algorithm != KMS_ALGORITHM
+            || !digest(&self.kms_context_sha256)
             || !digest(&self.kms_signature_sha256)
             || !digest(&self.cloudtrail_evidence_sha256)
         {
@@ -172,9 +219,10 @@ pub struct SyntheticLedger {
 impl SyntheticLedger {
     pub fn issue(&mut self, record: AuthorityRecord) -> Result<()> {
         record.validate()?;
-        if self.records.insert(record.authorization_id.clone(), record).is_some() {
+        if self.records.contains_key(&record.authorization_id) {
             return Err(PreauthError::new("duplicate-authorization"));
         }
+        self.records.insert(record.authorization_id.clone(), record);
         Ok(())
     }
 
@@ -230,11 +278,9 @@ pub struct DiskBinding {
 
 impl DiskBinding {
     pub fn validate(&self) -> Result<()> {
-        if !self.seed_path.starts_with("out/r0/vm/x86_64/")
-            || !self.child_path.starts_with("out/r0/vm/x86_64/")
+        if !valid_repository_relative(&self.seed_path, "out/r0/vm/x86_64", ".qcow2")
+            || !valid_repository_relative(&self.child_path, "out/r0/vm/x86_64", ".qcow2")
             || self.seed_path == self.child_path
-            || !self.seed_path.ends_with(".qcow2")
-            || !self.child_path.ends_with(".qcow2")
             || !digest(&self.seed_sha256)
             || !digest(&self.child_sha256)
             || self.virtual_bytes == 0
@@ -245,13 +291,38 @@ impl DiskBinding {
     }
 }
 
+pub fn valid_repository_relative(value: &str, prefix: &str, suffix: &str) -> bool {
+    if value.is_empty()
+        || value.starts_with('/')
+        || value.starts_with('\\')
+        || value.contains("//")
+        || value.contains('\\')
+        || value.bytes().any(|byte| byte == 0 || byte == b':')
+        || !value.ends_with(suffix)
+    {
+        return false;
+    }
+    let path = Path::new(value);
+    if !path.is_relative()
+        || path.components().any(|component| !matches!(component, Component::Normal(_)))
+    {
+        return false;
+    }
+    path.starts_with(prefix) && path.components().count() > Path::new(prefix).components().count()
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LifecycleEvent {
     Resolve,
     Spawn,
+    OutputLimit,
     Timeout,
     Terminate,
+    ExitObserved,
     Kill,
+    Crash,
+    Reconcile,
+    RefuseRetry,
     Cleanup,
     Quarantine,
 }
@@ -262,12 +333,82 @@ pub trait LifecycleBackend {
 
 pub fn synthetic_timeout_cleanup<B: LifecycleBackend>(backend: &mut B) -> Result<()> {
     backend.event(LifecycleEvent::Timeout)?;
-    if backend.event(LifecycleEvent::Terminate).is_err() {
-        backend.event(LifecycleEvent::Kill)?;
+    synthetic_forced_cleanup(backend)
+}
+
+pub fn synthetic_output_limit_cleanup<B: LifecycleBackend>(backend: &mut B) -> Result<()> {
+    backend.event(LifecycleEvent::OutputLimit)?;
+    synthetic_forced_cleanup(backend)
+}
+
+fn synthetic_forced_cleanup<B: LifecycleBackend>(backend: &mut B) -> Result<()> {
+    let terminate_failed = backend.event(LifecycleEvent::Terminate).is_err();
+    if terminate_failed || backend.event(LifecycleEvent::ExitObserved).is_err() {
+        if backend.event(LifecycleEvent::Kill).is_err() {
+            let _ = backend.event(LifecycleEvent::Quarantine);
+            let _ = backend.event(LifecycleEvent::Cleanup);
+            return Err(PreauthError::new("kill-failed-quarantined"));
+        }
+        backend.event(LifecycleEvent::ExitObserved).map_err(|_| {
+            let _ = backend.event(LifecycleEvent::Quarantine);
+            let _ = backend.event(LifecycleEvent::Cleanup);
+            PreauthError::new("exit-unobserved-quarantined")
+        })?;
     }
     if backend.event(LifecycleEvent::Cleanup).is_err() {
         backend.event(LifecycleEvent::Quarantine)?;
         return Err(PreauthError::new("cleanup-failed-quarantined"));
+    }
+    Ok(())
+}
+
+pub fn synthetic_crash_recovery<B: LifecycleBackend>(backend: &mut B) -> Result<()> {
+    backend.event(LifecycleEvent::Crash)?;
+    backend.event(LifecycleEvent::Quarantine)?;
+    backend.event(LifecycleEvent::Reconcile)?;
+    backend.event(LifecycleEvent::RefuseRetry)?;
+    if backend.event(LifecycleEvent::Cleanup).is_err() {
+        return Err(PreauthError::new("crash-cleanup-failed-quarantined"));
+    }
+    Ok(())
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DescriptorBinding {
+    pub identity_graph_sha256: String,
+    pub execution_host_sha256: String,
+    pub resolver_sha256: String,
+    pub spawner_sha256: String,
+    pub executable_sha256: String,
+    pub artifact_sha256: String,
+    pub disk_sha256: String,
+    pub firmware_code_sha256: String,
+    pub firmware_vars_sha256: String,
+}
+
+impl DescriptorBinding {
+    pub fn validate(&self) -> Result<()> {
+        if [
+            &self.identity_graph_sha256, &self.execution_host_sha256,
+            &self.resolver_sha256, &self.spawner_sha256, &self.executable_sha256,
+            &self.artifact_sha256, &self.disk_sha256, &self.firmware_code_sha256,
+            &self.firmware_vars_sha256,
+        ].into_iter().all(|value| digest(value)) {
+            Ok(())
+        } else {
+            Err(PreauthError::new("invalid-descriptor-binding"))
+        }
+    }
+}
+
+pub fn bind_resolver_to_spawner(
+    resolved: &DescriptorBinding,
+    presented: &DescriptorBinding,
+) -> Result<()> {
+    resolved.validate()?;
+    presented.validate()?;
+    if resolved != presented {
+        return Err(PreauthError::new("resolver-spawner-binding-mismatch"));
     }
     Ok(())
 }
