@@ -20,7 +20,7 @@ output=$root/out/r0/preauth/acquisition
 for path in "$root/out" "$root/out/r0" "$root/out/r0/preauth" "$output"; do
     [ ! -L "$path" ] || { echo "symlink output refused: $path" >&2; exit 2; }
 done
-mkdir -p "$output/apt-state/lists/partial" "$output/apt-cache/archives/partial" "$output/debs" "$output/licenses" "$output/derived-context/debs"
+mkdir -p "$output/apt-state/lists/partial" "$output/apt-cache/archives/partial" "$output/debs" "$output/licenses" "$output/derived-context/rootfs"
 
 snapshot=20260630T000000Z
 sources=$output/sources.list
@@ -97,11 +97,17 @@ lists_manifest=$output/signed-metadata.sha256
 find "$output/apt-state/lists" -maxdepth 1 -type f -exec /usr/bin/sha256sum {} \; | LC_ALL=C /usr/bin/sort > "$lists_manifest"
 [ "$(/usr/bin/grep -c 'InRelease' "$lists_manifest")" -ge 4 ] || { echo "signed InRelease evidence absent" >&2; exit 1; }
 
-cp "$output"/debs/*.deb "$output/derived-context/debs/"
+for deb in "$output"/debs/*.deb; do
+    /usr/bin/dpkg-deb -x "$deb" "$output/derived-context/rootfs"
+done
+/usr/bin/find "$output/derived-context/rootfs" ! -type d \
+    -exec /usr/bin/touch -h -d '@1784332800' {} +
+/usr/bin/find "$output/derived-context/rootfs" -depth -type d \
+    -exec /usr/bin/touch -d '@1784332800' {} +
 cat > "$output/derived-context/Dockerfile" <<'EOF'
 FROM rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
-COPY debs/ /rar-closure/
-RUN printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d && chmod 0755 /usr/sbin/policy-rc.d && dpkg -i /rar-closure/*.deb
+ARG SOURCE_DATE_EPOCH=1784332800
+COPY rootfs/ /
 ENV RAR_PREAUTH_BUILD_CONTAINER=rar-preauth-closure-v2
 ENV RAR_TARGET_EXECUTION=prohibited
 EOF
