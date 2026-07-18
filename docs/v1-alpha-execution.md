@@ -83,6 +83,12 @@ Use `docs/handoff-prompt.md` exactly.
 
 The owner must explicitly authorize the first guest boot after Prompt 7. This is the only required manual execution checkpoint.
 
+### Prompt 7A — Non-executing candidate construction
+
+> After the owner records the ADR 0017–0021 sequencing and closure decisions, construct exactly one x86-64 candidate without executing it. Verify the signed Debian snapshot closure rooted in the pinned Rust OCI image, build the R0-002-compatible static artifact twice, bind the disposable disk and every launch-affecting file, and prepare external one-shot authority schemas and synthetic controls. No QEMU, firmware, target, emulator, VM, guest, device, or AWS authority may execute or be accessed. Keep the PR draft and obtain no execution authorization in this prompt.
+
+After Prompt 7A passes independent review, rerun Prompt 7 against its exact hashes. Prompt 8 remains prohibited until Prompt 7 passes and the owner separately authorizes one exact profile, command, artifact, disk, firmware, closure, and authorization record.
+
 ### Prompt 8 — Parallel platform bring-up
 
 > After recorded owner authorization, implement R0-003, R0-004, and R0-005 in three isolated worktrees using one `rar_implementer` per task. No paths may overlap except approved generated contracts. Use only the authorized certified VM profiles. Commit and push one draft PR per task; do not integrate them in this task.

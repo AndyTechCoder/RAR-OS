@@ -83,14 +83,14 @@ operation durably and atomically records the validated record-digest/nonce key b
 resolver or spawner delegation. Successful consumption is irreversible even if resolution
 or spawning later fails. An unavailable consumer, a replay, or an uncertain commit state
 fails closed. Repository-local markers are rollbackable and therefore cannot satisfy this
-contract. The current scaffold supplies the mandatory consumer boundary and hostile-state
-test doubles, but deliberately supplies no production consumer. A future real launcher needs
-an owner-reviewed monotonic authority outside writable repository state; until it exists,
-installing a real resolver or spawner is forbidden and the one-launch gate remains unsatisfied.
+contract. ADR 0019 selects a future DynamoDB conditional-transition ledger with KMS signing,
+CloudTrail integrity evidence, and GitHub OIDC. Prompt 7A supplies only repository-side schemas,
+state-machine validation, and synthetic clients; it makes no AWS call and carries no credential.
+Installing an execution-capable resolver or spawner remains forbidden until Prompt 7 reviews the
+provisioned external authority and the owner issues one exact authorization.
 
 ## Current certification state
 
-No profile is certified. Required QEMU executables, x86-64/ARM64 firmware, and external
-LLD are unavailable and therefore have no recorded digest. No owner-authorization record
-exists. Static profile parsing and command inspection do not execute an emulator, firmware,
-target binary, or RAR artifact.
+No profile is authorized for execution. Prompt 7A prepares one x86-64 candidate from the
+ADR 0018 closure without executing QEMU, firmware, a target binary, or a RAR artifact. Other
+profiles remain uncertified. A prepared certification is not an owner authorization.

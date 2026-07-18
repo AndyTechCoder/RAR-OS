@@ -7,7 +7,7 @@ Rule: Release 0 proves architecture; it does not implement storage, networking, 
 
 Every R0 task below is defined by this shared contract, its row in the task field matrix, and its detailed owner, dependencies, deliverables, and acceptance criteria.
 
-- **Approved specifications:** `docs/constitution.md`, `docs/from-scratch-policy.md`, `docs/release-roadmap.md`, `docs/architecture.md`, `docs/security-and-recovery.md`, `docs/interfaces-and-formats.md`, `docs/handoff.md`, `docs/host-safety.md`, ADRs 0001–0016, and this packet. A task uses only the subset relevant to its row and dependencies.
+- **Approved specifications:** `docs/constitution.md`, `docs/from-scratch-policy.md`, `docs/release-roadmap.md`, `docs/architecture.md`, `docs/security-and-recovery.md`, `docs/interfaces-and-formats.md`, `docs/handoff.md`, `docs/host-safety.md`, ADRs 0001–0021, and this packet. A task uses only the subset relevant to its row and dependencies.
 - **Global in-scope rule:** implement only the mechanisms, host tools, contracts, tests, and documentation named by the active task.
 - **Global out-of-scope rule:** no Release 1+ component model, filesystems, networking, GUI, agents, package system, applications, physical-device enablement, or unapproved stable contract. No task may weaken a prior gate.
 - **Ownership rule:** the paths in the matrix are exclusive write ownership while that task is active. Dependency paths are read-only unless the coordinator records an ownership handoff. Root and shared governance files require coordinator ownership.
@@ -223,12 +223,13 @@ Acceptance:
 
 1. R0-000 establishes the non-execution and certified-VM boundary.
 2. R0-001 and R0-002 establish tools/contracts without guest execution.
-3. Owner authorization unlocks the first certified VM boot.
-4. R0-003, R0-004, and R0-005 run in parallel.
-5. R0-006 uses both full-architecture ports.
-6. R0-007 proves the component boundary.
-7. R0-008 turns tests into repeatable laboratory evidence.
-8. R0-009 closes documentation and acceptance.
+3. Prompt 7A may construct and certify one exact candidate without execution under ADRs 0017–0021.
+4. Prompt 7 is rerun with fresh architecture and security review; a separate exact owner authorization unlocks one certified VM boot.
+5. R0-003, R0-004, and R0-005 run in parallel.
+6. R0-006 uses both full-architecture ports.
+7. R0-007 proves the component boundary.
+8. R0-008 turns tests into repeatable laboratory evidence.
+9. R0-009 closes documentation and acceptance.
 
 No later release subsystem is merged into Release 0 merely to demonstrate progress.
 
