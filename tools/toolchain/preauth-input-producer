@@ -246,7 +246,34 @@ produce(){
  trap host_exit 0 1 2 15
  docker image inspect "$base" >/dev/null 2>&1 || docker pull "$base" >/dev/null
  host_phase=base-export
-  docker save --output "$stage/incoming/base-oci.tar" "$base"
+ base_raw=$stage/base-oci.raw.tar
+ docker save --output "$base_raw" "$base"
+ host_phase=base-validate
+ base_members=$stage/base-oci.members
+ /usr/bin/tar -tvf "$base_raw" > "$base_members"
+ [ "$(wc -l < "$base_members" | tr -d ' ')" -le 4096 ] || fail base-oci-member-count
+ /usr/bin/awk '
+  function safe(path) { return path != "" && path !~ /^\// && path !~ /(^|\/)\.\.?(\/|$)/ && path !~ /\\/ && path !~ /:/ }
+  NF < 6 { exit 73 }
+  { type=substr($1,1,1); if (type != "-" && type != "d") exit 73;
+    if ($3 !~ /^[0-9]+$/) exit 73; total += $3; if (total > 4294967296) exit 73;
+    path=$6; sub(/^\.\//,"",path); if (type == "d") next; if (!safe(path)) exit 73 }
+ ' "$base_members" || fail base-oci-member
+ base_layout=$stage/base-oci-layout
+ mkdir -m 700 "$base_layout"
+ /usr/bin/tar -xf "$base_raw" -C "$base_layout" --no-same-owner
+ /bin/rm -f "$base_raw" "$base_members"
+ [ -f "$base_layout/index.json" ] && [ -f "$base_layout/oci-layout" ] && [ -f "$base_layout/manifest.json" ] || fail base-oci-roots
+ for blob in "$base_layout"/blobs/sha256/*; do
+  [ -f "$blob" ] && [ ! -L "$blob" ] || fail base-oci-blob-type
+  [ "$(sha256sum "$blob" | cut -d ' ' -f1)" = "$(basename "$blob")" ] || fail base-oci-blob-digest
+ done
+ host_phase=base-canonicalize
+ base_list=$stage/base-oci.list
+ (cd "$base_layout" && find . -type f | sed 's|^\./||') | LC_ALL=C sort > "$base_list"
+ /usr/bin/tar --sort=name --mtime="@$epoch" --owner=0 --group=0 --numeric-owner --mode=0644 --format=gnu --no-recursion \
+  -cf "$stage/incoming/base-oci.tar" -C "$base_layout" -T "$base_list"
+ /bin/rm -rf "$base_layout" "$base_list"
  {
   printf '%s\n' schema=rar-preauth-input-producer-tools-v1
   printf 'tool=docker-client|%s|%s\n' "$(docker version --format '{{.Client.Version}}')" "$(sha256sum "$(command -v docker)" | cut -d ' ' -f1)"
