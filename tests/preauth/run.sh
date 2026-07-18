@@ -163,6 +163,22 @@ cp "$oci_test/one/metadata.json" "$oci_test/two/metadata.json"
 printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s,"platform":{"architecture":"arm64","os":"linux"}}]}\n' \
     "$manifest_digest" "$manifest_size" > "$oci_test/root/index.json"
 build_two_archive
+for attempt in one two; do
+    set +e
+    out/r0/preauth/acquisition/host-tools/preauth-verify-oci --member-list \
+        "$oci_test/two/image.tar" "$oci_test/two/metadata.json" "$oci_test/two/image.id" - \
+        > /dev/null 2> "$oci_test/index-diagnostic-$attempt.log"
+    status=$?
+    set -e
+    [ "$status" -eq 73 ]
+done
+cmp "$oci_test/index-diagnostic-one.log" "$oci_test/index-diagnostic-two.log"
+/usr/bin/grep -F 'oci_index_descriptor count=1 order=archive-index-order' \
+    "$oci_test/index-diagnostic-one.log" >/dev/null
+/usr/bin/grep -F 'actual_architecture=["arm64"] expected_architecture=[amd64]' \
+    "$oci_test/index-diagnostic-one.log" >/dev/null
+/usr/bin/grep -F 'oci_index_annotations count=0 keys_and_value_hashes=[]' \
+    "$oci_test/index-diagnostic-one.log" >/dev/null
 expect_oci_rejection "Buildx platform substitution"
 printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s,"platform":{"architecture":"amd64","os":"linux"}}]}\n' \
     "$manifest_digest" "$manifest_size" > "$oci_test/root/index.json"

@@ -16,6 +16,7 @@ const MAX_INLINE: u64 = 8 * 1024 * 1024;
 const MAX_REPOSITORIES: u64 = 512;
 const MAX_DIAGNOSTIC_MEMBERS: usize = 32;
 const MAX_DIAGNOSTIC_REFS: usize = 8;
+const MAX_DIAGNOSTIC_FIELDS: usize = 16;
 const SOURCE_DATE_EPOCH: u64 = 1_784_332_800;
 
 struct TarEntry {
@@ -207,6 +208,67 @@ fn numeric_values(text: &str, marker: &str) -> Vec<u64> {
         rest = &after_marker[end..];
     }
     values
+}
+
+fn optional_quoted_values(text: &str, marker: &str) -> Vec<String> {
+    if text.contains(marker) { quoted_values(text, marker) } else { Vec::new() }
+}
+
+fn annotation_pairs(text: &str) -> Vec<(String, String)> {
+    let Some((_, rest)) = text.split_once("\"annotations\":{") else { return Vec::new() };
+    let end = rest.find('}').unwrap_or_else(|| fail("malformed OCI index annotations"));
+    let body = &rest[..end];
+    if body.is_empty() { return Vec::new(); }
+    let mut pairs = BTreeMap::new();
+    for item in body.split(',') {
+        let (key, value) = item.split_once(':').unwrap_or_else(|| fail("malformed OCI index annotation"));
+        if key.len() < 2 || value.len() < 2 || !key.starts_with('"') || !key.ends_with('"')
+            || !value.starts_with('"') || !value.ends_with('"')
+        { fail("malformed OCI index annotation"); }
+        let key = &key[1..key.len() - 1];
+        let value = &value[1..value.len() - 1];
+        if key.is_empty() || key.len() > 128 || value.len() > 512
+            || key.contains('\\') || value.contains('\\')
+        { fail("noncanonical OCI index annotation"); }
+        if pairs.insert(key.to_owned(), value.to_owned()).is_some() { fail("duplicate OCI index annotation"); }
+        if pairs.len() > MAX_DIAGNOSTIC_FIELDS { fail("OCI index annotation bound exceeded"); }
+    }
+    pairs.into_iter().collect()
+}
+
+fn report_index_mapping(index: &str, expected_digest: &str, expected_size: u64) {
+    let schema = numeric_values(index, "\"schemaVersion\":");
+    let media = optional_quoted_values(index, "\"mediaType\":\"");
+    let digests = descriptor_digests(index);
+    let sizes = numeric_values(index, "\"size\":");
+    let architecture = optional_quoted_values(index, "\"architecture\":\"");
+    let os = optional_quoted_values(index, "\"os\":\"");
+    let variant = optional_quoted_values(index, "\"variant\":\"");
+    let os_version = optional_quoted_values(index, "\"os.version\":\"");
+    let os_features = if index.contains("\"os.features\":[") {
+        quoted_list(index, "\"os.features\":[")
+    } else { Vec::new() };
+    let features = if index.contains("\"features\":[") {
+        quoted_list(index, "\"features\":[")
+    } else { Vec::new() };
+    eprintln!(
+        "oci_index_mapping actual_schema={schema:?} expected_schema=[2] expected_schema_source=oci-image-spec actual_media={media:?} expected_media=[application/vnd.oci.image.index.v1+json,application/vnd.oci.image.manifest.v1+json] expected_media_source=validated-index-and-selected-manifest",
+    );
+    eprintln!(
+        "oci_index_descriptor count={} order=archive-index-order actual_digest={digests:?} expected_digest=[{expected_digest}] expected_digest_source=sha256-selected-manifest-bytes actual_size={sizes:?} expected_size=[{expected_size}] expected_size_source=validated-selected-manifest-byte-length",
+        digests.len(),
+    );
+    eprintln!(
+        "oci_index_platform actual_os={os:?} expected_os=[linux] expected_os_source=validated-loaded-config actual_architecture={architecture:?} expected_architecture=[amd64] expected_architecture_source=validated-loaded-config actual_variant={variant:?} expected_variant=[] actual_os_version={os_version:?} expected_os_version=[] actual_os_features={os_features:?} expected_os_features=[] actual_features={features:?} expected_features=[]",
+    );
+    let annotations = annotation_pairs(index);
+    let summaries = annotations.iter().map(|(key, value)| {
+        format!("{key}:len={}:sha256={}", value.len(), preauth::sha256_hex(value.as_bytes()))
+    }).collect::<Vec<_>>();
+    eprintln!(
+        "oci_index_annotations count={} keys_and_value_hashes={summaries:?} expected_policy_source=adr-0018-pending-exact-allowlist",
+        annotations.len(),
+    );
 }
 
 fn typed_list_digest(kind: &str, values: &[String]) -> String {
@@ -443,7 +505,10 @@ fn verify_oci_layout(
         ]
         || quoted_values(&index_compact, "\"architecture\":\"") != vec!["amd64".to_owned()]
         || quoted_values(&index_compact, "\"os\":\"") != vec!["linux".to_owned()]
-    { fail("OCI index descriptor mapping mismatch"); }
+    {
+        report_index_mapping(&index_compact, &selected_digest, selected.size);
+        fail("OCI index descriptor mapping mismatch");
+    }
     (selected_digest, expected)
 }
 
