@@ -239,8 +239,8 @@ for deb in "$output"/debs/*.deb; do
           return 1
         }
         NF < 6 { exit 73 }
-        { path=$6; sub(/^\.\//, "", path); if (!safe(path)) exit 73;
-          type=substr($1,1,1); if (type !~ /[-dl]/) exit 73;
+        { path=$6; sub(/^\.\//, "", path); type=substr($1,1,1); if (type !~ /[-dl]/) exit 73;
+          if (path == "" && type == "d") next; if (!safe(path)) exit 73;
           if (type == "l") { if ($7 != "->" || !safe_link(path,$8)) exit 73; print path "|" type "|" $8 }
           else print path "|" type }
     ' >> "$archive_plan" || { echo "unsafe package archive plan" >&2; exit 73; }
