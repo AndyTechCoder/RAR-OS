@@ -19,7 +19,7 @@ the exact 36-package manifest SHA-256 is
 `5f73693e6202969af6ca958e28bb4ce189741f4130f40e2eb5bb593e2e07519a`.
 
 The selected profile SHA-256 is
-`6844406817b6d43643e4ff60737fbc08a84846e29f78b2914cadd5de2ec6ab9a`,
+`8e7bc38fa513700556b7ea493ffd42b6df6b4adcaf0a4719a0c7fe11f7eb165f`,
 its typed command SHA-256 is
 `7d8e5f500c35b5da4de0d3f2a6d9b667563bb6e3ff7ed6503192ee8e69e0550d`,
 and its twice-built static artifact SHA-256 is
@@ -29,7 +29,7 @@ The deterministic seed and disposable child disk bytes both have SHA-256
 their content-bound disk record digest is
 `89e160c117154dded20d7daeaf75576dd082a9d83d5ade47f9254a6e35371826`.
 The prepared certification record SHA-256 is
-`a29ac62238f89704029a635bca05ba675f33ef90b47014682802959bc41a3ef3`.
+`b13820cb6a9dc59681a8e7f01576ebc48a4949cc6e732e3137363de4b753323c`.
 
 Every route records `target_execution=not-attempted`,
 `qemu_execution=not-attempted`, `emulator_execution=not-attempted`,

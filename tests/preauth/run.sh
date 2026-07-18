@@ -53,6 +53,9 @@ set -e
 /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc \
     --edition=2024 --test tests/preauth/src/main.rs -o "$test_dir/preauth-tests"
 "$test_dir/preauth-tests" --test-threads=1
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc \
+    --edition=2024 tests/preauth/src/records.rs -o "$test_dir/preauth-records"
+"$test_dir/preauth-records"
 printf '%s\n' \
     'target_execution=not-attempted' \
     'qemu_execution=not-attempted' \

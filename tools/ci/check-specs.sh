@@ -71,6 +71,7 @@ spec/lab/preauth/execution-host-v1.fields
 tools/rar-lab/preauth/src/lib.rs
 tools/rar-lab/preauth/src/disk.rs
 tests/preauth/src/main.rs
+tests/preauth/src/records.rs
 tests/preauth/run.sh
 tools/toolchain/acquire-preauth-closure.sh
 tools/toolchain/bind-preauth-head.sh
