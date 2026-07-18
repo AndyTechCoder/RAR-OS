@@ -232,9 +232,7 @@ fn verify_oci_layout(
     image_manifests.into_iter().next().unwrap()
 }
 
-fn verify_one(archive: &Path, metadata: &Path, image_id_path: &Path) -> String {
-    let entries = tar_entries(archive);
-    print_inventory(archive, &entries);
+fn verify_one(entries: &BTreeMap<String, TarEntry>, metadata: &Path, image_id_path: &Path) -> String {
     let manifest = &entries.get("manifest.json").unwrap_or_else(|| fail("Docker manifest absent")).data;
     if manifest.is_empty() { fail("oversized Docker manifest"); }
     let manifest = std::str::from_utf8(manifest).unwrap_or_else(|_| fail("manifest is not UTF-8"));
@@ -284,8 +282,12 @@ fn main() {
     let args: Vec<_> = env::args().collect();
     if args.len() != 7 { fail("usage: preauth-verify-oci archive1 metadata1 image-id1 archive2 metadata2 image-id2"); }
     let paths: Vec<_> = args[1..].iter().map(Path::new).collect();
-    let digest_one = verify_one(paths[0], paths[1], paths[2]);
-    let digest_two = verify_one(paths[3], paths[4], paths[5]);
+    let entries_one = tar_entries(paths[0]);
+    let entries_two = tar_entries(paths[3]);
+    print_inventory(paths[0], &entries_one);
+    print_inventory(paths[3], &entries_two);
+    let digest_one = verify_one(&entries_one, paths[1], paths[2]);
+    let digest_two = verify_one(&entries_two, paths[4], paths[5]);
     if digest_one != digest_two || digest_file(paths[0]) != digest_file(paths[3]) { fail("independent OCI builds differ"); }
     println!("derived_oci_archive_sha256={}", digest_file(paths[0]));
     println!("derived_oci_digest=sha256:{digest_one}");
