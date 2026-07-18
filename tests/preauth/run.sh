@@ -28,25 +28,32 @@ mkdir -p out/r0/preauth/acquisition/host-tools
     --edition=2024 tools/toolchain/preauth-verify-oci.rs \
     -o out/r0/preauth/acquisition/host-tools/preauth-verify-oci
 oci_test=out/r0/preauth/acquisition/derived-build/host-test
-mkdir -p "$oci_test/root/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
+mkdir -p "$oci_test/root/blobs/sha256" \
     "$oci_test/one" "$oci_test/two"
-printf 'minimal deterministic layer\n' > "$oci_test/root/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/layer.tar"
-layer_digest=$(/usr/bin/sha256sum "$oci_test/root/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/layer.tar" | /usr/bin/cut -d ' ' -f 1)
+printf 'minimal deterministic layer\n' > "$oci_test/root/layer.pending"
+layer_digest=$(/usr/bin/sha256sum "$oci_test/root/layer.pending" | /usr/bin/cut -d ' ' -f 1)
+mv "$oci_test/root/layer.pending" "$oci_test/root/blobs/sha256/$layer_digest"
 printf '{"rootfs":{"type":"layers","diff_ids":["sha256:%s"]}}\n' "$layer_digest" > "$oci_test/root/config.pending"
 digest=$(/usr/bin/sha256sum "$oci_test/root/config.pending" | /usr/bin/cut -d ' ' -f 1)
-mv "$oci_test/root/config.pending" "$oci_test/root/$digest.json"
-printf '[{"Config":"%s.json","RepoTags":["fixture:latest"],"Layers":["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/layer.tar"]}]\n' "$digest" > "$oci_test/root/manifest.json"
-printf '{}\n' > "$oci_test/root/repositories"
-printf '1.0\n' > "$oci_test/root/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/VERSION"
-printf '{}\n' > "$oci_test/root/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/json"
+mv "$oci_test/root/config.pending" "$oci_test/root/blobs/sha256/$digest"
+config_size=$(/usr/bin/wc -c < "$oci_test/root/blobs/sha256/$digest" | /usr/bin/tr -d ' ')
+layer_size=$(/usr/bin/wc -c < "$oci_test/root/blobs/sha256/$layer_digest" | /usr/bin/tr -d ' ')
+printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.image.config.v1+json","digest":"sha256:%s","size":%s},"layers":[{"mediaType":"application/vnd.oci.image.layer.v1.tar","digest":"sha256:%s","size":%s}]}\n' \
+    "$digest" "$config_size" "$layer_digest" "$layer_size" > "$oci_test/root/image-manifest.pending"
+manifest_digest=$(/usr/bin/sha256sum "$oci_test/root/image-manifest.pending" | /usr/bin/cut -d ' ' -f 1)
+mv "$oci_test/root/image-manifest.pending" "$oci_test/root/blobs/sha256/$manifest_digest"
+manifest_size=$(/usr/bin/wc -c < "$oci_test/root/blobs/sha256/$manifest_digest" | /usr/bin/tr -d ' ')
+printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s}]}\n' \
+    "$manifest_digest" "$manifest_size" > "$oci_test/root/index.json"
+printf '[{"Config":"blobs/sha256/%s","RepoTags":["fixture:latest"],"Layers":["blobs/sha256/%s"]}]\n' \
+    "$digest" "$layer_digest" > "$oci_test/root/manifest.json"
+printf '{"imageLayoutVersion":"1.0.0"}\n' > "$oci_test/root/oci-layout"
 /usr/bin/tar --sort=name --mtime='@1784332800' --owner=0 --group=0 --numeric-owner --format=gnu \
     -cf "$oci_test/one/image.tar" -C "$oci_test/root" \
-    manifest.json repositories "$digest.json" \
-    aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/VERSION \
-    aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/json \
-    aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/layer.tar
+    index.json manifest.json oci-layout \
+    "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest"
 cp "$oci_test/one/image.tar" "$oci_test/two/image.tar"
-printf '{"containerimage.config.digest":"sha256:%s","containerimage.digest":"sha256:%s"}\n' "$digest" "$digest" > "$oci_test/one/metadata.json"
+printf '{"containerimage.config.digest":"sha256:%s","containerimage.digest":"sha256:%s"}\n' "$digest" "$manifest_digest" > "$oci_test/one/metadata.json"
 cp "$oci_test/one/metadata.json" "$oci_test/two/metadata.json"
 printf 'sha256:%s\n' "$digest" > "$oci_test/one/image.id"
 cp "$oci_test/one/image.id" "$oci_test/two/image.id"
@@ -80,13 +87,11 @@ cp "$oci_test/one/image.tar" "$oci_test/two/image.tar"
     -C "$oci_test/root" manifest.json
 expect_oci_rejection "archive path escape"
 cp "$oci_test/one/image.tar" "$oci_test/two/image.tar"
-printf 'changed layer\n' > "$oci_test/root/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/layer.tar"
+printf 'changed layer\n' > "$oci_test/root/blobs/sha256/$layer_digest"
 /usr/bin/tar --sort=name --mtime='@1784332800' --owner=0 --group=0 --numeric-owner --format=gnu \
     -cf "$oci_test/two/image.tar" -C "$oci_test/root" \
-    manifest.json repositories "$digest.json" \
-    aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/VERSION \
-    aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/json \
-    aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/layer.tar
+    index.json manifest.json oci-layout \
+    "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$manifest_digest"
 expect_oci_rejection "layer diff-id substitution"
 /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc \
     --edition=2024 --test tests/preauth/src/main.rs -o "$test_dir/preauth-tests"

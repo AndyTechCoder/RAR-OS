@@ -124,20 +124,91 @@ fn metadata_digest(path: &Path, field: &str) -> String {
     value
 }
 
+fn blob_digest(path: &str) -> Option<&str> {
+    let digest = path.strip_prefix("blobs/sha256/")?;
+    if digest.len() == 64
+        && digest.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    { Some(digest) } else { None }
+}
+
+fn descriptor_digests(json: &str) -> Vec<String> {
+    let compact: String = json.chars().filter(|character| !character.is_ascii_whitespace()).collect();
+    let marker = "\"digest\":\"sha256:";
+    let mut rest = compact.as_str();
+    let mut digests = Vec::new();
+    while let Some((_, after_marker)) = rest.split_once(marker) {
+        if after_marker.len() < 65 || after_marker.as_bytes()[64] != b'\"' { fail("malformed OCI descriptor digest"); }
+        let digest = &after_marker[..64];
+        if !digest.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()) { fail("invalid OCI descriptor digest"); }
+        digests.push(digest.to_owned());
+        rest = &after_marker[65..];
+    }
+    digests
+}
+
+fn verify_oci_layout(
+    entries: &BTreeMap<String, TarEntry>, config_name: &str, layers: &[String], config_digest: &str,
+) -> String {
+    let config_path_digest = blob_digest(config_name).unwrap_or_else(|| fail("invalid OCI config path"));
+    if config_path_digest != config_digest { fail("OCI config name/digest mismatch"); }
+    let layout = entries.get("oci-layout").unwrap_or_else(|| fail("OCI layout absent"));
+    let layout_text = std::str::from_utf8(&layout.data).unwrap_or_else(|_| fail("OCI layout is not UTF-8"));
+    let compact_layout: String = layout_text.chars().filter(|character| !character.is_ascii_whitespace()).collect();
+    if compact_layout != "{\"imageLayoutVersion\":\"1.0.0\"}" { fail("unsupported OCI layout"); }
+    let index = entries.get("index.json").unwrap_or_else(|| fail("OCI index absent"));
+    let index_text = std::str::from_utf8(&index.data).unwrap_or_else(|_| fail("OCI index is not UTF-8"));
+    for (name, entry) in entries {
+        if let Some(digest) = blob_digest(name) {
+            if digest != entry.sha256 { fail("OCI blob name/digest mismatch"); }
+        } else if !matches!(name.as_str(), "index.json" | "manifest.json" | "oci-layout") {
+            fail("unexpected OCI archive member");
+        }
+    }
+    let mut pending = descriptor_digests(index_text);
+    if pending.is_empty() || pending.len() > 64 { fail("invalid OCI index descriptors"); }
+    let mut reachable = BTreeSet::new();
+    let mut image_manifests = BTreeSet::new();
+    while let Some(digest) = pending.pop() {
+        if !reachable.insert(digest.clone()) { continue; }
+        if reachable.len() > MAX_MEMBERS { fail("OCI graph bound exceeded"); }
+        let path = format!("blobs/sha256/{digest}");
+        let entry = entries.get(&path).unwrap_or_else(|| fail("OCI descriptor target absent"));
+        if !entry.data.is_empty() {
+            let text = std::str::from_utf8(&entry.data).unwrap_or_else(|_| fail("OCI descriptor is not UTF-8"));
+            let compact: String = text.chars().filter(|character| !character.is_ascii_whitespace()).collect();
+            if compact.contains("\"config\":{") && compact.contains("\"layers\":[") { image_manifests.insert(digest.clone()); }
+            pending.extend(descriptor_digests(text));
+        }
+    }
+    if !reachable.contains(config_path_digest) { fail("OCI config is not index-reachable"); }
+    for layer in layers {
+        let digest = blob_digest(layer).unwrap_or_else(|| fail("invalid OCI layer path"));
+        if !reachable.contains(digest) { fail("OCI layer is not index-reachable"); }
+    }
+    let expected = BTreeSet::from_iter(
+        ["index.json".to_owned(), "manifest.json".to_owned(), "oci-layout".to_owned()].into_iter()
+            .chain(reachable.iter().map(|digest| format!("blobs/sha256/{digest}"))),
+    );
+    if entries.keys().any(|name| !expected.contains(name)) { fail("unreachable OCI archive member"); }
+    if image_manifests.len() != 1 { fail("OCI image manifest is not unique"); }
+    image_manifests.into_iter().next().unwrap()
+}
+
 fn verify_one(archive: &Path, metadata: &Path, image_id_path: &Path) -> String {
     let entries = tar_entries(archive);
     let manifest = &entries.get("manifest.json").unwrap_or_else(|| fail("Docker manifest absent")).data;
     if manifest.is_empty() { fail("oversized Docker manifest"); }
     let manifest = std::str::from_utf8(manifest).unwrap_or_else(|_| fail("manifest is not UTF-8"));
     let config_name = quoted(manifest, "\"Config\":\"");
-    if !config_name.ends_with(".json") || !safe_name(&config_name) { fail("invalid config path"); }
+    let modern_oci = blob_digest(&config_name).is_some();
+    if !safe_name(&config_name) || (!modern_oci && !config_name.ends_with(".json")) { fail("invalid config path"); }
     let layers = quoted_list(manifest, "\"Layers\":[");
     if layers.is_empty() || layers.len() > 64 { fail("invalid layer count"); }
     let config_entry = entries.get(&config_name).unwrap_or_else(|| fail("config absent"));
     if config_entry.data.is_empty() { fail("oversized image config"); }
     let config = &config_entry.data;
     let config_digest = config_entry.sha256.clone();
-    if config_name != format!("{config_digest}.json") { fail("config name/digest mismatch"); }
+    if !modern_oci && config_name != format!("{config_digest}.json") { fail("config name/digest mismatch"); }
     let config_text = std::str::from_utf8(config).unwrap_or_else(|_| fail("config is not UTF-8"));
     let diff_ids = quoted_list(config_text, "\"diff_ids\":[");
     if diff_ids.len() != layers.len() { fail("layer/diff-id count mismatch"); }
@@ -147,16 +218,24 @@ fn verify_one(archive: &Path, metadata: &Path, image_id_path: &Path) -> String {
         let entry = entries.get(layer).unwrap_or_else(|| fail("layer absent"));
         if diff_id != format!("sha256:{}", entry.sha256) { fail("layer diff-id mismatch"); }
         expected.insert(layer.clone());
-        let directory = layer.strip_suffix("/layer.tar").unwrap_or_else(|| fail("noncanonical layer path"));
-        if directory.len() != 64 || !directory.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()) {
-            fail("invalid layer directory");
+        if modern_oci {
+            let digest = blob_digest(layer).unwrap_or_else(|| fail("invalid OCI layer path"));
+            if digest != entry.sha256 { fail("OCI layer name/digest mismatch"); }
+        } else {
+            let directory = layer.strip_suffix("/layer.tar").unwrap_or_else(|| fail("noncanonical layer path"));
+            if directory.len() != 64 || !directory.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()) { fail("invalid layer directory"); }
+            expected.insert(format!("{directory}/VERSION"));
+            expected.insert(format!("{directory}/json"));
         }
-        expected.insert(format!("{directory}/VERSION"));
-        expected.insert(format!("{directory}/json"));
     }
-    if entries.keys().any(|name| !expected.contains(name)) { fail("unexpected archive member"); }
+    let reported_digest = if modern_oci {
+        verify_oci_layout(&entries, &config_name, &layers, &config_digest)
+    } else {
+        if entries.keys().any(|name| !expected.contains(name)) { fail("unexpected archive member"); }
+        config_digest.clone()
+    };
     if metadata_digest(metadata, "containerimage.config.digest") != config_digest
-        || metadata_digest(metadata, "containerimage.digest") != config_digest { fail("reported image digest mismatch"); }
+        || metadata_digest(metadata, "containerimage.digest") != reported_digest { fail("reported image digest mismatch"); }
     let image_id = fs::read_to_string(image_id_path).unwrap_or_else(|_| fail("loaded image identity absent"));
     if image_id.trim() != format!("sha256:{config_digest}") { fail("loaded image identity mismatch"); }
     config_digest
