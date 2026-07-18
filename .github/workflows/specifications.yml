@@ -128,8 +128,18 @@ jobs:
               --metadata-file "out/r0/preauth/acquisition/derived-build/$candidate/metadata.json" \
               out/r0/preauth/acquisition/derived-context
             docker save \
-              --output "out/r0/preauth/acquisition/derived-build/$candidate/image.tar" \
+              --output "out/r0/preauth/acquisition/derived-build/$candidate/raw-image.tar" \
               "rar-preauth:${RAR_CHECKED_OUT_SOURCE_REVISION}"
+            mkdir "out/r0/preauth/acquisition/derived-build/$candidate/archive-root"
+            /usr/bin/tar -xf \
+              "out/r0/preauth/acquisition/derived-build/$candidate/raw-image.tar" \
+              -C "out/r0/preauth/acquisition/derived-build/$candidate/archive-root"
+            /usr/bin/tar --sort=name --mtime='@1784332800' \
+              --owner=0 --group=0 --numeric-owner --format=gnu \
+              -cf "out/r0/preauth/acquisition/derived-build/$candidate/image.tar" \
+              -C "out/r0/preauth/acquisition/derived-build/$candidate/archive-root" .
+            /bin/rm -f "out/r0/preauth/acquisition/derived-build/$candidate/raw-image.tar"
+            /bin/rm -rf "out/r0/preauth/acquisition/derived-build/$candidate/archive-root"
           done
           tools/toolchain/verify-preauth-oci.sh \
             out/r0/preauth/acquisition/derived-build/one/image.tar \
@@ -139,7 +149,7 @@ jobs:
             > out/r0/preauth/acquisition/derived-verification.evidence
           cp out/r0/preauth/acquisition/derived-build/one/metadata.json \
             out/r0/preauth/acquisition/derived-image.metadata.json
-          cp out/r0/preauth/acquisition/derived-build/one/image.tar \
+          mv out/r0/preauth/acquisition/derived-build/one/image.tar \
             out/r0/preauth/acquisition/derived-image.tar
 
       - name: Build twice, bind media, and run host-only controls
