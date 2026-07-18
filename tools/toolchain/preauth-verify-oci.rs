@@ -14,7 +14,15 @@ const MAX_MEMBER: u64 = 1024 * 1024 * 1024;
 const MAX_MEMBERS: usize = 256;
 const MAX_INLINE: u64 = 8 * 1024 * 1024;
 
-struct TarEntry { data: Vec<u8>, sha256: String }
+struct TarEntry {
+    data: Vec<u8>,
+    sha256: String,
+    size: u64,
+    mode: u64,
+    uid: u64,
+    gid: u64,
+    kind: u8,
+}
 
 fn fail(message: &str) -> ! { eprintln!("{message}"); std::process::exit(73) }
 
@@ -67,6 +75,9 @@ fn tar_entries(path: &Path) -> BTreeMap<String, TarEntry> {
         if !safe_name(name) { fail("unsafe tar path"); }
         let directory = header[156] == b'5';
         if !matches!(header[156], 0 | b'0' | b'5') { fail("unsupported tar member type"); }
+        let mode = parse_octal(&header[100..108]);
+        let uid = parse_octal(&header[108..116]);
+        let gid = parse_octal(&header[116..124]);
         let size = parse_octal(&header[124..136]);
         if directory && size != 0 { fail("nonempty tar directory"); }
         total = total.checked_add(size).unwrap_or_else(|| fail("tar total overflow"));
@@ -76,12 +87,12 @@ fn tar_entries(path: &Path) -> BTreeMap<String, TarEntry> {
                 let size_usize = usize::try_from(size).unwrap_or_else(|_| fail("tar size overflow"));
                 let mut data = vec![0_u8; size_usize];
                 file.read_exact(&mut data).unwrap_or_else(|_| fail("truncated tar member"));
-                TarEntry { sha256: preauth::sha256_hex(&data), data }
+                TarEntry { sha256: preauth::sha256_hex(&data), data, size, mode, uid, gid, kind: header[156] }
             } else {
                 let mut bounded = (&mut file).take(size);
                 let sha256 = preauth::sha256_reader(&mut bounded).unwrap_or_else(|_| fail("truncated tar member"));
                 if bounded.limit() != 0 { fail("truncated tar member"); }
-                TarEntry { data: Vec::new(), sha256 }
+                TarEntry { data: Vec::new(), sha256, size, mode, uid, gid, kind: header[156] }
             };
             if entries.insert(name.to_owned(), entry).is_some() { fail("duplicate tar member"); }
         }
@@ -90,6 +101,33 @@ fn tar_entries(path: &Path) -> BTreeMap<String, TarEntry> {
         offset = offset.checked_add(size + padding).unwrap_or_else(|| fail("tar offset overflow"));
     }
     entries
+}
+
+fn print_inventory(archive: &Path, entries: &BTreeMap<String, TarEntry>) {
+    println!("oci_member_inventory archive={} members={}", archive.display(), entries.len());
+    for (name, entry) in entries {
+        let kind = if matches!(entry.kind, 0 | b'0') { "regular" } else { "unsupported" };
+        println!(
+            "oci_member path={} type={} size={} mode={:04o} uid={} gid={} sha256={}",
+            name, kind, entry.size, entry.mode, entry.uid, entry.gid, entry.sha256,
+        );
+    }
+}
+
+fn unexpected_member(name: &str, entry: &TarEntry) -> ! {
+    eprintln!(
+        "unexpected OCI archive member path={} type=regular size={} mode={:04o} uid={} gid={} sha256={}",
+        name, entry.size, entry.mode, entry.uid, entry.gid, entry.sha256,
+    );
+    if !entry.data.is_empty() {
+        match std::str::from_utf8(&entry.data) {
+            Ok(text) => eprintln!("unexpected OCI archive member utf8={text:?}"),
+            Err(_) => eprintln!("unexpected OCI archive member content=binary"),
+        }
+    } else {
+        eprintln!("unexpected OCI archive member content=over-inline-limit");
+    }
+    fail("unexpected OCI archive member");
 }
 
 fn after<'a>(text: &'a str, marker: &str) -> &'a str {
@@ -161,7 +199,7 @@ fn verify_oci_layout(
         if let Some(digest) = blob_digest(name) {
             if digest != entry.sha256 { fail("OCI blob name/digest mismatch"); }
         } else if !matches!(name.as_str(), "index.json" | "manifest.json" | "oci-layout") {
-            fail("unexpected OCI archive member");
+            unexpected_member(name, entry);
         }
     }
     let mut pending = descriptor_digests(index_text);
@@ -196,6 +234,7 @@ fn verify_oci_layout(
 
 fn verify_one(archive: &Path, metadata: &Path, image_id_path: &Path) -> String {
     let entries = tar_entries(archive);
+    print_inventory(archive, &entries);
     let manifest = &entries.get("manifest.json").unwrap_or_else(|| fail("Docker manifest absent")).data;
     if manifest.is_empty() { fail("oversized Docker manifest"); }
     let manifest = std::str::from_utf8(manifest).unwrap_or_else(|_| fail("manifest is not UTF-8"));
