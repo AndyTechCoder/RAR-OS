@@ -1,6 +1,13 @@
 #!/bin/sh
 set -eu
-root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
+case "$0" in
+    */*) script_directory=${0%/*} ;;
+    *)
+        printf '%s\n' 'host-safety:explicit-script-path-required' >&2
+        exit 2
+        ;;
+esac
+root=$(CDPATH= cd -- "$script_directory/../.." && pwd -P)
 cd "$root"
 . tools/rarbuild/bootstrap-lib.sh
 rar_preflight_policy_records "$root"
