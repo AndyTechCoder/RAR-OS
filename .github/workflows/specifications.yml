@@ -84,8 +84,22 @@ jobs:
         run: |
           tools/ci/check-preauth-cutover.sh
           mkdir -p out/r0/preauth/input-delivery
+          set +e
           tools/toolchain/preauth-input-producer --produce one > out/r0/preauth/input-delivery/one.summary
+          producer_status=$?
+          set -e
+          if [ "$producer_status" -ne 0 ]; then
+            sed -n '1,80p' out/r0/preauth/input-delivery/one.summary
+            exit "$producer_status"
+          fi
+          set +e
           tools/toolchain/preauth-input-producer --produce two > out/r0/preauth/input-delivery/two.summary
+          producer_status=$?
+          set -e
+          if [ "$producer_status" -ne 0 ]; then
+            sed -n '1,80p' out/r0/preauth/input-delivery/two.summary
+            exit "$producer_status"
+          fi
           sed -n '1,20p' out/r0/preauth/input-delivery/one.summary
           sed -n '1,20p' out/r0/preauth/input-delivery/two.summary
           one=$(sha256sum out/r0/preauth/input-delivery/one/preauth-input-bundle-v1.tar | cut -d ' ' -f 1)

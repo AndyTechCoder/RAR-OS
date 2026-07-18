@@ -25,6 +25,8 @@ lock_value(){
 }
 
 inside(){
+ phase=setup
+ trap 'status=$?; if [ "$status" -ne 0 ]; then printf "preauth-input-producer:phase=%s:status=%s\n" "$phase" "$status" >&2; fi' 0
  relative_stage=$1
  case "$relative_stage" in out/r0/preauth/input-delivery/.stage-one|out/r0/preauth/input-delivery/.stage-two) :;; *) fail stage-path;; esac
  stage=$root/$relative_stage
@@ -45,10 +47,13 @@ inside(){
  options="-o Dir::Etc::sourcelist=$sources -o Dir::Etc::sourceparts=- -o Dir::State=$state -o Dir::Cache=$cache -o APT::Install-Recommends=false -o Acquire::Check-Valid-Until=false -o Acquire::https::AllowRedirect=true -o Acquire::Retries=2 -o Debug::NoLocking=1"
  # apt-secure validates the exact signed snapshot before download-only acquisition.
  # shellcheck disable=SC2086
+ phase=apt-update
  /usr/bin/apt-get $options update
  # shellcheck disable=SC2086
+ phase=apt-download
  /usr/bin/apt-get $options --yes --download-only --no-install-recommends install \
   'lld-19=1:19.1.7-3+b1' 'qemu-system-x86=1:10.0.8+ds-0+deb13u1+b2' 'ovmf=2025.02-8+deb13u1'
+ phase=inventory
  find "$cache/archives" -maxdepth 1 -type f -name '*.deb' -exec /bin/cp --reflink=never {} "$incoming/debs/" \;
  [ "$(find "$incoming/debs" -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d ' ')" -eq 36 ] || fail package-count
  find "$state/lists" -maxdepth 1 -type f -name '*InRelease' -exec /bin/cp --reflink=never {} "$incoming/" \;
@@ -60,6 +65,7 @@ inside(){
  : > "$archive_plan"
  printf '%s\n' schema=rar-preauth-package-manifest-v2 > "$observed"
  printf '%s\n' schema=rar-preauth-license-manifest-v2 > "$licenses"
+ phase=archive-plan
  for deb in "$incoming"/debs/*.deb; do
   sha=$(sha256sum "$deb" | cut -d ' ' -f1); name=$(/usr/bin/dpkg-deb -f "$deb" Package)
   version=$(/usr/bin/dpkg-deb -f "$deb" Version); architecture=$(/usr/bin/dpkg-deb -f "$deb" Architecture)
@@ -92,8 +98,10 @@ inside(){
   { if (($1 in kind) && (kind[$1] != "d" || $2 != "d")) exit 73; kind[$1]=$2;
     if ($3 !~ /^[0-9]+$/) exit 73; total += $3; if (total > 8589934592) exit 73 }
  ' "$archive_plan" || fail archive-plan-collision
+ phase=extract
  for deb in "$incoming"/debs/*.deb; do /usr/bin/dpkg-deb -x "$deb" "$stage/extracted"; done
  [ "$(sha256sum "$licenses" | cut -d ' ' -f1)" = "$(lock_value license_manifest_sha256)" ] || fail license-manifest
+ phase=licenses
  for row in $(grep '^package|' "$packages" | cut -d '|' -f2,8); do
   name=${row%|*}; expected=${row#*|}; copyright=$stage/extracted/usr/share/doc/$name/copyright
   resolved=$(/usr/bin/realpath -e "$copyright") || fail license-missing
@@ -101,6 +109,7 @@ inside(){
   [ "$(sha256sum "$resolved" | cut -d ' ' -f1)" = "$expected" ] || fail license-digest
   /bin/cp --reflink=never "$resolved" "$incoming/license-$expected"
  done
+ phase=bindings
  for binding in \
   '/usr/bin/ld.lld-19:lld_sha256:tool-lld' \
   '/usr/bin/qemu-system-x86_64:qemu_sha256:tool-qemu' \
@@ -116,6 +125,7 @@ inside(){
  done
  /bin/cp --reflink=never "$observed" "$incoming/packages.v2"
  /bin/cp --reflink=never "$licenses" "$incoming/licenses.v2"
+ phase=tool-record
  {
   printf '%s\n' schema=rar-preauth-input-producer-tools-v1
   for tool in /usr/bin/apt-get /usr/bin/dpkg-deb /usr/bin/tar /usr/bin/sha256sum; do
@@ -123,6 +133,7 @@ inside(){
   done
  } > "$incoming/container-tools.v1"
  printf '%s\n' acquisition-complete > "$stage/inside.complete"
+ phase=complete
 }
 
 assemble(){
