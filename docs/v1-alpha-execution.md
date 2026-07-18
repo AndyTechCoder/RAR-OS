@@ -16,15 +16,18 @@ Expect roughly 70–100 task/review PRs before V1 alpha. The exact total is evid
 
 ## Model policy
 
-- Main release coordinator: GPT-5.6 Sol Ultra.
-- Architecture/release planning: `rar_architect`, Sol Ultra, read-only.
-- Focused implementation: `rar_implementer`, Sol Extra High (`xhigh`).
-- Correctness review: `rar_reviewer`, Sol Extra High, read-only.
-- Security/trust review: `rar_security_reviewer`, Sol Max, read-only.
-- Exploration/log triage: `rar_explorer`, Terra High, read-only.
-- Gate closure: `rar_release_manager`, Sol Ultra.
+- Main release coordinator: GPT-5.6 Sol Medium.
+- Architecture/release planning: `rar_architect`, Sol Medium, read-only.
+- Focused implementation: `rar_implementer`, Sol Medium.
+- Correctness review: `rar_reviewer`, Sol Medium, read-only.
+- Security/trust review: `rar_security_reviewer`, Sol Medium, read-only.
+- Exploration/log triage: `rar_explorer`, Terra Medium, read-only.
+- Gate closure: `rar_release_manager`, Sol Medium.
 
-Ultra coordinates; it does not give multiple agents permission to edit the same paths. At most four threads run concurrently, one nesting level only.
+The coordinator is event-driven and dispatches one visible child task at a time.
+Reviews run sequentially. A child may make up to three focused corrections for
+ordinary build, CI, fixture, or test defects before stopping; these defects are
+not owner-approval events. Hidden parallel subagents are not the normal workflow.
 
 ## Git workflow
 
