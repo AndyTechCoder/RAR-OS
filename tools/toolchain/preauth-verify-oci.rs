@@ -236,7 +236,7 @@ fn annotation_pairs(text: &str) -> Vec<(String, String)> {
     pairs.into_iter().collect()
 }
 
-fn report_index_mapping(index: &str, expected_digest: &str, expected_size: u64) {
+fn report_index_mapping(index: &str, expected_digest: &str, expected_size: u64, revision: &str) {
     let schema = numeric_values(index, "\"schemaVersion\":");
     let media = optional_quoted_values(index, "\"mediaType\":\"");
     let digests = descriptor_digests(index);
@@ -259,14 +259,19 @@ fn report_index_mapping(index: &str, expected_digest: &str, expected_size: u64) 
         digests.len(),
     );
     eprintln!(
-        "oci_index_platform actual_os={os:?} expected_os=[linux] expected_os_source=validated-loaded-config actual_architecture={architecture:?} expected_architecture=[amd64] expected_architecture_source=validated-loaded-config actual_variant={variant:?} expected_variant=[] actual_os_version={os_version:?} expected_os_version=[] actual_os_features={os_features:?} expected_os_features=[] actual_features={features:?} expected_features=[]",
+        "oci_index_platform actual_os={os:?} expected_os=[] expected_os_source=canonical-index-omission-platform-bound-by-config actual_architecture={architecture:?} expected_architecture=[] expected_architecture_source=canonical-index-omission-platform-bound-by-config actual_variant={variant:?} expected_variant=[] actual_os_version={os_version:?} expected_os_version=[] actual_os_features={os_features:?} expected_os_features=[] actual_features={features:?} expected_features=[]",
     );
     let annotations = annotation_pairs(index);
     let summaries = annotations.iter().map(|(key, value)| {
         format!("{key}:len={}:sha256={}", value.len(), preauth::sha256_hex(value.as_bytes()))
     }).collect::<Vec<_>>();
+    let expected_name = format!("docker.io/library/rar-preauth:{revision}");
+    let expected_summaries = [
+        format!("io.containerd.image.name:len={}:sha256={}", expected_name.len(), preauth::sha256_hex(expected_name.as_bytes())),
+        format!("org.opencontainers.image.ref.name:len={}:sha256={}", revision.len(), preauth::sha256_hex(revision.as_bytes())),
+    ];
     eprintln!(
-        "oci_index_annotations count={} keys_and_value_hashes={summaries:?} expected_policy_source=adr-0018-pending-exact-allowlist",
+        "oci_index_annotations count={} keys_and_value_hashes={summaries:?} expected_keys_and_value_hashes={expected_summaries:?} expected_policy_source=adr-0018-and-validated-repositories-revision",
         annotations.len(),
     );
 }
@@ -283,7 +288,7 @@ fn one_marker(text: &str, marker: &str) {
     if text.match_indices(marker).count() != 1 { fail("duplicate or missing JSON field"); }
 }
 
-fn repositories_binding(entries: &BTreeMap<String, TarEntry>, repo_tag: &str, layer: &str) {
+fn repositories_binding(entries: &BTreeMap<String, TarEntry>, repo_tag: &str, layer: &str) -> String {
     let entry = entries.get("repositories").unwrap_or_else(|| fail("Docker repositories index absent"));
     if !matches!(entry.kind, 0 | b'0') || entry.mode != 0o644 || entry.uid != 0 || entry.gid != 0
         || entry.size == 0 || entry.size > MAX_REPOSITORIES || entry.data.len() as u64 != entry.size
@@ -299,6 +304,7 @@ fn repositories_binding(entries: &BTreeMap<String, TarEntry>, repo_tag: &str, la
     { fail("invalid Docker top-layer identity"); }
     let canonical = format!("{{\"rar-preauth\":{{\"{revision}\":\"{layer_identity}\"}}}}\n");
     if entry.data != canonical.as_bytes() { fail("Docker repositories binding mismatch"); }
+    revision.to_owned()
 }
 
 fn metadata_digest(path: &Path, field: &str) -> String {
@@ -410,8 +416,8 @@ fn report_unreachable(
 
 fn verify_oci_layout(
     entries: &BTreeMap<String, TarEntry>, config_name: &str, layers: &[String], config_digest: &str,
-    project_export: bool,
-) -> (String, BTreeSet<String>) {
+    revision: &str, project_export: bool,
+) -> (String, String, BTreeSet<String>) {
     let config_path_digest = blob_digest(config_name).unwrap_or_else(|| fail("invalid OCI config path"));
     if config_path_digest != config_digest { fail("OCI config name/digest mismatch"); }
     let layout = entries.get("oci-layout").unwrap_or_else(|| fail("OCI layout absent"));
@@ -497,24 +503,23 @@ fn verify_oci_layout(
         fail("OCI manifest size mapping mismatch");
     }
     let index_compact: String = index_text.chars().filter(|character| !character.is_ascii_whitespace()).collect();
-    if descriptor_digests(&index_compact) != vec![selected_digest.clone()]
-        || numeric_values(&index_compact, "\"size\":") != vec![selected.size]
-        || quoted_values(&index_compact, "\"mediaType\":\"") != vec![
-            "application/vnd.oci.image.index.v1+json".to_owned(),
-            "application/vnd.oci.image.manifest.v1+json".to_owned(),
-        ]
-        || quoted_values(&index_compact, "\"architecture\":\"") != vec!["amd64".to_owned()]
-        || quoted_values(&index_compact, "\"os\":\"") != vec!["linux".to_owned()]
-    {
-        report_index_mapping(&index_compact, &selected_digest, selected.size);
+    let canonical_index = format!(concat!(
+        "{{\"schemaVersion\":2,\"mediaType\":\"application/vnd.oci.image.index.v1+json\",",
+        "\"manifests\":[{{\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\",",
+        "\"digest\":\"sha256:{}\",\"size\":{},\"annotations\":{{",
+        "\"io.containerd.image.name\":\"docker.io/library/rar-preauth:{}\",",
+        "\"org.opencontainers.image.ref.name\":\"{}\"}}}}]}}",
+    ), selected_digest, selected.size, revision, revision);
+    if index.data != canonical_index.as_bytes() {
+        report_index_mapping(&index_compact, &selected_digest, selected.size, revision);
         fail("OCI index descriptor mapping mismatch");
     }
-    (selected_digest, expected)
+    (selected_digest, index.sha256.clone(), expected)
 }
 
 fn verify_one(
     entries: &BTreeMap<String, TarEntry>, metadata: &Path, image_id_path: &Path, project_export: bool,
-) -> (String, String, String, String, BTreeSet<String>) {
+) -> (String, String, String, String, String, BTreeSet<String>) {
     let manifest = &entries.get("manifest.json").unwrap_or_else(|| fail("Docker manifest absent")).data;
     if manifest.is_empty() { fail("oversized Docker manifest"); }
     let manifest = std::str::from_utf8(manifest).unwrap_or_else(|_| fail("manifest is not UTF-8"));
@@ -529,7 +534,7 @@ fn verify_one(
     if layers.is_empty() || layers.len() > 64 { fail("invalid layer count"); }
     let repo_tags = quoted_list(manifest, "\"RepoTags\":[");
     if repo_tags.len() != 1 { fail("invalid repository tag count"); }
-    repositories_binding(entries, &repo_tags[0], layers.last().unwrap());
+    let revision = repositories_binding(entries, &repo_tags[0], layers.last().unwrap());
     let config_entry = entries.get(&config_name).unwrap_or_else(|| fail("config absent"));
     if config_entry.data.is_empty() { fail("oversized image config"); }
     let config = &config_entry.data;
@@ -554,12 +559,12 @@ fn verify_one(
             expected.insert(format!("{directory}/json"));
         }
     }
-    let (reported_digest, graph) = if modern_oci {
-        verify_oci_layout(&entries, &config_name, &layers, &config_digest, project_export)
+    let (reported_digest, index_digest, graph) = if modern_oci {
+        verify_oci_layout(&entries, &config_name, &layers, &config_digest, &revision, project_export)
     } else {
         if project_export { fail("legacy Docker archive projection unsupported"); }
         if entries.keys().any(|name| !expected.contains(name)) { fail("unexpected archive member"); }
-        (config_digest.clone(), expected)
+        (config_digest.clone(), String::new(), expected)
     };
     let (metadata_config, metadata_digest, descriptor) = metadata_summary(metadata);
     let selected_path = format!("blobs/sha256/{reported_digest}");
@@ -590,7 +595,7 @@ fn verify_one(
     let layer_digests = layers.iter().map(|layer| blob_digest(layer).unwrap().to_owned()).collect::<Vec<_>>();
     let diff_digests = diff_ids.iter().map(|value| value.strip_prefix("sha256:").unwrap().to_owned()).collect::<Vec<_>>();
     (
-        config_digest, reported_digest, typed_list_digest("layer_descriptor", &layer_digests),
+        config_digest, reported_digest, index_digest, typed_list_digest("layer_descriptor", &layer_digests),
         typed_list_digest("rootfs_diff_id", &diff_digests), graph,
     )
 }
@@ -601,7 +606,7 @@ fn main() {
         let archive = Path::new(&args[2]);
         let entries = tar_entries(archive, false);
         print_inventory(archive, &entries);
-        let (_, _, _, _, graph) = verify_one(&entries, Path::new(&args[3]), Path::new(&args[4]), true);
+        let (_, _, _, _, _, graph) = verify_one(&entries, Path::new(&args[3]), Path::new(&args[4]), true);
         if args[5] != "-" { fail("member-list output must be stdout"); }
         for name in graph { println!("{name}"); }
         return;
@@ -612,16 +617,17 @@ fn main() {
     let entries_two = tar_entries(paths[3], true);
     print_inventory(paths[0], &entries_one);
     print_inventory(paths[3], &entries_two);
-    let (config_one, manifest_one, layers_one, diff_ids_one, _) = verify_one(&entries_one, paths[1], paths[2], false);
-    let (config_two, manifest_two, layers_two, diff_ids_two, _) = verify_one(&entries_two, paths[4], paths[5], false);
-    if (config_one.clone(), manifest_one.clone(), layers_one.clone(), diff_ids_one.clone())
-        != (config_two, manifest_two, layers_two, diff_ids_two)
+    let (config_one, manifest_one, index_one, layers_one, diff_ids_one, _) = verify_one(&entries_one, paths[1], paths[2], false);
+    let (config_two, manifest_two, index_two, layers_two, diff_ids_two, _) = verify_one(&entries_two, paths[4], paths[5], false);
+    if (config_one.clone(), manifest_one.clone(), index_one.clone(), layers_one.clone(), diff_ids_one.clone())
+        != (config_two, manifest_two, index_two, layers_two, diff_ids_two)
         || digest_file(paths[0]) != digest_file(paths[3]) { fail("independent OCI builds differ"); }
     println!("derived_oci_archive_sha256={}", digest_file(paths[0]));
     println!("buildx_descriptor_kind=docker-config-id");
     println!("buildx_descriptor_sha256={config_one}");
     println!("docker_config_sha256={config_one}");
     println!("selected_oci_manifest_sha256={manifest_one}");
+    println!("canonical_oci_index_sha256={index_one}");
     println!("layer_descriptor_set_sha256={layers_one}");
     println!("rootfs_diff_id_set_sha256={diff_ids_one}");
     println!("loaded_image_config_sha256={config_one}");

@@ -29,7 +29,7 @@ const IDENTITY_FIELDS: &[&str] = &[
 const ATTESTATION_FIELDS: &[&str] = &[
     "schema", "phase", "prepared_identity_graph_sha256", "source_revision", "event",
     "run_id", "archive_sha256", "buildx_descriptor_kind", "buildx_descriptor_sha256",
-    "docker_config_sha256", "selected_oci_manifest_sha256", "layer_descriptor_set_sha256",
+    "docker_config_sha256", "selected_oci_manifest_sha256", "canonical_oci_index_sha256", "layer_descriptor_set_sha256",
     "rootfs_diff_id_set_sha256", "loaded_image_config_sha256", "package_manifest_sha256",
     "profile_sha256", "artifact_sha256", "disk_sha256", "closure_sha256", "record_sha256",
 ];
@@ -150,6 +150,7 @@ pub struct AttestationRecord {
     pub buildx_descriptor_sha256: String,
     pub docker_config_sha256: String,
     pub selected_oci_manifest_sha256: String,
+    pub canonical_oci_index_sha256: String,
     pub layer_descriptor_set_sha256: String,
     pub rootfs_diff_id_set_sha256: String,
     pub loaded_image_config_sha256: String,
@@ -168,15 +169,15 @@ impl AttestationRecord {
             || run_id != expected_run
             || !digest(values[6])
             || values[7] != "docker-config-id"
-            || !values[8..19].iter().all(|value| digest(value))
+            || !values[8..20].iter().all(|value| digest(value))
             || values[8] != values[9]
-            || values[8] != values[13]
-            || !digest(values[19])
+            || values[8] != values[14]
+            || !digest(values[20])
         {
             return Err(PreauthError::new("invalid-ci-attestation"));
         }
-        let payload = canonical_without_last(ATTESTATION_FIELDS, &values, 19);
-        if sha256_hex(payload.as_bytes()) != values[19] {
+        let payload = canonical_without_last(ATTESTATION_FIELDS, &values, 20);
+        if sha256_hex(payload.as_bytes()) != values[20] {
             return Err(PreauthError::new("ci-attestation-integrity"));
         }
         Ok(Self {
@@ -188,10 +189,11 @@ impl AttestationRecord {
             buildx_descriptor_sha256: values[8].to_owned(),
             docker_config_sha256: values[9].to_owned(),
             selected_oci_manifest_sha256: values[10].to_owned(),
-            layer_descriptor_set_sha256: values[11].to_owned(),
-            rootfs_diff_id_set_sha256: values[12].to_owned(),
-            loaded_image_config_sha256: values[13].to_owned(),
-            record_sha256: values[19].to_owned(),
+            canonical_oci_index_sha256: values[11].to_owned(),
+            layer_descriptor_set_sha256: values[12].to_owned(),
+            rootfs_diff_id_set_sha256: values[13].to_owned(),
+            loaded_image_config_sha256: values[14].to_owned(),
+            record_sha256: values[20].to_owned(),
         })
     }
 }

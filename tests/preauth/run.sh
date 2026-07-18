@@ -43,8 +43,11 @@ printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+js
 manifest_digest=$(/usr/bin/sha256sum "$oci_test/root/image-manifest.pending" | /usr/bin/cut -d ' ' -f 1)
 mv "$oci_test/root/image-manifest.pending" "$oci_test/root/blobs/sha256/$manifest_digest"
 manifest_size=$(/usr/bin/wc -c < "$oci_test/root/blobs/sha256/$manifest_digest" | /usr/bin/tr -d ' ')
-printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s,"platform":{"architecture":"amd64","os":"linux"}}]}\n' \
-    "$manifest_digest" "$manifest_size" > "$oci_test/root/index.json"
+write_index() {
+    printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s,"annotations":{"io.containerd.image.name":"docker.io/library/rar-preauth:%s","org.opencontainers.image.ref.name":"%s"}}]}' \
+        "$1" "$2" "$head" "$head" > "$oci_test/root/index.json"
+}
+write_index "$manifest_digest" "$manifest_size"
 printf '[{"Config":"blobs/sha256/%s","RepoTags":["rar-preauth:%s"],"Layers":["blobs/sha256/%s"]}]\n' \
     "$digest" "$head" "$layer_digest" > "$oci_test/root/manifest.json"
 printf '{"imageLayoutVersion":"1.0.0"}\n' > "$oci_test/root/oci-layout"
@@ -175,27 +178,41 @@ done
 cmp "$oci_test/index-diagnostic-one.log" "$oci_test/index-diagnostic-two.log"
 /usr/bin/grep -F 'oci_index_descriptor count=1 order=archive-index-order' \
     "$oci_test/index-diagnostic-one.log" >/dev/null
-/usr/bin/grep -F 'actual_architecture=["arm64"] expected_architecture=[amd64]' \
+/usr/bin/grep -F 'actual_architecture=["arm64"] expected_architecture=[]' \
     "$oci_test/index-diagnostic-one.log" >/dev/null
 /usr/bin/grep -F 'oci_index_annotations count=0 keys_and_value_hashes=[]' \
     "$oci_test/index-diagnostic-one.log" >/dev/null
 expect_oci_rejection "Buildx platform substitution"
-printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s,"platform":{"architecture":"amd64","os":"linux"}}]}\n' \
-    "$manifest_digest" "$manifest_size" > "$oci_test/root/index.json"
+write_index "$manifest_digest" "$manifest_size"
+printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s,"annotations":{"org.opencontainers.image.ref.name":"%s"}}]}\n' \
+    "$manifest_digest" "$manifest_size" "$head" > "$oci_test/root/index.json"
+build_two_archive
+expect_oci_rejection "missing containerd image-name annotation"
+printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s,"annotations":{"io.containerd.image.name":"docker.io/library/rar-preauth:%s","org.opencontainers.image.ref.name":"%s","unexpected":"value"}}]}\n' \
+    "$manifest_digest" "$manifest_size" "$head" "$head" > "$oci_test/root/index.json"
+build_two_archive
+expect_oci_rejection "unknown OCI index annotation"
+printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s,"annotations":{"io.containerd.image.name":"docker.io/library/rar-preauth:%s","org.opencontainers.image.ref.name":"%s"}}]}\n' \
+    "$manifest_digest" "$manifest_size" "$head" "$merge" > "$oci_test/root/index.json"
+build_two_archive
+expect_oci_rejection "substituted OCI index ref annotation"
+printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s,"annotations":{"org.opencontainers.image.ref.name":"%s","io.containerd.image.name":"docker.io/library/rar-preauth:%s"}}]}\n' \
+    "$manifest_digest" "$manifest_size" "$head" "$head" > "$oci_test/root/index.json"
+build_two_archive
+expect_oci_rejection "noncanonical OCI index annotation order"
+write_index "$manifest_digest" "$manifest_size"
 cp "$oci_test/root/blobs/sha256/$manifest_digest" "$oci_test/root/image-manifest.bad"
 /usr/bin/sed -i 's|application/vnd.oci.image.config.v1+json|application/vnd.oci.image.config.v1+json-spoof|' \
     "$oci_test/root/image-manifest.bad"
 bad_manifest_digest=$(/usr/bin/sha256sum "$oci_test/root/image-manifest.bad" | /usr/bin/cut -d ' ' -f 1)
 bad_manifest_size=$(/usr/bin/wc -c < "$oci_test/root/image-manifest.bad" | /usr/bin/tr -d ' ')
 mv "$oci_test/root/image-manifest.bad" "$oci_test/root/blobs/sha256/$bad_manifest_digest"
-printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s,"platform":{"architecture":"amd64","os":"linux"}}]}\n' \
-    "$bad_manifest_digest" "$bad_manifest_size" > "$oci_test/root/index.json"
+write_index "$bad_manifest_digest" "$bad_manifest_size"
 build_two_members index.json manifest.json oci-layout repositories \
     "blobs/sha256/$digest" "blobs/sha256/$layer_digest" "blobs/sha256/$bad_manifest_digest"
 expect_oci_rejection "transformed OCI media-type substitution"
 rm "$oci_test/root/blobs/sha256/$bad_manifest_digest"
-printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":%s,"platform":{"architecture":"amd64","os":"linux"}}]}\n' \
-    "$manifest_digest" "$manifest_size" > "$oci_test/root/index.json"
+write_index "$manifest_digest" "$manifest_size"
 build_two_archive
 printf 'sha256:%064d\n' 0 > "$oci_test/two/image.id"
 expect_oci_rejection "loaded image substitution"

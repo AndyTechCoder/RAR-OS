@@ -100,7 +100,7 @@ evidence, tools, both firmware images, artifact, disk record and bytes, profile,
 unprovisioned execution-host leaf, exact unissued authority identity, resolver/spawner leaves,
 prepared certification, source tree, and irreversible consumption key. Exact-head CI emits a
 typed image subgraph that distinguishes the Buildx Docker-config descriptor, Docker config,
-selected OCI manifest, layer-descriptor set, rootfs-diff-ID set, canonical archive, and loaded
+canonical OCI index bytes, selected OCI manifest, layer-descriptor set, rootfs-diff-ID set, canonical archive, and loaded
 image config; only explicitly proved transformation edges may equate their digests. It also emits a
 separate attestation so no committed record claims its own enclosing commit. Other profiles
 remain uncertified. A prepared certification is not an owner authorization.

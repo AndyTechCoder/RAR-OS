@@ -9,6 +9,7 @@ buildx_descriptor_kind
 buildx_descriptor_sha256
 docker_config_sha256
 selected_oci_manifest_sha256
+canonical_oci_index_sha256
 layer_descriptor_set_sha256
 rootfs_diff_id_set_sha256
 loaded_image_config_sha256
