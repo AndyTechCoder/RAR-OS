@@ -8,9 +8,11 @@ if [ -x /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc ]
 else
  rustc_path=$(command -v rustc) || { printf '%s\n' 'preauth-transaction:rustc-unavailable' >&2; exit 73; }
 fi
-# The refusal paths must be repository-effect-free: the executable is built only inside an
-# ephemeral non-repository directory that is removed on every exit.
-build_dir=$(mktemp -d "${TMPDIR:-/tmp}/preauth-transaction.XXXXXX") || { printf '%s\n' 'preauth-transaction:build-boundary' >&2; exit 73; }
+# Build into an ephemeral repository-local directory: the workspace mount is executable
+# (the container /tmp tmpfs is noexec), and the directory is removed on every exit so the
+# repository byte-state is identical before and after any refusal.
+mkdir -p out/r0/preauth
+build_dir=$(mktemp -d out/r0/preauth/.build-preauth-transaction.XXXXXX) || { printf '%s\n' 'preauth-transaction:build-boundary' >&2; exit 73; }
 trap 'rm -rf "$build_dir"' 0 1 2 15
 "$rustc_path" --edition=2024 tools/toolchain/preauth-transaction.rs -o "$build_dir/preauth-transaction"
 set +e
