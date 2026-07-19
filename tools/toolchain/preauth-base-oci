@@ -2,7 +2,7 @@
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 cd "$root"
-[ "$#" -eq 6 ] && [ "$1" = --canonicalize ] || { printf '%s\n' 'preauth-base-oci:usage-refused' >&2; exit 73; }
+[ "$#" -eq 4 ] && [ "$1" = --canonicalize ] || { printf '%s\n' 'preauth-base-oci:usage-refused' >&2; exit 73; }
 mkdir -p out/r0/preauth/m1.6-tools
 if [ -x /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc ]; then
  rustc_path=/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc
@@ -14,4 +14,4 @@ fi
  printf '%s\n' schema=rar-preauth-input-producer-tools-v1
  printf 'tool=%s|%s\n' "$rustc_path" "$(sha256sum "$rustc_path" | cut -d ' ' -f 1)"
 } > "$4"
-exec out/r0/preauth/m1.6-tools/preauth-base-oci --canonicalize "$2" "$3" "$5" "$6"
+exec out/r0/preauth/m1.6-tools/preauth-base-oci --canonicalize "$2" "$3"

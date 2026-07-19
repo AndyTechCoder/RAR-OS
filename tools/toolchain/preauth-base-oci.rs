@@ -17,22 +17,20 @@ fn checked_relative(path: &str) -> &str {
 
 fn main() {
     let arguments: Vec<_> = std::env::args().collect();
-    if arguments.len() != 6 || arguments[1] != "--canonicalize" { refuse("usage-refused"); }
+    if arguments.len() != 4 || arguments[1] != "--canonicalize" { refuse("usage-refused"); }
     for name in ["ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_URL", "AWS_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"] {
         if std::env::var_os(name).is_some() { refuse("authority-environment"); }
     }
     let raw_path = checked_relative(&arguments[2]);
     let out_path = checked_relative(&arguments[3]);
-    let expected_image_name = &arguments[4];
-    let expected_ref_name = &arguments[5];
     let root = DescriptorDir::open_root(Path::new(".")).unwrap_or_else(|_| refuse("repository-descriptor"));
     let input = root.open_relative_file(raw_path).unwrap_or_else(|_| refuse("input-open"));
     let maximum = 4u64 * 1024 * 1024 * 1024;
     let mut bytes = Vec::new();
     Read::take(input, maximum + 1).read_to_end(&mut bytes).unwrap_or_else(|_| refuse("input-read"));
     if bytes.len() as u64 > maximum { refuse("input-bound"); }
-    let result = canonicalize_base_oci(&bytes, expected_image_name, expected_ref_name).unwrap_or_else(|error| {
+    let result = canonicalize_base_oci(&bytes).unwrap_or_else(|error| {
         for line in describe_base_oci(&bytes) { eprintln!("preauth-base-oci:observed:{line}"); }
         refuse(error.code)
     });

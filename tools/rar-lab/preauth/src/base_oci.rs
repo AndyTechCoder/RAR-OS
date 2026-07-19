@@ -5,9 +5,10 @@
 //! canonical timestamp grammar, re-hashes every content-addressed blob against its declared
 //! name, structurally parses `oci-layout`, `index.json`, the selected OCI manifest, the image
 //! config, the ordered layers, and Docker's legacy `manifest.json`, requires the exact
-//! digest-pull identity policy (two pinned index-descriptor annotations, no platform object,
-//! `RepoTags` exactly null, one exact `LayerSources` binding per diff ID, and no tag-bearing
-//! `repositories` root), proves index→manifest→config→layer reachability, digest-verifies then
+//! digest-pull identity policy (a bare index descriptor with no annotations and no platform
+//! object, `RepoTags` exactly null, one exact `LayerSources` binding per diff ID, and no
+//! tag-bearing `repositories` root; reference identity binds outside the archive through the
+//! daemon-verified pinned registry reference and loaded image ID), proves index→manifest→config→layer reachability, digest-verifies then
 //! excludes edge-free store metadata per ADR 0018, and emits one deterministic canonical ustar
 //! archive that equals the rooted graph exactly.
 
@@ -26,8 +27,6 @@ const INDEX_MEDIA_TYPE: &str = "application/vnd.oci.image.index.v1+json";
 const MANIFEST_MEDIA_TYPE: &str = "application/vnd.oci.image.manifest.v1+json";
 const CONFIG_MEDIA_TYPE: &str = "application/vnd.oci.image.config.v1+json";
 const LAYER_MEDIA_TYPE: &str = "application/vnd.oci.image.layer.v1.tar";
-const IMAGE_NAME_ANNOTATION: &str = "io.containerd.image.name";
-const REF_NAME_ANNOTATION: &str = "org.opencontainers.image.ref.name";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BaseOciCanonical {
@@ -196,10 +195,11 @@ fn emit_canonical(files: &BTreeMap<String, &[u8]>) -> Vec<u8> {
     archive
 }
 
-/// `expected_image_name` and `expected_ref_name` are the exact pinned digest-pull identity the
-/// export's index descriptor annotations must carry; a digest pull has no tag authority, so
-/// `RepoTags` must be exactly null and no `repositories` root may exist.
-pub fn canonicalize_base_oci(raw: &[u8], expected_image_name: &str, expected_ref_name: &str) -> Result<BaseOciCanonical> {
+/// A digest pull carries no tag or annotation authority: the index descriptor must be exactly
+/// `mediaType`/`digest`/`size`, `RepoTags` must be exactly null, and no `repositories` root may
+/// exist. Reference identity binds outside the archive through the daemon-verified pinned
+/// registry reference and loaded image ID.
+pub fn canonicalize_base_oci(raw: &[u8]) -> Result<BaseOciCanonical> {
     let members = walk_raw_export(raw)?;
     ArchivePlan::validate(members.iter().map(|member| ArchiveEntry {
         path: member.path.clone(), kind: member.kind, compressed_bytes: member.payload.len() as u64,
@@ -244,16 +244,8 @@ pub fn canonicalize_base_oci(raw: &[u8], expected_image_name: &str, expected_ref
     if index.get("mediaType")?.string()? != INDEX_MEDIA_TYPE { return Err(PreauthError::new("base-oci-media-type")); }
     let descriptors = index.get("manifests")?.array()?;
     if descriptors.len() != 1 { return Err(PreauthError::new("base-oci-manifest-count")); }
-    descriptors[0].exact_keys(&["mediaType", "digest", "size", "annotations"], &[])
+    descriptors[0].exact_keys(&["mediaType", "digest", "size"], &[])
         .map_err(|_| PreauthError::new("base-oci-descriptor-keys"))?;
-    let annotations = descriptors[0].get("annotations")?;
-    annotations.exact_keys(&[IMAGE_NAME_ANNOTATION, REF_NAME_ANNOTATION], &[])
-        .map_err(|_| PreauthError::new("base-oci-annotation-keys"))?;
-    if annotations.get(IMAGE_NAME_ANNOTATION)?.string()? != expected_image_name
-        || annotations.get(REF_NAME_ANNOTATION)?.string()? != expected_ref_name
-    {
-        return Err(PreauthError::new("base-oci-annotations"));
-    }
     let (manifest_hex, manifest_bytes) = resolve_blob(&blobs, &descriptors[0], MANIFEST_MEDIA_TYPE)?;
 
     if manifest_bytes.len() > MAX_METADATA_BYTES { return Err(PreauthError::new("base-oci-metadata-bound")); }

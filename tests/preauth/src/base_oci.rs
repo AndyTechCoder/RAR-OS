@@ -3,11 +3,8 @@ use std::io::{Read, Seek, SeekFrom};
 
 use super::preauth::{DescriptorDir, canonicalize_base_oci, sha256_hex};
 
-const IMAGE: &str = "docker.io/library/example:1.0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const REF: &str = "1.0";
-
 fn canonicalize(raw: &[u8]) -> super::preauth::Result<super::preauth::BaseOciCanonical> {
-    canonicalize_base_oci(raw, IMAGE, REF)
+    canonicalize_base_oci(raw)
 }
 
 #[derive(Clone)]
@@ -90,7 +87,7 @@ impl Layout {
     }
     fn index_bytes(&self, manifest: &[u8]) -> Vec<u8> {
         self.index.clone().unwrap_or_else(|| format!(
-            "{{\"schemaVersion\":2,\"mediaType\":\"application/vnd.oci.image.index.v1+json\",\"manifests\":[{{\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\",\"digest\":\"sha256:{}\",\"size\":{},\"annotations\":{{\"io.containerd.image.name\":\"{IMAGE}\",\"org.opencontainers.image.ref.name\":\"{REF}\"}}}}]}}",
+            "{{\"schemaVersion\":2,\"mediaType\":\"application/vnd.oci.image.index.v1+json\",\"manifests\":[{{\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\",\"digest\":\"sha256:{}\",\"size\":{}}}]}}",
             sha256_hex(manifest), manifest.len()).into_bytes())
     }
     fn legacy_bytes(&self) -> Vec<u8> {
@@ -229,23 +226,17 @@ fn base_oci_requires_exact_digest_pull_identity() {
     let base = Layout::default();
     let manifest = base.manifest_bytes();
     let index_text = String::from_utf8(base.index_bytes(&manifest)).unwrap();
-    let mut substituted_name = Layout::default();
-    substituted_name.index = Some(index_text.replace(IMAGE, "docker.io/library/evil:1.0").into_bytes());
-    assert_eq!(canonicalize(&substituted_name.render()).unwrap_err().code, "base-oci-annotations");
-    let mut missing_annotations = Layout::default();
-    missing_annotations.index = Some(index_text.replace(
-        &format!(",\"annotations\":{{\"io.containerd.image.name\":\"{IMAGE}\",\"org.opencontainers.image.ref.name\":\"{REF}\"}}"),
-        "").into_bytes());
-    assert_eq!(canonicalize(&missing_annotations.render()).unwrap_err().code, "base-oci-descriptor-keys");
-    let mut extra_annotation = Layout::default();
-    extra_annotation.index = Some(index_text.replace(
-        "\"org.opencontainers.image.ref.name\"",
-        "\"vendor.extra\":\"x\",\"org.opencontainers.image.ref.name\"").into_bytes());
-    assert_eq!(canonicalize(&extra_annotation.render()).unwrap_err().code, "base-oci-annotation-keys");
+    // A digest pull carries no annotation or tag authority: any injected annotation or
+    // platform object on the bare index descriptor is substituted identity.
+    let mut injected_annotations = Layout::default();
+    injected_annotations.index = Some(index_text.replace(
+        ",\"size\":",
+        ",\"annotations\":{\"io.containerd.image.name\":\"docker.io/library/evil:1.0\"},\"size\":").into_bytes());
+    assert_eq!(canonicalize(&injected_annotations.render()).unwrap_err().code, "base-oci-descriptor-keys");
     let mut platform_present = Layout::default();
     platform_present.index = Some(index_text.replace(
-        ",\"annotations\"",
-        ",\"platform\":{\"architecture\":\"amd64\",\"os\":\"linux\"},\"annotations\"").into_bytes());
+        ",\"size\":",
+        ",\"platform\":{\"architecture\":\"amd64\",\"os\":\"linux\"},\"size\":").into_bytes());
     assert_eq!(canonicalize(&platform_present.render()).unwrap_err().code, "base-oci-descriptor-keys");
     let legacy_text = String::from_utf8(base.legacy_bytes()).unwrap();
     let mut tagged = Layout::default();
