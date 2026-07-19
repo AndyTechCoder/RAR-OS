@@ -27,9 +27,12 @@ set +e; output=$(AWS_ACCESS_KEY_ID=forbidden "$producer" --produce one 2>&1); st
 [ "$status" -eq 73 ] && [ "$output" = preauth-input-producer:authority-environment ] || fail credential-refusal
 after=$(find out/r0/preauth/input-delivery -type f 2>/dev/null | sort || :)
 [ "$before" = "$after" ] || fail credential-side-effect
-grep -q 'Acquire::https::AllowRedirect=false' "$producer" || fail redirect-refusal
-grep -q 'Acquire::http::AllowRedirect=false' "$producer" || fail redirect-refusal
-! grep -q 'AllowRedirect=true' "$producer" || fail redirect-permitted
+# Authenticity is signature/digest-anchored, not transport-anchored: https redirects to the
+# origin CDN are permitted, plaintext downgrade is refused, and only approved requested origins
+# are contacted. Verify both the requested-source and effective-list origin allowlists behave.
+grep -q 'AllowDowngradeToInsecureRepositories=false' "$producer" || fail downgrade-refusal
+grep -q 'AllowInsecureRepositories=false' "$producer" || fail insecure-refusal
+! grep -q 'AllowRedirect=false' "$producer" || fail redirect-model-regressed
 grep -q 'registry-mirror-configured' "$producer" || fail registry-mirror-check
 origin_scratch=$(mktemp -d "${TMPDIR:-/tmp}/rar-origin-contract.XXXXXX") || fail origin-scratch
 mkdir "$origin_scratch/good" "$origin_scratch/bad" "$origin_scratch/empty"
@@ -41,6 +44,14 @@ mkdir "$origin_scratch/good/partial"
 set +e; "$producer" --verify-origins "$origin_scratch/bad" >/dev/null 2>&1; bad_status=$?
 "$producer" --verify-origins "$origin_scratch/empty" >/dev/null 2>&1; empty_status=$?; set -e
 [ "$bad_status" -eq 73 ] && [ "$empty_status" -eq 73 ] || fail origin-reject
+good_sources=$origin_scratch/good.sources; bad_sources=$origin_scratch/bad.sources; http_sources=$origin_scratch/http.sources
+printf '%s\n' 'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260630T000000Z trixie main' > "$good_sources"
+printf '%s\n' 'deb [check-valid-until=no] https://evil.example.org/archive/debian/20260630T000000Z trixie main' > "$bad_sources"
+printf '%s\n' 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260630T000000Z trixie main' > "$http_sources"
+"$producer" --verify-source-origins "$good_sources" >/dev/null 2>&1 || fail source-origin-accept
+set +e; "$producer" --verify-source-origins "$bad_sources" >/dev/null 2>&1; bad_src=$?
+"$producer" --verify-source-origins "$http_sources" >/dev/null 2>&1; http_src=$?; set -e
+[ "$bad_src" -eq 73 ] && [ "$http_src" -eq 73 ] || fail source-origin-reject
 rm -rf "$origin_scratch"
 grep -q 'tools/toolchain/preauth-base-oci --canonicalize' "$producer" || fail base-oci-canonicalizer
 grep -q -- '--network none' "$producer" || fail base-oci-networkless

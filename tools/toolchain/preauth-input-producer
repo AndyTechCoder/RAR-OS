@@ -23,17 +23,39 @@ lock_value(){
  [ -n "$value" ] && [ "$(grep -c "^$1=" "$lock")" -eq 1 ] || fail "lock-field-$1"
  printf '%s\n' "$value"
 }
+approved_origin(){
+ case "$1" in
+  snapshot.debian.org|auth.docker.io|registry-1.docker.io|production.cloudflare.docker.com) return 0;;
+  *) return 1;;
+ esac
+}
+verify_source_origins(){
+ sources_file=$1
+ [ -f "$sources_file" ] && [ ! -L "$sources_file" ] || fail source-origins-missing
+ seen=0
+ while IFS= read -r line; do
+  case "$line" in ''|\#*) continue;; esac
+  uri=$(printf '%s\n' "$line" | sed -n 's/^deb \(\[[^]]*\] \)\{0,1\}\(https:\/\/[^ ]*\).*/\2/p')
+  [ -n "$uri" ] || fail source-scheme
+  origin_host=$(printf '%s\n' "$uri" | sed -n 's|^https://\([^/]*\)/.*|\1|p')
+  approved_origin "$origin_host" || fail "source-origin:$origin_host"
+  seen=1
+ done < "$sources_file"
+ [ "$seen" -eq 1 ] || fail source-origins-empty
+}
 verify_origins(){
  origin_dir=$1
  [ -d "$origin_dir" ] && [ ! -L "$origin_dir" ] || fail effective-origin-missing
  origin_found=0
  for origin_entry in "$origin_dir"/*; do
   [ -e "$origin_entry" ] || fail effective-origin-empty
-  case "$(basename "$origin_entry")" in
-   partial|auxfiles|lock) :;;
-   snapshot.debian.org_*) origin_found=1;;
-   *) fail effective-origin;;
+  entry_name=$(basename "$origin_entry")
+  case "$entry_name" in
+   partial|auxfiles|lock) continue;;
   esac
+  origin_host=${entry_name%%_*}
+  approved_origin "$origin_host" || fail "effective-origin:$origin_host"
+  origin_found=1
  done
  [ "$origin_found" -eq 1 ] || fail effective-origin-empty
 }
@@ -77,9 +99,11 @@ inside(){
    'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260630T000000Z trixie-proposed-updates main' \
    'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260630T000000Z trixie-security main'
  } > "$sources"
- options="-o Dir::Etc::sourcelist=$sources -o Dir::Etc::sourceparts=- -o Dir::State=$state -o Dir::Cache=$cache -o APT::Install-Recommends=false -o Acquire::Check-Valid-Until=false -o Acquire::https::AllowRedirect=false -o Acquire::http::AllowRedirect=false -o Acquire::Retries=2 -o Debug::NoLocking=1"
+ options="-o Dir::Etc::sourcelist=$sources -o Dir::Etc::sourceparts=- -o Dir::State=$state -o Dir::Cache=$cache -o APT::Install-Recommends=false -o Acquire::Check-Valid-Until=false -o Acquire::https::AllowRedirect=true -o Acquire::AllowInsecureRepositories=false -o Acquire::AllowDowngradeToInsecureRepositories=false -o Acquire::http::Dl-Limit=0 -o Acquire::Retries=2 -o Debug::NoLocking=1"
  # apt-secure validates the exact signed snapshot before download-only acquisition.
  # shellcheck disable=SC2086
+ phase=source-origins
+ verify_source_origins "$sources"
  phase=apt-update
  /usr/bin/apt-get $options update
  telemetry apt-update-complete
@@ -332,5 +356,6 @@ case "${1-}" in
  --produce) [ "$#" -eq 2 ] || fail usage; produce "$2";;
  --inside) [ "$#" -eq 2 ] || fail usage; inside "$2";;
  --verify-origins) [ "$#" -eq 2 ] || fail usage; verify_origins "$2";;
+ --verify-source-origins) [ "$#" -eq 2 ] || fail usage; verify_source_origins "$2";;
  *) fail usage;;
 esac
