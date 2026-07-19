@@ -25,10 +25,10 @@ fn main() {
     let raw_path = checked_relative(&arguments[2]);
     let out_path = checked_relative(&arguments[3]);
     let root = DescriptorDir::open_root(Path::new(".")).unwrap_or_else(|_| refuse("repository-descriptor"));
-    let mut input = root.open_relative_file(raw_path).unwrap_or_else(|_| refuse("input-open"));
+    let input = root.open_relative_file(raw_path).unwrap_or_else(|_| refuse("input-open"));
     let maximum = 4u64 * 1024 * 1024 * 1024;
     let mut bytes = Vec::new();
-    input.by_ref().take(maximum + 1).read_to_end(&mut bytes).unwrap_or_else(|_| refuse("input-read"));
+    Read::take(input, maximum + 1).read_to_end(&mut bytes).unwrap_or_else(|_| refuse("input-read"));
     if bytes.len() as u64 > maximum { refuse("input-bound"); }
     let result = canonicalize_base_oci(&bytes).unwrap_or_else(|error| refuse(error.code));
     let mut output = std::fs::OpenOptions::new().write(true).create_new(true).open(out_path)
