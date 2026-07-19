@@ -324,13 +324,17 @@ pub fn canonicalize_base_oci(raw: &[u8]) -> Result<BaseOciCanonical> {
         }
     }
 
+    // ADR 0018: content-addressed store metadata with no inbound graph edge is omitted from
+    // canonical generation and can never enter evidence. Every blob was still digest-verified
+    // above; only the rooted graph reaches the canonical archive.
     let mut referenced: BTreeSet<&str> = BTreeSet::new();
     referenced.insert(&manifest_hex);
     referenced.insert(&config_hex);
     for hex in &layer_hexes { referenced.insert(hex); }
-    if blobs.keys().any(|hex| !referenced.contains(hex.as_str())) {
-        return Err(PreauthError::new("base-oci-dangling-blob"));
-    }
+    files.retain(|path, _| match path.strip_prefix("blobs/sha256/") {
+        Some(hex) => referenced.contains(hex),
+        None => true,
+    });
 
     Ok(BaseOciCanonical {
         canonical: emit_canonical(&files),

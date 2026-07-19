@@ -170,9 +170,15 @@ fn base_oci_rejects_substituted_dangling_or_unexpected_content() {
         "{{\"schemaVersion\":2,\"manifests\":[{{\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\",\"digest\":\"sha256:{}\",\"size\":{}}}]}}",
         sha256_hex(&manifest), manifest.len() + 1).into_bytes());
     assert_eq!(canonicalize_base_oci(&wrong_size.render()).unwrap_err().code, "base-oci-descriptor-size");
+    // Dangling raw-store metadata blobs are digest-verified, then excluded from canonical
+    // generation per ADR 0018: the canonical archive equals the rooted graph exactly.
     let mut dangling = Layout::default();
     dangling.extra_blobs = vec![b"unreferenced".to_vec()];
-    assert_eq!(canonicalize_base_oci(&dangling.render()).unwrap_err().code, "base-oci-dangling-blob");
+    let excluded = canonicalize_base_oci(&dangling.render()).expect("dangling metadata is excluded");
+    assert_eq!(excluded.canonical, canonicalize_base_oci(&Layout::default().render()).expect("rooted graph").canonical);
+    let mut corrupt_dangling = Layout::default();
+    corrupt_dangling.extra_members = vec![file(&format!("blobs/sha256/{}", "f".repeat(64)), b"corrupt")];
+    assert_eq!(canonicalize_base_oci(&corrupt_dangling.render()).unwrap_err().code, "base-oci-blob-digest");
     let mut renamed = Layout::default();
     renamed.extra_members = vec![file(&format!("blobs/sha256/{}", "b".repeat(64)), b"mismatch")];
     assert_eq!(canonicalize_base_oci(&renamed.render()).unwrap_err().code, "base-oci-blob-digest");
