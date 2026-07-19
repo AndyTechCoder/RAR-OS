@@ -2,17 +2,17 @@
 //!
 //! This intentionally implements only JSON, not a permissive JavaScript dialect. It rejects
 //! duplicate object keys, non-canonical number forms, invalid Unicode escapes, trailing data,
-//! and inputs outside fixed resource bounds. `canonical()` emits deterministic RFC 8259 JSON
+//! and inputs outside the frozen ADR 0022 bounds (1 MiB length, container depth 64, 4,096 object keys, 4,096 array items, 64 KiB strings). `canonical()` emits deterministic RFC 8259 JSON
 //! with lexicographically ordered object keys.
 
 use std::collections::BTreeMap;
 
 use super::{PreauthError, Result};
 
-const MAX_BYTES: usize = 8 * 1024 * 1024;
-const MAX_DEPTH: usize = 32;
-const MAX_ITEMS: usize = 512;
-const MAX_STRING: usize = 16 * 1024;
+const MAX_BYTES: usize = 1024 * 1024;
+const MAX_DEPTH: usize = 64;
+const MAX_CONTAINER_ITEMS: usize = 4096;
+const MAX_STRING: usize = 64 * 1024;
 const MAX_DIAGNOSTIC_KEYS: usize = 32;
 const MAX_DIAGNOSTIC_KEY_BYTES: usize = 96;
 const MAX_DIAGNOSTIC_PATH_BYTES: usize = 192;
@@ -33,7 +33,7 @@ impl Json {
             return Err(PreauthError::new("json-byte-limit"));
         }
         let text = std::str::from_utf8(input).map_err(|_| PreauthError::new("json-utf8"))?;
-        let mut parser = Parser { bytes: text.as_bytes(), at: 0, items: 0 };
+        let mut parser = Parser { bytes: text.as_bytes(), at: 0 };
         parser.ws();
         let value = parser.value(0)?;
         parser.ws();
@@ -166,22 +166,24 @@ fn write_string(output: &mut String, value: &str) {
     output.push('"');
 }
 
-struct Parser<'a> { bytes: &'a [u8], at: usize, items: usize }
+struct Parser<'a> { bytes: &'a [u8], at: usize }
 impl Parser<'_> {
     fn ws(&mut self) { while self.bytes.get(self.at).is_some_and(u8::is_ascii_whitespace) { self.at += 1; } }
     fn bump(&mut self) -> Result<u8> {
         let byte = *self.bytes.get(self.at).ok_or_else(|| PreauthError::new("json-truncated"))?;
         self.at += 1; Ok(byte)
     }
-    fn item(&mut self) -> Result<()> {
-        self.items += 1;
-        if self.items > MAX_ITEMS { Err(PreauthError::new("json-item-limit")) } else { Ok(()) }
-    }
     fn value(&mut self, depth: usize) -> Result<Json> {
-        if depth > MAX_DEPTH { return Err(PreauthError::new("json-depth-limit")); }
-        self.item()?; self.ws();
+        self.ws();
         match self.bytes.get(self.at).copied() {
-            Some(b'{') => self.object_value(depth + 1), Some(b'[') => self.array_value(depth + 1),
+            Some(b'{') => {
+                if depth >= MAX_DEPTH { return Err(PreauthError::new("json-depth-limit")); }
+                self.object_value(depth + 1)
+            }
+            Some(b'[') => {
+                if depth >= MAX_DEPTH { return Err(PreauthError::new("json-depth-limit")); }
+                self.array_value(depth + 1)
+            }
             Some(b'"') => Ok(Json::String(self.string_value()?)),
             Some(b't') => { self.literal(b"true")?; Ok(Json::Bool(true)) }
             Some(b'f') => { self.literal(b"false")?; Ok(Json::Bool(false)) }
@@ -252,7 +254,12 @@ impl Parser<'_> {
     fn array_value(&mut self, depth: usize) -> Result<Json> {
         self.at += 1; self.ws(); let mut values = Vec::new();
         if self.bytes.get(self.at) == Some(&b']') { self.at += 1; return Ok(Json::Array(values)); }
-        loop { values.push(self.value(depth)?); self.ws(); match self.bump()? { b',' => self.ws(), b']' => break, _ => return Err(PreauthError::new("json-syntax")) } }
+        loop {
+            values.push(self.value(depth)?);
+            if values.len() > MAX_CONTAINER_ITEMS { return Err(PreauthError::new("json-array-items")); }
+            self.ws();
+            match self.bump()? { b',' => self.ws(), b']' => break, _ => return Err(PreauthError::new("json-syntax")) }
+        }
         Ok(Json::Array(values))
     }
     fn object_value(&mut self, depth: usize) -> Result<Json> {
@@ -263,6 +270,7 @@ impl Parser<'_> {
             let key = self.string_value()?; self.ws(); if self.bump()? != b':' { return Err(PreauthError::new("json-syntax")); }
             self.ws(); let value = self.value(depth)?;
             if values.insert(key, value).is_some() { return Err(PreauthError::new("json-duplicate-key")); }
+            if values.len() > MAX_CONTAINER_ITEMS { return Err(PreauthError::new("json-object-keys")); }
             self.ws(); match self.bump()? { b',' => self.ws(), b'}' => break, _ => return Err(PreauthError::new("json-syntax")) }
         }
         Ok(Json::Object(values))

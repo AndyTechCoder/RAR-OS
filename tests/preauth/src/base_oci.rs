@@ -153,6 +153,21 @@ fn base_oci_accepts_timestamp_pax_but_rejects_overrides_and_bad_values() {
     let mut bad_value = Layout::default();
     bad_value.lead_members = vec![pax(&pax_record("mtime", "yesterday"))];
     assert_eq!(canonicalize(&bad_value.render()).unwrap_err().code, "base-oci-pax-value");
+    // The canonical grammar admits exactly one raw encoding: leading-zero record lengths and
+    // seconds, duplicate timestamp keys, and trailing-zero fractions are all noncanonical.
+    let mut zero_length = Layout::default();
+    zero_length.lead_members = vec![pax(&format!("0{}", pax_record("mtime", "1784332800")))];
+    assert_eq!(canonicalize(&zero_length.render()).unwrap_err().code, "base-oci-pax-record");
+    let mut zero_seconds = Layout::default();
+    zero_seconds.lead_members = vec![pax(&pax_record("mtime", "0178433280"))];
+    assert_eq!(canonicalize(&zero_seconds.render()).unwrap_err().code, "base-oci-pax-value");
+    let mut duplicate_key = Layout::default();
+    duplicate_key.lead_members = vec![pax(&format!("{}{}",
+        pax_record("mtime", "1784332800"), pax_record("mtime", "1784332801")))];
+    assert_eq!(canonicalize(&duplicate_key.render()).unwrap_err().code, "base-oci-pax-duplicate");
+    let mut trailing_zero = Layout::default();
+    trailing_zero.lead_members = vec![pax(&pax_record("mtime", "1784332800.50"))];
+    assert_eq!(canonicalize(&trailing_zero.render()).unwrap_err().code, "base-oci-pax-value");
 }
 
 #[test]

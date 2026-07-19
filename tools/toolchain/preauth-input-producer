@@ -23,6 +23,20 @@ lock_value(){
  [ -n "$value" ] && [ "$(grep -c "^$1=" "$lock")" -eq 1 ] || fail "lock-field-$1"
  printf '%s\n' "$value"
 }
+verify_origins(){
+ origin_dir=$1
+ [ -d "$origin_dir" ] && [ ! -L "$origin_dir" ] || fail effective-origin-missing
+ origin_found=0
+ for origin_entry in "$origin_dir"/*; do
+  [ -e "$origin_entry" ] || fail effective-origin-empty
+  case "$(basename "$origin_entry")" in
+   partial|auxfiles|lock) :;;
+   snapshot.debian.org_*) origin_found=1;;
+   *) fail effective-origin;;
+  esac
+ done
+ [ "$origin_found" -eq 1 ] || fail effective-origin-empty
+}
 
 inside(){
  phase=setup
@@ -63,7 +77,7 @@ inside(){
    'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260630T000000Z trixie-proposed-updates main' \
    'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260630T000000Z trixie-security main'
  } > "$sources"
- options="-o Dir::Etc::sourcelist=$sources -o Dir::Etc::sourceparts=- -o Dir::State=$state -o Dir::Cache=$cache -o APT::Install-Recommends=false -o Acquire::Check-Valid-Until=false -o Acquire::https::AllowRedirect=true -o Acquire::Retries=2 -o Debug::NoLocking=1"
+ options="-o Dir::Etc::sourcelist=$sources -o Dir::Etc::sourceparts=- -o Dir::State=$state -o Dir::Cache=$cache -o APT::Install-Recommends=false -o Acquire::Check-Valid-Until=false -o Acquire::https::AllowRedirect=false -o Acquire::http::AllowRedirect=false -o Acquire::Retries=2 -o Debug::NoLocking=1"
  # apt-secure validates the exact signed snapshot before download-only acquisition.
  # shellcheck disable=SC2086
  phase=apt-update
@@ -74,6 +88,8 @@ inside(){
  /usr/bin/apt-get $options --yes --download-only --no-install-recommends install \
   'lld-19=1:19.1.7-3+b1' 'qemu-system-x86=1:10.0.8+ds-0+deb13u1+b2' 'ovmf=2025.02-8+deb13u1'
  telemetry apt-download-complete
+ phase=origin-verification
+ verify_origins "$state/lists"
  phase=inventory
  find "$cache/archives" -maxdepth 1 -type f -name '*.deb' -exec /bin/cp --reflink=never {} "$incoming/debs/" \;
  [ "$(find "$incoming/debs" -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d ' ')" -eq 36 ] || fail package-count
@@ -252,6 +268,9 @@ produce(){
  }
  trap host_exit 0 1 2 15
  docker image inspect "$base" >/dev/null 2>&1 || docker pull "$base" >/dev/null
+ host_phase=registry-config
+ registry_mirrors=$(docker info --format '{{json .RegistryConfig.Mirrors}}' 2>/dev/null || printf 'unavailable')
+ case "$registry_mirrors" in null|\[\]) :;; *) fail registry-mirror-configured;; esac
  host_uid=$(id -u); host_gid=$(id -g)
  host_phase=base-export
  base_raw=$stage/base-oci.raw.tar
@@ -312,5 +331,6 @@ produce(){
 case "${1-}" in
  --produce) [ "$#" -eq 2 ] || fail usage; produce "$2";;
  --inside) [ "$#" -eq 2 ] || fail usage; inside "$2";;
+ --verify-origins) [ "$#" -eq 2 ] || fail usage; verify_origins "$2";;
  *) fail usage;;
 esac

@@ -27,6 +27,21 @@ set +e; output=$(AWS_ACCESS_KEY_ID=forbidden "$producer" --produce one 2>&1); st
 [ "$status" -eq 73 ] && [ "$output" = preauth-input-producer:authority-environment ] || fail credential-refusal
 after=$(find out/r0/preauth/input-delivery -type f 2>/dev/null | sort || :)
 [ "$before" = "$after" ] || fail credential-side-effect
+grep -q 'Acquire::https::AllowRedirect=false' "$producer" || fail redirect-refusal
+grep -q 'Acquire::http::AllowRedirect=false' "$producer" || fail redirect-refusal
+! grep -q 'AllowRedirect=true' "$producer" || fail redirect-permitted
+grep -q 'registry-mirror-configured' "$producer" || fail registry-mirror-check
+origin_scratch=$(mktemp -d "${TMPDIR:-/tmp}/rar-origin-contract.XXXXXX") || fail origin-scratch
+mkdir "$origin_scratch/good" "$origin_scratch/bad" "$origin_scratch/empty"
+: > "$origin_scratch/good/snapshot.debian.org_archive_debian_dists_trixie_InRelease"
+mkdir "$origin_scratch/good/partial"
+: > "$origin_scratch/bad/snapshot.debian.org_archive_debian_dists_trixie_InRelease"
+: > "$origin_scratch/bad/evil.example.org_dists_trixie_InRelease"
+"$producer" --verify-origins "$origin_scratch/good" >/dev/null 2>&1 || fail origin-accept
+set +e; "$producer" --verify-origins "$origin_scratch/bad" >/dev/null 2>&1; bad_status=$?
+"$producer" --verify-origins "$origin_scratch/empty" >/dev/null 2>&1; empty_status=$?; set -e
+[ "$bad_status" -eq 73 ] && [ "$empty_status" -eq 73 ] || fail origin-reject
+rm -rf "$origin_scratch"
 grep -q 'tools/toolchain/preauth-base-oci --canonicalize' "$producer" || fail base-oci-canonicalizer
 grep -q -- '--network none' "$producer" || fail base-oci-networkless
 ! grep -q 'docker save --output "$stage/incoming/base-oci.tar"' "$producer" || fail base-oci-raw-bundled

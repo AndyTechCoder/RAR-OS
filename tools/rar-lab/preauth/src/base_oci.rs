@@ -45,29 +45,44 @@ fn tar_octal(bytes: &[u8]) -> Result<u64> {
 }
 
 /// A pax extended header may only carry canonical timestamps, which the canonical serialization
-/// discards. Any other key, and any non-timestamp value, fails closed.
+/// discards. The grammar is exact: the record length has no leading zero, each of `mtime`,
+/// `atime`, and `ctime` appears at most once, seconds are `0` or leading-zero-free, and an
+/// optional fraction has one to nine digits with no trailing zero. Any other key, any duplicate,
+/// and any noncanonical encoding fails closed.
 fn check_pax_records(payload: &[u8]) -> Result<()> {
     if payload.len() as u64 > MAX_PAX_BYTES { return Err(PreauthError::new("base-oci-pax-bound")); }
     let mut rest = payload;
     let mut records = 0usize;
+    let mut seen: [bool; 3] = [false; 3];
     while !rest.is_empty() {
         records += 1;
         if records > MAX_PAX_RECORDS { return Err(PreauthError::new("base-oci-pax-bound")); }
         let space = rest.iter().position(|byte| *byte == b' ').ok_or_else(|| PreauthError::new("base-oci-pax-record"))?;
-        let length: usize = std::str::from_utf8(&rest[..space]).map_err(|_| PreauthError::new("base-oci-pax-record"))?
-            .parse().map_err(|_| PreauthError::new("base-oci-pax-record"))?;
+        let length_text = std::str::from_utf8(&rest[..space]).map_err(|_| PreauthError::new("base-oci-pax-record"))?;
+        if length_text.is_empty() || length_text.starts_with('0') || !length_text.bytes().all(|byte| byte.is_ascii_digit()) {
+            return Err(PreauthError::new("base-oci-pax-record"));
+        }
+        let length: usize = length_text.parse().map_err(|_| PreauthError::new("base-oci-pax-record"))?;
         if length <= space + 1 || length > rest.len() || rest[length - 1] != b'\n' {
             return Err(PreauthError::new("base-oci-pax-record"));
         }
         let record = std::str::from_utf8(&rest[space + 1..length - 1]).map_err(|_| PreauthError::new("base-oci-pax-record"))?;
         let (key, value) = record.split_once('=').ok_or_else(|| PreauthError::new("base-oci-pax-record"))?;
-        if !matches!(key, "mtime" | "atime" | "ctime") {
-            return Err(PreauthError::new("base-oci-pax-override"));
-        }
+        let slot = match key {
+            "mtime" => 0usize, "atime" => 1, "ctime" => 2,
+            _ => return Err(PreauthError::new("base-oci-pax-override")),
+        };
+        if seen[slot] { return Err(PreauthError::new("base-oci-pax-duplicate")); }
+        seen[slot] = true;
         let (seconds, fraction) = value.split_once('.').unwrap_or((value, ""));
         if seconds.is_empty() || seconds.len() > 20 || !seconds.bytes().all(|byte| byte.is_ascii_digit())
-            || fraction.len() > 9 || !fraction.bytes().all(|byte| byte.is_ascii_digit())
-            || (value.contains('.') && fraction.is_empty())
+            || (seconds.len() > 1 && seconds.starts_with('0'))
+        {
+            return Err(PreauthError::new("base-oci-pax-value"));
+        }
+        if value.contains('.')
+            && (fraction.is_empty() || fraction.len() > 9
+                || !fraction.bytes().all(|byte| byte.is_ascii_digit()) || fraction.ends_with('0'))
         {
             return Err(PreauthError::new("base-oci-pax-value"));
         }
