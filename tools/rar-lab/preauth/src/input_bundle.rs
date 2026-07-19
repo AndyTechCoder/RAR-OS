@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::{PreauthError, Result, sha256_hex};
 
 const MAX_RECORD: usize = 1024 * 1024;
-const MAX_OBJECTS: usize = 128;
+const MAX_OBJECTS: usize = super::transaction::MAX_INPUT_OBJECTS;
 const MAX_OBJECT: u64 = 2 * 1024 * 1024 * 1024;
 const MAX_AGGREGATE: u64 = 4 * 1024 * 1024 * 1024;
 const SOURCE_DATE_EPOCH: u64 = 1_784_332_800;
@@ -194,13 +194,13 @@ pub fn parse_input_bundle_v1(bytes: &[u8]) -> Result<InputBundleV1> {
     let (mut bundle, expected_objects) = parse_manifest(manifest_bytes, object_manifest)?;
     let role_count = |role: &str| objects.iter().filter(|object| object.role == role).count();
     let allowed = ["base-oci", "keyring", "inrelease", "security-inrelease", "package-manifest",
-        "license-manifest", "producer-tools", "deb", "license", "tool-lld", "tool-qemu", "firmware-code", "firmware-vars"];
+        "license-manifest", "license-archive", "producer-tools", "deb", "tool-lld", "tool-qemu", "firmware-code", "firmware-vars"];
     if objects.len() != expected_objects || payloads.len() != expected_objects + 2 || aggregate != bundle.aggregate_bytes
         || role_count("deb") != bundle.package_count || role_count("base-oci") != 1 || role_count("keyring") != 1
         || role_count("inrelease") != 3 || role_count("security-inrelease") != 1
-        || ["package-manifest", "license-manifest", "producer-tools", "tool-lld", "tool-qemu", "firmware-code", "firmware-vars"]
+        || ["package-manifest", "license-manifest", "license-archive", "producer-tools", "tool-lld", "tool-qemu", "firmware-code", "firmware-vars"]
             .iter().any(|role| role_count(role) != 1)
-        || role_count("license") == 0 || objects.iter().any(|object| !allowed.contains(&object.role.as_str()))
+        || objects.iter().any(|object| !allowed.contains(&object.role.as_str()))
     {
         return Err(PreauthError::new("input-bundle-inventory"));
     }

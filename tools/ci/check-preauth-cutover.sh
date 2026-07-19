@@ -17,6 +17,7 @@ manifest=spec/lab/preauth/cutover-v1.manifest
 [ "$(grep -c '^untrusted_delivery_runner=tools/toolchain/preauth-input-delivery$' "$manifest")" -eq 1 ] || fail delivery-runner
 
 for required in tools/toolchain/preauth-transaction tools/toolchain/preauth-input-producer tools/toolchain/preauth-input-delivery \
+ tools/toolchain/preauth-base-oci tools/toolchain/preauth-base-oci.rs tools/rar-lab/preauth/src/base_oci.rs \
  tools/rar-lab/preauth/src/lib.rs spec/lab/preauth/preauth-input-bundle-v1.fields \
  spec/lab/preauth/preauth-input-object-v1.fields spec/lab/preauth/preauth-input-delivery-v1.policy \
  spec/lab/preauth/locks/r0-x86_64-preauth-input-v4.lock \

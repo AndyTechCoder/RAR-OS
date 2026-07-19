@@ -1,5 +1,6 @@
 #![deny(unsafe_code)]
 #[path="../../../tools/rar-lab/preauth/src/lib.rs"]mod preauth;
+mod base_oci;
 mod transaction;
 use preauth::{InputLockV4,TransactionGraphV1,TRANSACTION_GRAPH_FIELDS,sha256_hex};
 

@@ -125,13 +125,19 @@ inside(){
  telemetry extract-complete
  [ "$(sha256sum "$licenses" | cut -d ' ' -f1)" = "$(lock_value license_manifest_sha256)" ] || fail license-manifest
  phase=licenses
+ mkdir -m 700 "$stage/licenses"
  for row in $(grep '^package|' "$packages" | cut -d '|' -f2,8); do
   name=${row%|*}; expected=${row#*|}; copyright=$stage/extracted/usr/share/doc/$name/copyright
   resolved=$(/usr/bin/realpath -e "$copyright") || fail license-missing
   case "$resolved" in "$stage"/extracted/usr/share/doc/*) :;; *) fail license-escape;; esac
   [ "$(sha256sum "$resolved" | cut -d ' ' -f1)" = "$expected" ] || fail license-digest
-  /bin/cp --reflink=never "$resolved" "$incoming/license-$expected"
+  /bin/cp --reflink=never "$resolved" "$stage/licenses/license-$expected"
  done
+ license_list=$stage/licenses.list
+ (cd "$stage/licenses" && find . -maxdepth 1 -type f | sed 's|^\./||') | LC_ALL=C sort > "$license_list"
+ [ "$(wc -l < "$license_list" | tr -d ' ')" -ge 1 ] || fail license-archive-empty
+ /usr/bin/tar --sort=name --mtime="@$epoch" --owner=0 --group=0 --numeric-owner --mode=0644 --format=ustar --no-recursion \
+  -cf "$incoming/license-archive.tar" -C "$stage/licenses" -T "$license_list"
  telemetry bindings-complete
  phase=bindings
  for binding in \
@@ -183,12 +189,12 @@ assemble(){
   name=$(/usr/bin/dpkg-deb -f "$deb" Package); row=$(grep -F "package|$name|" "$packages")
   add_object deb "$deb" "snapshot.debian.org/$(basename "$deb")" "$name" "$(printf '%s' "$row" | cut -d '|' -f3)" "$(printf '%s' "$row" | cut -d '|' -f4)" "$(printf '%s' "$row" | cut -d '|' -f9)" "$(printf '%s' "$row" | cut -d '|' -f10)"
  done
- for license in "$incoming"/license-*; do add_object license "$license" signed-package-copyright - - - - -; done
+ add_object license-archive "$incoming/license-archive.tar" signed-package-copyright - - - - -
  add_object tool-lld "$incoming/tool-lld" /usr/bin/ld.lld-19 lld-19 '1:19.1.7-3+b1' amd64 llvm-toolchain-19 '1:19.1.7-3'
  add_object tool-qemu "$incoming/tool-qemu" /usr/bin/qemu-system-x86_64 qemu-system-x86 '1:10.0.8+ds-0+deb13u1+b2' amd64 qemu '1:10.0.8+ds-0+deb13u1'
  add_object firmware-code "$incoming/firmware-code" /usr/share/OVMF/OVMF_CODE_4M.fd ovmf '2025.02-8+deb13u1' all edk2 '2025.02-8+deb13u1'
  add_object firmware-vars "$incoming/firmware-vars" /usr/share/OVMF/OVMF_VARS_4M.fd ovmf '2025.02-8+deb13u1' all edk2 '2025.02-8+deb13u1'
- LC_ALL=C sort -u "$rows.unsorted" > "$rows"; [ "$(wc -l < "$rows" | tr -d ' ')" -le 128 ] || fail object-count
+ LC_ALL=C sort -u "$rows.unsorted" > "$rows"; [ "$(wc -l < "$rows" | tr -d ' ')" -le 64 ] || fail object-count
  aggregate=$(awk -F '|' '{ sum += $3 } END { printf "%.0f", sum }' "$rows"); [ "$aggregate" -le 4294967296 ] || fail aggregate-size
  input_lock_sha=$(sha256sum "$lock" | cut -d ' ' -f1); policy_sha=$(sha256sum "$policy" | cut -d ' ' -f1); objects_sha=$(sha256sum "$rows" | cut -d ' ' -f1)
  manifest=$archive/manifest.v1
@@ -245,40 +251,27 @@ produce(){
  }
  trap host_exit 0 1 2 15
  docker image inspect "$base" >/dev/null 2>&1 || docker pull "$base" >/dev/null
+ host_uid=$(id -u); host_gid=$(id -g)
  host_phase=base-export
  base_raw=$stage/base-oci.raw.tar
  docker save --output "$base_raw" "$base"
- host_phase=base-validate
- base_members=$stage/base-oci.members
- /usr/bin/tar -tvf "$base_raw" > "$base_members"
- [ "$(wc -l < "$base_members" | tr -d ' ')" -le 4096 ] || fail base-oci-member-count
- /usr/bin/awk '
-  function safe(path) { return path != "" && path !~ /^\// && path !~ /(^|\/)\.\.?(\/|$)/ && path !~ /\\/ && path !~ /:/ }
-  NF < 6 { exit 73 }
-  { type=substr($1,1,1); if (type != "-" && type != "d") exit 73;
-    if ($3 !~ /^[0-9]+$/) exit 73; total += $3; if (total > 4294967296) exit 73;
-    path=$6; sub(/^\.\//,"",path); if (type == "d") next; if (!safe(path)) exit 73 }
- ' "$base_members" || fail base-oci-member
- base_layout=$stage/base-oci-layout
- mkdir -m 700 "$base_layout"
- /usr/bin/tar -xf "$base_raw" -C "$base_layout" --no-same-owner
- /bin/rm -f "$base_raw" "$base_members"
- [ -f "$base_layout/index.json" ] && [ -f "$base_layout/oci-layout" ] && [ -f "$base_layout/manifest.json" ] || fail base-oci-roots
- for blob in "$base_layout"/blobs/sha256/*; do
-  [ -f "$blob" ] && [ ! -L "$blob" ] || fail base-oci-blob-type
-  [ "$(sha256sum "$blob" | cut -d ' ' -f1)" = "$(basename "$blob")" ] || fail base-oci-blob-digest
- done
  host_phase=base-canonicalize
- base_list=$stage/base-oci.list
- (cd "$base_layout" && find . -type f | sed 's|^\./||') | LC_ALL=C sort > "$base_list"
- /usr/bin/tar --sort=name --mtime="@$epoch" --owner=0 --group=0 --numeric-owner --mode=0644 --format=gnu --no-recursion \
-  -cf "$stage/incoming/base-oci.tar" -C "$base_layout" -T "$base_list"
- /bin/rm -rf "$base_layout" "$base_list"
+ base_output=$(docker run --rm --read-only --network none \
+  --user "$host_uid:$host_gid" --security-opt no-new-privileges --cap-drop ALL \
+  --tmpfs "/tmp:rw,nosuid,nodev,size=512m,uid=$host_uid,gid=$host_gid,mode=1777" \
+  --mount "type=bind,source=$root,target=/workspace" --workdir /workspace \
+  "$base" /usr/bin/dash -e tools/toolchain/preauth-base-oci --canonicalize \
+  "$stage/base-oci.raw.tar" "$stage/incoming/base-oci.tar" "$stage/incoming/base-tools.v1")
+ case "$base_output" in base_oci_config_sha256=????????????????????????????????????????????????????????????????) :;; *) fail base-oci-canonical;; esac
+ host_phase=base-identity
+ [ "$(docker image inspect --format '{{.Id}}' "$base")" = "sha256:${base_output#base_oci_config_sha256=}" ] || fail base-oci-config-binding
+ docker image inspect --format '{{join .RepoDigests "\n"}}' "$base" \
+  | grep -qx 'rust@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3' || fail base-oci-registry-binding
+ /bin/rm -f "$base_raw"
  {
   printf '%s\n' schema=rar-preauth-input-producer-tools-v1
   printf 'tool=docker-client|%s|%s\n' "$(docker version --format '{{.Client.Version}}')" "$(sha256sum "$(command -v docker)" | cut -d ' ' -f1)"
  } > "$stage/incoming/host-tools.v1"
- host_uid=$(id -u); host_gid=$(id -g)
  host_phase=container-create
  container_name=rar-preauth-input-$slot-${GITHUB_RUN_ID-local}-${GITHUB_RUN_ATTEMPT-0}
  case "$container_name" in *[!A-Za-z0-9_.-]*) fail container-name;; esac
@@ -304,7 +297,7 @@ produce(){
  container_id=
  if docker inspect "$container_name" >/dev/null 2>&1; then fail container-cleanup; fi
  host_phase=host-assembly
- { sed -n '1p' "$stage/incoming/host-tools.v1"; sed -n '2,$p' "$stage/incoming/host-tools.v1"; sed -n '2,$p' "$stage/incoming/container-tools.v1"; } > "$stage/incoming/producer-tools.v1"
+ { sed -n '1p' "$stage/incoming/host-tools.v1"; sed -n '2,$p' "$stage/incoming/host-tools.v1"; sed -n '2,$p' "$stage/incoming/base-tools.v1"; sed -n '2,$p' "$stage/incoming/container-tools.v1"; } > "$stage/incoming/producer-tools.v1"
  host_phase=publication
   assemble "$slot"
  host_phase=complete

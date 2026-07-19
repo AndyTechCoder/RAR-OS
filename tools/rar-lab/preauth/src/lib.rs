@@ -2,6 +2,7 @@
 
 #[allow(unsafe_code)]
 mod descriptor_fs;
+mod base_oci;
 mod hash;
 mod input_bundle;
 mod json;
@@ -9,14 +10,15 @@ mod package;
 mod transaction;
 mod transaction_contracts;
 
+pub use base_oci::{BaseOciCanonical, canonicalize_base_oci};
 pub use descriptor_fs::{DescriptorDir, HeldSnapshot, snapshot_to_private};
 pub use hash::{sha256_hex, sha256_reader};
 pub use input_bundle::{InputBundleV1, InputObjectV1, parse_input_bundle_v1};
 pub use json::Json;
 pub use package::{PackageManifest, PackageRow};
-pub use transaction::{ArchiveEntry, ArchivePlan, DebPlan, FrozenTransactionGraph, MemberKind,
-    MutationBoundary, OwnedSnapshot, TransactionEffects, TransactionMachine, TransactionPhase,
-    plan_deb_ar, plan_tar, validate_closure_inputs};
+pub use transaction::{ArchiveEntry, ArchivePlan, DebPlan, FrozenTransactionGraph, MAX_INPUT_OBJECTS,
+    MemberKind, MutationBoundary, OwnedSnapshot, TransactionEffects, TransactionMachine,
+    TransactionPhase, plan_deb_ar, plan_tar, validate_closure_inputs};
 pub use transaction_contracts::{INPUT_LOCK_FIELDS, InputLockV4, TRANSACTION_GRAPH_FIELDS,
     TransactionGraphV1};
 

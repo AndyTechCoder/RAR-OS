@@ -27,6 +27,10 @@ set +e; output=$(AWS_ACCESS_KEY_ID=forbidden "$producer" --produce one 2>&1); st
 [ "$status" -eq 73 ] && [ "$output" = preauth-input-producer:authority-environment ] || fail credential-refusal
 after=$(find out/r0/preauth/input-delivery -type f 2>/dev/null | sort || :)
 [ "$before" = "$after" ] || fail credential-side-effect
+grep -q 'tools/toolchain/preauth-base-oci --canonicalize' "$producer" || fail base-oci-canonicalizer
+grep -q -- '--network none' "$producer" || fail base-oci-networkless
+! grep -q 'docker save --output "$stage/incoming/base-oci.tar"' "$producer" || fail base-oci-raw-bundled
+grep -q 'base_oci_rejects' tests/preauth/src/base_oci.rs || fail base-oci-corpus
 grep -q 'docker create' "$producer" || fail lifecycle-create
 grep -q 'docker start -a' "$producer" || fail lifecycle-start
 grep -q 'docker wait' "$producer" || fail lifecycle-wait

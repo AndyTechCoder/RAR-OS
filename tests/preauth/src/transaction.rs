@@ -4,8 +4,8 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::unix::fs::symlink;
 
 use super::preauth::{
-    ArchiveEntry, ArchivePlan, DescriptorDir, FrozenTransactionGraph, InputLockV4, MemberKind,
-    OwnedSnapshot, PreauthError, TransactionEffects, TransactionMachine, TransactionPhase,
+    ArchiveEntry, ArchivePlan, DescriptorDir, FrozenTransactionGraph, InputLockV4, MAX_INPUT_OBJECTS,
+    MemberKind, OwnedSnapshot, PreauthError, TransactionEffects, TransactionMachine, TransactionPhase,
     TRANSACTION_GRAPH_FIELDS, parse_input_bundle_v1, plan_deb_ar, plan_tar, sha256_hex, snapshot_to_private,
     validate_closure_inputs,
 };
@@ -31,10 +31,12 @@ fn input_header(name: &str, bytes: &[u8]) -> [u8; 512] {
     header[148..156].copy_from_slice(format!("{sum:06o}\0 ").as_bytes()); header
 }
 
-fn input_bundle_fixture() -> Vec<u8> {
+fn input_bundle_fixture() -> Vec<u8> { input_bundle_fixture_with(None) }
+
+fn input_bundle_fixture_with(object_count: Option<usize>) -> Vec<u8> {
     let mut logical: Vec<(String, Vec<u8>, String, [&str; 5])> = Vec::new();
     let singleton = ["base-oci", "keyring", "inrelease", "inrelease", "inrelease", "security-inrelease",
-        "package-manifest", "license-manifest", "producer-tools", "license", "tool-lld", "tool-qemu", "firmware-code", "firmware-vars"];
+        "package-manifest", "license-manifest", "license-archive", "producer-tools", "tool-lld", "tool-qemu", "firmware-code", "firmware-vars"];
     for (index, role) in singleton.iter().enumerate() {
         logical.push(((*role).into(), format!("{role}-{index}").into_bytes(), format!("origin-{index}"), ["-"; 5]));
     }
@@ -55,7 +57,7 @@ fn input_bundle_fixture() -> Vec<u8> {
         "schema=rar-preauth-input-bundle-v1\ninput_lock_sha256={}\nproducer_policy_sha256={}\n",
         "base_oci_index_sha256={}\ndebian_snapshot=20260630T000000Z\npackage_count=36\n",
         "object_count={}\naggregate_bytes={}\nobjects_manifest_sha256={}\n"),
-        lock, policy, base, rows.len(), aggregate, sha256_hex(&objects));
+        lock, policy, base, object_count.unwrap_or(rows.len()), aggregate, sha256_hex(&objects));
     let manifest = format!("{payload}record_sha256={}\n", sha256_hex(payload.as_bytes())).into_bytes();
     files.push(("manifest.v1".into(), manifest)); files.push(("objects.v1".into(), objects)); files.sort_by(|a,b| a.0.cmp(&b.0));
     let mut archive = Vec::new();
@@ -103,6 +105,18 @@ fn input_bundle_v1_is_canonical_complete_and_content_addressed() {
     let first_at = valid.windows(first_object.len()).position(|window| window == first_object).unwrap();
     substituted[first_at + 512] ^= 1;
     assert_eq!(parse_input_bundle_v1(&substituted).unwrap_err().code, "input-object-content");
+}
+
+#[test]
+fn input_bundle_object_bound_matches_frozen_transaction_limit() {
+    assert_eq!(MAX_INPUT_OBJECTS, 64);
+    let parsed = parse_input_bundle_v1(&input_bundle_fixture()).unwrap();
+    assert_eq!(parsed.objects.len(), 50);
+    assert!(parsed.objects.len() <= MAX_INPUT_OBJECTS);
+    assert_eq!(parse_input_bundle_v1(&input_bundle_fixture_with(Some(MAX_INPUT_OBJECTS + 1))).unwrap_err().code,
+        "input-bundle-bound");
+    assert_eq!(parse_input_bundle_v1(&input_bundle_fixture_with(Some(MAX_INPUT_OBJECTS))).unwrap_err().code,
+        "input-bundle-inventory");
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

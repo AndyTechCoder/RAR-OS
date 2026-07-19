@@ -118,7 +118,7 @@ printf '%s\n' "$required_files" | while IFS= read -r file; do
     [ -s "$file" ] || fail "empty required file: $file"
 done
 
-for script in tools/ci/check-specs.sh tools/ci/check-preauth-cutover.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh tests/preauth/run.sh tests/preauth/transaction-contracts.sh tests/preauth/input-producer-contracts.sh tools/toolchain/preauth-transaction tools/toolchain/preauth-input-producer spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
+for script in tools/ci/check-specs.sh tools/ci/check-preauth-cutover.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh tests/preauth/run.sh tests/preauth/transaction-contracts.sh tests/preauth/input-producer-contracts.sh tools/toolchain/preauth-transaction tools/toolchain/preauth-input-producer tools/toolchain/preauth-base-oci spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
     [ -x "$script" ] || fail "required script is not executable: $script"
 done
 
