@@ -179,6 +179,7 @@ assemble(){
   if [ -e "$destination" ]; then /usr/bin/cmp -s "$source" "$destination" || fail digest-collision; else /bin/cp --reflink=never "$source" "$destination"; chmod 0644 "$destination"; fi
   printf '%s|objects/%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$role" "$sha" "$size" "$sha" "$origin" "$package" "$version" "$architecture" "$source_package" "$source_version" >> "$rows.unsorted"
  }
+ [ "$(sha256sum "$incoming/base-oci.tar" | cut -d ' ' -f1)" = "$(cat "$stage/base-oci.expected")" ] || fail base-oci-reopen-mismatch
  add_object base-oci "$incoming/base-oci.tar" docker.io/library/rust@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 - - - - -
  add_object keyring "$incoming/debian-archive-keyring.gpg" debian-archive-keyring - - - - -
  for metadata in "$incoming"/*InRelease; do case "$(basename "$metadata")" in *debian-security*) role=security-inrelease;; *) role=inrelease;; esac; add_object "$role" "$metadata" "snapshot.debian.org/$(basename "$metadata")" - - - - -; done
@@ -261,10 +262,17 @@ produce(){
   --tmpfs "/tmp:rw,nosuid,nodev,size=512m,uid=$host_uid,gid=$host_gid,mode=1777" \
   --mount "type=bind,source=$root,target=/workspace" --workdir /workspace \
   "$base" /usr/bin/dash -e tools/toolchain/preauth-base-oci --canonicalize \
-  "$stage/base-oci.raw.tar" "$stage/incoming/base-oci.tar" "$stage/incoming/base-tools.v1")
- case "$base_output" in base_oci_config_sha256=????????????????????????????????????????????????????????????????) :;; *) fail base-oci-canonical;; esac
+  "$stage/base-oci.raw.tar" "$stage/incoming/base-oci.tar" "$stage/incoming/base-tools.v1" \
+  "docker.io/library/rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3" \
+  "1.95.0")
+ [ "$(printf '%s\n' "$base_output" | wc -l | tr -d ' ')" -eq 2 ] || fail base-oci-canonical
+ canonical_line=$(printf '%s\n' "$base_output" | sed -n '1p')
+ config_line=$(printf '%s\n' "$base_output" | sed -n '2p')
+ case "$canonical_line" in base_oci_canonical_sha256=????????????????????????????????????????????????????????????????) :;; *) fail base-oci-canonical;; esac
+ case "$config_line" in base_oci_config_sha256=????????????????????????????????????????????????????????????????) :;; *) fail base-oci-canonical;; esac
+ printf '%s\n' "${canonical_line#base_oci_canonical_sha256=}" > "$stage/base-oci.expected"
  host_phase=base-identity
- [ "$(docker image inspect --format '{{.Id}}' "$base")" = "sha256:${base_output#base_oci_config_sha256=}" ] || fail base-oci-config-binding
+ [ "$(docker image inspect --format '{{.Id}}' "$base")" = "sha256:${config_line#base_oci_config_sha256=}" ] || fail base-oci-config-binding
  docker image inspect --format '{{join .RepoDigests "\n"}}' "$base" \
   | grep -qx 'rust@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3' || fail base-oci-registry-binding
  /bin/rm -f "$base_raw"

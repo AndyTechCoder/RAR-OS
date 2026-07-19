@@ -27,6 +27,7 @@ fn main() {
     input.by_ref().take(maximum + 1).read_to_end(&mut bytes).unwrap_or_else(|_| refuse("input-read"));
     if bytes.len() as u64 > maximum { refuse("input-bound"); }
     let bundle = parse_input_bundle_v1(&bytes).unwrap_or_else(|error| refuse(error.code));
+    if bundle.package_count != 36 { refuse("input-package-count"); }
     println!("input_bundle_schema=rar-preauth-input-bundle-v1");
     println!("input_bundle_sha256={}", bundle.archive_sha256);
     println!("input_object_count={}", bundle.objects.len());

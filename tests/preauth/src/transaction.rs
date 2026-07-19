@@ -31,17 +31,17 @@ fn input_header(name: &str, bytes: &[u8]) -> [u8; 512] {
     header[148..156].copy_from_slice(format!("{sum:06o}\0 ").as_bytes()); header
 }
 
-fn input_bundle_fixture() -> Vec<u8> { input_bundle_fixture_with(None) }
+fn input_bundle_fixture() -> Vec<u8> { build_input_bundle(36, None) }
 
-fn input_bundle_fixture_with(object_count: Option<usize>) -> Vec<u8> {
+fn build_input_bundle(debs: usize, object_count: Option<usize>) -> Vec<u8> {
     let mut logical: Vec<(String, Vec<u8>, String, [&str; 5])> = Vec::new();
     let singleton = ["base-oci", "keyring", "inrelease", "inrelease", "inrelease", "security-inrelease",
         "package-manifest", "license-manifest", "license-archive", "producer-tools", "tool-lld", "tool-qemu", "firmware-code", "firmware-vars"];
     for (index, role) in singleton.iter().enumerate() {
         logical.push(((*role).into(), format!("{role}-{index}").into_bytes(), format!("origin-{index}"), ["-"; 5]));
     }
-    for index in 0..36 {
-        logical.push(("deb".into(), format!("deb-{index}").into_bytes(), format!("snapshot-{index}"),
+    for index in 0..debs {
+        logical.push(("deb".into(), format!("deb-{index:03}").into_bytes(), format!("snapshot-{index:03}"),
             ["package", "version", "amd64", "source", "source-version"]));
     }
     let mut rows = Vec::new(); let mut files = Vec::new(); let mut aggregate = 0u64;
@@ -55,9 +55,9 @@ fn input_bundle_fixture_with(object_count: Option<usize>) -> Vec<u8> {
     let lock = hash('a'); let policy = hash('b'); let base = hash('c');
     let payload = format!(concat!(
         "schema=rar-preauth-input-bundle-v1\ninput_lock_sha256={}\nproducer_policy_sha256={}\n",
-        "base_oci_index_sha256={}\ndebian_snapshot=20260630T000000Z\npackage_count=36\n",
+        "base_oci_index_sha256={}\ndebian_snapshot=20260630T000000Z\npackage_count={}\n",
         "object_count={}\naggregate_bytes={}\nobjects_manifest_sha256={}\n"),
-        lock, policy, base, object_count.unwrap_or(rows.len()), aggregate, sha256_hex(&objects));
+        lock, policy, base, debs, object_count.unwrap_or(rows.len()), aggregate, sha256_hex(&objects));
     let manifest = format!("{payload}record_sha256={}\n", sha256_hex(payload.as_bytes())).into_bytes();
     files.push(("manifest.v1".into(), manifest)); files.push(("objects.v1".into(), objects)); files.sort_by(|a,b| a.0.cmp(&b.0));
     let mut archive = Vec::new();
@@ -108,14 +108,21 @@ fn input_bundle_v1_is_canonical_complete_and_content_addressed() {
 }
 
 #[test]
-fn input_bundle_object_bound_matches_frozen_transaction_limit() {
+fn input_bundle_object_bound_is_an_accepted_conformance_boundary() {
     assert_eq!(MAX_INPUT_OBJECTS, 64);
-    let parsed = parse_input_bundle_v1(&input_bundle_fixture()).unwrap();
-    assert_eq!(parsed.objects.len(), 50);
-    assert!(parsed.objects.len() <= MAX_INPUT_OBJECTS);
-    assert_eq!(parse_input_bundle_v1(&input_bundle_fixture_with(Some(MAX_INPUT_OBJECTS + 1))).unwrap_err().code,
+    let current = parse_input_bundle_v1(&input_bundle_fixture()).unwrap();
+    assert_eq!(current.objects.len(), 50);
+    assert_eq!(current.package_count, 36);
+    // A semantically valid 64-object bundle (50 deb rows plus the 14 required singletons)
+    // is accepted by the production parser without filesystem effects.
+    let at_bound = parse_input_bundle_v1(&build_input_bundle(50, None)).unwrap();
+    assert_eq!(at_bound.objects.len(), MAX_INPUT_OBJECTS);
+    assert_eq!(at_bound.package_count, 50);
+    // One object past the frozen bound is rejected by the count bound itself.
+    assert_eq!(parse_input_bundle_v1(&build_input_bundle(51, None)).unwrap_err().code,
         "input-bundle-bound");
-    assert_eq!(parse_input_bundle_v1(&input_bundle_fixture_with(Some(MAX_INPUT_OBJECTS))).unwrap_err().code,
+    // A manifest claiming more objects than are present is an inventory integrity failure.
+    assert_eq!(parse_input_bundle_v1(&build_input_bundle(36, Some(MAX_INPUT_OBJECTS))).unwrap_err().code,
         "input-bundle-inventory");
 }
 

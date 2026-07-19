@@ -1,11 +1,15 @@
 //! Bounded structural validation and canonical re-serialization of the pinned base OCI export.
 //!
 //! The raw Docker export is untrusted delivery input. This module parses its tar framing with
-//! strict bounds, re-hashes every content-addressed blob against its declared name, structurally
-//! parses `oci-layout`, `index.json`, the selected OCI manifest, the image config, the ordered
-//! layers, and Docker's legacy `manifest.json`, proves index→manifest→config→layer reachability
-//! with no dangling or unexpected member, and then emits one deterministic canonical ustar archive
-//! of the validated regular files. Raw export serialization never reaches the published bundle.
+//! strict bounds and exact member metadata, permits pax extended headers only as a parsed
+//! canonical timestamp grammar, re-hashes every content-addressed blob against its declared
+//! name, structurally parses `oci-layout`, `index.json`, the selected OCI manifest, the image
+//! config, the ordered layers, and Docker's legacy `manifest.json`, requires the exact
+//! digest-pull identity policy (two pinned index-descriptor annotations, no platform object,
+//! `RepoTags` exactly null, one exact `LayerSources` binding per diff ID, and no tag-bearing
+//! `repositories` root), proves index→manifest→config→layer reachability, digest-verifies then
+//! excludes edge-free store metadata per ADR 0018, and emits one deterministic canonical ustar
+//! archive that equals the rooted graph exactly.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -14,7 +18,6 @@ use super::{Json, PreauthError, Result, sha256_hex};
 
 const SOURCE_DATE_EPOCH: u64 = 1_784_332_800;
 const MAX_METADATA_BYTES: usize = 1024 * 1024;
-const MAX_REPOSITORIES_BYTES: usize = 512;
 const MAX_LAYERS: usize = 64;
 const MAX_PAX_BYTES: u64 = 16 * 1024;
 const MAX_PAX_RECORDS: usize = 64;
@@ -23,6 +26,8 @@ const INDEX_MEDIA_TYPE: &str = "application/vnd.oci.image.index.v1+json";
 const MANIFEST_MEDIA_TYPE: &str = "application/vnd.oci.image.manifest.v1+json";
 const CONFIG_MEDIA_TYPE: &str = "application/vnd.oci.image.config.v1+json";
 const LAYER_MEDIA_TYPE: &str = "application/vnd.oci.image.layer.v1.tar";
+const IMAGE_NAME_ANNOTATION: &str = "io.containerd.image.name";
+const REF_NAME_ANNOTATION: &str = "org.opencontainers.image.ref.name";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BaseOciCanonical {
@@ -40,8 +45,8 @@ fn tar_octal(bytes: &[u8]) -> Result<u64> {
     u64::from_str_radix(value, 8).map_err(|_| PreauthError::new("base-oci-tar-number"))
 }
 
-/// A pax extended header may only carry timestamp/comment metadata, which the canonical
-/// serialization discards. Any identity-bearing override fails closed.
+/// A pax extended header may only carry canonical timestamps, which the canonical serialization
+/// discards. Any other key, and any non-timestamp value, fails closed.
 fn check_pax_records(payload: &[u8]) -> Result<()> {
     if payload.len() as u64 > MAX_PAX_BYTES { return Err(PreauthError::new("base-oci-pax-bound")); }
     let mut rest = payload;
@@ -56,9 +61,16 @@ fn check_pax_records(payload: &[u8]) -> Result<()> {
             return Err(PreauthError::new("base-oci-pax-record"));
         }
         let record = std::str::from_utf8(&rest[space + 1..length - 1]).map_err(|_| PreauthError::new("base-oci-pax-record"))?;
-        let key = record.split_once('=').map(|(key, _)| key).ok_or_else(|| PreauthError::new("base-oci-pax-record"))?;
-        if !matches!(key, "mtime" | "atime" | "ctime" | "comment") {
+        let (key, value) = record.split_once('=').ok_or_else(|| PreauthError::new("base-oci-pax-record"))?;
+        if !matches!(key, "mtime" | "atime" | "ctime") {
             return Err(PreauthError::new("base-oci-pax-override"));
+        }
+        let (seconds, fraction) = value.split_once('.').unwrap_or((value, ""));
+        if seconds.is_empty() || seconds.len() > 20 || !seconds.bytes().all(|byte| byte.is_ascii_digit())
+            || fraction.len() > 9 || !fraction.bytes().all(|byte| byte.is_ascii_digit())
+            || (value.contains('.') && fraction.is_empty())
+        {
+            return Err(PreauthError::new("base-oci-pax-value"));
         }
         rest = &rest[length..];
     }
@@ -124,13 +136,13 @@ fn walk_raw_export(raw: &[u8]) -> Result<Vec<RawMember<'_>>> {
         let path = if kind == MemberKind::Directory {
             raw_path.strip_suffix('/').unwrap_or(&raw_path).to_owned()
         } else { raw_path };
-        members.push(RawMember {
-            path, kind,
-            mode: u32::try_from(tar_octal(&header[100..108])?).map_err(|_| PreauthError::new("base-oci-tar-number"))?,
-            uid: u32::try_from(tar_octal(&header[108..116])?).map_err(|_| PreauthError::new("base-oci-tar-number"))?,
-            gid: u32::try_from(tar_octal(&header[116..124])?).map_err(|_| PreauthError::new("base-oci-tar-number"))?,
-            payload: &raw[payload_start..data_end],
-        });
+        let mode = u32::try_from(tar_octal(&header[100..108])?).map_err(|_| PreauthError::new("base-oci-tar-number"))?;
+        let uid = u32::try_from(tar_octal(&header[108..116])?).map_err(|_| PreauthError::new("base-oci-tar-number"))?;
+        let gid = u32::try_from(tar_octal(&header[116..124])?).map_err(|_| PreauthError::new("base-oci-tar-number"))?;
+        if uid != 0 || gid != 0 { return Err(PreauthError::new("base-oci-member-owner")); }
+        let exact_mode = if kind == MemberKind::Directory { 0o755 } else { 0o644 };
+        if mode != exact_mode { return Err(PreauthError::new("base-oci-member-mode")); }
+        members.push(RawMember { path, kind, mode, uid, gid, payload: &raw[payload_start..data_end] });
         offset = payload_end;
     }
     if zero_blocks != 2 { return Err(PreauthError::new("base-oci-tar-end-marker")); }
@@ -147,8 +159,6 @@ fn descriptor_digest(descriptor: &Json) -> Result<String> {
 }
 
 fn resolve_blob<'a>(blobs: &BTreeMap<String, &'a [u8]>, descriptor: &Json, media_type: &str) -> Result<(String, &'a [u8])> {
-    descriptor.exact_keys(&["mediaType", "digest", "size"], &["annotations", "platform"])
-        .map_err(|_| PreauthError::new("base-oci-descriptor-keys"))?;
     if descriptor.get("mediaType")?.string()? != media_type { return Err(PreauthError::new("base-oci-media-type")); }
     let hex = descriptor_digest(descriptor)?;
     let payload = *blobs.get(&hex).ok_or_else(|| PreauthError::new("base-oci-missing-blob"))?;
@@ -186,7 +196,10 @@ fn emit_canonical(files: &BTreeMap<String, &[u8]>) -> Vec<u8> {
     archive
 }
 
-pub fn canonicalize_base_oci(raw: &[u8]) -> Result<BaseOciCanonical> {
+/// `expected_image_name` and `expected_ref_name` are the exact pinned digest-pull identity the
+/// export's index descriptor annotations must carry; a digest pull has no tag authority, so
+/// `RepoTags` must be exactly null and no `repositories` root may exist.
+pub fn canonicalize_base_oci(raw: &[u8], expected_image_name: &str, expected_ref_name: &str) -> Result<BaseOciCanonical> {
     let members = walk_raw_export(raw)?;
     ArchivePlan::validate(members.iter().map(|member| ArchiveEntry {
         path: member.path.clone(), kind: member.kind, compressed_bytes: member.payload.len() as u64,
@@ -209,7 +222,9 @@ pub fn canonicalize_base_oci(raw: &[u8]) -> Result<BaseOciCanonical> {
                     }
                     if sha256_hex(member.payload) != hex { return Err(PreauthError::new("base-oci-blob-digest")); }
                     blobs.insert(hex.to_owned(), member.payload);
-                } else if !matches!(member.path.as_str(), "oci-layout" | "index.json" | "manifest.json" | "repositories") {
+                } else if member.path == "repositories" {
+                    return Err(PreauthError::new("base-oci-repositories-present"));
+                } else if !matches!(member.path.as_str(), "oci-layout" | "index.json" | "manifest.json") {
                     return Err(PreauthError::new("base-oci-unexpected-member"));
                 }
                 files.insert(member.path.clone(), member.payload);
@@ -223,20 +238,21 @@ pub fn canonicalize_base_oci(raw: &[u8]) -> Result<BaseOciCanonical> {
     if layout.get("imageLayoutVersion")?.string()? != "1.0.0" { return Err(PreauthError::new("base-oci-layout")); }
 
     let index = parse_metadata("index.json", &files)?;
-    index.exact_keys(&["schemaVersion", "manifests"], &["mediaType", "annotations"])
+    index.exact_keys(&["schemaVersion", "mediaType", "manifests"], &[])
         .map_err(|_| PreauthError::new("base-oci-index-keys"))?;
     if index.get("schemaVersion")?.number()? != 2 { return Err(PreauthError::new("base-oci-schema-version")); }
-    if let Ok(media_type) = index.get("mediaType") {
-        if media_type.string()? != INDEX_MEDIA_TYPE { return Err(PreauthError::new("base-oci-media-type")); }
-    }
+    if index.get("mediaType")?.string()? != INDEX_MEDIA_TYPE { return Err(PreauthError::new("base-oci-media-type")); }
     let descriptors = index.get("manifests")?.array()?;
     if descriptors.len() != 1 { return Err(PreauthError::new("base-oci-manifest-count")); }
-    if let Ok(platform) = descriptors[0].get("platform") {
-        platform.exact_keys(&["architecture", "os"], &["variant"])
-            .map_err(|_| PreauthError::new("base-oci-platform-keys"))?;
-        if platform.get("architecture")?.string()? != "amd64" || platform.get("os")?.string()? != "linux" {
-            return Err(PreauthError::new("base-oci-platform"));
-        }
+    descriptors[0].exact_keys(&["mediaType", "digest", "size", "annotations"], &[])
+        .map_err(|_| PreauthError::new("base-oci-descriptor-keys"))?;
+    let annotations = descriptors[0].get("annotations")?;
+    annotations.exact_keys(&[IMAGE_NAME_ANNOTATION, REF_NAME_ANNOTATION], &[])
+        .map_err(|_| PreauthError::new("base-oci-annotation-keys"))?;
+    if annotations.get(IMAGE_NAME_ANNOTATION)?.string()? != expected_image_name
+        || annotations.get(REF_NAME_ANNOTATION)?.string()? != expected_ref_name
+    {
+        return Err(PreauthError::new("base-oci-annotations"));
     }
     let (manifest_hex, manifest_bytes) = resolve_blob(&blobs, &descriptors[0], MANIFEST_MEDIA_TYPE)?;
 
@@ -248,13 +264,18 @@ pub fn canonicalize_base_oci(raw: &[u8]) -> Result<BaseOciCanonical> {
     if let Ok(media_type) = manifest.get("mediaType") {
         if media_type.string()? != MANIFEST_MEDIA_TYPE { return Err(PreauthError::new("base-oci-media-type")); }
     }
-    let (config_hex, config_bytes) = resolve_blob(&blobs, manifest.get("config")?, CONFIG_MEDIA_TYPE)?;
+    let config_descriptor = manifest.get("config")?;
+    config_descriptor.exact_keys(&["mediaType", "digest", "size"], &[])
+        .map_err(|_| PreauthError::new("base-oci-descriptor-keys"))?;
+    let (config_hex, config_bytes) = resolve_blob(&blobs, config_descriptor, CONFIG_MEDIA_TYPE)?;
     let layer_descriptors = manifest.get("layers")?.array()?;
     if layer_descriptors.is_empty() || layer_descriptors.len() > MAX_LAYERS {
         return Err(PreauthError::new("base-oci-layer-count"));
     }
     let mut layer_hexes = Vec::new();
     for descriptor in layer_descriptors {
+        descriptor.exact_keys(&["mediaType", "digest", "size"], &[])
+            .map_err(|_| PreauthError::new("base-oci-descriptor-keys"))?;
         let (hex, _) = resolve_blob(&blobs, descriptor, LAYER_MEDIA_TYPE)?;
         layer_hexes.push(hex);
     }
@@ -276,51 +297,28 @@ pub fn canonicalize_base_oci(raw: &[u8]) -> Result<BaseOciCanonical> {
     let entries = legacy.array()?;
     if entries.len() != 1 { return Err(PreauthError::new("base-oci-manifest-count")); }
     let entry = &entries[0];
-    entry.exact_keys(&["Config", "Layers"], &["RepoTags", "LayerSources"])
+    entry.exact_keys(&["Config", "RepoTags", "Layers", "LayerSources"], &[])
         .map_err(|_| PreauthError::new("base-oci-legacy-keys"))?;
     if entry.get("Config")?.string()? != format!("blobs/sha256/{config_hex}") {
         return Err(PreauthError::new("base-oci-legacy-config"));
     }
+    if entry.get("RepoTags")? != &Json::Null { return Err(PreauthError::new("base-oci-repo-tags")); }
     let legacy_layers = entry.get("Layers")?.array()?;
     if legacy_layers.len() != layer_hexes.len() { return Err(PreauthError::new("base-oci-legacy-layers")); }
     for (layer, hex) in legacy_layers.iter().zip(&layer_hexes) {
         if layer.string()? != format!("blobs/sha256/{hex}") { return Err(PreauthError::new("base-oci-legacy-layers")); }
     }
-    if let Ok(repo_tags) = entry.get("RepoTags") {
-        match repo_tags {
-            Json::Null => {}
-            Json::Array(values) => {
-                if values.len() > 8 { return Err(PreauthError::new("base-oci-repo-tags")); }
-                for value in values {
-                    if value.string()?.len() > 256 { return Err(PreauthError::new("base-oci-repo-tags")); }
-                }
-            }
-            _ => return Err(PreauthError::new("base-oci-repo-tags")),
-        }
-    }
-    if let Ok(layer_sources) = entry.get("LayerSources") {
-        let sources = layer_sources.object()?;
-        if sources.len() != layer_hexes.len() { return Err(PreauthError::new("base-oci-layer-sources")); }
-        for hex in &layer_hexes {
-            let source = sources.get(&format!("sha256:{hex}")).ok_or_else(|| PreauthError::new("base-oci-layer-sources"))?;
-            source.exact_keys(&["mediaType", "digest", "size"], &[])
-                .map_err(|_| PreauthError::new("base-oci-layer-sources"))?;
-            if source.get("mediaType")?.string()? != LAYER_MEDIA_TYPE
-                || source.get("digest")?.string()? != format!("sha256:{hex}")
-                || source.get("size")?.number()? != blobs[hex].len() as u64
-            {
-                return Err(PreauthError::new("base-oci-layer-sources"));
-            }
-        }
-    }
-
-    if let Some(repositories) = files.get("repositories") {
-        if repositories.len() > MAX_REPOSITORIES_BYTES { return Err(PreauthError::new("base-oci-repositories")); }
-        let parsed = Json::parse(repositories).map_err(|_| PreauthError::new("base-oci-repositories"))?;
-        for value in parsed.object().map_err(|_| PreauthError::new("base-oci-repositories"))?.values() {
-            for binding in value.object().map_err(|_| PreauthError::new("base-oci-repositories"))?.values() {
-                binding.string().map_err(|_| PreauthError::new("base-oci-repositories"))?;
-            }
+    let sources = entry.get("LayerSources")?.object()?;
+    if sources.len() != layer_hexes.len() { return Err(PreauthError::new("base-oci-layer-sources")); }
+    for hex in &layer_hexes {
+        let source = sources.get(&format!("sha256:{hex}")).ok_or_else(|| PreauthError::new("base-oci-layer-sources"))?;
+        source.exact_keys(&["mediaType", "digest", "size"], &[])
+            .map_err(|_| PreauthError::new("base-oci-layer-sources"))?;
+        if source.get("mediaType")?.string()? != LAYER_MEDIA_TYPE
+            || source.get("digest")?.string()? != format!("sha256:{hex}")
+            || source.get("size")?.number()? != blobs[hex].len() as u64
+        {
+            return Err(PreauthError::new("base-oci-layer-sources"));
         }
     }
 
@@ -342,4 +340,48 @@ pub fn canonicalize_base_oci(raw: &[u8]) -> Result<BaseOciCanonical> {
         manifest_sha256: manifest_hex,
         layer_count: layer_hexes.len(),
     })
+}
+
+fn escaped(bytes: &[u8], cap: usize) -> String {
+    let mut output = String::new();
+    for byte in bytes.iter().take(cap) {
+        if byte.is_ascii_graphic() || *byte == b' ' { output.push(char::from(*byte)); }
+        else { output.push_str(&format!("\\x{byte:02x}")); }
+    }
+    if bytes.len() > cap { output.push_str("..."); }
+    output
+}
+
+/// Bounded, value-redacting-where-large, tolerant description of a raw export's observed shape.
+/// Used only for failure diagnostics; it grants nothing and validates nothing.
+pub fn describe_base_oci(raw: &[u8]) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut offset = 0usize;
+    let mut metadata: BTreeMap<String, Vec<u8>> = BTreeMap::new();
+    while offset + 512 <= raw.len() && lines.len() < 96 {
+        let header = &raw[offset..offset + 512];
+        if header.iter().all(|byte| *byte == 0) { offset += 512; continue; }
+        let name_end = header[..100].iter().position(|byte| *byte == 0).unwrap_or(100);
+        let name = String::from_utf8_lossy(&header[..name_end]).into_owned();
+        let size = tar_octal(&header[124..136]).unwrap_or(u64::MAX);
+        if size == u64::MAX { lines.push(format!("member path={} size=unparseable", escaped(name.as_bytes(), 120))); break; }
+        let mode = tar_octal(&header[100..108]).unwrap_or(0);
+        let uid = tar_octal(&header[108..116]).unwrap_or(u64::MAX);
+        let gid = tar_octal(&header[116..124]).unwrap_or(u64::MAX);
+        let kind = header[156];
+        lines.push(format!("member path={} type={} mode={:04o} uid={} gid={} size={}",
+            escaped(name.as_bytes(), 120), escaped(&[kind.max(b'0')], 4), mode, uid, gid, size));
+        let payload_start = offset + 512;
+        let padded = (size as usize).div_ceil(512) * 512;
+        if payload_start + padded > raw.len() { lines.push("truncated payload".into()); break; }
+        if kind == b'x' || ((kind == 0 || kind == b'0') && size <= 4096 && !name.starts_with("blobs/")) {
+            metadata.insert(name, raw[payload_start..payload_start + size as usize].to_vec());
+        }
+        offset = payload_start + padded;
+    }
+    for (name, bytes) in &metadata {
+        lines.push(format!("payload {}={}", escaped(name.as_bytes(), 120), escaped(bytes, 640)));
+    }
+    lines.truncate(120);
+    lines
 }

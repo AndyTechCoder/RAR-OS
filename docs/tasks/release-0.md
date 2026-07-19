@@ -223,7 +223,7 @@ Acceptance:
 
 1. R0-000 establishes the non-execution and certified-VM boundary.
 2. R0-001 and R0-002 establish tools/contracts without guest execution.
-3. Prompt 7A may construct and certify one exact candidate without execution under ADRs 0017–0021.
+3. Prompt 7A may construct and certify one exact candidate without execution under ADRs 0017–0022.
 4. Prompt 7 is rerun with fresh architecture and security review; a separate exact owner authorization unlocks one certified VM boot.
 5. R0-003, R0-004, and R0-005 run in parallel.
 6. R0-006 uses both full-architecture ports.

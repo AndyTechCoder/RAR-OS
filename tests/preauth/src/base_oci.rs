@@ -1,6 +1,14 @@
 use std::collections::BTreeMap;
+use std::io::{Read, Seek, SeekFrom};
 
-use super::preauth::{canonicalize_base_oci, sha256_hex};
+use super::preauth::{DescriptorDir, canonicalize_base_oci, sha256_hex};
+
+const IMAGE: &str = "docker.io/library/example:1.0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const REF: &str = "1.0";
+
+fn canonicalize(raw: &[u8]) -> super::preauth::Result<super::preauth::BaseOciCanonical> {
+    canonicalize_base_oci(raw, IMAGE, REF)
+}
 
 #[derive(Clone)]
 struct Member { path: String, kind: u8, mode: &'static [u8; 8], payload: Vec<u8> }
@@ -52,10 +60,10 @@ fn render(members: &[Member]) -> Vec<u8> {
 struct Layout {
     config: Vec<u8>,
     layers: Vec<Vec<u8>>,
-    manifest: Option<Vec<u8>>,
     index: Option<Vec<u8>>,
     legacy: Option<Vec<u8>>,
     extra_blobs: Vec<Vec<u8>>,
+    lead_members: Vec<Member>,
     extra_members: Vec<Member>,
 }
 
@@ -66,41 +74,50 @@ impl Default for Layout {
         let config = format!(
             "{{\"architecture\":\"amd64\",\"os\":\"linux\",\"rootfs\":{{\"type\":\"layers\",\"diff_ids\":[{}]}}}}",
             diff_ids.join(",")).into_bytes();
-        Self { config, layers, manifest: None, index: None, legacy: None, extra_blobs: Vec::new(), extra_members: Vec::new() }
+        Self { config, layers, index: None, legacy: None, extra_blobs: Vec::new(),
+            lead_members: Vec::new(), extra_members: Vec::new() }
     }
 }
 
 impl Layout {
     fn manifest_bytes(&self) -> Vec<u8> {
-        self.manifest.clone().unwrap_or_else(|| {
-            let layers: Vec<String> = self.layers.iter().map(|layer| format!(
-                "{{\"mediaType\":\"application/vnd.oci.image.layer.v1.tar\",\"digest\":\"sha256:{}\",\"size\":{}}}",
+        let layers: Vec<String> = self.layers.iter().map(|layer| format!(
+            "{{\"mediaType\":\"application/vnd.oci.image.layer.v1.tar\",\"digest\":\"sha256:{}\",\"size\":{}}}",
+            sha256_hex(layer), layer.len())).collect();
+        format!(
+            "{{\"schemaVersion\":2,\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\",\"config\":{{\"mediaType\":\"application/vnd.oci.image.config.v1+json\",\"digest\":\"sha256:{}\",\"size\":{}}},\"layers\":[{}]}}",
+            sha256_hex(&self.config), self.config.len(), layers.join(",")).into_bytes()
+    }
+    fn index_bytes(&self, manifest: &[u8]) -> Vec<u8> {
+        self.index.clone().unwrap_or_else(|| format!(
+            "{{\"schemaVersion\":2,\"mediaType\":\"application/vnd.oci.image.index.v1+json\",\"manifests\":[{{\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\",\"digest\":\"sha256:{}\",\"size\":{},\"annotations\":{{\"io.containerd.image.name\":\"{IMAGE}\",\"org.opencontainers.image.ref.name\":\"{REF}\"}}}}]}}",
+            sha256_hex(manifest), manifest.len()).into_bytes())
+    }
+    fn legacy_bytes(&self) -> Vec<u8> {
+        self.legacy.clone().unwrap_or_else(|| {
+            let layers: Vec<String> = self.layers.iter().map(|layer| format!("\"blobs/sha256/{}\"", sha256_hex(layer))).collect();
+            let sources: Vec<String> = self.layers.iter().map(|layer| format!(
+                "\"sha256:{0}\":{{\"mediaType\":\"application/vnd.oci.image.layer.v1.tar\",\"digest\":\"sha256:{0}\",\"size\":{1}}}",
                 sha256_hex(layer), layer.len())).collect();
-            format!(
-                "{{\"schemaVersion\":2,\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\",\"config\":{{\"mediaType\":\"application/vnd.oci.image.config.v1+json\",\"digest\":\"sha256:{}\",\"size\":{}}},\"layers\":[{}]}}",
-                sha256_hex(&self.config), self.config.len(), layers.join(",")).into_bytes()
+            format!("[{{\"Config\":\"blobs/sha256/{}\",\"RepoTags\":null,\"Layers\":[{}],\"LayerSources\":{{{}}}}}]",
+                sha256_hex(&self.config), layers.join(","), sources.join(",")).into_bytes()
         })
     }
     fn render(&self) -> Vec<u8> {
         let manifest = self.manifest_bytes();
-        let index = self.index.clone().unwrap_or_else(|| format!(
-            "{{\"schemaVersion\":2,\"manifests\":[{{\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\",\"digest\":\"sha256:{}\",\"size\":{}}}]}}",
-            sha256_hex(&manifest), manifest.len()).into_bytes());
-        let legacy = self.legacy.clone().unwrap_or_else(|| {
-            let layers: Vec<String> = self.layers.iter().map(|layer| format!("\"blobs/sha256/{}\"", sha256_hex(layer))).collect();
-            format!("[{{\"Config\":\"blobs/sha256/{}\",\"Layers\":[{}],\"RepoTags\":null}}]",
-                sha256_hex(&self.config), layers.join(",")).into_bytes()
-        });
+        let index = self.index_bytes(&manifest);
+        let legacy = self.legacy_bytes();
         let mut blobs: BTreeMap<String, Vec<u8>> = BTreeMap::new();
         blobs.insert(sha256_hex(&self.config), self.config.clone());
         blobs.insert(sha256_hex(&manifest), manifest);
         for layer in &self.layers { blobs.insert(sha256_hex(layer), layer.clone()); }
         for blob in &self.extra_blobs { blobs.insert(sha256_hex(blob), blob.clone()); }
-        let mut members = vec![
+        let mut members = self.lead_members.clone();
+        members.extend([
             directory("blobs"), directory("blobs/sha256"),
             file("oci-layout", b"{\"imageLayoutVersion\":\"1.0.0\"}"),
             file("index.json", &index), file("manifest.json", &legacy),
-        ];
+        ]);
         for (digest, payload) in &blobs { members.push(file(&format!("blobs/sha256/{digest}"), payload)); }
         members.extend(self.extra_members.iter().cloned());
         render(&members)
@@ -111,83 +128,140 @@ impl Layout {
 fn base_oci_accepts_and_deterministically_canonicalizes_a_rooted_graph() {
     let layout = Layout::default();
     let raw = layout.render();
-    let first = canonicalize_base_oci(&raw).expect("valid layout");
-    let second = canonicalize_base_oci(&raw).expect("valid layout");
+    let first = canonicalize(&raw).expect("valid layout");
+    let second = canonicalize(&raw).expect("valid layout");
     assert_eq!(first, second);
     assert_eq!(first.layer_count, 2);
     assert_eq!(first.config_sha256, sha256_hex(&layout.config));
     // Canonical output depends only on validated content, not on raw framing noise.
-    let mut plain = Layout::default();
-    plain.extra_members = vec![file("repositories", b"{}")];
     let mut noisy = Layout::default();
-    noisy.extra_members = vec![pax(&pax_record("mtime", "1784332800.5")), file("repositories", b"{}")];
-    let plain_raw = plain.render();
+    noisy.lead_members = vec![pax(&pax_record("mtime", "1784332800.5"))];
     let noisy_raw = noisy.render();
-    assert_ne!(plain_raw, noisy_raw);
-    assert_eq!(canonicalize_base_oci(&plain_raw).expect("valid layout").canonical,
-        canonicalize_base_oci(&noisy_raw).expect("valid layout").canonical);
+    assert_ne!(raw, noisy_raw);
+    assert_eq!(first.canonical, canonicalize(&noisy_raw).expect("valid layout").canonical);
 }
 
 #[test]
-fn base_oci_accepts_timestamp_pax_but_rejects_identity_overrides() {
-    let mut layout = Layout::default();
-    layout.extra_members = vec![pax(&pax_record("mtime", "1784332800.123")), file("repositories", b"{}")];
-    canonicalize_base_oci(&layout.render()).expect("timestamp pax is metadata only");
-    let mut override_layout = Layout::default();
-    override_layout.extra_members = vec![pax(&pax_record("path", "blobs/sha256/injected")), file("repositories", b"{}")];
-    assert_eq!(canonicalize_base_oci(&override_layout.render()).unwrap_err().code, "base-oci-pax-override");
+fn base_oci_accepts_timestamp_pax_but_rejects_overrides_and_bad_values() {
+    let mut timestamps = Layout::default();
+    timestamps.lead_members = vec![pax(&format!("{}{}",
+        pax_record("mtime", "1784332800.123"), pax_record("atime", "1784332800")))];
+    canonicalize(&timestamps.render()).expect("timestamp pax is metadata only");
+    let mut path_override = Layout::default();
+    path_override.lead_members = vec![pax(&pax_record("path", "blobs/sha256/injected"))];
+    assert_eq!(canonicalize(&path_override.render()).unwrap_err().code, "base-oci-pax-override");
+    let mut comment = Layout::default();
+    comment.lead_members = vec![pax(&pax_record("comment", "noise"))];
+    assert_eq!(canonicalize(&comment.render()).unwrap_err().code, "base-oci-pax-override");
+    let mut bad_value = Layout::default();
+    bad_value.lead_members = vec![pax(&pax_record("mtime", "yesterday"))];
+    assert_eq!(canonicalize(&bad_value.render()).unwrap_err().code, "base-oci-pax-value");
 }
 
 #[test]
-fn base_oci_rejects_traversal_duplicate_collision_link_and_special_members() {
+fn base_oci_rejects_traversal_duplicate_collision_link_special_and_metadata_members() {
     let mut traversal = Layout::default();
     traversal.extra_members = vec![file("../escape", b"x")];
-    assert_eq!(canonicalize_base_oci(&traversal.render()).unwrap_err().code, "transaction-path");
+    assert_eq!(canonicalize(&traversal.render()).unwrap_err().code, "transaction-path");
     let mut duplicate = Layout::default();
     duplicate.extra_members = vec![file("oci-layout", b"{\"imageLayoutVersion\":\"1.0.0\"}")];
-    assert_eq!(canonicalize_base_oci(&duplicate.render()).unwrap_err().code, "archive-path-collision");
+    assert_eq!(canonicalize(&duplicate.render()).unwrap_err().code, "archive-path-collision");
     let mut collision = Layout::default();
     collision.extra_members = vec![file("OCI-LAYOUT", b"x")];
-    assert_eq!(canonicalize_base_oci(&collision.render()).unwrap_err().code, "archive-path-collision");
+    assert_eq!(canonicalize(&collision.render()).unwrap_err().code, "archive-path-collision");
     let mut link = Layout::default();
     link.extra_members = vec![Member { path: "blobs/link".into(), kind: b'2', mode: b"0000644\0", payload: Vec::new() }];
-    assert_eq!(canonicalize_base_oci(&link.render()).unwrap_err().code, "base-oci-member-type");
+    assert_eq!(canonicalize(&link.render()).unwrap_err().code, "base-oci-member-type");
     let mut special = Layout::default();
     special.extra_members = vec![Member { path: "device".into(), kind: b'3', mode: b"0000644\0", payload: Vec::new() }];
-    assert_eq!(canonicalize_base_oci(&special.render()).unwrap_err().code, "base-oci-member-type");
+    assert_eq!(canonicalize(&special.render()).unwrap_err().code, "base-oci-member-type");
+    let mut loose_file = Layout::default();
+    loose_file.extra_members = vec![Member { path: "notes".into(), kind: b'0', mode: b"0000600\0", payload: b"x".to_vec() }];
+    assert_eq!(canonicalize(&loose_file.render()).unwrap_err().code, "base-oci-member-mode");
+    let mut loose_directory = Layout::default();
+    loose_directory.extra_members = vec![Member { path: "extra/".into(), kind: b'5', mode: b"0000700\0", payload: Vec::new() }];
+    assert_eq!(canonicalize(&loose_directory.render()).unwrap_err().code, "base-oci-member-mode");
+    let mut nonroot = Layout::default();
+    let mut member = file("notes", b"x");
+    member.mode = b"0000644\0";
+    nonroot.extra_members = vec![Member { path: member.path, kind: member.kind, mode: member.mode, payload: member.payload }];
+    let mut raw = nonroot.render();
+    let position = raw.windows(5).position(|window| window == b"notes").expect("member");
+    raw[position + 108..position + 116].copy_from_slice(b"0000001\0");
+    let checksum_start = position + 148;
+    raw[checksum_start..checksum_start + 8].fill(b' ');
+    let sum: u64 = raw[position..position + 512].iter().map(|byte| *byte as u64).sum();
+    raw[checksum_start..checksum_start + 8].copy_from_slice(format!("{sum:06o}\0 ").as_bytes());
+    assert_eq!(canonicalize(&raw).unwrap_err().code, "base-oci-member-owner");
 }
 
 #[test]
 fn base_oci_rejects_substituted_dangling_or_unexpected_content() {
+    let base = Layout::default();
+    let manifest = base.manifest_bytes();
+    let index_text = String::from_utf8(base.index_bytes(&manifest)).unwrap();
     let mut substituted = Layout::default();
-    let manifest = substituted.manifest_bytes();
-    substituted.index = Some(format!(
-        "{{\"schemaVersion\":2,\"manifests\":[{{\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\",\"digest\":\"sha256:{}\",\"size\":{}}}]}}",
-        "a".repeat(64), manifest.len()).into_bytes());
-    assert_eq!(canonicalize_base_oci(&substituted.render()).unwrap_err().code, "base-oci-missing-blob");
+    substituted.index = Some(index_text.replace(&sha256_hex(&manifest), &"a".repeat(64)).into_bytes());
+    assert_eq!(canonicalize(&substituted.render()).unwrap_err().code, "base-oci-missing-blob");
     let mut wrong_size = Layout::default();
-    wrong_size.index = Some(format!(
-        "{{\"schemaVersion\":2,\"manifests\":[{{\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\",\"digest\":\"sha256:{}\",\"size\":{}}}]}}",
-        sha256_hex(&manifest), manifest.len() + 1).into_bytes());
-    assert_eq!(canonicalize_base_oci(&wrong_size.render()).unwrap_err().code, "base-oci-descriptor-size");
+    wrong_size.index = Some(index_text.replace(
+        &format!("\"size\":{}", manifest.len()), &format!("\"size\":{}", manifest.len() + 1)).into_bytes());
+    assert_eq!(canonicalize(&wrong_size.render()).unwrap_err().code, "base-oci-descriptor-size");
     // Dangling raw-store metadata blobs are digest-verified, then excluded from canonical
     // generation per ADR 0018: the canonical archive equals the rooted graph exactly.
     let mut dangling = Layout::default();
     dangling.extra_blobs = vec![b"unreferenced".to_vec()];
-    let excluded = canonicalize_base_oci(&dangling.render()).expect("dangling metadata is excluded");
-    assert_eq!(excluded.canonical, canonicalize_base_oci(&Layout::default().render()).expect("rooted graph").canonical);
+    let excluded = canonicalize(&dangling.render()).expect("dangling metadata is excluded");
+    assert_eq!(excluded.canonical, canonicalize(&Layout::default().render()).expect("rooted graph").canonical);
     let mut corrupt_dangling = Layout::default();
     corrupt_dangling.extra_members = vec![file(&format!("blobs/sha256/{}", "f".repeat(64)), b"corrupt")];
-    assert_eq!(canonicalize_base_oci(&corrupt_dangling.render()).unwrap_err().code, "base-oci-blob-digest");
-    let mut renamed = Layout::default();
-    renamed.extra_members = vec![file(&format!("blobs/sha256/{}", "b".repeat(64)), b"mismatch")];
-    assert_eq!(canonicalize_base_oci(&renamed.render()).unwrap_err().code, "base-oci-blob-digest");
+    assert_eq!(canonicalize(&corrupt_dangling.render()).unwrap_err().code, "base-oci-blob-digest");
     let mut unexpected = Layout::default();
     unexpected.extra_members = vec![file("blobs/extra", b"x")];
-    assert_eq!(canonicalize_base_oci(&unexpected.render()).unwrap_err().code, "base-oci-unexpected-member");
-    let mut stray_root = Layout::default();
-    stray_root.extra_members = vec![file("notes.txt", b"x")];
-    assert_eq!(canonicalize_base_oci(&stray_root.render()).unwrap_err().code, "base-oci-unexpected-member");
+    assert_eq!(canonicalize(&unexpected.render()).unwrap_err().code, "base-oci-unexpected-member");
+    let mut repositories = Layout::default();
+    repositories.extra_members = vec![file("repositories", b"{}")];
+    assert_eq!(canonicalize(&repositories.render()).unwrap_err().code, "base-oci-repositories-present");
+}
+
+#[test]
+fn base_oci_requires_exact_digest_pull_identity() {
+    let base = Layout::default();
+    let manifest = base.manifest_bytes();
+    let index_text = String::from_utf8(base.index_bytes(&manifest)).unwrap();
+    let mut substituted_name = Layout::default();
+    substituted_name.index = Some(index_text.replace(IMAGE, "docker.io/library/evil:1.0").into_bytes());
+    assert_eq!(canonicalize(&substituted_name.render()).unwrap_err().code, "base-oci-annotations");
+    let mut missing_annotations = Layout::default();
+    missing_annotations.index = Some(index_text.replace(
+        &format!(",\"annotations\":{{\"io.containerd.image.name\":\"{IMAGE}\",\"org.opencontainers.image.ref.name\":\"{REF}\"}}"),
+        "").into_bytes());
+    assert_eq!(canonicalize(&missing_annotations.render()).unwrap_err().code, "base-oci-descriptor-keys");
+    let mut extra_annotation = Layout::default();
+    extra_annotation.index = Some(index_text.replace(
+        "\"org.opencontainers.image.ref.name\"",
+        "\"vendor.extra\":\"x\",\"org.opencontainers.image.ref.name\"").into_bytes());
+    assert_eq!(canonicalize(&extra_annotation.render()).unwrap_err().code, "base-oci-annotation-keys");
+    let mut platform_present = Layout::default();
+    platform_present.index = Some(index_text.replace(
+        ",\"annotations\"",
+        ",\"platform\":{\"architecture\":\"amd64\",\"os\":\"linux\"},\"annotations\"").into_bytes());
+    assert_eq!(canonicalize(&platform_present.render()).unwrap_err().code, "base-oci-descriptor-keys");
+    let legacy_text = String::from_utf8(base.legacy_bytes()).unwrap();
+    let mut tagged = Layout::default();
+    tagged.legacy = Some(legacy_text.replace("\"RepoTags\":null", "\"RepoTags\":[\"evil:latest\"]").into_bytes());
+    assert_eq!(canonicalize(&tagged.render()).unwrap_err().code, "base-oci-repo-tags");
+    let mut no_sources = Layout::default();
+    let sources_start = legacy_text.find(",\"LayerSources\"").expect("sources");
+    no_sources.legacy = Some(format!("{}}}]", &legacy_text[..sources_start]).into_bytes());
+    assert_eq!(canonicalize(&no_sources.render()).unwrap_err().code, "base-oci-legacy-keys");
+    let mut wrong_source = Layout::default();
+    let first_layer = sha256_hex(&base.layers[0]);
+    let second_layer = sha256_hex(&base.layers[1]);
+    wrong_source.legacy = Some(legacy_text.replace(
+        &format!("\"digest\":\"sha256:{first_layer}\",\"size\":{}", base.layers[0].len()),
+        &format!("\"digest\":\"sha256:{second_layer}\",\"size\":{}", base.layers[0].len())).into_bytes());
+    assert_eq!(canonicalize(&wrong_source.render()).unwrap_err().code, "base-oci-layer-sources");
 }
 
 #[test]
@@ -196,24 +270,45 @@ fn base_oci_rejects_graph_platform_and_legacy_binding_defects() {
         directory("blobs"), directory("blobs/sha256"),
         file("oci-layout", b"{\"imageLayoutVersion\":\"1.0.0\"}"),
     ]);
-    assert_eq!(canonicalize_base_oci(&missing_root).unwrap_err().code, "base-oci-roots");
+    assert_eq!(canonicalize(&missing_root).unwrap_err().code, "base-oci-roots");
     let mut diff_mismatch = Layout::default();
     diff_mismatch.config = format!(
         "{{\"architecture\":\"amd64\",\"os\":\"linux\",\"rootfs\":{{\"type\":\"layers\",\"diff_ids\":[\"sha256:{}\",\"sha256:{}\"]}}}}",
         "c".repeat(64), "d".repeat(64)).into_bytes();
-    assert_eq!(canonicalize_base_oci(&diff_mismatch.render()).unwrap_err().code, "base-oci-diff-id");
+    assert_eq!(canonicalize(&diff_mismatch.render()).unwrap_err().code, "base-oci-diff-id");
     let mut platform = Layout::default();
     platform.config = b"{\"architecture\":\"arm64\",\"os\":\"linux\",\"rootfs\":{\"type\":\"layers\",\"diff_ids\":[]}}".to_vec();
-    assert_eq!(canonicalize_base_oci(&platform.render()).unwrap_err().code, "base-oci-platform");
-    let mut legacy = Layout::default();
-    legacy.legacy = Some(format!("[{{\"Config\":\"blobs/sha256/{}\",\"Layers\":[]}}]", "e".repeat(64)).into_bytes());
-    assert_eq!(canonicalize_base_oci(&legacy.render()).unwrap_err().code, "base-oci-legacy-config");
-    let mut sources = Layout::default();
-    let manifest_default = Layout::default();
-    let layer_zero = sha256_hex(&manifest_default.layers[0]);
-    let layer_one = sha256_hex(&manifest_default.layers[1]);
-    sources.legacy = Some(format!(
-        "[{{\"Config\":\"blobs/sha256/{}\",\"Layers\":[\"blobs/sha256/{layer_zero}\",\"blobs/sha256/{layer_one}\"],\"LayerSources\":{{\"sha256:{layer_zero}\":{{\"mediaType\":\"application/vnd.oci.image.layer.v1.tar\",\"digest\":\"sha256:{layer_one}\",\"size\":15}},\"sha256:{layer_one}\":{{\"mediaType\":\"application/vnd.oci.image.layer.v1.tar\",\"digest\":\"sha256:{layer_one}\",\"size\":15}}}}}}]",
-        sha256_hex(&sources.config)).into_bytes());
-    assert_eq!(canonicalize_base_oci(&sources.render()).unwrap_err().code, "base-oci-layer-sources");
+    assert_eq!(canonicalize(&platform.render()).unwrap_err().code, "base-oci-platform");
+    let base = Layout::default();
+    let legacy_text = String::from_utf8(base.legacy_bytes()).unwrap();
+    let mut wrong_config = Layout::default();
+    wrong_config.legacy = Some(legacy_text.replace(
+        &format!("\"Config\":\"blobs/sha256/{}\"", sha256_hex(&base.config)),
+        &format!("\"Config\":\"blobs/sha256/{}\"", "e".repeat(64))).into_bytes());
+    assert_eq!(canonicalize(&wrong_config.render()).unwrap_err().code, "base-oci-legacy-config");
+}
+
+#[test]
+fn base_oci_output_descriptor_survives_ancestor_replacement() {
+    // The canonical output is created through a held directory descriptor: replacing the
+    // pathname ancestor after the descriptor is held cannot redirect the write.
+    let scratch = std::env::temp_dir().join(format!("rar-base-oci-held-{}", std::process::id()));
+    let original = scratch.join("original");
+    std::fs::create_dir_all(&original).expect("scratch");
+    let held = DescriptorDir::open_root(&original).expect("held descriptor");
+    let replaced = scratch.join("replaced");
+    std::fs::rename(&original, &replaced).expect("ancestor replacement");
+    std::fs::create_dir(&original).expect("attacker ancestor");
+    let mut output = held.create_exclusive_file("canonical.tar").expect("descriptor create");
+    use std::io::Write as _;
+    output.write_all(b"held-bytes").expect("write");
+    output.sync_all().expect("sync");
+    assert!(!original.join("canonical.tar").exists());
+    assert!(replaced.join("canonical.tar").exists());
+    let mut reread = held.open_file("canonical.tar").expect("read through held descriptor");
+    reread.seek(SeekFrom::Start(0)).expect("seek");
+    let mut bytes = Vec::new();
+    reread.read_to_end(&mut bytes).expect("read");
+    assert_eq!(bytes, b"held-bytes");
+    std::fs::remove_dir_all(&scratch).expect("cleanup");
 }

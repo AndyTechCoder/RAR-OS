@@ -106,7 +106,7 @@ fn parse_manifest(bytes: &[u8], object_bytes: &[u8]) -> Result<(InputBundleV1, u
     let package_count = usize::try_from(decimal(values[5])?).map_err(|_| PreauthError::new("input-bundle-number"))?;
     let object_count = usize::try_from(decimal(values[6])?).map_err(|_| PreauthError::new("input-bundle-number"))?;
     let aggregate_bytes = decimal(values[7])?;
-    if package_count != 36 || object_count > MAX_OBJECTS || aggregate_bytes > MAX_AGGREGATE {
+    if package_count == 0 || object_count > MAX_OBJECTS || aggregate_bytes > MAX_AGGREGATE {
         return Err(PreauthError::new("input-bundle-bound"));
     }
     Ok((InputBundleV1 {
