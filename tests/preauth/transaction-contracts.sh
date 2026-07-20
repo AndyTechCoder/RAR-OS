@@ -67,27 +67,49 @@ grep -qx 'descriptor_slot_schema' spec/lab/preauth/execution-host-v2.fields || f
 grep -qx 'runtime_disk_slot' spec/lab/vm-profile/profile-v2.fields || fail 'profile-v2 descriptor slot missing'
 grep -qx 'executable_slot' spec/lab/vm-profile/command-v2.fields || fail 'command-v2 executable slot missing'
 
-# The production entrypoint's refusal paths must leave the repository byte-identical.
+# The production entrypoint's refusal paths must leave the complete repository tree
+# byte-identical: entries, types, modes, link targets, and file bytes, from the true
+# pre-invocation state, with refusal diagnostics only on stderr and stdout empty.
 repository_state(){
-    find out -type f 2>/dev/null | LC_ALL=C sort | while IFS= read -r state_file; do
-        printf '%s %s\n' "$state_file" "$(cksum < "$state_file")"
+    find out 2>/dev/null | LC_ALL=C sort | while IFS= read -r state_entry; do
+        state_mode=$(ls -ld "$state_entry" | awk '{print $1}')
+        if [ -L "$state_entry" ]; then
+            state_detail="link:$(readlink "$state_entry")"
+        elif [ -f "$state_entry" ]; then
+            state_detail=$(cksum < "$state_entry")
+        else
+            state_detail=-
+        fi
+        printf '%s %s %s\n' "$state_entry" "$state_mode" "$state_detail"
     done
 }
+refusal_stderr=$(mktemp "${TMPDIR:-/tmp}/rar-refusal-stderr.XXXXXX") || fail 'refusal scratch'
+baseline=$(repository_state)
+set +e
+usage_stdout=$(tools/toolchain/preauth-transaction 2>"$refusal_stderr"); usage_status=$?
+set -e
+[ "$usage_status" -eq 73 ] || fail 'usage refusal exit status'
+[ -z "$usage_stdout" ] || fail 'usage refusal wrote stdout'
+grep -q 'preauth-transaction:usage-refused' "$refusal_stderr" || fail 'usage refusal diagnostic'
+[ "$baseline" = "$(repository_state)" ] || fail 'usage refusal changed the repository tree'
+set +e
+authority_stdout=$(RAR_TRANSACTION_NETWORK=none AWS_ACCESS_KEY_ID=forbidden     tools/toolchain/preauth-transaction --prepare out/.contract-no-such-bundle 2>"$refusal_stderr"); authority_status=$?
+set -e
+[ "$authority_status" -eq 73 ] || fail 'authority refusal exit status'
+[ -z "$authority_stdout" ] || fail 'authority refusal wrote stdout'
+grep -q 'preauth-transaction:authority-environment' "$refusal_stderr" || fail 'authority refusal diagnostic'
+[ "$baseline" = "$(repository_state)" ] || fail 'authority refusal changed the repository tree'
 malformed=out/r0/preauth/.contract-malformed-bundle
 mkdir -p out/r0/preauth
 printf 'not-a-bundle' > "$malformed"
 before=$(repository_state)
 set +e
-usage_output=$(tools/toolchain/preauth-transaction 2>&1); usage_status=$?
-authority_output=$(RAR_TRANSACTION_NETWORK=none AWS_ACCESS_KEY_ID=forbidden tools/toolchain/preauth-transaction --prepare "$malformed" 2>&1); authority_status=$?
-malformed_output=$(RAR_TRANSACTION_NETWORK=none tools/toolchain/preauth-transaction --prepare "$malformed" 2>&1); malformed_status=$?
+malformed_stdout=$(RAR_TRANSACTION_NETWORK=none tools/toolchain/preauth-transaction --prepare "$malformed" 2>"$refusal_stderr"); malformed_status=$?
 set -e
-[ "$usage_status" -eq 73 ] && [ "$authority_status" -eq 73 ] && [ "$malformed_status" -eq 73 ] || fail 'refusal exit status'
-printf '%s\n' "$usage_output" | grep -q 'preauth-transaction:usage-refused' || fail 'usage refusal diagnostic'
-printf '%s\n' "$authority_output" | grep -q 'preauth-transaction:authority-environment' || fail 'authority refusal diagnostic'
-printf '%s\n' "$malformed_output" | grep -q 'preauth-transaction:' || fail 'malformed refusal diagnostic'
-after=$(repository_state)
-[ "$before" = "$after" ] || fail 'refusal produced repository effects'
-rm -f "$malformed"
+[ "$malformed_status" -eq 73 ] || fail 'malformed refusal exit status'
+[ -z "$malformed_stdout" ] || fail 'malformed refusal wrote stdout'
+grep -q 'preauth-transaction:' "$refusal_stderr" || fail 'malformed refusal diagnostic'
+[ "$before" = "$(repository_state)" ] || fail 'malformed refusal changed the repository tree'
+rm -f "$malformed" "$refusal_stderr"
 
 printf '%s\n' 'transaction contract checks passed'

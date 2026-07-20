@@ -8,11 +8,12 @@ if [ -x /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc ]
 else
  rustc_path=$(command -v rustc) || { printf '%s\n' 'preauth-base-oci:rustc-unavailable' >&2; exit 73; }
 fi
-# Build into an ephemeral repository-local directory: the workspace mount is executable
-# (the container /tmp tmpfs is noexec), and the directory is removed on every exit so the
-# repository byte-state is identical before and after any refusal.
-mkdir -p out/r0/preauth
-build_dir=$(mktemp -d out/r0/preauth/.build-preauth-base-oci.XXXXXX) || { printf '%s\n' 'preauth-base-oci:build-boundary' >&2; exit 73; }
+# Build only inside an ephemeral non-repository boundary supplied by the caller: CI containers
+# mount an executable tmpfs and pass it as RAR_PREAUTH_BUILD_ROOT (the container /tmp is noexec);
+# elsewhere the system temporary directory is used. Nothing is created inside the repository, so
+# every refusal leaves the complete repository tree byte-identical.
+build_root=${RAR_PREAUTH_BUILD_ROOT:-${TMPDIR:-/tmp}}
+build_dir=$(mktemp -d "$build_root/preauth-base-oci.XXXXXX") || { printf '%s\n' 'preauth-base-oci:build-boundary' >&2; exit 73; }
 trap 'rm -rf "$build_dir"' 0 1 2 15
 "$rustc_path" --edition=2024 -O tools/toolchain/preauth-base-oci.rs -o "$build_dir/preauth-base-oci"
 {

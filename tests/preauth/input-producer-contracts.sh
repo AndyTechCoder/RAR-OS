@@ -48,6 +48,18 @@ good_sources=$origin_scratch/good.sources; bad_sources=$origin_scratch/bad.sourc
 printf '%s\n' 'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260630T000000Z trixie main' > "$good_sources"
 printf '%s\n' 'deb [check-valid-until=no] https://evil.example.org/archive/debian/20260630T000000Z trixie main' > "$bad_sources"
 printf '%s\n' 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260630T000000Z trixie main' > "$http_sources"
+good_log=$origin_scratch/good.transfer; foreign_log=$origin_scratch/foreign.transfer; plain_log=$origin_scratch/plain.transfer
+{ printf '%s\n' 'GET /archive/debian/dists/trixie/InRelease HTTP/1.1' \
+   'Answer for: https://snapshot.debian.org/archive/debian/dists/trixie/InRelease' \
+   'HTTP/1.1 302 Found' 'Location: https://snapshot.debian.org/file/abc' \
+   'Answer for: https://snapshot.debian.org/file/abc' 'HTTP/1.1 200 OK'; } > "$good_log"
+{ cat "$good_log"; printf '%s\n' 'Location: https://evil.example.org/file/abc'; } > "$foreign_log"
+{ cat "$good_log"; printf '%s\n' 'Location: http://snapshot.debian.org/file/abc'; } > "$plain_log"
+"$producer" --verify-transfer-origins "$good_log" >/dev/null 2>&1 || fail transfer-origin-accept
+set +e; "$producer" --verify-transfer-origins "$foreign_log" >/dev/null 2>&1; foreign_status=$?
+"$producer" --verify-transfer-origins "$plain_log" >/dev/null 2>&1; plain_status=$?; set -e
+[ "$foreign_status" -eq 73 ] && [ "$plain_status" -eq 73 ] || fail transfer-origin-reject
+grep -q 'Debug::Acquire::https=true' "$producer" || fail transfer-telemetry-capture
 "$producer" --verify-source-origins "$good_sources" >/dev/null 2>&1 || fail source-origin-accept
 set +e; "$producer" --verify-source-origins "$bad_sources" >/dev/null 2>&1; bad_src=$?
 "$producer" --verify-source-origins "$http_sources" >/dev/null 2>&1; http_src=$?; set -e

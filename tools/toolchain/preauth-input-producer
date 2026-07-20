@@ -43,6 +43,23 @@ verify_source_origins(){
  done < "$sources_file"
  [ "$seen" -eq 1 ] || fail source-origins-empty
 }
+verify_transfer_origins(){
+ transfer_log=$1
+ [ -f "$transfer_log" ] && [ ! -L "$transfer_log" ] || fail transfer-log-missing
+ if grep -q 'http://' "$transfer_log"; then
+  grep -o 'http://[A-Za-z0-9.-]*' "$transfer_log" | LC_ALL=C sort -u | sed 's/^/preauth-input-producer:observed-plaintext:/' >&2
+  fail transfer-plaintext
+ fi
+ transfer_hosts=$(grep -o 'https://[A-Za-z0-9.-]*' "$transfer_log" | sed 's|https://||' | LC_ALL=C sort -u)
+ [ -n "$transfer_hosts" ] || fail transfer-empty
+ for transfer_host in $transfer_hosts; do
+  approved_origin "$transfer_host" && continue
+  grep -qx "allowed_redirect_origin=$transfer_host" "$policy" && continue
+  printf 'preauth-input-producer:observed-transfer-hosts:%s\n' "$(printf '%s' "$transfer_hosts" | tr '\n' ',')" >&2
+  fail "transfer-origin:$transfer_host"
+ done
+ printf 'preauth-input-producer:transfer-hosts:%s\n' "$(printf '%s' "$transfer_hosts" | tr '\n' ',')" >&2
+}
 verify_origins(){
  origin_dir=$1
  [ -d "$origin_dir" ] && [ ! -L "$origin_dir" ] || fail effective-origin-missing
@@ -104,13 +121,22 @@ inside(){
  # shellcheck disable=SC2086
  phase=source-origins
  verify_source_origins "$sources"
+ transfer_log=$stage/apt-transfer.log
  phase=apt-update
- /usr/bin/apt-get $options update
+ if ! /usr/bin/apt-get $options -o Debug::Acquire::https=true -o Debug::Acquire::http=true update 2>"$transfer_log"; then
+  cat "$transfer_log" >&2; fail apt-update-failed
+ fi
+ phase=transfer-origin-verification
+ verify_transfer_origins "$transfer_log"
  telemetry apt-update-complete
  # shellcheck disable=SC2086
  phase=apt-download
- /usr/bin/apt-get $options --yes --download-only --no-install-recommends install \
-  'lld-19=1:19.1.7-3+b1' 'qemu-system-x86=1:10.0.8+ds-0+deb13u1+b2' 'ovmf=2025.02-8+deb13u1'
+ if ! /usr/bin/apt-get $options -o Debug::Acquire::https=true -o Debug::Acquire::http=true --yes --download-only --no-install-recommends install \
+  'lld-19=1:19.1.7-3+b1' 'qemu-system-x86=1:10.0.8+ds-0+deb13u1+b2' 'ovmf=2025.02-8+deb13u1' 2>>"$transfer_log"; then
+  cat "$transfer_log" >&2; fail apt-download-failed
+ fi
+ phase=transfer-origin-verification
+ verify_transfer_origins "$transfer_log"
  telemetry apt-download-complete
  phase=origin-verification
  verify_origins "$state/lists"
@@ -291,10 +317,11 @@ produce(){
   exit "$status"
  }
  trap host_exit 0 1 2 15
- docker image inspect "$base" >/dev/null 2>&1 || docker pull "$base" >/dev/null
  host_phase=registry-config
  registry_mirrors=$(docker info --format '{{json .RegistryConfig.Mirrors}}' 2>/dev/null || printf 'unavailable')
  case "$registry_mirrors" in null|\[\]) :;; *) fail registry-mirror-configured;; esac
+ host_phase=base-image
+ docker image inspect "$base" >/dev/null 2>&1 || docker pull "$base" >/dev/null
  host_uid=$(id -u); host_gid=$(id -g)
  host_phase=base-export
  base_raw=$stage/base-oci.raw.tar
@@ -303,6 +330,8 @@ produce(){
  base_output=$(docker run --rm --read-only --network none \
   --user "$host_uid:$host_gid" --security-opt no-new-privileges --cap-drop ALL \
   --tmpfs "/tmp:rw,nosuid,nodev,size=512m,uid=$host_uid,gid=$host_gid,mode=1777" \
+  --tmpfs "/build:rw,exec,nosuid,nodev,size=512m,uid=$host_uid,gid=$host_gid,mode=700" \
+  --env RAR_PREAUTH_BUILD_ROOT=/build \
   --mount "type=bind,source=$root,target=/workspace" --workdir /workspace \
   "$base" /usr/bin/dash -e tools/toolchain/preauth-base-oci --canonicalize \
   "$stage/base-oci.raw.tar" "$stage/incoming/base-oci.tar" "$stage/incoming/base-tools.v1")
@@ -357,5 +386,6 @@ case "${1-}" in
  --inside) [ "$#" -eq 2 ] || fail usage; inside "$2";;
  --verify-origins) [ "$#" -eq 2 ] || fail usage; verify_origins "$2";;
  --verify-source-origins) [ "$#" -eq 2 ] || fail usage; verify_source_origins "$2";;
+ --verify-transfer-origins) [ "$#" -eq 2 ] || fail usage; verify_transfer_origins "$2";;
  *) fail usage;;
 esac
