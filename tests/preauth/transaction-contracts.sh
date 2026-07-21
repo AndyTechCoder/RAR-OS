@@ -167,11 +167,12 @@ check_root_refusal non-directory "$contract_scratch/not-directory"
 # A lying mktemp that returns a pre-existing leaf is treated as a collision.
 collision_root=$contract_build_parent/collision-root; mkdir -m 700 "$collision_root"
 collision_leaf=$collision_root/preauth-transaction.COLLIDE1; mkdir -m 700 "$collision_leaf"
-mkdir -m 700 "$contract_scratch/fake-bin"
-printf '%s\n' '#!/bin/sh' "printf '%s\\n' './preauth-transaction.COLLIDE1'" > "$contract_scratch/fake-bin/mktemp"
-chmod 0700 "$contract_scratch/fake-bin/mktemp"
+collision_fake_bin=$contract_build_parent/collision-fake-bin
+mkdir -m 700 "$collision_fake_bin"
+printf '%s\n' '#!/bin/sh' "printf '%s\\n' './preauth-transaction.COLLIDE1'" > "$collision_fake_bin/mktemp"
+chmod 0700 "$collision_fake_bin/mktemp"
 set +e
-env PATH="$contract_scratch/fake-bin:$PATH" RAR_PREAUTH_BUILD_ROOT="$collision_root" RAR_TRANSACTION_NETWORK=none \
+env PATH="$collision_fake_bin:$PATH" RAR_PREAUTH_BUILD_ROOT="$collision_root" RAR_TRANSACTION_NETWORK=none \
     tools/toolchain/preauth-transaction --prepare AGENTS.md \
     >"$contract_scratch/collision.stdout" 2>"$contract_scratch/collision.stderr"
 collision_status=$?
