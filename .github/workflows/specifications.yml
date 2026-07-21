@@ -60,7 +60,7 @@ jobs:
             /usr/bin/dash -e -c '
               tools/ci/check-preauth-cutover.sh --self-test
               tools/ci/check-specs.sh
-              /usr/bin/dash -n tools/rarbuild/rarbuild tools/rarbuild/bootstrap-lib.sh tests/host-safety/run.sh tests/bootstrap/run.sh tests/preauth/run.sh tests/preauth/transaction-contracts.sh tests/preauth/input-producer-contracts.sh tests/preauth/snapshot-repository-tree.sh tools/toolchain/preauth-transaction tools/toolchain/preauth-base-oci tools/toolchain/preauth-build-root.sh tools/toolchain/preauth-transfer-telemetry
+              /usr/bin/dash -n tools/rarbuild/rarbuild tools/rarbuild/bootstrap-lib.sh tests/host-safety/run.sh tests/bootstrap/run.sh tests/preauth/run.sh tests/preauth/transaction-contracts.sh tests/preauth/input-producer-contracts.sh tests/preauth/container-compiler-contracts.sh tests/preauth/container-compiler-contracts-inner.sh tests/preauth/snapshot-repository-tree.sh tools/toolchain/preauth-transaction tools/toolchain/preauth-base-oci tools/toolchain/preauth-build-root.sh tools/toolchain/preauth-transfer-telemetry
               spec/fixtures/release-0/run.sh --ci
               sdk/generated/release-0/check.sh --compile
               tests/host-safety/run.sh
@@ -80,6 +80,15 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
           persist-credentials: false
+
+      - name: Validate nested container compiler boundary
+        shell: /usr/bin/dash -e {0}
+        run: |
+          compiler_root=$RUNNER_TEMP/preauth-container-compiler-root
+          umask 077
+          /usr/bin/mkdir -m 700 "$compiler_root"
+          RAR_PREAUTH_BUILD_ROOT="$compiler_root" tests/preauth/container-compiler-contracts.sh
+          /usr/bin/rmdir "$compiler_root"
 
       - name: Acquire two deterministic untrusted input bundles
         shell: /usr/bin/dash -e {0}
@@ -107,6 +116,7 @@ jobs:
             --tmpfs "/build:rw,exec,nosuid,nodev,size=512m,uid=$host_uid,gid=$host_gid,mode=700" \
             --env RAR_PREAUTH_BUILD_ROOT=/build \
             --mount "type=bind,source=$GITHUB_WORKSPACE,target=/workspace" --workdir /workspace \
+            --env RAR_PREAUTH_CONTAINER_IMAGE=sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 \
             --env RAR_TRANSACTION_NETWORK=none \
             rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 \
             /usr/bin/dash -e tools/toolchain/preauth-transaction --prepare \

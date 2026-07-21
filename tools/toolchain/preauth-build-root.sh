@@ -79,12 +79,65 @@ preauth_build_mount_is_executable() {
 
 preauth_build_pinned_rustc_path() {
     preauth_pinned_root=$1
+    [ -z "${RAR_PREAUTH_CONTAINER_IMAGE-}" ] || return 1
+    [ -z "${RAR_PREAUTH_CONTAINER_RUSTC_PATH-}" ] || return 1
+    [ -z "${RAR_PREAUTH_CONTAINER_RUSTC_ROOT-}" ] || return 1
+    [ -z "${RAR_PREAUTH_CONTAINER_RUSTC_SHA256-}" ] || return 1
+    [ -z "${RAR_PREAUTH_CONTAINER_RUSTC_VERSION-}" ] || return 1
     . "$preauth_pinned_root/tools/rarbuild/bootstrap-lib.sh" || return 1
     rar_select_preparser_axiom || return 1
     rar_load_selected_bootstrap_root "$preauth_pinned_root" || return 1
     rar_verify_selected_bootstrap_root || return 1
     printf '%s\n' "$bootstrap_rustc_path"
 }
+
+# The acquisition containers are a distinct compiler trust boundary. Their sole
+# caller-supplied identity is the immutable image digest. Paths, byte hashes,
+# version, target, and LLVM identity are derived from the reviewed in-repository
+# Linux lock and cannot be overridden by either the host or the caller's PATH.
+preauth_build_pinned_container_rustc_path() (
+    preauth_pinned_root=$1
+    [ "${RAR_PREAUTH_CONTAINER_IMAGE-}" = sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 ] || return 1
+    [ -z "${RAR_CI_BOOTSTRAP_IMAGE-}" ] || return 1
+    [ -z "${RAR_PREAUTH_CONTAINER_RUSTC_PATH-}" ] || return 1
+    [ -z "${RAR_PREAUTH_CONTAINER_RUSTC_ROOT-}" ] || return 1
+    [ -z "${RAR_PREAUTH_CONTAINER_RUSTC_SHA256-}" ] || return 1
+    [ -z "${RAR_PREAUTH_CONTAINER_RUSTC_VERSION-}" ] || return 1
+
+    RAR_CI_BOOTSTRAP_IMAGE=$RAR_PREAUTH_CONTAINER_IMAGE
+    export RAR_CI_BOOTSTRAP_IMAGE
+    . "$preauth_pinned_root/tools/rarbuild/bootstrap-lib.sh" || return 1
+    rar_select_preparser_axiom || return 1
+    rar_load_selected_bootstrap_root "$preauth_pinned_root" || return 1
+    rar_verify_selected_bootstrap_root || return 1
+    rar_verify_read_only_ci_tool_mounts || return 1
+
+    [ "$bootstrap_rust_toolchain_root" = /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu ] || return 1
+    [ "$bootstrap_rustc_path" = /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc ] || return 1
+    [ "$bootstrap_rustc_sha256" = bff349e72704ff70bc08a234a3847338e797065bbedde5e556808bc87b7bf7c6 ] || return 1
+    case "$bootstrap_rustc_path" in "$bootstrap_rust_toolchain_root"/*) :;; *) return 1;; esac
+    rar_validate_absolute_directory "$bootstrap_rust_toolchain_root" || return 1
+    rar_validate_absolute_file "$bootstrap_rustc_path" || return 1
+    [ ! -w "$bootstrap_rust_toolchain_root" ] || return 1
+
+    preauth_container_rustc_version=$(LC_ALL=C LANG=C "$bootstrap_rustc_path" -vV) || return 1
+    preauth_saved_ifs=$IFS
+    IFS='
+'
+    set -f
+    set -- $preauth_container_rustc_version
+    set +f
+    IFS=$preauth_saved_ifs
+    [ "$#" -eq 7 ] || return 1
+    case "$1" in 'rustc 1.95.0 (59807616e '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]')') :;; *) return 1;; esac
+    [ "$2" = 'binary: rustc' ] || return 1
+    [ "$3" = 'commit-hash: 59807616e1fa2540724bfbac14d7976d7e4a3860' ] || return 1
+    case "$4" in 'commit-date: '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) :;; *) return 1;; esac
+    [ "$5" = 'host: x86_64-unknown-linux-gnu' ] || return 1
+    [ "$6" = 'release: 1.95.0' ] || return 1
+    [ "$7" = 'LLVM version: 22.1.2' ] || return 1
+    printf '%s\n' "$bootstrap_rustc_path"
+)
 
 preauth_build_root_create() {
     PREAUTH_BUILD_REPOSITORY=$1

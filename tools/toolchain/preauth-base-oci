@@ -3,7 +3,11 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 [ "$#" -eq 4 ] && [ "$1" = --canonicalize ] || { printf '%s\n' 'preauth-base-oci:usage-refused' >&2; exit 73; }
 . "$root/tools/toolchain/preauth-build-root.sh"
-rustc_path=$(preauth_build_pinned_rustc_path "$root") || { printf '%s\n' 'preauth-base-oci:pinned-rustc' >&2; exit 73; }
+if [ -n "${RAR_PREAUTH_CONTAINER_IMAGE-}" ]; then
+    rustc_path=$(preauth_build_pinned_container_rustc_path "$root")
+else
+    rustc_path=$(preauth_build_pinned_rustc_path "$root")
+fi || { printf '%s\n' 'preauth-base-oci:pinned-rustc' >&2; exit 73; }
 preauth_build_root_create "$root" preauth-base-oci preauth-base-oci
 preauth_build_install_traps
 preauth_build_run_child "$rustc_path" --edition=2024 -O "$root/tools/toolchain/preauth-base-oci.rs" -o "$PREAUTH_BUILD_DIR/preauth-base-oci" \

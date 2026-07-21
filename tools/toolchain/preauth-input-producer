@@ -112,7 +112,8 @@ inside(){
   [ -z "$(find "$apt_runtime" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]
  }
  trap inside_exit 0
- [ "${RAR_CI_BOOTSTRAP_IMAGE-}" = sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 ] || fail base-identity
+ [ "${RAR_PREAUTH_CONTAINER_IMAGE-}" = sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 ] || fail base-identity
+ [ -z "${RAR_CI_BOOTSTRAP_IMAGE-}" ] || fail host-bootstrap-leak
  [ "$(id -u)" = "${RAR_OUTPUT_UID-}" ] && [ "$(id -g)" = "${RAR_OUTPUT_GID-}" ] || fail output-owner
  [ "$(id -u _apt)" = 42 ] && [ "$(id -g _apt)" = "$apt_group" ] || fail apt-sandbox-identity
  id -G | tr ' ' '\n' | grep -qx "$apt_group" || fail apt-sandbox-group
@@ -144,7 +145,7 @@ inside(){
  } > "$sources"
  /bin/cp -a /usr/lib/apt/methods/. "$methods/"
  /bin/mv "$methods/https" "$methods/https.real"
- rustc_path=$(preauth_build_pinned_rustc_path "$root") || fail telemetry-rustc
+ rustc_path=$(preauth_build_pinned_container_rustc_path "$root") || fail telemetry-rustc
  "$rustc_path" --edition=2024 -O tools/toolchain/preauth-transfer-telemetry.rs -o "$methods/https" || fail telemetry-compile
  chgrp "$apt_group" "$methods/https" && chmod 0750 "$methods/https" || fail telemetry-method-identity
  [ "$(stat -c '%u:%g:%a' "$methods/https")" = "${RAR_OUTPUT_UID}:$apt_group:750" ] || fail telemetry-method-identity
@@ -367,6 +368,7 @@ produce(){
   --tmpfs "/tmp:rw,nosuid,nodev,size=512m,uid=$host_uid,gid=$host_gid,mode=1777" \
   --tmpfs "/build:rw,exec,nosuid,nodev,size=512m,uid=$host_uid,gid=$host_gid,mode=700" \
   --env RAR_PREAUTH_BUILD_ROOT=/build \
+  --env RAR_PREAUTH_CONTAINER_IMAGE=sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 \
   --mount "type=bind,source=$root,target=/workspace" --workdir /workspace \
   "$base" /usr/bin/dash -e tools/toolchain/preauth-base-oci --canonicalize \
   "$stage/base-oci.raw.tar" "$stage/incoming/base-oci.tar" "$stage/incoming/base-tools.v1")
@@ -394,7 +396,7 @@ produce(){
   --tmpfs "/tmp:rw,nosuid,nodev,size=512m,uid=$host_uid,gid=$host_gid,mode=1777" \
   --tmpfs "/apt-runtime:rw,exec,nosuid,nodev,size=3g,uid=$host_uid,gid=65534,mode=2770" \
   --mount "type=bind,source=$root,target=/workspace" --workdir /workspace \
-  --env RAR_CI_BOOTSTRAP_IMAGE=sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 \
+  --env RAR_PREAUTH_CONTAINER_IMAGE=sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 \
   --env RAR_OUTPUT_UID="$host_uid" --env RAR_OUTPUT_GID="$host_gid" --env HOME="/workspace/$stage/home" \
   "$base" /usr/bin/dash -e tools/toolchain/preauth-input-producer --inside "$stage")
  host_phase=container-start-wait
