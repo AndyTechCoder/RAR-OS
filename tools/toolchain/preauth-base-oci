@@ -11,7 +11,7 @@ fi
 preauth_build_root_create "$root" preauth-base-oci preauth-base-oci
 preauth_build_install_traps
 preauth_build_run_child "$rustc_path" --edition=2024 -O "$root/tools/toolchain/preauth-base-oci.rs" -o "$PREAUTH_BUILD_DIR/preauth-base-oci" \
- || preauth_build_refuse compiler-failed
+ >"$PREAUTH_BUILD_DIR/compiler.stdout" 2>"$PREAUTH_BUILD_DIR/compiler.stderr" || preauth_build_refuse compiler-failed
 preauth_build_root_probe_executable "$PREAUTH_BUILD_DIR/preauth-base-oci"
 preauth_build_run_child_in_directory "$root" "$PREAUTH_BUILD_DIR/preauth-base-oci" --canonicalize "$2" "$3"
 status=$?

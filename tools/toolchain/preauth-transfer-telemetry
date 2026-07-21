@@ -11,7 +11,8 @@ fi
 preauth_build_root_create "$root" preauth-transfer-telemetry preauth-transfer-telemetry
 preauth_build_install_traps
 preauth_build_run_child "$rustc_path" --edition=2024 -O "$root/tools/toolchain/preauth-transfer-telemetry.rs" \
-    -o "$PREAUTH_BUILD_DIR/preauth-transfer-telemetry" || preauth_build_refuse compiler-failed
+    -o "$PREAUTH_BUILD_DIR/preauth-transfer-telemetry" \
+    >"$PREAUTH_BUILD_DIR/compiler.stdout" 2>"$PREAUTH_BUILD_DIR/compiler.stderr" || preauth_build_refuse compiler-failed
 preauth_build_root_probe_executable "$PREAUTH_BUILD_DIR/preauth-transfer-telemetry"
 preauth_build_run_child_in_directory "$root" "$PREAUTH_BUILD_DIR/preauth-transfer-telemetry" --verify "$2" "$3"
 status=$?
