@@ -158,6 +158,7 @@ grep -q 'docker create' "$producer" || fail lifecycle-create
 grep -q -- '--group-add 65534' "$producer" || fail apt-sandbox-group
 grep -q -- '--tmpfs "/apt-runtime:rw,exec,nosuid,nodev,size=3g,uid=$host_uid,gid=65534,mode=2770"' "$producer" || fail apt-runtime-mount
 grep -q 'APT::Sandbox::User=_apt' "$producer" || fail apt-sandbox-user
+grep -q 'chgrp "$apt_group" "$methods/https"' "$producer" || fail apt-method-group-binding
 grep -q 'Dir::State::lists=$state/lists' "$producer" || fail apt-state-binding
 grep -q 'Dir::State::lists::partial=$state/lists/partial' "$producer" || fail apt-state-partial-binding
 grep -q 'Dir::Cache::archives=$cache/archives' "$producer" || fail apt-cache-binding

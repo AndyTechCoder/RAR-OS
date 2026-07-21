@@ -149,7 +149,7 @@ inside(){
   rustc_path=$(command -v rustc) || fail telemetry-rustc
  fi
  "$rustc_path" --edition=2024 -O tools/toolchain/preauth-transfer-telemetry.rs -o "$methods/https" || fail telemetry-compile
- chmod 0750 "$methods/https"
+ chgrp "$apt_group" "$methods/https" && chmod 0750 "$methods/https" || fail telemetry-method-identity
  [ "$(stat -c '%u:%g:%a' "$methods/https")" = "${RAR_OUTPUT_UID}:$apt_group:750" ] || fail telemetry-method-identity
  options="-o Dir::Etc::sourcelist=$sources -o Dir::Etc::sourceparts=- -o Dir::State=$state -o Dir::State::lists=$state/lists -o Dir::State::lists::partial=$state/lists/partial -o Dir::Cache=$cache -o Dir::Cache::archives=$cache/archives -o Dir::Cache::archives::partial=$cache/archives/partial -o Dir::Bin::methods=$methods -o APT::Sandbox::User=_apt -o APT::Install-Recommends=false -o Acquire::Check-Valid-Until=false -o Acquire::Queue-Mode=access -o Acquire::https::Pipeline-Depth=0 -o Acquire::https::AllowRedirect=true -o Acquire::AllowInsecureRepositories=false -o Acquire::AllowDowngradeToInsecureRepositories=false -o Acquire::http::Dl-Limit=0 -o Acquire::Retries=2 -o Debug::NoLocking=1"
  # apt-secure validates the exact signed snapshot before download-only acquisition.
