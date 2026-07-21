@@ -18,6 +18,7 @@ manifest=spec/lab/preauth/cutover-v1.manifest
 
 for required in tools/toolchain/preauth-transaction tools/toolchain/preauth-input-producer tools/toolchain/preauth-input-delivery \
  tools/toolchain/preauth-base-oci tools/toolchain/preauth-base-oci.rs tools/rar-lab/preauth/src/base_oci.rs \
+ tools/toolchain/preauth-build-root.sh tools/toolchain/preauth-transfer-telemetry tools/toolchain/preauth-transfer-telemetry.rs \
  tools/rar-lab/preauth/src/lib.rs spec/lab/preauth/preauth-input-bundle-v1.fields \
  spec/lab/preauth/preauth-input-object-v1.fields spec/lab/preauth/preauth-input-delivery-v1.policy \
  spec/lab/preauth/locks/r0-x86_64-preauth-input-v4.lock \

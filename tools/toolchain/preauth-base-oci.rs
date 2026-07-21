@@ -17,6 +17,7 @@ fn checked_relative(path: &str) -> &str {
 
 fn main() {
     let arguments: Vec<_> = std::env::args().collect();
+    if arguments.len() == 2 && arguments[1] == "--build-root-exec-probe" { return; }
     if arguments.len() != 4 || arguments[1] != "--canonicalize" { refuse("usage-refused"); }
     for name in ["ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_URL", "AWS_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"] {

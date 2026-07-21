@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
+[ "$#" -eq 3 ] && [ "$1" = --verify ] || { printf '%s\n' 'preauth-transfer-telemetry:usage-refused' >&2; exit 73; }
+. "$root/tools/toolchain/preauth-build-root.sh"
+if [ -x /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc ]; then
+    rustc_path=/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc
+else
+    rustc_path=$(command -v rustc) || { printf '%s\n' 'preauth-transfer-telemetry:rustc-unavailable' >&2; exit 73; }
+fi
+preauth_build_root_create "$root" preauth-transfer-telemetry preauth-transfer-telemetry
+preauth_build_install_traps
+preauth_build_run_child "$rustc_path" --edition=2024 -O "$root/tools/toolchain/preauth-transfer-telemetry.rs" \
+    -o "$PREAUTH_BUILD_DIR/preauth-transfer-telemetry" || preauth_build_refuse compiler-failed
+preauth_build_root_probe_executable "$PREAUTH_BUILD_DIR/preauth-transfer-telemetry"
+preauth_build_run_child_in_directory "$root" "$PREAUTH_BUILD_DIR/preauth-transfer-telemetry" --verify "$2" "$3"
+status=$?
+exit "$status"

@@ -13,3 +13,5 @@ else
 fi
 "$rustc_path" --edition=2024 --test tests/preauth/src/main.rs -o out/r0/preauth-tests
 out/r0/preauth-tests --test-threads=1
+"$rustc_path" --edition=2024 --test tools/toolchain/preauth-transfer-telemetry.rs -o out/r0/preauth-transfer-telemetry-tests
+out/r0/preauth-transfer-telemetry-tests --test-threads=1

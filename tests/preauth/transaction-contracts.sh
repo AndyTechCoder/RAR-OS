@@ -67,49 +67,276 @@ grep -qx 'descriptor_slot_schema' spec/lab/preauth/execution-host-v2.fields || f
 grep -qx 'runtime_disk_slot' spec/lab/vm-profile/profile-v2.fields || fail 'profile-v2 descriptor slot missing'
 grep -qx 'executable_slot' spec/lab/vm-profile/command-v2.fields || fail 'command-v2 executable slot missing'
 
-# The production entrypoint's refusal paths must leave the complete repository tree
-# byte-identical: entries, types, modes, link targets, and file bytes, from the true
-# pre-invocation state, with refusal diagnostics only on stderr and stdout empty.
+# Refusal snapshots live outside the repository and cover the complete tree. No Git
+# internals are excluded: these wrappers never invoke Git and therefore have no
+# production reason to write below .git.
+contract_scratch=$(mktemp -d "${TMPDIR:-/tmp}/rar-transaction-contract.XXXXXX") || fail 'contract scratch'
+chmod 0700 "$contract_scratch"
+build_root=$contract_scratch/build-root
+mkdir -m 700 "$build_root"
 repository_state(){
-    find out 2>/dev/null | LC_ALL=C sort | while IFS= read -r state_entry; do
-        state_mode=$(ls -ld "$state_entry" | awk '{print $1}')
-        if [ -L "$state_entry" ]; then
-            state_detail="link:$(readlink "$state_entry")"
-        elif [ -f "$state_entry" ]; then
-            state_detail=$(cksum < "$state_entry")
-        else
-            state_detail=-
-        fi
-        printf '%s %s %s\n' "$state_entry" "$state_mode" "$state_detail"
-    done
+    tests/preauth/snapshot-repository-tree.sh "$1"
 }
-refusal_stderr=$(mktemp "${TMPDIR:-/tmp}/rar-refusal-stderr.XXXXXX") || fail 'refusal scratch'
-baseline=$(repository_state)
+assert_unchanged(){ repository_state "$contract_scratch/after"; cmp -s "$contract_scratch/before" "$contract_scratch/after" || fail "$1 changed the repository tree"; }
+invoke_refusal(){
+    refusal_name=$1; shift
+    repository_state "$contract_scratch/before"
+    set +e
+    "$@" >"$contract_scratch/$refusal_name.stdout" 2>"$contract_scratch/$refusal_name.stderr"
+    refusal_status=$?
+    set -e
+    [ "$refusal_status" -eq 73 ] || fail "$refusal_name exit status"
+    [ ! -s "$contract_scratch/$refusal_name.stdout" ] || fail "$refusal_name wrote stdout"
+    assert_unchanged "$refusal_name"
+}
+
+invoke_refusal usage tools/toolchain/preauth-transaction
+grep -qx 'preauth-transaction:usage-refused' "$contract_scratch/usage.stderr" || fail 'usage diagnostic'
+invoke_refusal authority env RAR_PREAUTH_BUILD_ROOT="$build_root" RAR_TRANSACTION_NETWORK=none AWS_ACCESS_KEY_ID=forbidden \
+    tools/toolchain/preauth-transaction --prepare AGENTS.md
+grep -qx 'preauth-transaction:authority-environment' "$contract_scratch/authority.stderr" || fail 'authority diagnostic'
+invoke_refusal malformed env RAR_PREAUTH_BUILD_ROOT="$build_root" RAR_TRANSACTION_NETWORK=none \
+    tools/toolchain/preauth-transaction --prepare AGENTS.md
+grep -q '^preauth-transaction:' "$contract_scratch/malformed.stderr" || fail 'malformed diagnostic'
+invoke_refusal base-invalid env RAR_PREAUTH_BUILD_ROOT="$build_root" \
+    tools/toolchain/preauth-base-oci --canonicalize AGENTS.md out/r0/base-invalid.tar out/r0/base-invalid.tools
+grep -q '^preauth-base-oci:' "$contract_scratch/base-invalid.stderr" || fail 'base invalid diagnostic'
+
+# A canonical 50-object/36-package fixture exercises the real M2-incomplete path.
+fixture_generator=$contract_scratch/generate-valid-input-bundle
+rustc --edition=2024 tests/preauth/generate-valid-input-bundle.rs -o "$fixture_generator" || fail 'fixture generator compile'
+valid_bundle=out/r0/preauth-contract-valid.tar
+"$fixture_generator" "$valid_bundle"
+repository_state "$contract_scratch/before"
 set +e
-usage_stdout=$(tools/toolchain/preauth-transaction 2>"$refusal_stderr"); usage_status=$?
+env RAR_PREAUTH_BUILD_ROOT="$build_root" RAR_TRANSACTION_NETWORK=none \
+    tools/toolchain/preauth-transaction --prepare "$valid_bundle" \
+    >"$contract_scratch/m2.stdout" 2>"$contract_scratch/m2.stderr"
+m2_status=$?
 set -e
-[ "$usage_status" -eq 73 ] || fail 'usage refusal exit status'
-[ -z "$usage_stdout" ] || fail 'usage refusal wrote stdout'
-grep -q 'preauth-transaction:usage-refused' "$refusal_stderr" || fail 'usage refusal diagnostic'
-[ "$baseline" = "$(repository_state)" ] || fail 'usage refusal changed the repository tree'
+[ "$m2_status" -eq 73 ] || fail 'M2-incomplete exit status'
+[ ! -s "$contract_scratch/m2.stdout" ] || fail 'M2-incomplete wrote stdout'
+grep -qx 'preauth-transaction:evidence:input_bundle_schema=rar-preauth-input-bundle-v1' "$contract_scratch/m2.stderr" || fail 'M2 schema evidence'
+grep -qx 'preauth-transaction:evidence:input_object_count=50' "$contract_scratch/m2.stderr" || fail 'M2 object evidence'
+grep -qx 'preauth-transaction:evidence:input_package_count=36' "$contract_scratch/m2.stderr" || fail 'M2 package evidence'
+grep -qx 'preauth-transaction:m2-incomplete' "$contract_scratch/m2.stderr" || fail 'M2 refusal marker'
+assert_unchanged M2-incomplete
+rm -f "$valid_bundle"
+
+# The shared root validator fails closed before mktemp for every unsafe root class.
+check_root_refusal(){
+    root_name=$1; candidate=$2
+    set +e
+    env RAR_PREAUTH_BUILD_ROOT="$candidate" RAR_TRANSACTION_NETWORK=none \
+        tools/toolchain/preauth-transaction --prepare AGENTS.md \
+        >"$contract_scratch/root-$root_name.stdout" 2>"$contract_scratch/root-$root_name.stderr"
+    root_status=$?
+    set -e
+    [ "$root_status" -eq 73 ] && [ ! -s "$contract_scratch/root-$root_name.stdout" ] \
+        || fail "build root accepted: $root_name"
+    grep -q '^preauth-transaction:build-root-' "$contract_scratch/root-$root_name.stderr" \
+        || fail "build root diagnostic: $root_name"
+}
+check_root_refusal repository-local "$root"
+check_root_refusal root-alias "$root/."
+mkdir -m 700 "$contract_scratch/real-parent"
+ln -s "$contract_scratch/real-parent" "$contract_scratch/link-parent"
+check_root_refusal symlinked-ancestor "$contract_scratch/link-parent"
+mkdir -m 777 "$contract_scratch/unsafe-shared"
+check_root_refusal unsafe-mode "$contract_scratch/unsafe-shared"
+check_root_refusal wrong-owner /usr
+check_root_refusal missing "$contract_scratch/missing"
+printf 'not a directory\n' > "$contract_scratch/not-directory"
+check_root_refusal non-directory "$contract_scratch/not-directory"
+
+# A lying mktemp that returns a pre-existing leaf is treated as a collision.
+collision_root=$contract_scratch/collision-root; mkdir -m 700 "$collision_root"
+collision_leaf=$collision_root/preauth-transaction.COLLIDE1; mkdir -m 700 "$collision_leaf"
+mkdir -m 700 "$contract_scratch/fake-bin"
+printf '%s\n' '#!/bin/sh' "printf '%s\\n' './preauth-transaction.COLLIDE1'" > "$contract_scratch/fake-bin/mktemp"
+chmod 0700 "$contract_scratch/fake-bin/mktemp"
 set +e
-authority_stdout=$(RAR_TRANSACTION_NETWORK=none AWS_ACCESS_KEY_ID=forbidden     tools/toolchain/preauth-transaction --prepare out/.contract-no-such-bundle 2>"$refusal_stderr"); authority_status=$?
+env PATH="$contract_scratch/fake-bin:$PATH" RAR_PREAUTH_BUILD_ROOT="$collision_root" RAR_TRANSACTION_NETWORK=none \
+    tools/toolchain/preauth-transaction --prepare AGENTS.md \
+    >"$contract_scratch/collision.stdout" 2>"$contract_scratch/collision.stderr"
+collision_status=$?
 set -e
-[ "$authority_status" -eq 73 ] || fail 'authority refusal exit status'
-[ -z "$authority_stdout" ] || fail 'authority refusal wrote stdout'
-grep -q 'preauth-transaction:authority-environment' "$refusal_stderr" || fail 'authority refusal diagnostic'
-[ "$baseline" = "$(repository_state)" ] || fail 'authority refusal changed the repository tree'
-malformed=out/r0/preauth/.contract-malformed-bundle
-mkdir -p out/r0/preauth
-printf 'not-a-bundle' > "$malformed"
-before=$(repository_state)
-set +e
-malformed_stdout=$(RAR_TRANSACTION_NETWORK=none tools/toolchain/preauth-transaction --prepare "$malformed" 2>"$refusal_stderr"); malformed_status=$?
-set -e
-[ "$malformed_status" -eq 73 ] || fail 'malformed refusal exit status'
-[ -z "$malformed_stdout" ] || fail 'malformed refusal wrote stdout'
-grep -q 'preauth-transaction:' "$refusal_stderr" || fail 'malformed refusal diagnostic'
-[ "$before" = "$(repository_state)" ] || fail 'malformed refusal changed the repository tree'
-rm -f "$malformed" "$refusal_stderr"
+[ "$collision_status" -eq 73 ] && [ ! -s "$contract_scratch/collision.stdout" ] || fail 'build collision accepted'
+grep -qx 'preauth-transaction:build-leaf-collision' "$contract_scratch/collision.stderr" || fail 'build collision diagnostic'
+[ -d "$collision_leaf" ] || fail 'collision leaf overwritten'
+
+# The shared trap removes its exact private leaf on generic failure and preserves
+# conventional signal statuses while terminating and reaping its exact child.
+cleanup_root=$contract_scratch/cleanup-root; mkdir -m 700 "$cleanup_root"
+(
+    . tools/toolchain/preauth-build-root.sh
+    RAR_PREAUTH_BUILD_ROOT=$cleanup_root
+    preauth_build_root_create "$root" cleanup-failure cleanup-failure
+    printf '%s\n' "$PREAUTH_BUILD_DIR" > "$contract_scratch/failure-leaf"
+    preauth_build_install_traps
+    exit 91
+) >/dev/null 2>"$contract_scratch/failure.stderr" || :
+failure_leaf=$(cat "$contract_scratch/failure-leaf")
+[ ! -e "$failure_leaf" ] || fail 'compiler/error cleanup leaf remains'
+
+assert_signal_result(){
+    signal_label=$1
+    signal_expected=$2
+    signal_status=$3
+    signal_leaf_file=$4
+    signal_child_file=${5-}
+    [ "$signal_status" -eq "$signal_expected" ] || fail "$signal_label status"
+    [ ! -s "$contract_scratch/$signal_label.stdout" ] || fail "$signal_label wrote stdout"
+    signal_leaf=$(cat "$signal_leaf_file")
+    [ ! -e "$signal_leaf" ] || fail "$signal_label cleanup leaf remains"
+    if [ -n "$signal_child_file" ]; then
+        signal_child=$(cat "$signal_child_file")
+        if kill -0 "$signal_child" 2>/dev/null; then
+            fail "$signal_label child remains"
+        fi
+    fi
+    repository_state "$contract_scratch/$signal_label.after"
+    cmp -s "$contract_scratch/$signal_label.before" "$contract_scratch/$signal_label.after" \
+        || fail "$signal_label changed the repository tree"
+}
+
+run_real_signal_case(){
+    signal_name=$1
+    signal_number=$2
+    child_behavior=$3
+    repeat_signal=${4-}
+    label=signal-$signal_name-$child_behavior${repeat_signal:+-$repeat_signal}
+    ready_file=$contract_scratch/$label.ready
+    pid_file=$contract_scratch/$label.pid
+    leaf_file=$contract_scratch/$label.leaf
+    child_file=$contract_scratch/$label.child
+    repository_state "$contract_scratch/$label.before"
+    (
+        while [ ! -s "$ready_file" ]; do :; done
+        signal_target=$(cat "$pid_file")
+        kill -"$signal_name" "$signal_target"
+        if [ "$repeat_signal" = repeated ]; then
+            sleep 1
+            kill -TERM "$signal_target" 2>/dev/null || :
+        fi
+    ) &
+    signaler_pid=$!
+    set +e
+    sh -c '
+        set -eu
+        repository=$1; selected_root=$2; label=$3; behavior=$4; pid_file=$5; child_file=$6; leaf_file=$7; ready_file=$8
+        . "$repository/tools/toolchain/preauth-build-root.sh"
+        RAR_PREAUTH_BUILD_ROOT=$selected_root
+        preauth_build_root_create "$repository" "cleanup-$label" "cleanup-$label"
+        preauth_build_install_traps
+        printf "%s\n" "$$" > "$pid_file"
+        printf "%s\n" "$PREAUTH_BUILD_DIR" > "$leaf_file"
+        preauth_build_run_child sh -c '\''
+            behavior=$1; child_file=$2; ready_file=$3
+            case "$behavior" in
+                cooperative) trap - HUP TERM ;;
+                ignore-original) trap "" HUP; trap - TERM ;;
+                ignore-original-term) trap "" HUP TERM ;;
+                *) exit 97 ;;
+            esac
+            printf "%s\n" "$$" > "$child_file"
+            printf "%s\n" ready > "$ready_file"
+            while :; do :; done
+        '\'' preauth-signal-child "$behavior" "$child_file" "$ready_file"
+        exit "$?"
+    ' preauth-signal-wrapper "$root" "$cleanup_root" "$label" "$child_behavior" "$pid_file" "$child_file" "$leaf_file" "$ready_file" \
+        >"$contract_scratch/$label.stdout" 2>"$contract_scratch/$label.stderr"
+    signal_status=$?
+    set -e
+    wait "$signaler_pid"
+    assert_signal_result "$label" "$((128 + signal_number))" "$signal_status" "$leaf_file" "$child_file"
+}
+
+run_before_child_signal_case(){
+    label=signal-HUP-before-child
+    ready_file=$contract_scratch/$label.ready
+    pid_file=$contract_scratch/$label.pid
+    leaf_file=$contract_scratch/$label.leaf
+    repository_state "$contract_scratch/$label.before"
+    (
+        while [ ! -s "$ready_file" ]; do :; done
+        kill -HUP "$(cat "$pid_file")"
+    ) &
+    signaler_pid=$!
+    set +e
+    sh -c '
+        set -eu
+        repository=$1; selected_root=$2; label=$3; pid_file=$4; leaf_file=$5; ready_file=$6
+        . "$repository/tools/toolchain/preauth-build-root.sh"
+        RAR_PREAUTH_BUILD_ROOT=$selected_root
+        preauth_build_root_create "$repository" "cleanup-$label" "cleanup-$label"
+        preauth_build_install_traps
+        printf "%s\n" "$$" > "$pid_file"
+        printf "%s\n" "$PREAUTH_BUILD_DIR" > "$leaf_file"
+        printf "%s\n" ready > "$ready_file"
+        while :; do :; done
+    ' preauth-before-child "$root" "$cleanup_root" "$label" "$pid_file" "$leaf_file" "$ready_file" \
+        >"$contract_scratch/$label.stdout" 2>"$contract_scratch/$label.stderr"
+    signal_status=$?
+    set -e
+    wait "$signaler_pid"
+    assert_signal_result "$label" 129 "$signal_status" "$leaf_file"
+}
+
+run_direct_handler_case(){
+    signal_name=$1
+    signal_number=$2
+    child_behavior=$3
+    label=handler-$signal_name-$child_behavior
+    leaf_file=$contract_scratch/$label.leaf
+    child_file=$contract_scratch/$label.child
+    ready_file=$contract_scratch/$label.ready
+    repository_state "$contract_scratch/$label.before"
+    set +e
+    sh -c '
+        set -eu
+        repository=$1; selected_root=$2; label=$3; signal_number=$4; behavior=$5; child_file=$6; leaf_file=$7; ready_file=$8
+        . "$repository/tools/toolchain/preauth-build-root.sh"
+        RAR_PREAUTH_BUILD_ROOT=$selected_root
+        preauth_build_root_create "$repository" "cleanup-$label" "cleanup-$label"
+        preauth_build_install_traps
+        printf "%s\n" "$PREAUTH_BUILD_DIR" > "$leaf_file"
+        sh -c '\''
+            behavior=$1; child_file=$2; ready_file=$3
+            case "$behavior" in
+                ignore-int) trap "" INT; trap - TERM ;;
+                already-exited) : ;;
+                *) exit 97 ;;
+            esac
+            printf "%s\n" "$$" > "$child_file"
+            printf "%s\n" ready > "$ready_file"
+            [ "$behavior" = already-exited ] && exit 0
+            while :; do :; done
+        '\'' preauth-handler-child "$behavior" "$child_file" "$ready_file" &
+        preauth_build_child_pid=$!
+        while [ ! -s "$ready_file" ]; do :; done
+        [ "$behavior" != already-exited ] || sleep 1
+        preauth_build_signal "$signal_number"
+        exit 99
+    ' preauth-signal-handler "$root" "$cleanup_root" "$label" "$signal_number" "$child_behavior" "$child_file" "$leaf_file" "$ready_file" \
+        >"$contract_scratch/$label.stdout" 2>"$contract_scratch/$label.stderr"
+    handler_status=$?
+    set -e
+    assert_signal_result "$label" "$((128 + signal_number))" "$handler_status" "$leaf_file" "$child_file"
+}
+
+run_real_signal_case TERM 15 cooperative
+run_real_signal_case HUP 1 cooperative
+run_real_signal_case HUP 1 ignore-original
+run_real_signal_case HUP 1 ignore-original-term
+run_real_signal_case HUP 1 ignore-original-term repeated
+run_before_child_signal_case
+# Non-interactive parents may start with INT ignored, which POSIX shells cannot
+# make catchable. Exercise the shared handler boundary explicitly and prove that
+# a child ignoring INT is still terminated by the bounded TERM escalation.
+run_direct_handler_case INT 2 ignore-int
+run_direct_handler_case HUP 1 already-exited
+
+rm -rf "$contract_scratch"
 
 printf '%s\n' 'transaction contract checks passed'

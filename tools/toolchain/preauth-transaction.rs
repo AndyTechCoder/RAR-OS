@@ -10,6 +10,7 @@ fn refuse(code: &str) -> ! { eprintln!("preauth-transaction:{code}"); std::proce
 
 fn main() {
     let arguments: Vec<_> = std::env::args().collect();
+    if arguments.len() == 2 && arguments[1] == "--build-root-exec-probe" { return; }
     if arguments.len() != 3 || arguments[1] != "--prepare" { refuse("usage-refused"); }
     if std::env::var("RAR_TRANSACTION_NETWORK").as_deref() != Ok("none") { refuse("network-boundary"); }
     for name in ["ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_URL", "AWS_ACCESS_KEY_ID",
@@ -28,11 +29,11 @@ fn main() {
     if bytes.len() as u64 > maximum { refuse("input-bound"); }
     let bundle = parse_input_bundle_v1(&bytes).unwrap_or_else(|error| refuse(error.code));
     if bundle.package_count != 36 { refuse("input-package-count"); }
-    println!("input_bundle_schema=rar-preauth-input-bundle-v1");
-    println!("input_bundle_sha256={}", bundle.archive_sha256);
-    println!("input_object_count={}", bundle.objects.len());
-    println!("input_package_count={}", bundle.package_count);
-    println!("input_lock_sha256={}", bundle.input_lock_sha256);
+    eprintln!("preauth-transaction:evidence:input_bundle_schema=rar-preauth-input-bundle-v1");
+    eprintln!("preauth-transaction:evidence:input_bundle_sha256={}", bundle.archive_sha256);
+    eprintln!("preauth-transaction:evidence:input_object_count={}", bundle.objects.len());
+    eprintln!("preauth-transaction:evidence:input_package_count={}", bundle.package_count);
+    eprintln!("preauth-transaction:evidence:input_lock_sha256={}", bundle.input_lock_sha256);
     eprintln!("preauth-transaction:m2-incomplete");
     std::process::exit(73);
 }

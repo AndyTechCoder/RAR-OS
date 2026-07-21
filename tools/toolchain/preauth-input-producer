@@ -45,20 +45,7 @@ verify_source_origins(){
 }
 verify_transfer_origins(){
  transfer_log=$1
- [ -f "$transfer_log" ] && [ ! -L "$transfer_log" ] || fail transfer-log-missing
- if grep -q 'http://' "$transfer_log"; then
-  grep -o 'http://[A-Za-z0-9.-]*' "$transfer_log" | LC_ALL=C sort -u | sed 's/^/preauth-input-producer:observed-plaintext:/' >&2
-  fail transfer-plaintext
- fi
- transfer_hosts=$(grep -o 'https://[A-Za-z0-9.-]*' "$transfer_log" | sed 's|https://||' | LC_ALL=C sort -u)
- [ -n "$transfer_hosts" ] || fail transfer-empty
- for transfer_host in $transfer_hosts; do
-  approved_origin "$transfer_host" && continue
-  grep -qx "allowed_redirect_origin=$transfer_host" "$policy" && continue
-  printf 'preauth-input-producer:observed-transfer-hosts:%s\n' "$(printf '%s' "$transfer_hosts" | tr '\n' ',')" >&2
-  fail "transfer-origin:$transfer_host"
- done
- printf 'preauth-input-producer:transfer-hosts:%s\n' "$(printf '%s' "$transfer_hosts" | tr '\n' ',')" >&2
+ "$root/tools/toolchain/preauth-transfer-telemetry" --verify "$transfer_log" "$policy"
 }
 verify_origins(){
  origin_dir=$1
@@ -116,27 +103,39 @@ inside(){
    'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260630T000000Z trixie-proposed-updates main' \
    'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260630T000000Z trixie-security main'
  } > "$sources"
- options="-o Dir::Etc::sourcelist=$sources -o Dir::Etc::sourceparts=- -o Dir::State=$state -o Dir::Cache=$cache -o APT::Install-Recommends=false -o Acquire::Check-Valid-Until=false -o Acquire::https::AllowRedirect=true -o Acquire::AllowInsecureRepositories=false -o Acquire::AllowDowngradeToInsecureRepositories=false -o Acquire::http::Dl-Limit=0 -o Acquire::Retries=2 -o Debug::NoLocking=1"
+ methods=$stage/apt-methods
+ mkdir -m 700 "$methods"
+ /bin/cp -a /usr/lib/apt/methods/. "$methods/"
+ /bin/mv "$methods/https" "$methods/https.real"
+ rustc_path=$(command -v rustc) || fail telemetry-rustc
+ "$rustc_path" --edition=2024 -O tools/toolchain/preauth-transfer-telemetry.rs -o "$methods/https" || fail telemetry-compile
+ chmod 0700 "$methods/https"
+ options="-o Dir::Etc::sourcelist=$sources -o Dir::Etc::sourceparts=- -o Dir::State=$state -o Dir::Cache=$cache -o Dir::Bin::methods=$methods -o APT::Install-Recommends=false -o Acquire::Check-Valid-Until=false -o Acquire::Queue-Mode=access -o Acquire::https::Pipeline-Depth=0 -o Acquire::https::AllowRedirect=true -o Acquire::AllowInsecureRepositories=false -o Acquire::AllowDowngradeToInsecureRepositories=false -o Acquire::http::Dl-Limit=0 -o Acquire::Retries=2 -o Debug::NoLocking=1"
  # apt-secure validates the exact signed snapshot before download-only acquisition.
  # shellcheck disable=SC2086
  phase=source-origins
  verify_source_origins "$sources"
- transfer_log=$stage/apt-transfer.log
  phase=apt-update
- if ! /usr/bin/apt-get $options -o Debug::Acquire::https=true -o Debug::Acquire::http=true update 2>"$transfer_log"; then
-  cat "$transfer_log" >&2; fail apt-update-failed
+ update_events=$stage/apt-update-transfer.v1
+ update_log=$stage/apt-update.stderr
+ export RAR_PREAUTH_APT_REAL_METHOD=$root/$methods/https.real RAR_PREAUTH_APT_TELEMETRY=$root/$update_events
+ if ! /usr/bin/apt-get $options update 2>"$update_log"; then
+  cat "$update_log" >&2; fail apt-update-failed
  fi
  phase=transfer-origin-verification
- verify_transfer_origins "$transfer_log"
+ "$methods/https" --verify "$update_events" "$policy" || fail transfer-origin-verification
  telemetry apt-update-complete
  # shellcheck disable=SC2086
  phase=apt-download
- if ! /usr/bin/apt-get $options -o Debug::Acquire::https=true -o Debug::Acquire::http=true --yes --download-only --no-install-recommends install \
-  'lld-19=1:19.1.7-3+b1' 'qemu-system-x86=1:10.0.8+ds-0+deb13u1+b2' 'ovmf=2025.02-8+deb13u1' 2>>"$transfer_log"; then
-  cat "$transfer_log" >&2; fail apt-download-failed
+ download_events=$stage/apt-download-transfer.v1
+ download_log=$stage/apt-download.stderr
+ export RAR_PREAUTH_APT_TELEMETRY=$root/$download_events
+ if ! /usr/bin/apt-get $options --yes --download-only --no-install-recommends install \
+  'lld-19=1:19.1.7-3+b1' 'qemu-system-x86=1:10.0.8+ds-0+deb13u1+b2' 'ovmf=2025.02-8+deb13u1' 2>"$download_log"; then
+  cat "$download_log" >&2; fail apt-download-failed
  fi
  phase=transfer-origin-verification
- verify_transfer_origins "$transfer_log"
+ "$methods/https" --verify "$download_events" "$policy" || fail transfer-origin-verification
  telemetry apt-download-complete
  phase=origin-verification
  verify_origins "$state/lists"
@@ -224,7 +223,7 @@ inside(){
  phase=tool-record
  {
   printf '%s\n' schema=rar-preauth-input-producer-tools-v1
-  for tool in /usr/bin/apt-get /usr/bin/dpkg-deb /usr/bin/tar /usr/bin/sha256sum; do
+  for tool in /usr/bin/apt-get /usr/bin/dpkg-deb /usr/bin/tar /usr/bin/sha256sum "$methods/https" "$methods/https.real"; do
    printf 'tool=%s|%s\n' "$tool" "$(sha256sum "$tool" | cut -d ' ' -f1)"
   done
  } > "$incoming/container-tools.v1"

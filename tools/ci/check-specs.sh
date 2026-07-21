@@ -86,10 +86,15 @@ tests/preauth/src/main.rs
 tests/preauth/run.sh
 tests/preauth/transaction-contracts.sh
 tests/preauth/input-producer-contracts.sh
+tests/preauth/snapshot-repository-tree.sh
+tests/preauth/generate-valid-input-bundle.rs
 tests/preauth/fixtures/cutover-mutations.v1
 tools/toolchain/acquire-preauth-closure.sh
 tools/toolchain/preauth-transaction
 tools/toolchain/preauth-transaction.rs
+tools/toolchain/preauth-build-root.sh
+tools/toolchain/preauth-transfer-telemetry
+tools/toolchain/preauth-transfer-telemetry.rs
 tools/toolchain/preauth-input-producer
 tools/toolchain/bind-preauth-head.sh
 tools/toolchain/verify-preauth-oci.sh
@@ -118,7 +123,7 @@ printf '%s\n' "$required_files" | while IFS= read -r file; do
     [ -s "$file" ] || fail "empty required file: $file"
 done
 
-for script in tools/ci/check-specs.sh tools/ci/check-preauth-cutover.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh tests/preauth/run.sh tests/preauth/transaction-contracts.sh tests/preauth/input-producer-contracts.sh tools/toolchain/preauth-transaction tools/toolchain/preauth-input-producer tools/toolchain/preauth-base-oci spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
+for script in tools/ci/check-specs.sh tools/ci/check-preauth-cutover.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh tests/preauth/run.sh tests/preauth/transaction-contracts.sh tests/preauth/input-producer-contracts.sh tests/preauth/snapshot-repository-tree.sh tools/toolchain/preauth-transaction tools/toolchain/preauth-input-producer tools/toolchain/preauth-base-oci tools/toolchain/preauth-transfer-telemetry spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
     [ -x "$script" ] || fail "required script is not executable: $script"
 done
 
