@@ -72,7 +72,14 @@ grep -qx 'executable_slot' spec/lab/vm-profile/command-v2.fields || fail 'comman
 # production reason to write below .git.
 contract_scratch=$(mktemp -d "${TMPDIR:-/tmp}/rar-transaction-contract.XXXXXX") || fail 'contract scratch'
 chmod 0700 "$contract_scratch"
-build_root=$contract_scratch/build-root
+if [ -n "${RAR_PREAUTH_BUILD_ROOT-}" ]; then
+    contract_build_parent=$RAR_PREAUTH_BUILD_ROOT/transaction-contract-roots
+    [ ! -e "$contract_build_parent" ] || fail 'contract build parent collision'
+else
+    contract_build_parent=$contract_scratch/executable-roots
+fi
+mkdir -m 700 "$contract_build_parent"
+build_root=$contract_build_parent/build-root
 mkdir -m 700 "$build_root"
 repository_state(){
     tests/preauth/snapshot-repository-tree.sh "$1"
@@ -103,7 +110,7 @@ invoke_refusal base-invalid env RAR_PREAUTH_BUILD_ROOT="$build_root" \
 grep -q '^preauth-base-oci:' "$contract_scratch/base-invalid.stderr" || fail 'base invalid diagnostic'
 
 # A canonical 50-object/36-package fixture exercises the real M2-incomplete path.
-fixture_generator=$contract_scratch/generate-valid-input-bundle
+fixture_generator=$contract_build_parent/generate-valid-input-bundle
 rustc --edition=2024 tests/preauth/generate-valid-input-bundle.rs -o "$fixture_generator" || fail 'fixture generator compile'
 valid_bundle=out/r0/preauth-contract-valid.tar
 "$fixture_generator" "$valid_bundle"
@@ -150,7 +157,7 @@ printf 'not a directory\n' > "$contract_scratch/not-directory"
 check_root_refusal non-directory "$contract_scratch/not-directory"
 
 # A lying mktemp that returns a pre-existing leaf is treated as a collision.
-collision_root=$contract_scratch/collision-root; mkdir -m 700 "$collision_root"
+collision_root=$contract_build_parent/collision-root; mkdir -m 700 "$collision_root"
 collision_leaf=$collision_root/preauth-transaction.COLLIDE1; mkdir -m 700 "$collision_leaf"
 mkdir -m 700 "$contract_scratch/fake-bin"
 printf '%s\n' '#!/bin/sh' "printf '%s\\n' './preauth-transaction.COLLIDE1'" > "$contract_scratch/fake-bin/mktemp"
@@ -167,7 +174,7 @@ grep -qx 'preauth-transaction:build-leaf-collision' "$contract_scratch/collision
 
 # The shared trap removes its exact private leaf on generic failure and preserves
 # conventional signal statuses while terminating and reaping its exact child.
-cleanup_root=$contract_scratch/cleanup-root; mkdir -m 700 "$cleanup_root"
+cleanup_root=$contract_build_parent/cleanup-root; mkdir -m 700 "$cleanup_root"
 (
     . tools/toolchain/preauth-build-root.sh
     RAR_PREAUTH_BUILD_ROOT=$cleanup_root
@@ -337,6 +344,6 @@ run_before_child_signal_case
 run_direct_handler_case INT 2 ignore-int
 run_direct_handler_case HUP 1 already-exited
 
-rm -rf "$contract_scratch"
+rm -rf "$contract_build_parent" "$contract_scratch"
 
 printf '%s\n' 'transaction contract checks passed'

@@ -1,9 +1,10 @@
 #![deny(unsafe_code)]
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::{File, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -14,10 +15,16 @@ const MAX_LINE: usize = 4096;
 const MAX_RECORD: usize = 64 * 1024;
 const MAX_REQUESTS: usize = 4096;
 const MAX_REDIRECTS: usize = 8;
+const MAX_CHANNELS: usize = 64;
 
 #[derive(Debug)]
 struct Error(&'static str);
 type Result<T> = std::result::Result<T, Error>;
+
+fn telemetry_directory_mode(mode: u32) -> bool {
+    let expected = if cfg!(target_os = "linux") { 0o2770 } else { 0o770 };
+    mode & 0o7777 == expected
+}
 
 fn fail(code: &'static str) -> ! {
     eprintln!("preauth-transfer-telemetry:{code}");
@@ -131,9 +138,26 @@ struct Tracker {
 }
 
 impl Tracker {
-    fn create(path: &str) -> Result<Self> {
-        let mut output = OpenOptions::new().write(true).create_new(true).mode(0o600).open(path)
+    fn create(directory: &str) -> Result<Self> {
+        Self::create_channel(directory, std::process::id())
+    }
+
+    fn create_channel(directory: &str, channel: u32) -> Result<Self> {
+        let directory_metadata = fs::symlink_metadata(directory).map_err(|_| Error("telemetry-directory"))?;
+        if !directory_metadata.file_type().is_dir() || !telemetry_directory_mode(directory_metadata.permissions().mode()) {
+            return Err(Error("telemetry-directory"));
+        }
+        let path = Path::new(directory).join(format!("channel-{channel:010}.events"));
+        let mut output = OpenOptions::new().write(true).create_new(true).mode(0o640).open(&path)
             .map_err(|_| Error("telemetry-create"))?;
+        output.set_permissions(fs::Permissions::from_mode(0o640)).map_err(|_| Error("telemetry-mode"))?;
+        let output_metadata = output.metadata().map_err(|_| Error("telemetry-file"))?;
+        if !output_metadata.file_type().is_file() || output_metadata.nlink() != 1
+            || output_metadata.permissions().mode() & 0o777 != 0o640
+            || output_metadata.gid() != directory_metadata.gid()
+        {
+            return Err(Error("telemetry-file"));
+        }
         output.write_all(format!("{SCHEMA}\n").as_bytes()).map_err(|_| Error("telemetry-write"))?;
         Ok(Self { output, next_id: 1, active: BTreeMap::new(), total: 0 })
     }
@@ -287,10 +311,10 @@ struct VerifiedRequest {
     terminal: bool,
 }
 
-fn verify(path: &str, policy_path: &str) -> Result<()> {
-    let metadata = std::fs::symlink_metadata(path).map_err(|_| Error("telemetry-missing"))?;
+fn verify_channel(path: &Path, policy: &Policy, expected_gid: u32, hosts: &mut BTreeSet<String>) -> Result<usize> {
+    let metadata = fs::symlink_metadata(path).map_err(|_| Error("telemetry-missing"))?;
     if !metadata.file_type().is_file() || metadata.len() as usize > MAX_FILE || metadata.nlink() != 1
-        || metadata.permissions().mode() & 0o777 != 0o600
+        || metadata.permissions().mode() & 0o777 != 0o640 || metadata.gid() != expected_gid
     {
         return Err(Error("telemetry-file"));
     }
@@ -300,11 +324,9 @@ fn verify(path: &str, policy_path: &str) -> Result<()> {
         return Err(Error("telemetry-framing"));
     }
     let text = std::str::from_utf8(&bytes).map_err(|_| Error("telemetry-utf8"))?;
-    let policy = parse_policy(policy_path)?;
     let mut lines = text.lines();
     if lines.next() != Some(SCHEMA) { return Err(Error("telemetry-schema")); }
     let mut requests: BTreeMap<u32, VerifiedRequest> = BTreeMap::new();
-    let mut hosts = BTreeSet::new();
     let mut completed = None;
     for line in lines {
         if line.len() > MAX_LINE || line.is_empty() || completed.is_some() { return Err(Error("telemetry-record")); }
@@ -355,9 +377,46 @@ fn verify(path: &str, policy_path: &str) -> Result<()> {
     if requests.is_empty() || expected != requests.len() || requests.values().any(|request| !request.terminal) {
         return Err(Error("request-cardinality"));
     }
+    Ok(requests.len())
+}
+
+fn channel_path(directory: &Path, name: &str) -> Result<PathBuf> {
+    let digits = name.strip_prefix("channel-").and_then(|value| value.strip_suffix(".events"))
+        .ok_or(Error("telemetry-entry"))?;
+    if digits.len() != 10 || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(Error("telemetry-entry"));
+    }
+    Ok(directory.join(name))
+}
+
+fn verify(directory: &str, policy_path: &str) -> Result<()> {
+    let directory_path = Path::new(directory);
+    let metadata = fs::symlink_metadata(directory_path).map_err(|_| Error("telemetry-missing"))?;
+    if !metadata.file_type().is_dir() || !telemetry_directory_mode(metadata.permissions().mode()) {
+        return Err(Error("telemetry-directory"));
+    }
+    let policy = parse_policy(policy_path)?;
+    let mut paths = Vec::new();
+    for entry in fs::read_dir(directory_path).map_err(|_| Error("telemetry-read"))? {
+        let entry = entry.map_err(|_| Error("telemetry-read"))?;
+        let name = entry.file_name().into_string().map_err(|_| Error("telemetry-entry"))?;
+        paths.push(channel_path(directory_path, &name)?);
+        if paths.len() > MAX_CHANNELS { return Err(Error("telemetry-channel-bound")); }
+    }
+    if paths.is_empty() { return Err(Error("telemetry-channel-empty")); }
+    paths.sort();
+    let channel_count = paths.len();
+    let mut hosts = BTreeSet::new();
+    let mut total = 0usize;
+    for path in paths {
+        total = total.checked_add(verify_channel(&path, &policy, metadata.gid(), &mut hosts)?)
+            .ok_or(Error("request-bound"))?;
+        if total > policy.maximum_requests { return Err(Error("request-bound")); }
+    }
     let host_list = hosts.into_iter().collect::<Vec<_>>().join(",");
     eprintln!("preauth-input-producer:transfer-hosts:{host_list}");
-    eprintln!("preauth-input-producer:transfer-requests:{}", requests.len());
+    eprintln!("preauth-input-producer:transfer-requests:{total}");
+    eprintln!("preauth-input-producer:transfer-channels:{channel_count}");
     Ok(())
 }
 
@@ -376,7 +435,7 @@ fn main() {
         [program] => {
             let _ = program;
             let real = std::env::var("RAR_PREAUTH_APT_REAL_METHOD").map_err(|_| Error("proxy-environment"));
-            let telemetry = std::env::var("RAR_PREAUTH_APT_TELEMETRY").map_err(|_| Error("proxy-environment"));
+            let telemetry = std::env::var("RAR_PREAUTH_APT_TELEMETRY_DIR").map_err(|_| Error("proxy-environment"));
             match (real, telemetry) { (Ok(real), Ok(telemetry)) => proxy(&real, &telemetry), _ => Err(Error("proxy-environment")) }
         }
         [_, command] if command == "--build-root-exec-probe" => Ok(()),

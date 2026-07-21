@@ -70,6 +70,13 @@ inside(){
  case "$relative_stage" in out/r0/preauth/input-delivery/.stage-one|out/r0/preauth/input-delivery/.stage-two) :;; *) fail stage-path;; esac
  stage=$root/$relative_stage
  status_file=$stage/inside-status.v1
+ apt_runtime=/apt-runtime
+ apt_group=65534
+ state=
+ cache=
+ methods=
+ update_events=
+ download_events=
  telemetry(){
   phase=$1
   files=$(find "$stage" -xdev -type f 2>/dev/null | wc -l | tr -d ' ')
@@ -83,17 +90,48 @@ inside(){
  inside_exit(){
   status=$?
   trap - 0
+  cleanup_status=0
+  apt_runtime_cleanup || cleanup_status=$?
+  if [ "$cleanup_status" -ne 0 ]; then
+   printf 'preauth-input-producer:apt-runtime-cleanup-failed\n' >&2
+   status=73
+  fi
   printf 'exit_status=%s\n' "$status" >> "$status_file" 2>/dev/null || :
   if [ "$status" -ne 0 ]; then printf 'preauth-input-producer:phase=%s:status=%s\n' "$phase" "$status" >&2; fi
   exit "$status"
  }
+ apt_runtime_identity(){ stat -c '%u:%g:%a' "$apt_runtime" 2>/dev/null; }
+ apt_runtime_cleanup(){
+  [ "$(apt_runtime_identity)" = "${RAR_OUTPUT_UID-}:$apt_group:2770" ] || return 1
+  for runtime_entry in "$download_events" "$update_events" "$methods" "$cache" "$state"; do
+   [ -n "$runtime_entry" ] || continue
+   case "$runtime_entry" in "$apt_runtime"/*) :;; *) return 1;; esac
+   /bin/rm -rf -- "$runtime_entry" || return 1
+  done
+  [ -z "$(find "$apt_runtime" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]
+ }
  trap inside_exit 0
  [ "${RAR_CI_BOOTSTRAP_IMAGE-}" = sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 ] || fail base-identity
  [ "$(id -u)" = "${RAR_OUTPUT_UID-}" ] && [ "$(id -g)" = "${RAR_OUTPUT_GID-}" ] || fail output-owner
+ [ "$(id -u _apt)" = 42 ] && [ "$(id -g _apt)" = "$apt_group" ] || fail apt-sandbox-identity
+ id -G | tr ' ' '\n' | grep -qx "$apt_group" || fail apt-sandbox-group
+ [ "$(apt_runtime_identity)" = "${RAR_OUTPUT_UID}:$apt_group:2770" ] || fail apt-runtime-identity
  incoming=$stage/incoming
- state=$stage/apt-state
- cache=$stage/apt-cache
- mkdir -m 700 "$state" "$state/lists" "$state/lists/partial" "$cache" "$cache/archives" "$cache/archives/partial" "$incoming/debs" "$stage/extracted"
+ state=$apt_runtime/state
+ cache=$apt_runtime/cache
+ methods=$apt_runtime/methods
+ update_events=$apt_runtime/update-events
+ download_events=$apt_runtime/download-events
+ previous_umask=$(umask)
+ umask 007
+ mkdir -m 2770 "$state" "$state/lists" "$state/lists/partial" \
+  "$cache" "$cache/archives" "$cache/archives/partial" "$methods" "$update_events" "$download_events"
+ umask "$previous_umask"
+ for apt_directory in "$state" "$state/lists" "$state/lists/partial" \
+  "$cache" "$cache/archives" "$cache/archives/partial" "$methods" "$update_events" "$download_events"; do
+  [ "$(stat -c '%u:%g:%a' "$apt_directory")" = "${RAR_OUTPUT_UID}:$apt_group:2770" ] || fail apt-runtime-directory
+ done
+ mkdir -m 700 "$incoming/debs" "$stage/extracted"
  telemetry setup-complete
  sources=$stage/sources.list
  {
@@ -103,8 +141,6 @@ inside(){
    'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260630T000000Z trixie-proposed-updates main' \
    'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260630T000000Z trixie-security main'
  } > "$sources"
- methods=$stage/apt-methods
- mkdir -m 700 "$methods"
  /bin/cp -a /usr/lib/apt/methods/. "$methods/"
  /bin/mv "$methods/https" "$methods/https.real"
  if [ -x /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc ]; then
@@ -113,16 +149,16 @@ inside(){
   rustc_path=$(command -v rustc) || fail telemetry-rustc
  fi
  "$rustc_path" --edition=2024 -O tools/toolchain/preauth-transfer-telemetry.rs -o "$methods/https" || fail telemetry-compile
- chmod 0700 "$methods/https"
- options="-o Dir::Etc::sourcelist=$sources -o Dir::Etc::sourceparts=- -o Dir::State=$state -o Dir::Cache=$cache -o Dir::Bin::methods=$methods -o APT::Install-Recommends=false -o Acquire::Check-Valid-Until=false -o Acquire::Queue-Mode=access -o Acquire::https::Pipeline-Depth=0 -o Acquire::https::AllowRedirect=true -o Acquire::AllowInsecureRepositories=false -o Acquire::AllowDowngradeToInsecureRepositories=false -o Acquire::http::Dl-Limit=0 -o Acquire::Retries=2 -o Debug::NoLocking=1"
+ chmod 0750 "$methods/https"
+ [ "$(stat -c '%u:%g:%a' "$methods/https")" = "${RAR_OUTPUT_UID}:$apt_group:750" ] || fail telemetry-method-identity
+ options="-o Dir::Etc::sourcelist=$sources -o Dir::Etc::sourceparts=- -o Dir::State=$state -o Dir::State::lists=$state/lists -o Dir::State::lists::partial=$state/lists/partial -o Dir::Cache=$cache -o Dir::Cache::archives=$cache/archives -o Dir::Cache::archives::partial=$cache/archives/partial -o Dir::Bin::methods=$methods -o APT::Sandbox::User=_apt -o APT::Install-Recommends=false -o Acquire::Check-Valid-Until=false -o Acquire::Queue-Mode=access -o Acquire::https::Pipeline-Depth=0 -o Acquire::https::AllowRedirect=true -o Acquire::AllowInsecureRepositories=false -o Acquire::AllowDowngradeToInsecureRepositories=false -o Acquire::http::Dl-Limit=0 -o Acquire::Retries=2 -o Debug::NoLocking=1"
  # apt-secure validates the exact signed snapshot before download-only acquisition.
  # shellcheck disable=SC2086
  phase=source-origins
  verify_source_origins "$sources"
  phase=apt-update
- update_events=$stage/apt-update-transfer.v1
  update_log=$stage/apt-update.stderr
- export RAR_PREAUTH_APT_REAL_METHOD=$root/$methods/https.real RAR_PREAUTH_APT_TELEMETRY=$root/$update_events
+ export RAR_PREAUTH_APT_REAL_METHOD=$methods/https.real RAR_PREAUTH_APT_TELEMETRY_DIR=$update_events
  if ! /usr/bin/apt-get $options update 2>"$update_log"; then
   cat "$update_log" >&2; fail apt-update-failed
  fi
@@ -131,9 +167,8 @@ inside(){
  telemetry apt-update-complete
  # shellcheck disable=SC2086
  phase=apt-download
- download_events=$stage/apt-download-transfer.v1
  download_log=$stage/apt-download.stderr
- export RAR_PREAUTH_APT_TELEMETRY=$root/$download_events
+ export RAR_PREAUTH_APT_TELEMETRY_DIR=$download_events
  if ! /usr/bin/apt-get $options --yes --download-only --no-install-recommends install \
   'lld-19=1:19.1.7-3+b1' 'qemu-system-x86=1:10.0.8+ds-0+deb13u1+b2' 'ovmf=2025.02-8+deb13u1' 2>"$download_log"; then
   cat "$download_log" >&2; fail apt-download-failed
@@ -358,7 +393,9 @@ produce(){
  case "$container_name" in *[!A-Za-z0-9_.-]*) fail container-name;; esac
  container_id=$(docker create --name "$container_name" --read-only \
   --user "$host_uid:$host_gid" --security-opt no-new-privileges --cap-drop ALL \
+  --group-add 65534 \
   --tmpfs "/tmp:rw,nosuid,nodev,size=512m,uid=$host_uid,gid=$host_gid,mode=1777" \
+  --tmpfs "/apt-runtime:rw,exec,nosuid,nodev,size=3g,uid=$host_uid,gid=65534,mode=2770" \
   --mount "type=bind,source=$root,target=/workspace" --workdir /workspace \
   --env RAR_CI_BOOTSTRAP_IMAGE=sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 \
   --env RAR_OUTPUT_UID="$host_uid" --env RAR_OUTPUT_GID="$host_gid" --env HOME="/workspace/$stage/home" \

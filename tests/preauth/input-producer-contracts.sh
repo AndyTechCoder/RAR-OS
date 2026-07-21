@@ -49,7 +49,12 @@ printf '%s\n' 'deb [check-valid-until=no] https://evil.example.org/archive/debia
 printf '%s\n' 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260630T000000Z trixie main' > "$http_sources"
 telemetry_verifier=$origin_scratch/preauth-transfer-telemetry
 "${RUSTC:-rustc}" --edition=2024 -O tools/toolchain/preauth-transfer-telemetry.rs -o "$telemetry_verifier" || fail telemetry-compile
-event_file(){ event_name=$1; shift; printf '%s\n' "$@" > "$origin_scratch/$event_name"; chmod 0600 "$origin_scratch/$event_name"; }
+event_file(){
+ event_name=$1; shift
+ mkdir -m 2770 "$origin_scratch/$event_name"
+ printf '%s\n' "$@" > "$origin_scratch/$event_name/channel-0000000001.events"
+ chmod 0640 "$origin_scratch/$event_name/channel-0000000001.events"
+}
 reject_event(){ set +e; "$telemetry_verifier" --verify "$origin_scratch/$1" "$policy" >"$origin_scratch/reject.stdout" 2>"$origin_scratch/reject.stderr"; reject_status=$?; set -e; [ "$reject_status" -eq 73 ] && [ ! -s "$origin_scratch/reject.stdout" ] || fail "telemetry-reject:$1"; }
 event_file good.transfer \
  'schema	rar-apt-transfer-events-v1' \
@@ -59,6 +64,12 @@ event_file good.transfer \
  'start	00000002	https://snapshot.debian.org/archive/debian/pool/tool.deb' \
  'terminal	00000002	success	https://snapshot.debian.org/archive/debian/pool/tool.deb' \
  'complete	2'
+printf '%s\n' \
+ 'schema	rar-apt-transfer-events-v1' \
+ 'start	00000001	https://snapshot.debian.org/archive/debian/pool/second.deb' \
+ 'terminal	00000001	success	https://snapshot.debian.org/archive/debian/pool/second.deb' \
+ 'complete	1' > "$origin_scratch/good.transfer/channel-0000000002.events"
+chmod 0640 "$origin_scratch/good.transfer/channel-0000000002.events"
 "$producer" --verify-transfer-origins "$origin_scratch/good.transfer" >/dev/null 2>&1 || fail transfer-origin-accept
 
 for case_and_url in \
@@ -79,8 +90,10 @@ done
 
 event_file malformed.transfer 'schema	rar-apt-transfer-events-v1' 'start	00000001'
 reject_event malformed.transfer
+mkdir -m 2770 "$origin_scratch/truncated.transfer"
 printf '%s' 'schema	rar-apt-transfer-events-v1
-start	00000001	https://snapshot.debian.org/x' > "$origin_scratch/truncated.transfer"; chmod 0600 "$origin_scratch/truncated.transfer"
+start	00000001	https://snapshot.debian.org/x' > "$origin_scratch/truncated.transfer/channel-0000000001.events"
+chmod 0640 "$origin_scratch/truncated.transfer/channel-0000000001.events"
 reject_event truncated.transfer
 event_file duplicate-start.transfer 'schema	rar-apt-transfer-events-v1' \
  'start	00000001	https://snapshot.debian.org/x' 'start	00000001	https://snapshot.debian.org/x' \
@@ -131,7 +144,7 @@ event_file injection.transfer 'schema	rar-apt-transfer-events-v1' \
 reject_event injection.transfer
 grep -q 'Dir::Bin::methods=' "$producer" || fail transfer-proxy-install
 grep -q 'Acquire::Queue-Mode=access' "$producer" || fail transfer-request-serialization
-grep -q 'private-exclusive-method-proxy-file' "$policy" || fail transfer-private-channel
+grep -q 'private-setgid-method-channel-directory' "$policy" || fail transfer-private-channel
 "$producer" --verify-source-origins "$good_sources" >/dev/null 2>&1 || fail source-origin-accept
 set +e; "$producer" --verify-source-origins "$bad_sources" >/dev/null 2>&1; bad_src=$?
 "$producer" --verify-source-origins "$http_sources" >/dev/null 2>&1; http_src=$?; set -e
@@ -142,6 +155,15 @@ grep -q -- '--network none' "$producer" || fail base-oci-networkless
 ! grep -q 'docker save --output "$stage/incoming/base-oci.tar"' "$producer" || fail base-oci-raw-bundled
 grep -q 'base_oci_rejects' tests/preauth/src/base_oci.rs || fail base-oci-corpus
 grep -q 'docker create' "$producer" || fail lifecycle-create
+grep -q -- '--group-add 65534' "$producer" || fail apt-sandbox-group
+grep -q -- '--tmpfs "/apt-runtime:rw,exec,nosuid,nodev,size=3g,uid=$host_uid,gid=65534,mode=2770"' "$producer" || fail apt-runtime-mount
+grep -q 'APT::Sandbox::User=_apt' "$producer" || fail apt-sandbox-user
+grep -q 'Dir::State::lists=$state/lists' "$producer" || fail apt-state-binding
+grep -q 'Dir::State::lists::partial=$state/lists/partial' "$producer" || fail apt-state-partial-binding
+grep -q 'Dir::Cache::archives=$cache/archives' "$producer" || fail apt-cache-binding
+grep -q 'Dir::Cache::archives::partial=$cache/archives/partial' "$producer" || fail apt-cache-partial-binding
+! grep -q '/var/cache/apt' "$producer" || fail apt-host-cache-reliance
+grep -q 'apt_runtime_cleanup' "$producer" || fail apt-runtime-cleanup
 grep -q 'docker start -a' "$producer" || fail lifecycle-start
 grep -q 'docker wait' "$producer" || fail lifecycle-wait
 grep -q 'State.OOMKilled' "$producer" || fail lifecycle-oom
