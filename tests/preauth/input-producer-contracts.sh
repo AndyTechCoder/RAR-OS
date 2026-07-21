@@ -80,7 +80,15 @@ printf '%s\n' \
  'terminal	0000000002-00000001	success	https://snapshot.debian.org/archive/debian/pool/second.deb' \
  'method-complete	1' > "$origin_scratch/good.transfer/channel-0000000002.events"
 chmod 0640 "$origin_scratch/good.transfer/channel-0000000002.events"
-env RAR_PREAUTH_BUILD_ROOT="$origin_build_root" "$producer" --verify-transfer-origins "$origin_scratch/good.transfer" >/dev/null 2>&1 || fail transfer-origin-accept
+set +e
+env RAR_PREAUTH_BUILD_ROOT="$origin_build_root" "$producer" --verify-transfer-origins "$origin_scratch/good.transfer" \
+ >"$origin_scratch/accept.stdout" 2>"$origin_scratch/accept.stderr"
+accept_status=$?
+set -e
+if [ "$accept_status" -ne 0 ] || [ -s "$origin_scratch/accept.stdout" ]; then
+ cat "$origin_scratch/accept.stderr" >&2
+ fail transfer-origin-accept
+fi
 
 for case_and_url in \
  'foreign|https://evil.example.org/x' \

@@ -78,6 +78,8 @@ inside(){
  methods=
  update_events=
  download_events=
+ update_lifecycle=
+ download_lifecycle=
  telemetry(){
   phase=$1
   files=$(find "$stage" -xdev -type f 2>/dev/null | wc -l | tr -d ' ')
@@ -104,7 +106,7 @@ inside(){
  apt_runtime_identity(){ stat -c '%u:%g:%a' "$apt_runtime" 2>/dev/null; }
  apt_runtime_cleanup(){
   [ "$(apt_runtime_identity)" = "${RAR_OUTPUT_UID-}:$apt_group:2770" ] || return 1
-  for runtime_entry in "$download_events" "$update_events" "$methods" "$cache" "$state"; do
+  for runtime_entry in "$download_lifecycle" "$update_lifecycle" "$download_events" "$update_events" "$methods" "$cache" "$state"; do
    [ -n "$runtime_entry" ] || continue
    case "$runtime_entry" in "$apt_runtime"/*) :;; *) return 1;; esac
    /bin/rm -rf -- "$runtime_entry" || return 1
@@ -124,13 +126,17 @@ inside(){
  methods=$apt_runtime/methods
  update_events=$apt_runtime/update-events
  download_events=$apt_runtime/download-events
+ update_lifecycle=$apt_runtime/update-lifecycle
+ download_lifecycle=$apt_runtime/download-lifecycle
  previous_umask=$(umask)
  umask 007
  mkdir -m 2770 "$state" "$state/lists" "$state/lists/partial" \
   "$cache" "$cache/archives" "$cache/archives/partial" "$methods" "$update_events" "$download_events"
+ mkdir -m 2770 "$update_lifecycle" "$download_lifecycle"
  umask "$previous_umask"
  for apt_directory in "$state" "$state/lists" "$state/lists/partial" \
-  "$cache" "$cache/archives" "$cache/archives/partial" "$methods" "$update_events" "$download_events"; do
+  "$cache" "$cache/archives" "$cache/archives/partial" "$methods" "$update_events" "$download_events" \
+  "$update_lifecycle" "$download_lifecycle"; do
   [ "$(stat -c '%u:%g:%a' "$apt_directory")" = "${RAR_OUTPUT_UID}:$apt_group:2770" ] || fail apt-runtime-directory
  done
  mkdir -m 700 "$incoming/debs" "$stage/extracted"
@@ -156,23 +162,54 @@ inside(){
  verify_source_origins "$sources"
  phase=apt-update
  update_log=$stage/apt-update.stderr
- export RAR_PREAUTH_APT_REAL_METHOD=$methods/https.real RAR_PREAUTH_APT_TELEMETRY_DIR=$update_events
- if ! /usr/bin/apt-get $options update 2>"$update_log"; then
+ export RAR_PREAUTH_APT_REAL_METHOD=$methods/https.real RAR_PREAUTH_APT_TELEMETRY_DIR=$update_events \
+  RAR_PREAUTH_APT_LIFECYCLE_DIR=$update_lifecycle
+ printf '%s\n' 'preauth-apt-lifecycle:parent:phase=update:transition=apt-start' >&2
+ set +e
+ /usr/bin/apt-get $options update 2>"$update_log"
+ apt_status=$?
+ set -e
+ printf 'preauth-apt-lifecycle:parent:phase=update:transition=apt-exit:status=%s\n' "$apt_status" >&2
+ if [ "$apt_status" -ne 0 ]; then
   cat "$update_log" >&2; fail apt-update-failed
  fi
  phase=transfer-origin-verification
- "$methods/https" --verify "$update_events" "$policy" || fail transfer-origin-verification
+ printf '%s\n' 'preauth-apt-lifecycle:parent:phase=update:transition=aggregator-start' >&2
+ set +e
+ "$methods/https" --verify "$update_events" "$policy"
+ verify_status=$?
+ set -e
+ printf 'preauth-apt-lifecycle:parent:phase=update:transition=aggregator-exit:status=%s\n' "$verify_status" >&2
+ if [ "$verify_status" -ne 0 ]; then
+  for trace_file in "$update_lifecycle"/trace-*.events; do [ -f "$trace_file" ] && cat "$trace_file" >&2; done
+  fail transfer-origin-verification
+ fi
  telemetry apt-update-complete
  # shellcheck disable=SC2086
  phase=apt-download
  download_log=$stage/apt-download.stderr
- export RAR_PREAUTH_APT_TELEMETRY_DIR=$download_events
- if ! /usr/bin/apt-get $options --yes --download-only --no-install-recommends install \
-  'lld-19=1:19.1.7-3+b1' 'qemu-system-x86=1:10.0.8+ds-0+deb13u1+b2' 'ovmf=2025.02-8+deb13u1' 2>"$download_log"; then
+ export RAR_PREAUTH_APT_TELEMETRY_DIR=$download_events RAR_PREAUTH_APT_LIFECYCLE_DIR=$download_lifecycle
+ printf '%s\n' 'preauth-apt-lifecycle:parent:phase=download:transition=apt-start' >&2
+ set +e
+ /usr/bin/apt-get $options --yes --download-only --no-install-recommends install \
+  'lld-19=1:19.1.7-3+b1' 'qemu-system-x86=1:10.0.8+ds-0+deb13u1+b2' 'ovmf=2025.02-8+deb13u1' 2>"$download_log"
+ apt_status=$?
+ set -e
+ printf 'preauth-apt-lifecycle:parent:phase=download:transition=apt-exit:status=%s\n' "$apt_status" >&2
+ if [ "$apt_status" -ne 0 ]; then
   cat "$download_log" >&2; fail apt-download-failed
  fi
  phase=transfer-origin-verification
- "$methods/https" --verify "$download_events" "$policy" || fail transfer-origin-verification
+ printf '%s\n' 'preauth-apt-lifecycle:parent:phase=download:transition=aggregator-start' >&2
+ set +e
+ "$methods/https" --verify "$download_events" "$policy"
+ verify_status=$?
+ set -e
+ printf 'preauth-apt-lifecycle:parent:phase=download:transition=aggregator-exit:status=%s\n' "$verify_status" >&2
+ if [ "$verify_status" -ne 0 ]; then
+  for trace_file in "$download_lifecycle"/trace-*.events; do [ -f "$trace_file" ] && cat "$trace_file" >&2; done
+  fail transfer-origin-verification
+ fi
  telemetry apt-download-complete
  phase=origin-verification
  verify_origins "$state/lists"

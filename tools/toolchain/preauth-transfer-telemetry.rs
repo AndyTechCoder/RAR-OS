@@ -1,11 +1,17 @@
-#![deny(unsafe_code)]
+#![deny(unsafe_op_in_unsafe_fn)]
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Write};
+#[cfg(target_os = "linux")]
+use std::os::fd::AsRawFd;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+#[cfg(target_os = "linux")]
+use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+#[cfg(target_os = "linux")]
+use std::sync::atomic::{AtomicI32, Ordering};
 
 const SCHEMA: &str = "schema\trar-apt-transfer-events-v1";
 const MAX_FILE: usize = 4 * 1024 * 1024;
@@ -14,6 +20,40 @@ const MAX_RECORD: usize = 64 * 1024;
 const MAX_REQUESTS: usize = 4096;
 const MAX_REDIRECTS: usize = 8;
 const MAX_CHANNELS: usize = 64;
+const LIFECYCLE_SCHEMA: &str = "schema\trar-apt-method-lifecycle-v1";
+
+#[cfg(target_os = "linux")]
+static LIFECYCLE_SIGNAL_FD: AtomicI32 = AtomicI32::new(-1);
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn signal(number: i32, handler: extern "C" fn(i32)) -> usize;
+    fn write(fd: i32, buffer: *const std::ffi::c_void, count: usize) -> isize;
+    fn fsync(fd: i32) -> i32;
+    fn _exit(status: i32) -> !;
+}
+
+#[cfg(target_os = "linux")]
+extern "C" fn lifecycle_signal_handler(number: i32) {
+    let line: &[u8] = match number {
+        1 => b"transition\twrapper-signal-hup\n",
+        2 => b"transition\twrapper-signal-int\n",
+        15 => b"transition\twrapper-signal-term\n",
+        _ => b"transition\twrapper-signal-unknown\n",
+    };
+    let fd = LIFECYCLE_SIGNAL_FD.load(Ordering::Relaxed);
+    if fd >= 0 {
+        // SAFETY: the handler uses only the pre-opened append-only trace descriptor and
+        // async-signal-safe libc operations. The buffer remains alive for both calls.
+        unsafe {
+            let _ = write(fd, line.as_ptr().cast(), line.len());
+            let _ = fsync(fd);
+        }
+    }
+    // SAFETY: diagnostic correction 1 preserves the signal-derived status without
+    // running destructors or touching any unowned process. Correction 2 will use the
+    // observed transition to define the bounded owned-child shutdown state machine.
+    unsafe { _exit(128 + number) }
+}
 
 #[derive(Debug)]
 struct Error(&'static str);
@@ -22,6 +62,71 @@ type Result<T> = std::result::Result<T, Error>;
 fn telemetry_directory_mode(mode: u32) -> bool {
     let expected = if cfg!(target_os = "linux") { 0o2770 } else { 0o770 };
     mode & 0o7777 == expected
+}
+
+#[derive(Debug)]
+struct LifecycleTrace {
+    output: File,
+}
+
+impl LifecycleTrace {
+    fn create(directory: &str, channel: u32) -> Result<Self> {
+        let directory_metadata = fs::symlink_metadata(directory).map_err(|_| Error("lifecycle-directory"))?;
+        if !directory_metadata.file_type().is_dir()
+            || !telemetry_directory_mode(directory_metadata.permissions().mode())
+        {
+            return Err(Error("lifecycle-directory"));
+        }
+        let path = Path::new(directory).join(format!("trace-{channel:010}.events"));
+        let mut output = OpenOptions::new()
+            .append(true)
+            .create_new(true)
+            .mode(0o640)
+            .open(path)
+            .map_err(|_| Error("lifecycle-create"))?;
+        output
+            .set_permissions(fs::Permissions::from_mode(0o640))
+            .map_err(|_| Error("lifecycle-mode"))?;
+        let metadata = output.metadata().map_err(|_| Error("lifecycle-file"))?;
+        if !metadata.file_type().is_file()
+            || metadata.nlink() != 1
+            || metadata.permissions().mode() & 0o777 != 0o640
+            || metadata.gid() != directory_metadata.gid()
+        {
+            return Err(Error("lifecycle-file"));
+        }
+        output
+            .write_all(format!("{LIFECYCLE_SCHEMA}\n").as_bytes())
+            .map_err(|_| Error("lifecycle-write"))?;
+        #[cfg(target_os = "linux")]
+        {
+            LIFECYCLE_SIGNAL_FD.store(output.as_raw_fd(), Ordering::Release);
+            // SAFETY: the three installed handlers have the exact C ABI and remain
+            // valid for the process lifetime. A SIG_ERR result rejects startup.
+            unsafe {
+                for number in [1, 2, 15] {
+                    if signal(number, lifecycle_signal_handler) == usize::MAX {
+                        return Err(Error("lifecycle-signal-install"));
+                    }
+                }
+            }
+        }
+        Ok(Self { output })
+    }
+
+    fn transition(&mut self, state: &'static str, requests: usize, active: usize) -> Result<()> {
+        self.output
+            .write_all(format!("transition\t{state}\t{requests}\t{active}\n").as_bytes())
+            .map_err(|_| Error("lifecycle-write"))
+    }
+
+    fn finish(mut self) -> Result<()> {
+        self.output.flush().map_err(|_| Error("lifecycle-write"))?;
+        self.output.sync_all().map_err(|_| Error("lifecycle-sync"))?;
+        #[cfg(target_os = "linux")]
+        LIFECYCLE_SIGNAL_FD.store(-1, Ordering::Release);
+        Ok(())
+    }
 }
 
 fn fail(code: &'static str) -> ! {
@@ -216,7 +321,7 @@ impl Tracker {
         self.line(&format!("terminal\t{:010}-{:08}\t{outcome}\t{}", self.channel, active.id, url.serialized))
     }
 
-    fn finish(&mut self) -> Result<()> {
+    fn finish(mut self) -> Result<()> {
         if !self.active.is_empty() { return Err(Error("terminal-missing")); }
         self.line(&format!("method-complete\t{}", self.total))?;
         self.output.flush().map_err(|_| Error("telemetry-write"))?;
@@ -224,10 +329,14 @@ impl Tracker {
     }
 }
 
-fn proxy(real_method: &str, telemetry: &str) -> Result<()> {
+fn proxy(real_method: &str, telemetry: &str, lifecycle: &str) -> Result<()> {
     let mut tracker = Tracker::create(telemetry)?;
+    let mut trace = LifecycleTrace::create(lifecycle, tracker.channel)?;
+    trace.transition("proxy-start", tracker.total, tracker.active.len())?;
+    trace.transition("configuration-accepted", tracker.total, tracker.active.len())?;
     let mut child = Command::new(real_method).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit())
         .spawn().map_err(|_| Error("method-spawn"))?;
+    trace.transition("child-spawned", tracker.total, tracker.active.len())?;
     let mut child_input = child.stdin.take().ok_or(Error("method-stdin"))?;
     let stdout = io::stdout();
     let mut apt_output = stdout.lock();
@@ -236,32 +345,55 @@ fn proxy(real_method: &str, telemetry: &str) -> Result<()> {
     let startup = read_protocol_record(&mut child_output).map_err(|_| Error("apt-protocol-output"))?
         .ok_or(Error("method-startup"))?;
     if startup.code != 100 { return Err(Error("method-startup")); }
+    trace.transition("child-startup", tracker.total, tracker.active.len())?;
     apt_output.write_all(&startup.raw).and_then(|_| apt_output.flush()).map_err(|_| Error("apt-output-write"))?;
 
     let stdin = io::stdin();
     let mut apt_input = stdin.lock();
     while let Some(input) = read_protocol_record(&mut apt_input).map_err(|_| Error("apt-protocol-input"))? {
+        trace.transition("apt-input-record", tracker.total, tracker.active.len())?;
         let acquire = input.code == 600;
-        if acquire { tracker.request(&input)?; }
+        if acquire {
+            tracker.request(&input)?;
+            trace.transition("request-start", tracker.total, tracker.active.len())?;
+        }
         child_input.write_all(&input.raw).and_then(|_| child_input.flush()).map_err(|_| Error("method-input-write"))?;
         if !acquire { continue; }
         loop {
             let record = read_protocol_record(&mut child_output).map_err(|_| Error("apt-protocol-output"))?
                 .ok_or(Error("method-output-eof"))?;
             let terminal = handle_child_record(&mut tracker, &record)?;
+            if terminal { trace.transition("request-terminal", tracker.total, tracker.active.len())?; }
             apt_output.write_all(&record.raw).and_then(|_| apt_output.flush()).map_err(|_| Error("apt-output-write"))?;
             if terminal { break; }
         }
     }
+    trace.transition("apt-stdin-eof", tracker.total, tracker.active.len())?;
     drop(child_input);
+    trace.transition("child-stdin-closed", tracker.total, tracker.active.len())?;
 
     while let Some(record) = read_protocol_record(&mut child_output).map_err(|_| Error("apt-protocol-output"))? {
-        handle_child_record(&mut tracker, &record)?;
+        let terminal = handle_child_record(&mut tracker, &record)?;
+        if terminal { trace.transition("request-terminal", tracker.total, tracker.active.len())?; }
         apt_output.write_all(&record.raw).and_then(|_| apt_output.flush()).map_err(|_| Error("apt-output-write"))?;
     }
+    trace.transition("child-stdout-eof", tracker.total, tracker.active.len())?;
     let status = child.wait().map_err(|_| Error("method-wait"))?;
-    if !status.success() { return Err(Error("method-exit")); }
-    tracker.finish()
+    if status.success() {
+        trace.transition("child-exit-success", tracker.total, tracker.active.len())?;
+    } else {
+        #[cfg(target_os = "linux")]
+        let state = if status.signal().is_some() { "child-exit-signal" } else { "child-exit-nonzero" };
+        #[cfg(not(target_os = "linux"))]
+        let state = "child-exit-nonzero";
+        trace.transition(state, tracker.total, tracker.active.len())?;
+        return Err(Error("method-exit"));
+    }
+    trace.transition("event-channel-sync-start", tracker.total, tracker.active.len())?;
+    tracker.finish()?;
+    trace.transition("event-channel-synced-closed", 0, 0)?;
+    trace.transition("wrapper-exit-success", 0, 0)?;
+    trace.finish()
 }
 
 fn handle_child_record(tracker: &mut Tracker, record: &ProtocolRecord) -> Result<bool> {
@@ -445,12 +577,23 @@ fn verify(directory: &str, policy_path: &str) -> Result<()> {
     if paths.is_empty() { return Err(Error("telemetry-channel-empty")); }
     paths.sort();
     let channel_count = paths.len();
+    eprintln!("preauth-apt-lifecycle:aggregator:transition=discovery:channels={channel_count}");
     let mut hosts = BTreeSet::new();
     let mut global_ids = BTreeSet::new();
     let mut total = 0usize;
     for path in paths {
-        total = total.checked_add(verify_channel(&path, &policy, metadata.gid(), &mut hosts, &mut global_ids)?)
-            .ok_or(Error("request-bound"))?;
+        let channel = channel_identity(&path)?;
+        let verified = match verify_channel(&path, &policy, metadata.gid(), &mut hosts, &mut global_ids) {
+            Ok(count) => {
+                eprintln!("preauth-apt-lifecycle:aggregator:channel={channel}:result=accepted:requests={count}");
+                count
+            }
+            Err(error) => {
+                eprintln!("preauth-apt-lifecycle:aggregator:channel={channel}:result={}", error.0);
+                return Err(error);
+            }
+        };
+        total = total.checked_add(verified).ok_or(Error("request-bound"))?;
         if total > policy.maximum_requests { return Err(Error("request-bound")); }
     }
     let host_list = hosts.into_iter().collect::<Vec<_>>().join(",");
@@ -473,13 +616,17 @@ fn parse_id(raw: &str, channel: &str) -> Result<String> {
 fn main() {
     let arguments: Vec<_> = std::env::args().collect();
     let result = match arguments.as_slice() {
-        [_, command, real, telemetry] if command == "--proxy" => proxy(real, telemetry),
+        [_, command, real, telemetry, lifecycle] if command == "--proxy" => proxy(real, telemetry, lifecycle),
         [_, command, telemetry, policy] if command == "--verify" => verify(telemetry, policy),
         [program] => {
             let _ = program;
             let real = std::env::var("RAR_PREAUTH_APT_REAL_METHOD").map_err(|_| Error("proxy-environment"));
             let telemetry = std::env::var("RAR_PREAUTH_APT_TELEMETRY_DIR").map_err(|_| Error("proxy-environment"));
-            match (real, telemetry) { (Ok(real), Ok(telemetry)) => proxy(&real, &telemetry), _ => Err(Error("proxy-environment")) }
+            let lifecycle = std::env::var("RAR_PREAUTH_APT_LIFECYCLE_DIR").map_err(|_| Error("proxy-environment"));
+            match (real, telemetry, lifecycle) {
+                (Ok(real), Ok(telemetry), Ok(lifecycle)) => proxy(&real, &telemetry, &lifecycle),
+                _ => Err(Error("proxy-environment")),
+            }
         }
         [_, command] if command == "--build-root-exec-probe" => Ok(()),
         _ => Err(Error("usage-refused")),
