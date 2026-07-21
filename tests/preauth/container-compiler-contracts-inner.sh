@@ -8,6 +8,7 @@ fail() {
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 . "$root/tools/toolchain/preauth-build-root.sh"
+. "$root/tools/rarbuild/bootstrap-lib.sh"
 
 [ "$(id -u)" = "${RAR_TEST_UID-}" ] || fail uid
 [ "$(id -g)" = "${RAR_TEST_GID-}" ] || fail gid
