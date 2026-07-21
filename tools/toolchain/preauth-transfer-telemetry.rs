@@ -6,8 +6,6 @@ use std::io::{self, BufRead, BufReader, Read, Write};
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::{Arc, Mutex};
-use std::thread;
 
 const SCHEMA: &str = "schema\trar-apt-transfer-events-v1";
 const MAX_FILE: usize = 4 * 1024 * 1024;
@@ -132,6 +130,7 @@ struct Active {
 #[derive(Debug)]
 struct Tracker {
     output: File,
+    channel: u32,
     next_id: u32,
     active: BTreeMap<String, Active>,
     total: usize,
@@ -159,7 +158,7 @@ impl Tracker {
             return Err(Error("telemetry-file"));
         }
         output.write_all(format!("{SCHEMA}\n").as_bytes()).map_err(|_| Error("telemetry-write"))?;
-        Ok(Self { output, next_id: 1, active: BTreeMap::new(), total: 0 })
+        Ok(Self { output, channel, next_id: 1, active: BTreeMap::new(), total: 0 })
     }
 
     fn line(&mut self, value: &str) -> Result<()> {
@@ -186,7 +185,7 @@ impl Tracker {
         self.total += 1;
         let mut visited = BTreeSet::new();
         visited.insert(url.serialized.clone());
-        self.line(&format!("start\t{id:08}\t{}", url.serialized))?;
+        self.line(&format!("start\t{:010}-{id:08}\t{}", self.channel, url.serialized))?;
         self.active.insert(url.serialized.clone(), Active {
             id, current: url.serialized, hops: 0, visited, awaiting_redirect_request: false,
         });
@@ -203,7 +202,7 @@ impl Tracker {
             return Err(Error("redirect-chain"));
         }
         active.hops += 1;
-        self.line(&format!("redirect\t{:08}\t{}\t{}\t{}", active.id, active.hops, old.serialized, new.serialized))?;
+        self.line(&format!("redirect\t{:010}-{:08}\t{}\t{}\t{}", self.channel, active.id, active.hops, old.serialized, new.serialized))?;
         active.current = new.serialized.clone();
         active.awaiting_redirect_request = true;
         self.active.insert(new.serialized, active);
@@ -214,53 +213,74 @@ impl Tracker {
         let url = canonical_https_url(one_field(record, "URI")?)?;
         let active = self.active.remove(&url.serialized).ok_or(Error("terminal-unobserved"))?;
         if active.current != url.serialized { return Err(Error("terminal-url")); }
-        self.line(&format!("terminal\t{:08}\t{outcome}\t{}", active.id, url.serialized))
+        self.line(&format!("terminal\t{:010}-{:08}\t{outcome}\t{}", self.channel, active.id, url.serialized))
     }
 
     fn finish(&mut self) -> Result<()> {
         if !self.active.is_empty() { return Err(Error("terminal-missing")); }
-        self.line(&format!("complete\t{}", self.total))?;
+        self.line(&format!("method-complete\t{}", self.total))?;
+        self.output.flush().map_err(|_| Error("telemetry-write"))?;
         self.output.sync_all().map_err(|_| Error("telemetry-sync"))
     }
 }
 
-fn lock_tracker(tracker: &Arc<Mutex<Tracker>>) -> Result<std::sync::MutexGuard<'_, Tracker>> {
-    tracker.lock().map_err(|_| Error("telemetry-lock"))
-}
-
 fn proxy(real_method: &str, telemetry: &str) -> Result<()> {
-    let tracker = Arc::new(Mutex::new(Tracker::create(telemetry)?));
+    let mut tracker = Tracker::create(telemetry)?;
     let mut child = Command::new(real_method).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit())
         .spawn().map_err(|_| Error("method-spawn"))?;
     let mut child_input = child.stdin.take().ok_or(Error("method-stdin"))?;
-    let tracker_input = Arc::clone(&tracker);
-    let input_thread = thread::spawn(move || -> Result<()> {
-        let stdin = io::stdin();
-        let mut reader = stdin.lock();
-        while let Some(record) = read_protocol_record(&mut reader).map_err(|_| Error("apt-protocol-input"))? {
-            if record.code == 600 { lock_tracker(&tracker_input)?.request(&record)?; }
-            child_input.write_all(&record.raw).and_then(|_| child_input.flush()).map_err(|_| Error("method-input-write"))?;
-        }
-        Ok(())
-    });
-
     let stdout = io::stdout();
     let mut apt_output = stdout.lock();
     let mut child_output = BufReader::new(child.stdout.take().ok_or(Error("method-stdout"))?);
-    while let Some(record) = read_protocol_record(&mut child_output).map_err(|_| Error("apt-protocol-output"))? {
-        match record.code {
-            103 => lock_tracker(&tracker)?.redirect(&record)?,
-            201 => lock_tracker(&tracker)?.terminal(&record, "success")?,
-            400 => lock_tracker(&tracker)?.terminal(&record, "failure")?,
-            100 | 101 | 102 | 104 | 200 | 351 | 401 | 402 | 403 => {},
-            _ => return Err(Error("method-event-unknown")),
+
+    let startup = read_protocol_record(&mut child_output).map_err(|_| Error("apt-protocol-output"))?
+        .ok_or(Error("method-startup"))?;
+    if startup.code != 100 { return Err(Error("method-startup")); }
+    apt_output.write_all(&startup.raw).and_then(|_| apt_output.flush()).map_err(|_| Error("apt-output-write"))?;
+
+    let stdin = io::stdin();
+    let mut apt_input = stdin.lock();
+    while let Some(input) = read_protocol_record(&mut apt_input).map_err(|_| Error("apt-protocol-input"))? {
+        let acquire = input.code == 600;
+        if acquire { tracker.request(&input)?; }
+        child_input.write_all(&input.raw).and_then(|_| child_input.flush()).map_err(|_| Error("method-input-write"))?;
+        if !acquire { continue; }
+        loop {
+            let record = read_protocol_record(&mut child_output).map_err(|_| Error("apt-protocol-output"))?
+                .ok_or(Error("method-output-eof"))?;
+            let terminal = handle_child_record(&mut tracker, &record)?;
+            apt_output.write_all(&record.raw).and_then(|_| apt_output.flush()).map_err(|_| Error("apt-output-write"))?;
+            if terminal { break; }
         }
+    }
+    drop(child_input);
+
+    while let Some(record) = read_protocol_record(&mut child_output).map_err(|_| Error("apt-protocol-output"))? {
+        handle_child_record(&mut tracker, &record)?;
         apt_output.write_all(&record.raw).and_then(|_| apt_output.flush()).map_err(|_| Error("apt-output-write"))?;
     }
-    input_thread.join().map_err(|_| Error("input-thread"))??;
     let status = child.wait().map_err(|_| Error("method-wait"))?;
     if !status.success() { return Err(Error("method-exit")); }
-    lock_tracker(&tracker)?.finish()
+    tracker.finish()
+}
+
+fn handle_child_record(tracker: &mut Tracker, record: &ProtocolRecord) -> Result<bool> {
+    match record.code {
+        103 => {
+            tracker.redirect(record)?;
+            Ok(true)
+        }
+        201 => {
+            tracker.terminal(record, "success")?;
+            Ok(true)
+        }
+        400 => {
+            tracker.terminal(record, "failure")?;
+            Ok(true)
+        }
+        100 | 101 | 102 | 104 | 200 | 351 | 401 | 402 | 403 => Ok(false),
+        _ => Err(Error("method-event-unknown")),
+    }
 }
 
 #[derive(Debug)]
@@ -311,7 +331,13 @@ struct VerifiedRequest {
     terminal: bool,
 }
 
-fn verify_channel(path: &Path, policy: &Policy, expected_gid: u32, hosts: &mut BTreeSet<String>) -> Result<usize> {
+fn verify_channel(
+    path: &Path,
+    policy: &Policy,
+    expected_gid: u32,
+    hosts: &mut BTreeSet<String>,
+    global_ids: &mut BTreeSet<String>,
+) -> Result<usize> {
     let metadata = fs::symlink_metadata(path).map_err(|_| Error("telemetry-missing"))?;
     if !metadata.file_type().is_file() || metadata.len() as usize > MAX_FILE || metadata.nlink() != 1
         || metadata.permissions().mode() & 0o777 != 0o640 || metadata.gid() != expected_gid
@@ -324,25 +350,28 @@ fn verify_channel(path: &Path, policy: &Policy, expected_gid: u32, hosts: &mut B
         return Err(Error("telemetry-framing"));
     }
     let text = std::str::from_utf8(&bytes).map_err(|_| Error("telemetry-utf8"))?;
+    let channel = channel_identity(path)?;
     let mut lines = text.lines();
     if lines.next() != Some(SCHEMA) { return Err(Error("telemetry-schema")); }
-    let mut requests: BTreeMap<u32, VerifiedRequest> = BTreeMap::new();
+    let mut requests: BTreeMap<String, VerifiedRequest> = BTreeMap::new();
     let mut completed = None;
     for line in lines {
         if line.len() > MAX_LINE || line.is_empty() || completed.is_some() { return Err(Error("telemetry-record")); }
         let fields: Vec<_> = line.split('\t').collect();
         match fields.as_slice() {
             ["start", id, raw_url] => {
-                let id = parse_id(id)?;
+                let id = parse_id(id, &channel)?;
                 let url = canonical_https_url(raw_url)?;
                 if !policy.starts.contains(&url.host) { return Err(Error("start-origin")); }
-                if requests.len() >= policy.maximum_requests || requests.contains_key(&id) { return Err(Error("start-cardinality")); }
+                if requests.len() >= policy.maximum_requests || requests.contains_key(&id) || !global_ids.insert(id.clone()) {
+                    return Err(Error("start-cardinality"));
+                }
                 hosts.insert(url.host);
                 let mut visited = BTreeSet::new(); visited.insert(url.serialized.clone());
                 requests.insert(id, VerifiedRequest { current: url.serialized, hops: 0, visited, terminal: false });
             }
             ["redirect", id, hop, raw_from, raw_to] => {
-                let id = parse_id(id)?;
+                let id = parse_id(id, &channel)?;
                 let hop: usize = hop.parse().map_err(|_| Error("redirect-hop"))?;
                 let from = canonical_https_url(raw_from)?;
                 let to = canonical_https_url(raw_to)?;
@@ -358,7 +387,7 @@ fn verify_channel(path: &Path, policy: &Policy, expected_gid: u32, hosts: &mut B
             }
             ["terminal", id, outcome @ ("success" | "failure"), raw_url] => {
                 let _ = outcome;
-                let id = parse_id(id)?;
+                let id = parse_id(id, &channel)?;
                 let url = canonical_https_url(raw_url)?;
                 if !policy.redirects.contains(&url.host) { return Err(Error("terminal-origin")); }
                 hosts.insert(url.host);
@@ -366,7 +395,7 @@ fn verify_channel(path: &Path, policy: &Policy, expected_gid: u32, hosts: &mut B
                 if request.terminal || request.current != url.serialized { return Err(Error("terminal-cardinality")); }
                 request.terminal = true;
             }
-            ["complete", count] => {
+            ["method-complete", count] => {
                 let count: usize = count.parse().map_err(|_| Error("complete-count"))?;
                 completed = Some(count);
             }
@@ -389,6 +418,16 @@ fn channel_path(directory: &Path, name: &str) -> Result<PathBuf> {
     Ok(directory.join(name))
 }
 
+fn channel_identity(path: &Path) -> Result<String> {
+    let name = path.file_name().and_then(|name| name.to_str()).ok_or(Error("telemetry-entry"))?;
+    let digits = name.strip_prefix("channel-").and_then(|value| value.strip_suffix(".events"))
+        .ok_or(Error("telemetry-entry"))?;
+    if digits.len() != 10 || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(Error("telemetry-entry"));
+    }
+    Ok(digits.to_owned())
+}
+
 fn verify(directory: &str, policy_path: &str) -> Result<()> {
     let directory_path = Path::new(directory);
     let metadata = fs::symlink_metadata(directory_path).map_err(|_| Error("telemetry-missing"))?;
@@ -407,9 +446,10 @@ fn verify(directory: &str, policy_path: &str) -> Result<()> {
     paths.sort();
     let channel_count = paths.len();
     let mut hosts = BTreeSet::new();
+    let mut global_ids = BTreeSet::new();
     let mut total = 0usize;
     for path in paths {
-        total = total.checked_add(verify_channel(&path, &policy, metadata.gid(), &mut hosts)?)
+        total = total.checked_add(verify_channel(&path, &policy, metadata.gid(), &mut hosts, &mut global_ids)?)
             .ok_or(Error("request-bound"))?;
         if total > policy.maximum_requests { return Err(Error("request-bound")); }
     }
@@ -420,11 +460,14 @@ fn verify(directory: &str, policy_path: &str) -> Result<()> {
     Ok(())
 }
 
-fn parse_id(raw: &str) -> Result<u32> {
-    if raw.len() != 8 || !raw.bytes().all(|byte| byte.is_ascii_digit()) { return Err(Error("request-id")); }
-    let id = raw.parse().map_err(|_| Error("request-id"))?;
+fn parse_id(raw: &str, channel: &str) -> Result<String> {
+    let (raw_channel, local) = raw.split_once('-').ok_or(Error("request-id"))?;
+    if raw_channel != channel || local.len() != 8 || !local.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(Error("request-id"));
+    }
+    let id: u32 = local.parse().map_err(|_| Error("request-id"))?;
     if id == 0 { return Err(Error("request-id")); }
-    Ok(id)
+    Ok(raw.to_owned())
 }
 
 fn main() {

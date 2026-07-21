@@ -39,8 +39,13 @@ case "${1-}" in
             echo "reference decoder execution is restricted to the pinned CI route" >&2
             exit 1
         }
+        . "$root/tools/toolchain/preauth-build-root.sh"
+        rustc_path=$(preauth_build_pinned_rustc_path "$root") || {
+            echo "pinned Rust 1.95 compiler unavailable" >&2
+            exit 1
+        }
         reference_binary=$root/out/r0-002-reference.$$
-        /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc \
+        "$rustc_path" \
             --edition 2024 \
             -D warnings \
             -o "$reference_binary" \

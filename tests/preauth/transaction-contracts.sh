@@ -72,6 +72,8 @@ grep -qx 'executable_slot' spec/lab/vm-profile/command-v2.fields || fail 'comman
 # production reason to write below .git.
 contract_scratch=$(mktemp -d "${TMPDIR:-/tmp}/rar-transaction-contract.XXXXXX") || fail 'contract scratch'
 chmod 0700 "$contract_scratch"
+. tools/toolchain/preauth-build-root.sh
+rustc_path=$(preauth_build_pinned_rustc_path "$root") || fail 'pinned rustc unavailable'
 if [ -n "${RAR_PREAUTH_BUILD_ROOT-}" ]; then
     contract_build_parent=$RAR_PREAUTH_BUILD_ROOT/transaction-contract-roots
     [ ! -e "$contract_build_parent" ] || fail 'contract build parent collision'
@@ -111,7 +113,13 @@ grep -q '^preauth-base-oci:' "$contract_scratch/base-invalid.stderr" || fail 'ba
 
 # A canonical 50-object/36-package fixture exercises the real M2-incomplete path.
 fixture_generator=$contract_build_parent/generate-valid-input-bundle
-rustc --edition=2024 tests/preauth/generate-valid-input-bundle.rs -o "$fixture_generator" || fail 'fixture generator compile'
+mkdir -m 700 "$contract_scratch/poisoned-bin" "$contract_scratch/readonly-rustup"
+printf '%s\n' '#!/bin/sh' 'exit 99' > "$contract_scratch/poisoned-bin/rustc"
+chmod 0700 "$contract_scratch/poisoned-bin/rustc"
+chmod 0500 "$contract_scratch/readonly-rustup"
+env PATH="$contract_scratch/poisoned-bin:$PATH" RUSTUP_HOME="$contract_scratch/readonly-rustup" \
+    "$rustc_path" --edition=2024 tests/preauth/generate-valid-input-bundle.rs -o "$fixture_generator" \
+    || fail 'fixture generator compile'
 valid_bundle=out/r0/preauth-contract-valid.tar
 "$fixture_generator" "$valid_bundle"
 repository_state "$contract_scratch/before"

@@ -77,6 +77,15 @@ preauth_build_mount_is_executable() {
     fi
 }
 
+preauth_build_pinned_rustc_path() {
+    preauth_pinned_root=$1
+    . "$preauth_pinned_root/tools/rarbuild/bootstrap-lib.sh" || return 1
+    rar_select_preparser_axiom || return 1
+    rar_load_selected_bootstrap_root "$preauth_pinned_root" || return 1
+    rar_verify_selected_bootstrap_root || return 1
+    printf '%s\n' "$bootstrap_rustc_path"
+}
+
 preauth_build_root_create() {
     PREAUTH_BUILD_REPOSITORY=$1
     PREAUTH_BUILD_PREFIX=$2

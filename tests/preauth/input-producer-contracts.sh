@@ -3,6 +3,8 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 cd "$root"
 fail(){ printf 'input-producer-contract:%s\n' "$1" >&2; exit 1; }
+. tools/toolchain/preauth-build-root.sh
+rustc_path=$(preauth_build_pinned_rustc_path "$root") || fail pinned-rustc
 policy=spec/lab/preauth/preauth-input-delivery-v1.policy
 producer=tools/toolchain/preauth-input-producer
 delivery=tools/toolchain/preauth-input-delivery
@@ -34,6 +36,8 @@ grep -q 'AllowInsecureRepositories=false' "$producer" || fail insecure-refusal
 ! grep -q 'AllowRedirect=false' "$producer" || fail redirect-model-regressed
 grep -q 'registry-mirror-configured' "$producer" || fail registry-mirror-check
 origin_scratch=$(mktemp -d "${TMPDIR:-/tmp}/rar-origin-contract.XXXXXX") || fail origin-scratch
+origin_build_root=$origin_scratch/build-root
+mkdir -m 700 "$origin_build_root"
 mkdir "$origin_scratch/good" "$origin_scratch/bad" "$origin_scratch/empty"
 : > "$origin_scratch/good/snapshot.debian.org_archive_debian_dists_trixie_InRelease"
 mkdir "$origin_scratch/good/partial"
@@ -48,7 +52,13 @@ printf '%s\n' 'deb [check-valid-until=no] https://snapshot.debian.org/archive/de
 printf '%s\n' 'deb [check-valid-until=no] https://evil.example.org/archive/debian/20260630T000000Z trixie main' > "$bad_sources"
 printf '%s\n' 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260630T000000Z trixie main' > "$http_sources"
 telemetry_verifier=$origin_scratch/preauth-transfer-telemetry
-"${RUSTC:-rustc}" --edition=2024 -O tools/toolchain/preauth-transfer-telemetry.rs -o "$telemetry_verifier" || fail telemetry-compile
+mkdir -m 700 "$origin_scratch/poisoned-bin" "$origin_scratch/readonly-rustup"
+printf '%s\n' '#!/bin/sh' 'exit 99' > "$origin_scratch/poisoned-bin/rustc"
+chmod 0700 "$origin_scratch/poisoned-bin/rustc"
+chmod 0500 "$origin_scratch/readonly-rustup"
+env PATH="$origin_scratch/poisoned-bin:$PATH" RUSTUP_HOME="$origin_scratch/readonly-rustup" \
+ "$rustc_path" --edition=2024 -O tools/toolchain/preauth-transfer-telemetry.rs -o "$telemetry_verifier" \
+ || fail telemetry-compile
 event_file(){
  event_name=$1; shift
  mkdir -m 2770 "$origin_scratch/$event_name"
@@ -58,19 +68,19 @@ event_file(){
 reject_event(){ set +e; "$telemetry_verifier" --verify "$origin_scratch/$1" "$policy" >"$origin_scratch/reject.stdout" 2>"$origin_scratch/reject.stderr"; reject_status=$?; set -e; [ "$reject_status" -eq 73 ] && [ ! -s "$origin_scratch/reject.stdout" ] || fail "telemetry-reject:$1"; }
 event_file good.transfer \
  'schema	rar-apt-transfer-events-v1' \
- 'start	00000001	https://snapshot.debian.org/archive/debian/dists/trixie/InRelease' \
- 'redirect	00000001	1	https://snapshot.debian.org/archive/debian/dists/trixie/InRelease	https://snapshot.debian.org/file/abc' \
- 'terminal	00000001	success	https://snapshot.debian.org/file/abc' \
- 'start	00000002	https://snapshot.debian.org/archive/debian/pool/tool.deb' \
- 'terminal	00000002	success	https://snapshot.debian.org/archive/debian/pool/tool.deb' \
- 'complete	2'
+ 'start	0000000001-00000001	https://snapshot.debian.org/archive/debian/dists/trixie/InRelease' \
+ 'redirect	0000000001-00000001	1	https://snapshot.debian.org/archive/debian/dists/trixie/InRelease	https://snapshot.debian.org/file/abc' \
+ 'terminal	0000000001-00000001	success	https://snapshot.debian.org/file/abc' \
+ 'start	0000000001-00000002	https://snapshot.debian.org/archive/debian/pool/tool.deb' \
+ 'terminal	0000000001-00000002	success	https://snapshot.debian.org/archive/debian/pool/tool.deb' \
+ 'method-complete	2'
 printf '%s\n' \
  'schema	rar-apt-transfer-events-v1' \
- 'start	00000001	https://snapshot.debian.org/archive/debian/pool/second.deb' \
- 'terminal	00000001	success	https://snapshot.debian.org/archive/debian/pool/second.deb' \
- 'complete	1' > "$origin_scratch/good.transfer/channel-0000000002.events"
+ 'start	0000000002-00000001	https://snapshot.debian.org/archive/debian/pool/second.deb' \
+ 'terminal	0000000002-00000001	success	https://snapshot.debian.org/archive/debian/pool/second.deb' \
+ 'method-complete	1' > "$origin_scratch/good.transfer/channel-0000000002.events"
 chmod 0640 "$origin_scratch/good.transfer/channel-0000000002.events"
-"$producer" --verify-transfer-origins "$origin_scratch/good.transfer" >/dev/null 2>&1 || fail transfer-origin-accept
+env RAR_PREAUTH_BUILD_ROOT="$origin_build_root" "$producer" --verify-transfer-origins "$origin_scratch/good.transfer" >/dev/null 2>&1 || fail transfer-origin-accept
 
 for case_and_url in \
  'foreign|https://evil.example.org/x' \
@@ -84,7 +94,7 @@ for case_and_url in \
  'percent-authority|https://snapshot%2edebian.org/x'; do
  event_name=${case_and_url%%|*}; event_url=${case_and_url#*|}
  event_file "$event_name.transfer" 'schema	rar-apt-transfer-events-v1' \
-  "start	00000001	$event_url" "terminal	00000001	success	$event_url" 'complete	1'
+  "start	0000000001-00000001	$event_url" "terminal	0000000001-00000001	success	$event_url" 'method-complete	1'
  reject_event "$event_name.transfer"
 done
 
@@ -92,55 +102,76 @@ event_file malformed.transfer 'schema	rar-apt-transfer-events-v1' 'start	0000000
 reject_event malformed.transfer
 mkdir -m 2770 "$origin_scratch/truncated.transfer"
 printf '%s' 'schema	rar-apt-transfer-events-v1
-start	00000001	https://snapshot.debian.org/x' > "$origin_scratch/truncated.transfer/channel-0000000001.events"
+start	0000000001-00000001	https://snapshot.debian.org/x' > "$origin_scratch/truncated.transfer/channel-0000000001.events"
 chmod 0640 "$origin_scratch/truncated.transfer/channel-0000000001.events"
 reject_event truncated.transfer
 event_file duplicate-start.transfer 'schema	rar-apt-transfer-events-v1' \
- 'start	00000001	https://snapshot.debian.org/x' 'start	00000001	https://snapshot.debian.org/x' \
- 'terminal	00000001	success	https://snapshot.debian.org/x' 'complete	1'
+ 'start	0000000001-00000001	https://snapshot.debian.org/x' 'start	0000000001-00000001	https://snapshot.debian.org/x' \
+ 'terminal	0000000001-00000001	success	https://snapshot.debian.org/x' 'method-complete	1'
 reject_event duplicate-start.transfer
 event_file duplicate-terminal.transfer 'schema	rar-apt-transfer-events-v1' \
- 'start	00000001	https://snapshot.debian.org/x' 'terminal	00000001	success	https://snapshot.debian.org/x' \
- 'terminal	00000001	success	https://snapshot.debian.org/x' 'complete	1'
+ 'start	0000000001-00000001	https://snapshot.debian.org/x' 'terminal	0000000001-00000001	success	https://snapshot.debian.org/x' \
+ 'terminal	0000000001-00000001	success	https://snapshot.debian.org/x' 'method-complete	1'
 reject_event duplicate-terminal.transfer
 event_file missing-terminal.transfer 'schema	rar-apt-transfer-events-v1' \
- 'start	00000001	https://snapshot.debian.org/x' 'complete	1'
+ 'start	0000000001-00000001	https://snapshot.debian.org/x' 'method-complete	1'
 reject_event missing-terminal.transfer
+event_file missing-completion.transfer 'schema	rar-apt-transfer-events-v1' \
+ 'start	0000000001-00000001	https://snapshot.debian.org/x' 'terminal	0000000001-00000001	success	https://snapshot.debian.org/x'
+reject_event missing-completion.transfer
+event_file completion-before-terminal.transfer 'schema	rar-apt-transfer-events-v1' \
+ 'start	0000000001-00000001	https://snapshot.debian.org/x' 'method-complete	1' \
+ 'terminal	0000000001-00000001	success	https://snapshot.debian.org/x'
+reject_event completion-before-terminal.transfer
 event_file unknown.transfer 'schema	rar-apt-transfer-events-v1' \
- 'package-output	start	00000001	https://snapshot.debian.org/x' 'complete	0'
+ 'package-output	start	0000000001-00000001	https://snapshot.debian.org/x' 'method-complete	0'
 reject_event unknown.transfer
 event_file unobserved.transfer 'schema	rar-apt-transfer-events-v1' \
- 'terminal	00000001	success	https://snapshot.debian.org/x' 'complete	0'
+ 'terminal	0000000001-00000001	success	https://snapshot.debian.org/x' 'method-complete	0'
 reject_event unobserved.transfer
 event_file extra-record.transfer 'schema	rar-apt-transfer-events-v1' \
- 'start	00000001	https://snapshot.debian.org/x' 'terminal	00000001	success	https://snapshot.debian.org/x' \
- 'complete	1' 'start	00000002	https://snapshot.debian.org/y'
+ 'start	0000000001-00000001	https://snapshot.debian.org/x' 'terminal	0000000001-00000001	success	https://snapshot.debian.org/x' \
+ 'method-complete	1' 'start	0000000001-00000002	https://snapshot.debian.org/y'
 reject_event extra-record.transfer
 event_file cardinality.transfer 'schema	rar-apt-transfer-events-v1' \
- 'start	00000001	https://snapshot.debian.org/x' 'terminal	00000001	success	https://snapshot.debian.org/x' 'complete	2'
+ 'start	0000000001-00000001	https://snapshot.debian.org/x' 'terminal	0000000001-00000001	success	https://snapshot.debian.org/x' 'method-complete	2'
 reject_event cardinality.transfer
+mkdir -m 2770 "$origin_scratch/cross-channel-request.transfer"
+printf '%s\n' \
+ 'schema	rar-apt-transfer-events-v1' \
+ 'start	0000000001-00000001	https://snapshot.debian.org/x' \
+ 'terminal	0000000001-00000001	success	https://snapshot.debian.org/x' \
+ 'method-complete	1' > "$origin_scratch/cross-channel-request.transfer/channel-0000000001.events"
+chmod 0640 "$origin_scratch/cross-channel-request.transfer/channel-0000000001.events"
+printf '%s\n' \
+ 'schema	rar-apt-transfer-events-v1' \
+ 'start	0000000001-00000002	https://snapshot.debian.org/y' \
+ 'terminal	0000000001-00000002	success	https://snapshot.debian.org/y' \
+ 'method-complete	1' > "$origin_scratch/cross-channel-request.transfer/channel-0000000002.events"
+chmod 0640 "$origin_scratch/cross-channel-request.transfer/channel-0000000002.events"
+reject_event cross-channel-request.transfer
 event_file cycle.transfer 'schema	rar-apt-transfer-events-v1' \
- 'start	00000001	https://snapshot.debian.org/a' \
- 'redirect	00000001	1	https://snapshot.debian.org/a	https://snapshot.debian.org/b' \
- 'redirect	00000001	2	https://snapshot.debian.org/b	https://snapshot.debian.org/a' \
- 'terminal	00000001	success	https://snapshot.debian.org/a' 'complete	1'
+ 'start	0000000001-00000001	https://snapshot.debian.org/a' \
+ 'redirect	0000000001-00000001	1	https://snapshot.debian.org/a	https://snapshot.debian.org/b' \
+ 'redirect	0000000001-00000001	2	https://snapshot.debian.org/b	https://snapshot.debian.org/a' \
+ 'terminal	0000000001-00000001	success	https://snapshot.debian.org/a' 'method-complete	1'
 reject_event cycle.transfer
 event_file over-limit.transfer 'schema	rar-apt-transfer-events-v1' \
- 'start	00000001	https://snapshot.debian.org/0' \
- 'redirect	00000001	1	https://snapshot.debian.org/0	https://snapshot.debian.org/1' \
- 'redirect	00000001	2	https://snapshot.debian.org/1	https://snapshot.debian.org/2' \
- 'redirect	00000001	3	https://snapshot.debian.org/2	https://snapshot.debian.org/3' \
- 'redirect	00000001	4	https://snapshot.debian.org/3	https://snapshot.debian.org/4' \
- 'redirect	00000001	5	https://snapshot.debian.org/4	https://snapshot.debian.org/5' \
- 'redirect	00000001	6	https://snapshot.debian.org/5	https://snapshot.debian.org/6' \
- 'redirect	00000001	7	https://snapshot.debian.org/6	https://snapshot.debian.org/7' \
- 'redirect	00000001	8	https://snapshot.debian.org/7	https://snapshot.debian.org/8' \
- 'redirect	00000001	9	https://snapshot.debian.org/8	https://snapshot.debian.org/9' \
- 'terminal	00000001	success	https://snapshot.debian.org/9' 'complete	1'
+ 'start	0000000001-00000001	https://snapshot.debian.org/0' \
+ 'redirect	0000000001-00000001	1	https://snapshot.debian.org/0	https://snapshot.debian.org/1' \
+ 'redirect	0000000001-00000001	2	https://snapshot.debian.org/1	https://snapshot.debian.org/2' \
+ 'redirect	0000000001-00000001	3	https://snapshot.debian.org/2	https://snapshot.debian.org/3' \
+ 'redirect	0000000001-00000001	4	https://snapshot.debian.org/3	https://snapshot.debian.org/4' \
+ 'redirect	0000000001-00000001	5	https://snapshot.debian.org/4	https://snapshot.debian.org/5' \
+ 'redirect	0000000001-00000001	6	https://snapshot.debian.org/5	https://snapshot.debian.org/6' \
+ 'redirect	0000000001-00000001	7	https://snapshot.debian.org/6	https://snapshot.debian.org/7' \
+ 'redirect	0000000001-00000001	8	https://snapshot.debian.org/7	https://snapshot.debian.org/8' \
+ 'redirect	0000000001-00000001	9	https://snapshot.debian.org/8	https://snapshot.debian.org/9' \
+ 'terminal	0000000001-00000001	success	https://snapshot.debian.org/9' 'method-complete	1'
 reject_event over-limit.transfer
 event_file injection.transfer 'schema	rar-apt-transfer-events-v1' \
- 'start	00000001	https://snapshot.debian.org/x' \
- 'evil package says: terminal	00000001	success	https://snapshot.debian.org/x' 'complete	1'
+ 'start	0000000001-00000001	https://snapshot.debian.org/x' \
+ 'evil package says: terminal	0000000001-00000001	success	https://snapshot.debian.org/x' 'method-complete	1'
 reject_event injection.transfer
 grep -q 'Dir::Bin::methods=' "$producer" || fail transfer-proxy-install
 grep -q 'Acquire::Queue-Mode=access' "$producer" || fail transfer-request-serialization
