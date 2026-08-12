@@ -4,8 +4,9 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::unix::fs::symlink;
 
 use super::preauth::{
-    ArchiveEntry, ArchivePlan, DescriptorDir, FrozenTransactionGraph, InputLockV4, MAX_INPUT_OBJECTS,
-    MemberKind, OwnedSnapshot, PreauthError, TransactionEffects, TransactionMachine, TransactionPhase,
+    ArchiveEntry, ArchivePlan, DescriptorDir, FrozenTransactionGraph, InputLockV4,
+    MAX_INPUT_OBJECTS, MemberKind, OwnedSnapshot, PreauthError,
+    TransactionEffects, TransactionMachine, TransactionPhase,
     TRANSACTION_GRAPH_FIELDS, canonical_input_bundle_header, parse_input_bundle_v1, plan_deb_ar,
     plan_tar, sha256_hex, snapshot_to_private,
     validate_closure_inputs,
@@ -153,12 +154,16 @@ fn input_bundle_object_bound_is_an_accepted_conformance_boundary() {
     let at_bound = parse_input_bundle_v1(&build_input_bundle(50, None)).unwrap();
     assert_eq!(at_bound.objects.len(), MAX_INPUT_OBJECTS);
     assert_eq!(at_bound.package_count, 50);
-    // One object past the frozen bound is rejected by the count bound itself.
-    assert_eq!(parse_input_bundle_v1(&build_input_bundle(51, None)).unwrap_err().code,
-        "input-bundle-bound");
     // A manifest claiming more objects than are present is an inventory integrity failure.
     assert_eq!(parse_input_bundle_v1(&build_input_bundle(36, Some(MAX_INPUT_OBJECTS))).unwrap_err().code,
         "input-bundle-inventory");
+}
+
+#[test]
+fn input_bundle_rejects_one_over_payload_member_bound_without_effects() {
+    let one_over = build_input_bundle(51, None);
+    super::assert_side_effect_free_rejection("input-bundle-bound",
+        || parse_input_bundle_v1(&one_over));
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -263,6 +268,15 @@ fn tar(entries: &[(&str, u8, &[u8], &str)]) -> Vec<u8> {
     bytes.resize(bytes.len() + 1024, 0); bytes
 }
 
+fn empty_tar_members(count: usize) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(count * 512 + 1024);
+    for index in 0..count {
+        bytes.extend_from_slice(&tar_header(&format!("entry-{index:04}"), b'0', 0, ""));
+    }
+    bytes.resize(bytes.len() + 1024, 0);
+    bytes
+}
+
 #[test]
 fn bounded_tar_plan_rejects_bombs_collisions_special_and_links() {
     let valid = tar(&[("usr/", b'5', b"", ""), ("usr/bin", b'5', b"", ""),
@@ -278,6 +292,13 @@ fn bounded_tar_plan_rejects_bombs_collisions_special_and_links() {
     let bomb = vec![ArchiveEntry { path: "bomb".into(), kind: MemberKind::File,
         compressed_bytes: 1, expanded_bytes: 65, mode: 0o644, uid: 0, gid: 0, link_target: None }];
     assert_eq!(ArchivePlan::validate(bomb).unwrap_err().code, "archive-size-bound");
+}
+
+#[test]
+fn frozen_tar_rejects_one_over_member_bound_without_effects() {
+    let one_over = empty_tar_members(super::ARCHIVE_MEMBER_BOUND + 1);
+    super::assert_side_effect_free_rejection("archive-member-count",
+        || plan_tar(&one_over, one_over.len() as u64));
 }
 
 fn ar_member(name: &str, data: &[u8]) -> Vec<u8> {
@@ -297,8 +318,17 @@ fn deb_ar_and_expanded_data_tar_are_both_planned_before_use() {
     deb.extend(ar_member("data.tar.xz", b"private-data-snapshot"));
     let plan = plan_deb_ar(&deb, &data_tar).unwrap();
     assert_eq!(plan.data_member, "data.tar.xz"); assert_eq!(plan.data_plan.entries.len(), 2);
-    let extra = { let mut copy = deb.clone(); copy.extend(ar_member("extra", b"x")); copy };
-    assert_eq!(plan_deb_ar(&extra, &data_tar).unwrap_err().code, "deb-member-set");
+}
+
+#[test]
+fn deb_ar_rejects_one_over_member_bound_without_effects() {
+    let mut one_over = b"!<arch>\n".to_vec();
+    one_over.extend(ar_member("debian-binary", b"2.0\n"));
+    one_over.extend(ar_member("control.tar.xz", b"private-control-snapshot"));
+    one_over.extend(ar_member("data.tar.xz", b"private-data-snapshot"));
+    one_over.extend(ar_member("extra", b"x"));
+    super::assert_side_effect_free_rejection("deb-member-set",
+        || plan_deb_ar(&one_over, b"expanded tar must remain unparsed"));
 }
 
 #[test]

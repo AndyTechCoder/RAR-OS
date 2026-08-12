@@ -243,6 +243,7 @@ pub fn plan_deb_ar(bytes: &[u8], expanded_data_tar: &[u8]) -> Result<DebPlan> {
         let end = start.checked_add(usize::try_from(size).map_err(|_| PreauthError::new("ar-overflow"))?)
             .ok_or_else(|| PreauthError::new("ar-overflow"))?;
         if end > bytes.len() { return Err(PreauthError::new("ar-truncated")); }
+        if names.len() == 3 { return Err(PreauthError::new("deb-member-set")); }
         names.push(name.to_owned());
         offset = end.checked_add((size & 1) as usize).ok_or_else(|| PreauthError::new("ar-overflow"))?;
     }
@@ -318,6 +319,9 @@ pub fn plan_tar(bytes: &[u8], compressed_bytes: u64) -> Result<ArchivePlan> {
         let payload_end = payload_start.checked_add(usize::try_from(padded).map_err(|_| PreauthError::new("tar-overflow"))?)
             .ok_or_else(|| PreauthError::new("tar-overflow"))?;
         if payload_end > bytes.len() { return Err(PreauthError::new("tar-truncated")); }
+        if entries.len() == MAX_ARCHIVE_MEMBERS {
+            return Err(PreauthError::new("archive-member-count"));
+        }
         entries.push(ArchiveEntry { path, kind, compressed_bytes: size, expanded_bytes: size,
             mode, uid, gid, link_target: (!link.is_empty()).then(|| link.to_owned()) });
         offset = payload_end;

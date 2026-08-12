@@ -14,7 +14,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::transaction::{ArchiveEntry, ArchivePlan, MAX_INPUT_BYTES, MemberKind};
+use super::transaction::{ArchiveEntry, ArchivePlan, MAX_ARCHIVE_MEMBERS, MAX_INPUT_BYTES, MemberKind};
 use super::{Json, PreauthError, Result, sha256_hex};
 
 const SOURCE_DATE_EPOCH: u64 = 1_784_332_800;
@@ -97,6 +97,7 @@ fn walk_raw_export(raw: &[u8]) -> Result<Vec<RawMember<'_>>> {
     if raw.len() as u64 > MAX_INPUT_BYTES { return Err(PreauthError::new("base-oci-raw-bound")); }
     let mut offset = 0usize;
     let mut members = Vec::new();
+    let mut raw_member_count = 0usize;
     let mut zero_blocks = 0u8;
     let mut pending_pax = false;
     while offset < raw.len() {
@@ -131,6 +132,10 @@ fn walk_raw_export(raw: &[u8]) -> Result<Vec<RawMember<'_>>> {
         if raw[data_end..payload_end].iter().any(|byte| *byte != 0) {
             return Err(PreauthError::new("base-oci-tar-padding"));
         }
+        if raw_member_count == MAX_ARCHIVE_MEMBERS {
+            return Err(PreauthError::new("archive-member-count"));
+        }
+        raw_member_count += 1;
         let kind = match header[156] {
             0 | b'0' => MemberKind::File,
             b'5' => MemberKind::Directory,

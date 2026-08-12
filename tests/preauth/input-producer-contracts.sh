@@ -268,7 +268,11 @@ env PATH="$origin_scratch/poisoned-bin:$PATH" RUSTUP_HOME="$origin_scratch/reado
 for mutation_test in \
  transaction::snapshot_is_private_and_source_mutation_after_copy_cannot_change_consumed_bytes \
  transaction::input_bundle_v1_is_canonical_complete_and_content_addressed \
+ transaction::input_bundle_rejects_one_over_payload_member_bound_without_effects \
+ transaction::frozen_tar_rejects_one_over_member_bound_without_effects \
+ transaction::deb_ar_rejects_one_over_member_bound_without_effects \
  base_oci::base_oci_accepts_and_deterministically_canonicalizes_a_rooted_graph \
+ base_oci::base_oci_rejects_one_over_member_bound_without_effects \
  base_oci::base_oci_rejects_substituted_dangling_or_unexpected_content \
  base_oci::base_oci_requires_exact_digest_pull_identity; do
  "$mutation_tests" --exact "$mutation_test" --quiet || fail "mutation-test:$mutation_test"

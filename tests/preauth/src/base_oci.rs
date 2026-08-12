@@ -156,6 +156,16 @@ fn base_oci_accepts_and_deterministically_canonicalizes_a_rooted_graph() {
 }
 
 #[test]
+fn base_oci_rejects_one_over_member_bound_without_effects() {
+    let members: Vec<_> = (0..=super::ARCHIVE_MEMBER_BOUND)
+        .map(|index| directory(&format!("entry-{index:04}")))
+        .collect();
+    let one_over = render(&members);
+    super::assert_side_effect_free_rejection("archive-member-count",
+        || canonicalize(&one_over));
+}
+
+#[test]
 fn base_oci_accepts_timestamp_pax_but_rejects_overrides_and_bad_values() {
     let mut timestamps = Layout::default();
     timestamps.lead_members = vec![pax(&format!("{}{}",

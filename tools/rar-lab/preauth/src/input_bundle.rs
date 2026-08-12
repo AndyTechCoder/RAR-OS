@@ -186,6 +186,7 @@ pub fn parse_input_bundle_v1(bytes: &[u8]) -> Result<InputBundleV1> {
     let mut offset = 0usize;
     let mut names = BTreeSet::new();
     let mut payloads: BTreeMap<String, &[u8]> = BTreeMap::new();
+    let mut payload_member_count = 0usize;
     let mut previous_name: Option<String> = None;
     let mut zero_blocks = 0u8;
     while offset < bytes.len() {
@@ -204,6 +205,12 @@ pub fn parse_input_bundle_v1(bytes: &[u8]) -> Result<InputBundleV1> {
             return Err(PreauthError::new("input-bundle-tar-type"));
         }
         let (name, size) = validate_input_bundle_header(header)?;
+        if name.starts_with("objects/") {
+            if payload_member_count == MAX_OBJECTS {
+                return Err(PreauthError::new("input-bundle-bound"));
+            }
+            payload_member_count += 1;
+        }
         if previous_name.as_deref().is_some_and(|previous| previous >= name.as_str()) {
             return Err(PreauthError::new("input-bundle-tar-order"));
         }

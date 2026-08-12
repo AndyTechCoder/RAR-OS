@@ -6,6 +6,49 @@ mod transaction;
 use preauth::{InputLockV4,TransactionGraphV1,TRANSACTION_GRAPH_FIELDS,sha256_hex};
 
 fn hash(byte:char)->String{std::iter::repeat_n(byte,64).collect()}
+pub(crate) const ARCHIVE_MEMBER_BOUND:usize=4096;
+
+fn collect_repository_effects(
+ path:&std::path::Path,root:&std::path::Path,effects:&mut Vec<(String,String)>
+){
+ let metadata=std::fs::symlink_metadata(path).expect("repository effect metadata");
+ let relative=path.strip_prefix(root).expect("repository-relative effect path")
+  .to_string_lossy().into_owned();
+ if metadata.is_dir(){
+  let mut entries:Vec<_>=std::fs::read_dir(path).expect("repository effect directory")
+   .map(|entry|entry.expect("repository effect entry").path()).collect();
+  entries.sort();
+  for entry in entries{collect_repository_effects(&entry,root,effects);}
+ }else if metadata.file_type().is_symlink(){
+  let target=std::fs::read_link(path).expect("repository effect symlink");
+  effects.push((relative,format!("symlink:{}",target.to_string_lossy())));
+ }else{
+  let bytes=std::fs::read(path).expect("repository effect file");
+  effects.push((relative,sha256_hex(&bytes)));
+ }
+}
+
+fn repository_effect_snapshot()->Vec<(String,String)>{
+ let root=std::env::current_dir().expect("repository root");
+ let mut effects=Vec::new();
+ for relative in ["tools/rar-lab/preauth","tests/preauth","spec/lab/preauth","out/r0/preauth"]{
+  let path=root.join(relative);
+  if path.exists(){collect_repository_effects(&path,&root,&mut effects);}
+  else{effects.push((relative.into(),"missing".into()));}
+ }
+ effects.sort();
+ effects
+}
+
+pub(crate) fn assert_side_effect_free_rejection<T:std::fmt::Debug>(
+ expected:&str,operation:impl FnOnce()->preauth::Result<T>
+){
+ let before=repository_effect_snapshot();
+ let error=operation().expect_err("one-over-limit input accepted");
+ assert_eq!(error.code,expected);
+ assert_eq!(repository_effect_snapshot(),before,
+  "rejection changed publication or repository state");
+}
 
 #[test]
 fn input_lock_v4_accepts_only_current_input_contract(){
