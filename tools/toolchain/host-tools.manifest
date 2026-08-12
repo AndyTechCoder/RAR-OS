@@ -1,7 +1,7 @@
 schema=rar-host-tool-manifest-v4
 class_b_inventory=tools/toolchain/class-b-host-tools.v1
 class_b_inventory_schema=rar-class-b-host-tool-inventory-v1
-class_b_inventory_sha256=c5fc48337425eb29f661c07e72956b99d3e14c9f476318e951c8af9c954b904a
+class_b_inventory_sha256=8a816a3bfc36b0a4ec8f01d277c418d9eacd40f6d47756e116049d56f1290336
 bootstrap_boundary=macos-diagnostic-closure-and-immutable-oci-ci-root
 bootstrap_shell=macos-bin-sh
 bootstrap_hasher=macos-usr-bin-shasum
@@ -26,7 +26,7 @@ ci_test_image=rust-1.95.0-sha256-f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890
 ci_platform_lock=host-tools-x86_64-unknown-linux-gnu-ci-lock
 ci_lock_sha256=6752b1b21ac8fa93a671ff9444173e4c3bbc4cdcbe4cf5cd39820371dc79aa24
 ci_tool_root=read-only-container-filesystem
-ci_runner_image=ubuntu-24.04-20260810.271.1
+ci_runner_image=ubuntu-24.04-20260720.247.2
 ci_runner_status=external-attested-noncertifying
 ci_checkout=actions-checkout-v4.2.2-git-sha1-11bd71901bbe5b1630ceea73d27597364c9af683
 ci_linker=gcc-14

@@ -65,7 +65,7 @@ done
     RUNNER_OS=Linux
     RUNNER_ARCH=X64
     ImageOS=ubuntu24
-    ImageVersion=20260810.271.1
+    ImageVersion=20260720.247.2
     export RUNNER_OS RUNNER_ARCH ImageOS ImageVersion
     if rar_verify_ci_execution_boundary; then
         exit 1

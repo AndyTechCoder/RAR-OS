@@ -20,7 +20,7 @@ jobs:
         run: |
           set -u
           [ "${ImageOS-}" = ubuntu24 ]
-          [ "${ImageVersion-}" = 20260810.271.1 ]
+          [ "${ImageVersion-}" = 20260720.247.2 ]
           [ "${RUNNER_OS-}" = Linux ]
           [ "${RUNNER_ARCH-}" = X64 ]
           printf '%s\n' \
