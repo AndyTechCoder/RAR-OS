@@ -52,6 +52,8 @@ Any package, snapshot, key, firmware, base image, grammar, algorithm, or policy 
 
 Two independent acquisitions must produce identical canonical manifests, byte-identical derived archives, and identical derived OCI digests. Negative tests cover stale metadata, substitutions, key mismatch, closure drift, symlinks, inode mutation, archive/digest divergence, push/PR head selection, malformed revisions, and checked-out-head mismatch.
 
+APT normally tears down each HTTPS method instance with `SIGINT`, including registered instances that handled zero requests. The repository-owned proxy accepts that signal as normal teardown only after every started request has a terminal, its exact child has been boundedly terminated and reaped, and its event stream has been synced and atomically published. It then publishes a synced completion registry carrying the channel identity and request count and exits successfully to APT. The producer aggregates only the exact registry-declared closed channels after APT succeeds, rejecting incomplete, extra, reopened, or cross-channel identities.
+
 ## Replacement path
 
 Another host closure may replace Debian only through an ADR with equivalent provenance, signatures, complete dependency inventory, licensing, and reproducibility.

@@ -9,9 +9,12 @@ use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 #[cfg(target_os = "linux")]
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
 #[cfg(target_os = "linux")]
 use std::sync::atomic::{AtomicI32, Ordering};
+use std::thread;
+use std::time::{Duration, Instant};
 
 const SCHEMA: &str = "schema\trar-apt-transfer-events-v1";
 const MAX_FILE: usize = 4 * 1024 * 1024;
@@ -21,19 +24,30 @@ const MAX_REQUESTS: usize = 4096;
 const MAX_REDIRECTS: usize = 8;
 const MAX_CHANNELS: usize = 64;
 const LIFECYCLE_SCHEMA: &str = "schema\trar-apt-method-lifecycle-v1";
+const SHUTDOWN_GRACE: Duration = Duration::from_millis(250);
+const SHUTDOWN_POLL: Duration = Duration::from_millis(10);
+const COMPLETION_WAIT: Duration = Duration::from_secs(2);
 
 #[cfg(target_os = "linux")]
 static LIFECYCLE_SIGNAL_FD: AtomicI32 = AtomicI32::new(-1);
+#[cfg(target_os = "linux")]
+static LIFECYCLE_SIGNAL: AtomicI32 = AtomicI32::new(0);
 #[cfg(target_os = "linux")]
 unsafe extern "C" {
     fn signal(number: i32, handler: extern "C" fn(i32)) -> usize;
     fn write(fd: i32, buffer: *const std::ffi::c_void, count: usize) -> isize;
     fn fsync(fd: i32) -> i32;
-    fn _exit(status: i32) -> !;
+    fn kill(pid: i32, signal: i32) -> i32;
 }
 
 #[cfg(target_os = "linux")]
 extern "C" fn lifecycle_signal_handler(number: i32) {
+    if LIFECYCLE_SIGNAL
+        .compare_exchange(0, number, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return;
+    }
     let line: &[u8] = match number {
         1 => b"transition\twrapper-signal-hup\n",
         2 => b"transition\twrapper-signal-int\n",
@@ -49,10 +63,6 @@ extern "C" fn lifecycle_signal_handler(number: i32) {
             let _ = fsync(fd);
         }
     }
-    // SAFETY: diagnostic correction 1 preserves the signal-derived status without
-    // running destructors or touching any unowned process. Correction 2 will use the
-    // observed transition to define the bounded owned-child shutdown state machine.
-    unsafe { _exit(128 + number) }
 }
 
 #[derive(Debug)]
@@ -67,6 +77,11 @@ fn telemetry_directory_mode(mode: u32) -> bool {
 #[derive(Debug)]
 struct LifecycleTrace {
     output: File,
+    registry: File,
+    registry_open: PathBuf,
+    registry_complete: PathBuf,
+    directory: PathBuf,
+    channel: u32,
 }
 
 impl LifecycleTrace {
@@ -77,7 +92,8 @@ impl LifecycleTrace {
         {
             return Err(Error("lifecycle-directory"));
         }
-        let path = Path::new(directory).join(format!("trace-{channel:010}.events"));
+        let directory = Path::new(directory);
+        let path = directory.join(format!("trace-{channel:010}.events"));
         let mut output = OpenOptions::new()
             .append(true)
             .create_new(true)
@@ -98,8 +114,25 @@ impl LifecycleTrace {
         output
             .write_all(format!("{LIFECYCLE_SCHEMA}\n").as_bytes())
             .map_err(|_| Error("lifecycle-write"))?;
+        let registry_open = directory.join(format!("registry-{channel:010}.open"));
+        let registry_complete = directory.join(format!("registry-{channel:010}.complete"));
+        let mut registry = OpenOptions::new().write(true).create_new(true).mode(0o640)
+            .open(&registry_open).map_err(|_| Error("lifecycle-registry-create"))?;
+        registry.set_permissions(fs::Permissions::from_mode(0o640)).map_err(|_| Error("lifecycle-mode"))?;
+        let registry_metadata = registry.metadata().map_err(|_| Error("lifecycle-file"))?;
+        if !registry_metadata.file_type().is_file() || registry_metadata.nlink() != 1
+            || registry_metadata.permissions().mode() & 0o777 != 0o640
+            || registry_metadata.gid() != directory_metadata.gid()
+        {
+            return Err(Error("lifecycle-file"));
+        }
+        registry.write_all(format!("{LIFECYCLE_SCHEMA}\nchannel\t{channel:010}\n").as_bytes())
+            .and_then(|_| registry.flush()).map_err(|_| Error("lifecycle-write"))?;
+        registry.sync_all().map_err(|_| Error("lifecycle-sync"))?;
+        File::open(directory).and_then(|file| file.sync_all()).map_err(|_| Error("lifecycle-sync"))?;
         #[cfg(target_os = "linux")]
         {
+            LIFECYCLE_SIGNAL.store(0, Ordering::Release);
             LIFECYCLE_SIGNAL_FD.store(output.as_raw_fd(), Ordering::Release);
             // SAFETY: the three installed handlers have the exact C ABI and remain
             // valid for the process lifetime. A SIG_ERR result rejects startup.
@@ -111,13 +144,26 @@ impl LifecycleTrace {
                 }
             }
         }
-        Ok(Self { output })
+        Ok(Self {
+            output, registry, registry_open, registry_complete,
+            directory: directory.to_path_buf(), channel,
+        })
     }
 
     fn transition(&mut self, state: &'static str, requests: usize, active: usize) -> Result<()> {
         self.output
             .write_all(format!("transition\t{state}\t{requests}\t{active}\n").as_bytes())
             .map_err(|_| Error("lifecycle-write"))
+    }
+
+    fn publish_completion(&mut self, requests: usize) -> Result<()> {
+        self.registry.write_all(format!("complete\t{:010}\t{requests}\n", self.channel).as_bytes())
+            .and_then(|_| self.registry.flush()).map_err(|_| Error("lifecycle-write"))?;
+        self.registry.sync_all().map_err(|_| Error("lifecycle-sync"))?;
+        fs::hard_link(&self.registry_open, &self.registry_complete)
+            .map_err(|_| Error("lifecycle-publish"))?;
+        fs::remove_file(&self.registry_open).map_err(|_| Error("lifecycle-publish"))?;
+        File::open(&self.directory).and_then(|file| file.sync_all()).map_err(|_| Error("lifecycle-sync"))
     }
 
     fn finish(mut self) -> Result<()> {
@@ -217,6 +263,45 @@ fn read_protocol_record(reader: &mut impl BufRead) -> io::Result<Option<Protocol
     Ok(Some(ProtocolRecord { code, raw, fields }))
 }
 
+type RecordMessage = Result<Option<ProtocolRecord>>;
+
+fn record_reader<R: Read>(reader: R, sender: SyncSender<RecordMessage>, code: &'static str) {
+    let mut reader = BufReader::new(reader);
+    loop {
+        let message = read_protocol_record(&mut reader).map_err(|_| Error(code));
+        let finished = !matches!(message, Ok(Some(_)));
+        if sender.send(message).is_err() || finished { return; }
+    }
+}
+
+fn pending_signal() -> Option<i32> {
+    #[cfg(target_os = "linux")]
+    {
+        let signal = LIFECYCLE_SIGNAL.load(Ordering::Acquire);
+        if signal != 0 { return Some(signal); }
+    }
+    None
+}
+
+enum RecordOrSignal {
+    Record(ProtocolRecord),
+    Eof,
+    Signal(i32),
+}
+
+fn receive_record(receiver: &Receiver<RecordMessage>) -> Result<RecordOrSignal> {
+    loop {
+        if let Some(signal) = pending_signal() { return Ok(RecordOrSignal::Signal(signal)); }
+        match receiver.recv_timeout(SHUTDOWN_POLL) {
+            Ok(Ok(Some(record))) => return Ok(RecordOrSignal::Record(record)),
+            Ok(Ok(None)) => return Ok(RecordOrSignal::Eof),
+            Ok(Err(error)) => return Err(error),
+            Err(RecvTimeoutError::Timeout) => {},
+            Err(RecvTimeoutError::Disconnected) => return Err(Error("protocol-reader")),
+        }
+    }
+}
+
 fn one_field<'a>(record: &'a ProtocolRecord, name: &str) -> Result<&'a str> {
     let values = record.fields.get(name).ok_or(Error("method-field-missing"))?;
     if values.len() != 1 || values[0].is_empty() { return Err(Error("method-field-cardinality")); }
@@ -235,6 +320,9 @@ struct Active {
 #[derive(Debug)]
 struct Tracker {
     output: File,
+    pending_path: PathBuf,
+    final_path: PathBuf,
+    directory: PathBuf,
     channel: u32,
     next_id: u32,
     active: BTreeMap<String, Active>,
@@ -251,8 +339,10 @@ impl Tracker {
         if !directory_metadata.file_type().is_dir() || !telemetry_directory_mode(directory_metadata.permissions().mode()) {
             return Err(Error("telemetry-directory"));
         }
-        let path = Path::new(directory).join(format!("channel-{channel:010}.events"));
-        let mut output = OpenOptions::new().write(true).create_new(true).mode(0o640).open(&path)
+        let directory = Path::new(directory);
+        let pending_path = directory.join(format!("channel-{channel:010}.pending"));
+        let final_path = directory.join(format!("channel-{channel:010}.events"));
+        let mut output = OpenOptions::new().write(true).create_new(true).mode(0o640).open(&pending_path)
             .map_err(|_| Error("telemetry-create"))?;
         output.set_permissions(fs::Permissions::from_mode(0o640)).map_err(|_| Error("telemetry-mode"))?;
         let output_metadata = output.metadata().map_err(|_| Error("telemetry-file"))?;
@@ -263,7 +353,10 @@ impl Tracker {
             return Err(Error("telemetry-file"));
         }
         output.write_all(format!("{SCHEMA}\n").as_bytes()).map_err(|_| Error("telemetry-write"))?;
-        Ok(Self { output, channel, next_id: 1, active: BTreeMap::new(), total: 0 })
+        Ok(Self {
+            output, pending_path, final_path, directory: directory.to_path_buf(),
+            channel, next_id: 1, active: BTreeMap::new(), total: 0,
+        })
     }
 
     fn line(&mut self, value: &str) -> Result<()> {
@@ -323,13 +416,55 @@ impl Tracker {
 
     fn finish(mut self) -> Result<()> {
         if !self.active.is_empty() { return Err(Error("terminal-missing")); }
-        self.line(&format!("method-complete\t{}", self.total))?;
+        self.line(&format!("method-complete\t{:010}\t{}", self.channel, self.total))?;
         self.output.flush().map_err(|_| Error("telemetry-write"))?;
-        self.output.sync_all().map_err(|_| Error("telemetry-sync"))
+        self.output.sync_all().map_err(|_| Error("telemetry-sync"))?;
+        fs::hard_link(&self.pending_path, &self.final_path).map_err(|_| Error("telemetry-publish"))?;
+        fs::remove_file(&self.pending_path).map_err(|_| Error("telemetry-publish"))?;
+        File::open(&self.directory).and_then(|file| file.sync_all()).map_err(|_| Error("telemetry-sync"))
     }
 }
 
-fn proxy(real_method: &str, telemetry: &str, lifecycle: &str) -> Result<()> {
+enum ProgramOutcome {
+    Complete,
+    Signaled(i32),
+}
+
+fn finish_proxy_shutdown(
+    tracker: Tracker,
+    mut trace: LifecycleTrace,
+    shutdown: ShutdownResult,
+) -> Result<ProgramOutcome> {
+    let requests = tracker.total;
+    let active = tracker.active.len();
+    if shutdown.accepted {
+        trace.transition("event-channel-sync-start", requests, active)?;
+        tracker.finish()?;
+        trace.publish_completion(requests)?;
+        trace.transition("event-channel-synced-closed", requests, 0)?;
+    } else {
+        trace.transition("event-channel-completion-refused", requests, active)?;
+    }
+    let outcome = match shutdown.signal {
+        Some(2) if shutdown.accepted => {
+            trace.transition("wrapper-exit-success", requests, 0)?;
+            ProgramOutcome::Complete
+        }
+        Some(signal) => {
+            trace.transition("wrapper-exit-signal", requests, active)?;
+            ProgramOutcome::Signaled(signal)
+        }
+        None if shutdown.accepted => {
+            trace.transition("wrapper-exit-success", requests, 0)?;
+            ProgramOutcome::Complete
+        }
+        None => return Err(Error("method-exit")),
+    };
+    trace.finish()?;
+    Ok(outcome)
+}
+
+fn proxy(real_method: &str, telemetry: &str, lifecycle: &str) -> Result<ProgramOutcome> {
     let mut tracker = Tracker::create(telemetry)?;
     let mut trace = LifecycleTrace::create(lifecycle, tracker.channel)?;
     trace.transition("proxy-start", tracker.total, tracker.active.len())?;
@@ -337,48 +472,242 @@ fn proxy(real_method: &str, telemetry: &str, lifecycle: &str) -> Result<()> {
     let mut child = Command::new(real_method).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit())
         .spawn().map_err(|_| Error("method-spawn"))?;
     trace.transition("child-spawned", tracker.total, tracker.active.len())?;
-    let mut child_input = child.stdin.take().ok_or(Error("method-stdin"))?;
+    let mut child_input = Some(child.stdin.take().ok_or(Error("method-stdin"))?);
+    let child_output = child.stdout.take().ok_or(Error("method-stdout"))?;
+    let (child_sender, child_receiver) = mpsc::sync_channel(1);
+    thread::spawn(move || record_reader(child_output, child_sender, "apt-protocol-output"));
     let stdout = io::stdout();
     let mut apt_output = stdout.lock();
-    let mut child_output = BufReader::new(child.stdout.take().ok_or(Error("method-stdout"))?);
-
-    let startup = read_protocol_record(&mut child_output).map_err(|_| Error("apt-protocol-output"))?
-        .ok_or(Error("method-startup"))?;
+    let startup = match receive_record(&child_receiver)? {
+        RecordOrSignal::Record(record) => record,
+        RecordOrSignal::Eof => return Err(Error("method-startup")),
+        RecordOrSignal::Signal(signal) => {
+            let shutdown = shutdown_child(
+                ShutdownCause::Signal(signal), &mut child, &mut child_input, &child_receiver,
+                &mut tracker, &mut trace, &mut apt_output, false,
+            )?;
+            return finish_proxy_shutdown(tracker, trace, shutdown);
+        }
+    };
     if startup.code != 100 { return Err(Error("method-startup")); }
     trace.transition("child-startup", tracker.total, tracker.active.len())?;
     apt_output.write_all(&startup.raw).and_then(|_| apt_output.flush()).map_err(|_| Error("apt-output-write"))?;
 
-    let stdin = io::stdin();
-    let mut apt_input = stdin.lock();
-    while let Some(input) = read_protocol_record(&mut apt_input).map_err(|_| Error("apt-protocol-input"))? {
+    let (apt_sender, apt_receiver) = mpsc::sync_channel(1);
+    thread::spawn(move || {
+        let stdin = io::stdin();
+        let input = stdin.lock();
+        record_reader(input, apt_sender, "apt-protocol-input");
+    });
+    loop {
+        let input = match receive_record(&apt_receiver)? {
+            RecordOrSignal::Record(record) => record,
+            RecordOrSignal::Eof => {
+                trace.transition("apt-stdin-eof", tracker.total, tracker.active.len())?;
+                let shutdown = shutdown_child(
+                    ShutdownCause::InputEof, &mut child, &mut child_input, &child_receiver,
+                    &mut tracker, &mut trace, &mut apt_output, false,
+                )?;
+                return finish_proxy_shutdown(tracker, trace, shutdown);
+            }
+            RecordOrSignal::Signal(signal) => {
+                let shutdown = shutdown_child(
+                    ShutdownCause::Signal(signal), &mut child, &mut child_input, &child_receiver,
+                    &mut tracker, &mut trace, &mut apt_output, false,
+                )?;
+                return finish_proxy_shutdown(tracker, trace, shutdown);
+            }
+        };
         trace.transition("apt-input-record", tracker.total, tracker.active.len())?;
         let acquire = input.code == 600;
         if acquire {
             tracker.request(&input)?;
             trace.transition("request-start", tracker.total, tracker.active.len())?;
         }
-        child_input.write_all(&input.raw).and_then(|_| child_input.flush()).map_err(|_| Error("method-input-write"))?;
+        let input_pipe = child_input.as_mut().ok_or(Error("method-stdin"))?;
+        input_pipe.write_all(&input.raw).and_then(|_| input_pipe.flush()).map_err(|_| Error("method-input-write"))?;
         if !acquire { continue; }
         loop {
-            let record = read_protocol_record(&mut child_output).map_err(|_| Error("apt-protocol-output"))?
-                .ok_or(Error("method-output-eof"))?;
-            let terminal = handle_child_record(&mut tracker, &record)?;
-            if terminal { trace.transition("request-terminal", tracker.total, tracker.active.len())?; }
+            let record = match receive_record(&child_receiver)? {
+                RecordOrSignal::Record(record) => record,
+                RecordOrSignal::Eof => {
+                    let shutdown = shutdown_child(
+                        ShutdownCause::InputEof, &mut child, &mut child_input, &child_receiver,
+                        &mut tracker, &mut trace, &mut apt_output, true,
+                    )?;
+                    if shutdown.accepted { return Err(Error("method-output-eof")); }
+                    return Err(Error("method-output-eof"));
+                }
+                RecordOrSignal::Signal(signal) => {
+                    let shutdown = shutdown_child(
+                        ShutdownCause::Signal(signal), &mut child, &mut child_input, &child_receiver,
+                        &mut tracker, &mut trace, &mut apt_output, false,
+                    )?;
+                    return finish_proxy_shutdown(tracker, trace, shutdown);
+                }
+            };
+            let handled = handle_child_record(&mut tracker, &record)?;
+            if handled.terminal { trace.transition("request-terminal", tracker.total, tracker.active.len())?; }
             apt_output.write_all(&record.raw).and_then(|_| apt_output.flush()).map_err(|_| Error("apt-output-write"))?;
-            if terminal { break; }
+            if handled.response_complete { break; }
         }
     }
-    trace.transition("apt-stdin-eof", tracker.total, tracker.active.len())?;
-    drop(child_input);
-    trace.transition("child-stdin-closed", tracker.total, tracker.active.len())?;
+}
 
-    while let Some(record) = read_protocol_record(&mut child_output).map_err(|_| Error("apt-protocol-output"))? {
-        let terminal = handle_child_record(&mut tracker, &record)?;
-        if terminal { trace.transition("request-terminal", tracker.total, tracker.active.len())?; }
-        apt_output.write_all(&record.raw).and_then(|_| apt_output.flush()).map_err(|_| Error("apt-output-write"))?;
+struct HandledRecord {
+    response_complete: bool,
+    terminal: bool,
+}
+
+fn handle_child_record(tracker: &mut Tracker, record: &ProtocolRecord) -> Result<HandledRecord> {
+    match record.code {
+        103 => {
+            tracker.redirect(record)?;
+            Ok(HandledRecord { response_complete: true, terminal: false })
+        }
+        201 => {
+            tracker.terminal(record, "success")?;
+            Ok(HandledRecord { response_complete: true, terminal: true })
+        }
+        400 => {
+            tracker.terminal(record, "failure")?;
+            Ok(HandledRecord { response_complete: true, terminal: true })
+        }
+        100 | 101 | 102 | 104 | 200 | 351 | 401 | 402 | 403 => {
+            Ok(HandledRecord { response_complete: false, terminal: false })
+        }
+        _ => Err(Error("method-event-unknown")),
     }
-    trace.transition("child-stdout-eof", tracker.total, tracker.active.len())?;
-    let status = child.wait().map_err(|_| Error("method-wait"))?;
+}
+
+#[derive(Clone, Copy)]
+enum ShutdownCause {
+    InputEof,
+    Signal(i32),
+}
+
+struct ShutdownResult {
+    accepted: bool,
+    signal: Option<i32>,
+}
+
+fn drain_child_records(
+    receiver: &Receiver<RecordMessage>,
+    tracker: &mut Tracker,
+    trace: &mut LifecycleTrace,
+    apt_output: &mut impl Write,
+    relay: bool,
+    output_eof: &mut bool,
+) -> Result<()> {
+    loop {
+        match receiver.try_recv() {
+            Ok(Ok(Some(record))) => {
+                let handled = handle_child_record(tracker, &record)?;
+                if handled.terminal { trace.transition("request-terminal", tracker.total, tracker.active.len())?; }
+                if relay {
+                    apt_output.write_all(&record.raw).and_then(|_| apt_output.flush())
+                        .map_err(|_| Error("apt-output-write"))?;
+                }
+            }
+            Ok(Ok(None)) => {
+                *output_eof = true;
+                trace.transition("child-stdout-eof", tracker.total, tracker.active.len())?;
+                return Ok(());
+            }
+            Ok(Err(error)) => return Err(error),
+            Err(mpsc::TryRecvError::Empty) => return Ok(()),
+            Err(mpsc::TryRecvError::Disconnected) => {
+                if *output_eof { return Ok(()); }
+                return Err(Error("method-output-uncertain"));
+            }
+        }
+    }
+}
+
+fn poll_child_phase(
+    child: &mut Child,
+    receiver: &Receiver<RecordMessage>,
+    tracker: &mut Tracker,
+    trace: &mut LifecycleTrace,
+    apt_output: &mut impl Write,
+    relay: bool,
+    output_eof: &mut bool,
+    status: &mut Option<ExitStatus>,
+) -> Result<bool> {
+    let deadline = Instant::now() + SHUTDOWN_GRACE;
+    loop {
+        drain_child_records(receiver, tracker, trace, apt_output, relay, output_eof)?;
+        if status.is_none() {
+            *status = child.try_wait().map_err(|_| Error("method-wait"))?;
+        }
+        if status.is_some() && *output_eof { return Ok(true); }
+        if Instant::now() >= deadline { return Ok(false); }
+        thread::sleep(SHUTDOWN_POLL);
+    }
+}
+
+fn signal_owned_child(child: &mut Child, number: i32, status: &mut Option<ExitStatus>) -> Result<bool> {
+    if status.is_none() { *status = child.try_wait().map_err(|_| Error("method-wait"))?; }
+    if status.is_some() { return Ok(false); }
+    #[cfg(target_os = "linux")]
+    {
+        // SAFETY: `child.id()` names the still-unreaped direct child proven alive by
+        // `try_wait`; PID reuse is impossible until it is reaped. No process group is used.
+        if unsafe { kill(child.id() as i32, number) } != 0 {
+            *status = child.try_wait().map_err(|_| Error("method-wait"))?;
+            if status.is_some() { return Ok(false); }
+            return Err(Error("method-signal"));
+        }
+        return Ok(true);
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = number;
+        child.kill().map_err(|_| Error("method-signal"))?;
+        Ok(true)
+    }
+}
+
+fn shutdown_child(
+    cause: ShutdownCause,
+    child: &mut Child,
+    child_input: &mut Option<std::process::ChildStdin>,
+    receiver: &Receiver<RecordMessage>,
+    tracker: &mut Tracker,
+    trace: &mut LifecycleTrace,
+    apt_output: &mut impl Write,
+    mut output_eof: bool,
+) -> Result<ShutdownResult> {
+    let complete_at_trigger = tracker.active.is_empty();
+    drop(child_input.take());
+    trace.transition("child-stdin-closed", tracker.total, tracker.active.len())?;
+    let relay = matches!(cause, ShutdownCause::InputEof);
+    let mut status = child.try_wait().map_err(|_| Error("method-wait"))?;
+    let mut controlled_signal = false;
+
+    if let ShutdownCause::Signal(number) = cause {
+        trace.transition("child-original-signal", tracker.total, tracker.active.len())?;
+        controlled_signal = signal_owned_child(child, number, &mut status)?;
+    }
+    if !poll_child_phase(child, receiver, tracker, trace, apt_output, relay, &mut output_eof, &mut status)? {
+        trace.transition("child-term-escalation", tracker.total, tracker.active.len())?;
+        controlled_signal |= signal_owned_child(child, 15, &mut status)?;
+        if !poll_child_phase(child, receiver, tracker, trace, apt_output, relay, &mut output_eof, &mut status)? {
+            trace.transition("child-kill-escalation", tracker.total, tracker.active.len())?;
+            if status.is_none() { status = child.try_wait().map_err(|_| Error("method-wait"))?; }
+            if status.is_none() {
+                if child.kill().is_err() {
+                    status = child.try_wait().map_err(|_| Error("method-wait"))?;
+                    if status.is_none() { return Err(Error("method-kill")); }
+                }
+                controlled_signal = true;
+            }
+            if !poll_child_phase(child, receiver, tracker, trace, apt_output, relay, &mut output_eof, &mut status)? {
+                return Err(Error("method-reap-uncertain"));
+            }
+        }
+    }
+    let status = status.ok_or(Error("method-reap-uncertain"))?;
     if status.success() {
         trace.transition("child-exit-success", tracker.total, tracker.active.len())?;
     } else {
@@ -387,32 +716,17 @@ fn proxy(real_method: &str, telemetry: &str, lifecycle: &str) -> Result<()> {
         #[cfg(not(target_os = "linux"))]
         let state = "child-exit-nonzero";
         trace.transition(state, tracker.total, tracker.active.len())?;
-        return Err(Error("method-exit"));
     }
-    trace.transition("event-channel-sync-start", tracker.total, tracker.active.len())?;
-    tracker.finish()?;
-    trace.transition("event-channel-synced-closed", 0, 0)?;
-    trace.transition("wrapper-exit-success", 0, 0)?;
-    trace.finish()
-}
-
-fn handle_child_record(tracker: &mut Tracker, record: &ProtocolRecord) -> Result<bool> {
-    match record.code {
-        103 => {
-            tracker.redirect(record)?;
-            Ok(true)
-        }
-        201 => {
-            tracker.terminal(record, "success")?;
-            Ok(true)
-        }
-        400 => {
-            tracker.terminal(record, "failure")?;
-            Ok(true)
-        }
-        100 | 101 | 102 | 104 | 200 | 351 | 401 | 402 | 403 => Ok(false),
-        _ => Err(Error("method-event-unknown")),
-    }
+    let accepted = match cause {
+        ShutdownCause::Signal(2) => complete_at_trigger && tracker.active.is_empty()
+            && (status.success() || controlled_signal),
+        ShutdownCause::Signal(_) => false,
+        ShutdownCause::InputEof => tracker.active.is_empty() && (status.success() || controlled_signal),
+    };
+    Ok(ShutdownResult {
+        accepted,
+        signal: match cause { ShutdownCause::Signal(number) => Some(number), ShutdownCause::InputEof => None },
+    })
 }
 
 #[derive(Debug)]
@@ -527,7 +841,8 @@ fn verify_channel(
                 if request.terminal || request.current != url.serialized { return Err(Error("terminal-cardinality")); }
                 request.terminal = true;
             }
-            ["method-complete", count] => {
+            ["method-complete", complete_channel, count] => {
+                if *complete_channel != channel { return Err(Error("complete-channel")); }
                 let count: usize = count.parse().map_err(|_| Error("complete-count"))?;
                 completed = Some(count);
             }
@@ -535,7 +850,7 @@ fn verify_channel(
         }
     }
     let expected = completed.ok_or(Error("complete-missing"))?;
-    if requests.is_empty() || expected != requests.len() || requests.values().any(|request| !request.terminal) {
+    if expected != requests.len() || requests.values().any(|request| !request.terminal) {
         return Err(Error("request-cardinality"));
     }
     Ok(requests.len())
@@ -560,7 +875,11 @@ fn channel_identity(path: &Path) -> Result<String> {
     Ok(digits.to_owned())
 }
 
-fn verify(directory: &str, policy_path: &str) -> Result<()> {
+fn verify_internal(
+    directory: &str,
+    policy_path: &str,
+    expected_channels: Option<&BTreeMap<String, usize>>,
+) -> Result<()> {
     let directory_path = Path::new(directory);
     let metadata = fs::symlink_metadata(directory_path).map_err(|_| Error("telemetry-missing"))?;
     if !metadata.file_type().is_dir() || !telemetry_directory_mode(metadata.permissions().mode()) {
@@ -576,6 +895,11 @@ fn verify(directory: &str, policy_path: &str) -> Result<()> {
     }
     if paths.is_empty() { return Err(Error("telemetry-channel-empty")); }
     paths.sort();
+    if let Some(expected) = expected_channels {
+        let observed = paths.iter().map(|path| channel_identity(path)).collect::<Result<BTreeSet<_>>>()?;
+        let declared = expected.keys().cloned().collect::<BTreeSet<_>>();
+        if observed != declared { return Err(Error("telemetry-channel-cardinality")); }
+    }
     let channel_count = paths.len();
     eprintln!("preauth-apt-lifecycle:aggregator:transition=discovery:channels={channel_count}");
     let mut hosts = BTreeSet::new();
@@ -593,13 +917,116 @@ fn verify(directory: &str, policy_path: &str) -> Result<()> {
                 return Err(error);
             }
         };
+        if expected_channels.and_then(|expected| expected.get(&channel)).is_some_and(|count| *count != verified) {
+            return Err(Error("lifecycle-request-cardinality"));
+        }
         total = total.checked_add(verified).ok_or(Error("request-bound"))?;
         if total > policy.maximum_requests { return Err(Error("request-bound")); }
     }
+    if total == 0 { return Err(Error("request-cardinality")); }
     let host_list = hosts.into_iter().collect::<Vec<_>>().join(",");
     eprintln!("preauth-input-producer:transfer-hosts:{host_list}");
     eprintln!("preauth-input-producer:transfer-requests:{total}");
     eprintln!("preauth-input-producer:transfer-channels:{channel_count}");
+    Ok(())
+}
+
+fn verify(directory: &str, policy_path: &str) -> Result<()> {
+    verify_internal(directory, policy_path, None)
+}
+
+fn lifecycle_entry_channel(name: &str, suffix: &str) -> Result<String> {
+    let digits = name.strip_prefix("registry-").and_then(|value| value.strip_suffix(suffix))
+        .ok_or(Error("lifecycle-entry"))?;
+    if digits.len() != 10 || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(Error("lifecycle-entry"));
+    }
+    Ok(digits.to_owned())
+}
+
+fn parse_registry(path: &Path, expected_gid: u32, channel: &str, complete: bool) -> Result<Option<usize>> {
+    let metadata = fs::symlink_metadata(path).map_err(|_| Error("lifecycle-registry-missing"))?;
+    if !metadata.file_type().is_file() || metadata.len() as usize > MAX_LINE
+        || metadata.nlink() != 1 || metadata.permissions().mode() & 0o777 != 0o640
+        || metadata.gid() != expected_gid
+    {
+        return Err(Error("lifecycle-registry-file"));
+    }
+    let text = fs::read_to_string(path).map_err(|_| Error("lifecycle-registry-read"))?;
+    if !text.ends_with('\n') || !text.is_ascii() { return Err(Error("lifecycle-registry-framing")); }
+    let mut lines = text.lines();
+    if lines.next() != Some(LIFECYCLE_SCHEMA)
+        || lines.next() != Some(&format!("channel\t{channel}"))
+    {
+        return Err(Error("lifecycle-registry-record"));
+    }
+    let count = match (complete, lines.next()) {
+        (false, None) => None,
+        (true, Some(line)) => {
+            let fields = line.split('\t').collect::<Vec<_>>();
+            match fields.as_slice() {
+                ["complete", record_channel, count] if *record_channel == channel => {
+                    Some(count.parse().map_err(|_| Error("lifecycle-registry-record"))?)
+                }
+                _ => return Err(Error("lifecycle-registry-record")),
+            }
+        }
+        _ => return Err(Error("lifecycle-registry-record")),
+    };
+    if lines.next().is_some() { return Err(Error("lifecycle-registry-record")); }
+    Ok(count)
+}
+
+fn discover_registries(directory: &Path) -> Result<BTreeMap<String, Option<usize>>> {
+    let metadata = fs::symlink_metadata(directory).map_err(|_| Error("lifecycle-directory"))?;
+    if !metadata.file_type().is_dir() || !telemetry_directory_mode(metadata.permissions().mode()) {
+        return Err(Error("lifecycle-directory"));
+    }
+    let mut registries = BTreeMap::new();
+    for entry in fs::read_dir(directory).map_err(|_| Error("lifecycle-read"))? {
+        let entry = entry.map_err(|_| Error("lifecycle-read"))?;
+        let name = entry.file_name().into_string().map_err(|_| Error("lifecycle-entry"))?;
+        if let Some(digits) = name.strip_prefix("trace-").and_then(|value| value.strip_suffix(".events")) {
+            if digits.len() != 10 || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+                return Err(Error("lifecycle-entry"));
+            }
+            continue;
+        }
+        let (channel, complete) = if name.ends_with(".open") {
+            (lifecycle_entry_channel(&name, ".open")?, false)
+        } else if name.ends_with(".complete") {
+            (lifecycle_entry_channel(&name, ".complete")?, true)
+        } else {
+            return Err(Error("lifecycle-entry"));
+        };
+        let count = parse_registry(&entry.path(), metadata.gid(), &channel, complete)?;
+        if registries.insert(channel, count).is_some() { return Err(Error("lifecycle-registry-duplicate")); }
+        if registries.len() > MAX_CHANNELS { return Err(Error("telemetry-channel-bound")); }
+    }
+    if registries.is_empty() { return Err(Error("lifecycle-registry-empty")); }
+    Ok(registries)
+}
+
+fn await_verify(telemetry: &str, lifecycle: &str, policy: &str) -> Result<()> {
+    let lifecycle_path = Path::new(lifecycle);
+    let initial = discover_registries(lifecycle_path)?;
+    let declared = initial.keys().cloned().collect::<BTreeSet<_>>();
+    let deadline = Instant::now() + COMPLETION_WAIT;
+    let completed = loop {
+        let observed = discover_registries(lifecycle_path)?;
+        if observed.keys().cloned().collect::<BTreeSet<_>>() != declared {
+            return Err(Error("lifecycle-registry-reopened"));
+        }
+        if observed.values().all(Option::is_some) { break observed; }
+        if Instant::now() >= deadline { return Err(Error("lifecycle-completion-timeout")); }
+        thread::sleep(SHUTDOWN_POLL);
+    };
+    let expected = completed.into_iter().map(|(channel, count)| (channel, count.unwrap())).collect();
+    verify_internal(telemetry, policy, Some(&expected))?;
+    let final_state = discover_registries(lifecycle_path)?;
+    if final_state != expected.iter().map(|(channel, count)| (channel.clone(), Some(*count))).collect() {
+        return Err(Error("lifecycle-registry-reopened"));
+    }
     Ok(())
 }
 
@@ -617,7 +1044,12 @@ fn main() {
     let arguments: Vec<_> = std::env::args().collect();
     let result = match arguments.as_slice() {
         [_, command, real, telemetry, lifecycle] if command == "--proxy" => proxy(real, telemetry, lifecycle),
-        [_, command, telemetry, policy] if command == "--verify" => verify(telemetry, policy),
+        [_, command, telemetry, policy] if command == "--verify" => {
+            verify(telemetry, policy).map(|_| ProgramOutcome::Complete)
+        }
+        [_, command, telemetry, lifecycle, policy] if command == "--await-verify" => {
+            await_verify(telemetry, lifecycle, policy).map(|_| ProgramOutcome::Complete)
+        }
         [program] => {
             let _ = program;
             let real = std::env::var("RAR_PREAUTH_APT_REAL_METHOD").map_err(|_| Error("proxy-environment"));
@@ -628,15 +1060,64 @@ fn main() {
                 _ => Err(Error("proxy-environment")),
             }
         }
-        [_, command] if command == "--build-root-exec-probe" => Ok(()),
+        [_, command] if command == "--build-root-exec-probe" => Ok(ProgramOutcome::Complete),
         _ => Err(Error("usage-refused")),
     };
-    if let Err(error) = result { fail(error.0); }
+    match result {
+        Ok(ProgramOutcome::Complete) => {},
+        Ok(ProgramOutcome::Signaled(signal)) => std::process::exit(128 + signal),
+        Err(error) => fail(error.0),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    fn shutdown_fixture(command: &str, active: bool, cause: ShutdownCause, settle: bool) -> (ProgramOutcome, String, String) {
+        use std::sync::atomic::{AtomicU32, Ordering as AtomicOrdering};
+        static NEXT: AtomicU32 = AtomicU32::new(1);
+        let sequence = NEXT.fetch_add(1, AtomicOrdering::Relaxed);
+        let root = std::env::temp_dir().join(format!("rar-apt-lifecycle-test-{}-{sequence}", std::process::id()));
+        let events = root.join("events");
+        let lifecycle = root.join("lifecycle");
+        fs::create_dir(&root).unwrap();
+        fs::create_dir(&events).unwrap();
+        fs::create_dir(&lifecycle).unwrap();
+        fs::set_permissions(&events, fs::Permissions::from_mode(0o2770)).unwrap();
+        fs::set_permissions(&lifecycle, fs::Permissions::from_mode(0o2770)).unwrap();
+        let channel = 1000 + sequence;
+        let mut tracker = Tracker::create_channel(events.to_str().unwrap(), channel).unwrap();
+        if active {
+            let mut fields = BTreeMap::new();
+            fields.insert("URI".to_owned(), vec!["https://snapshot.debian.org/pending".to_owned()]);
+            tracker.request(&ProtocolRecord { code: 600, raw: Vec::new(), fields }).unwrap();
+        }
+        let mut trace = LifecycleTrace::create(lifecycle.to_str().unwrap(), channel).unwrap();
+        let mut child = Command::new("/bin/sh")
+            .arg("-c").arg(command)
+            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null())
+            .spawn().unwrap();
+        let mut child_input = Some(child.stdin.take().unwrap());
+        let child_output = child.stdout.take().unwrap();
+        let (sender, receiver) = mpsc::sync_channel(1);
+        thread::spawn(move || record_reader(child_output, sender, "apt-protocol-output"));
+        if settle { thread::sleep(Duration::from_millis(50)); }
+        let mut output = Vec::new();
+        let shutdown = shutdown_child(
+            cause, &mut child, &mut child_input, &receiver, &mut tracker, &mut trace, &mut output, false,
+        ).unwrap();
+        let outcome = finish_proxy_shutdown(tracker, trace, shutdown).unwrap();
+        let final_path = events.join(format!("channel-{channel:010}.events"));
+        let pending_path = events.join(format!("channel-{channel:010}.pending"));
+        let event_path = if final_path.exists() { final_path } else { pending_path };
+        let trace_path = lifecycle.join(format!("trace-{channel:010}.events"));
+        let event_text = fs::read_to_string(event_path).unwrap();
+        let trace_text = fs::read_to_string(trace_path).unwrap();
+        fs::remove_dir_all(root).unwrap();
+        (outcome, event_text, trace_text)
+    }
 
     #[test]
     fn strict_url_authority_rejects_ambiguous_forms() {
@@ -649,5 +1130,55 @@ mod tests {
             "https://127.0.0.1/x", "https://[::1]/x", "https://snapshot.debian.org\\@evil/x",
             "https://snapshot.debian.org/x#fragment", "https://snapshot.debian.org/white space",
         ] { assert!(canonical_https_url(raw).is_err(), "accepted {raw}"); }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn signal_after_terminals_reaps_cooperative_and_escalated_children() {
+        for (command, expected_transition) in [
+            ("trap 'exit 0' INT TERM; while :; do read ignored < /dev/zero || :; done", "child-original-signal"),
+            ("trap '' INT; trap 'exit 0' TERM; while :; do read ignored < /dev/zero || :; done", "child-term-escalation"),
+            ("trap '' INT TERM; while :; do read ignored < /dev/zero || :; done", "child-kill-escalation"),
+        ] {
+            let (outcome, events, trace) = shutdown_fixture(command, false, ShutdownCause::Signal(2), false);
+            assert!(matches!(outcome, ProgramOutcome::Complete));
+            assert!(events.contains("method-complete\t"));
+            assert!(trace.contains(expected_transition));
+            assert!(trace.contains("event-channel-synced-closed"));
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn signal_before_terminal_reaps_but_refuses_completion() {
+        let command = "trap 'exit 0' INT TERM; while :; do read ignored < /dev/zero || :; done";
+        let (outcome, events, trace) = shutdown_fixture(command, true, ShutdownCause::Signal(2), false);
+        assert!(matches!(outcome, ProgramOutcome::Signaled(2)));
+        assert!(!events.contains("method-complete"));
+        assert!(trace.contains("event-channel-completion-refused"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn clean_eof_reaps_resident_child_before_completion() {
+        let command = "trap '' INT; trap 'exit 0' TERM; while :; do read ignored < /dev/zero || :; done";
+        let (outcome, events, trace) = shutdown_fixture(command, false, ShutdownCause::InputEof, false);
+        assert!(matches!(outcome, ProgramOutcome::Complete));
+        assert!(events.contains("method-complete\t"));
+        assert!(trace.contains("child-term-escalation"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn nonzero_child_and_unexpected_signals_never_publish_completion() {
+        let (outcome, events, _) = shutdown_fixture("exit 7", false, ShutdownCause::Signal(2), true);
+        assert!(matches!(outcome, ProgramOutcome::Signaled(2)));
+        assert!(!events.contains("method-complete"));
+        for signal in [1, 15] {
+            let command = "trap 'exit 0' HUP TERM; while :; do read ignored < /dev/zero || :; done";
+            let (outcome, events, _) = shutdown_fixture(command, false, ShutdownCause::Signal(signal), false);
+            assert!(matches!(outcome, ProgramOutcome::Signaled(value) if value == signal));
+            assert!(!events.contains("method-complete"));
+        }
     }
 }

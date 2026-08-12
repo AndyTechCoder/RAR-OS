@@ -176,7 +176,7 @@ inside(){
  phase=transfer-origin-verification
  printf '%s\n' 'preauth-apt-lifecycle:parent:phase=update:transition=aggregator-start' >&2
  set +e
- "$methods/https" --verify "$update_events" "$policy"
+ "$methods/https" --await-verify "$update_events" "$update_lifecycle" "$policy"
  verify_status=$?
  set -e
  printf 'preauth-apt-lifecycle:parent:phase=update:transition=aggregator-exit:status=%s\n' "$verify_status" >&2
@@ -202,7 +202,7 @@ inside(){
  phase=transfer-origin-verification
  printf '%s\n' 'preauth-apt-lifecycle:parent:phase=download:transition=aggregator-start' >&2
  set +e
- "$methods/https" --verify "$download_events" "$policy"
+ "$methods/https" --await-verify "$download_events" "$download_lifecycle" "$policy"
  verify_status=$?
  set -e
  printf 'preauth-apt-lifecycle:parent:phase=download:transition=aggregator-exit:status=%s\n' "$verify_status" >&2
