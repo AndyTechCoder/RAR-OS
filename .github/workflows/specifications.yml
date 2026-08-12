@@ -20,7 +20,18 @@ jobs:
         run: |
           set -u
           [ "${ImageOS-}" = ubuntu24 ]
-          [ "${ImageVersion-}" = 20260720.247.2 ]
+          rar_ci_image_version=${ImageVersion-}
+          rar_ci_image_date=${rar_ci_image_version%%.*}
+          rar_ci_image_rest=${rar_ci_image_version#*.}
+          [ "$rar_ci_image_rest" != "$rar_ci_image_version" ]
+          rar_ci_image_build=${rar_ci_image_rest%%.*}
+          rar_ci_image_revision=${rar_ci_image_rest#*.}
+          [ "$rar_ci_image_revision" != "$rar_ci_image_rest" ]
+          case "$rar_ci_image_revision" in *.*) exit 1 ;; esac
+          [ "${#rar_ci_image_date}" -eq 8 ]
+          for component in "$rar_ci_image_date" "$rar_ci_image_build" "$rar_ci_image_revision"; do
+            case "$component" in '' | *[!0-9]*) exit 1 ;; esac
+          done
           [ "${RUNNER_OS-}" = Linux ]
           [ "${RUNNER_ARCH-}" = X64 ]
           printf '%s\n' \

@@ -429,6 +429,21 @@ rar_verify_read_only_ci_tool_mounts() {
     [ "$rar_root_mount_seen" = true ]
 }
 
+rar_validate_ci_runner_image_version() {
+    rar_ci_image_version=$1
+    rar_ci_image_date=${rar_ci_image_version%%.*}
+    rar_ci_image_rest=${rar_ci_image_version#*.}
+    [ "$rar_ci_image_rest" != "$rar_ci_image_version" ] || return 1
+    rar_ci_image_build=${rar_ci_image_rest%%.*}
+    rar_ci_image_revision=${rar_ci_image_rest#*.}
+    [ "$rar_ci_image_revision" != "$rar_ci_image_rest" ] || return 1
+    case "$rar_ci_image_revision" in *.*) return 1 ;; esac
+    [ "${#rar_ci_image_date}" -eq 8 ] || return 1
+    for rar_ci_component in "$rar_ci_image_date" "$rar_ci_image_build" "$rar_ci_image_revision"; do
+        case "$rar_ci_component" in '' | *[!0-9]*) return 1 ;; esac
+    done
+}
+
 rar_verify_ci_execution_boundary() {
     [ "${RAR_CI_BOOTSTRAP_IMAGE-}" = sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 ] || return 1
     [ "${GITHUB_ACTIONS-}" = true ] || return 1
@@ -436,7 +451,7 @@ rar_verify_ci_execution_boundary() {
     [ "${RAR_CI_RUNNER_OS-}" = Linux ] || return 1
     [ "${RAR_CI_RUNNER_ARCH-}" = X64 ] || return 1
     [ "${RAR_CI_RUNNER_IMAGE_OS-}" = ubuntu24 ] || return 1
-    [ "${RAR_CI_RUNNER_IMAGE_VERSION-}" = 20260720.247.2 ] || return 1
+    rar_validate_ci_runner_image_version "${RAR_CI_RUNNER_IMAGE_VERSION-}" || return 1
     [ "$bootstrap_lock_sha256" = 6752b1b21ac8fa93a671ff9444173e4c3bbc4cdcbe4cf5cd39820371dc79aa24 ] || return 1
     rar_validate_git_object_id "${RAR_EXPECTED_SOURCE_REVISION-}" || return 1
     rar_verify_read_only_ci_tool_mounts

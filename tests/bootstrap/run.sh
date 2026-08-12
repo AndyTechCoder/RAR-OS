@@ -71,6 +71,22 @@ done
         exit 1
     fi
 ) || exit 2
+for accepted_image_version in 20260720.247.2 20260810.271.1; do
+    (
+        RAR_CI_RUNNER_IMAGE_VERSION=$accepted_image_version
+        export RAR_CI_RUNNER_IMAGE_VERSION
+        rar_verify_ci_execution_boundary
+    ) || exit 2
+done
+for refused_image_version in '' 20260720 20260720.247 20260720.247.2.1 2026-0720.247.2 20260720.latest.2; do
+    (
+        RAR_CI_RUNNER_IMAGE_VERSION=$refused_image_version
+        export RAR_CI_RUNNER_IMAGE_VERSION
+        if rar_verify_ci_execution_boundary; then
+            exit 1
+        fi
+    ) || exit 2
+done
 rar_verify_ci_source_snapshot || exit 2
 RAR_BOOTSTRAP_LOCK_SHA256=$bootstrap_lock_sha256
 export RAR_BOOTSTRAP_LOCK_SHA256
