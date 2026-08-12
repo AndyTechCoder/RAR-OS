@@ -1326,7 +1326,7 @@ fn class_b_host_inventory_is_complete_canonical_and_traceable() {
         "oci-index-sha256-f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3"
     ));
     assert!(input.contains("git-sha1-11bd71901bbe5b1630ceea73d27597364c9af683"));
-    assert!(input.contains("ubuntu-24.04-20260714.240.1"));
+    assert!(input.contains("ubuntu-24.04-20260810.271.1"));
 
     let manifest = fs::read_to_string(root().join("tools/toolchain/host-tools.manifest"))
         .expect("read host tool manifest");
