@@ -1082,7 +1082,19 @@ mod tests {
     use super::*;
 
     #[cfg(target_os = "linux")]
-    fn shutdown_fixture(command: &str, active: bool, cause: ShutdownCause) -> (ProgramOutcome, String, String) {
+    #[derive(Clone, Copy)]
+    enum FixtureChildState {
+        Running,
+        Exited(i32),
+    }
+
+    #[cfg(target_os = "linux")]
+    fn shutdown_fixture(
+        command: &str,
+        active: bool,
+        cause: ShutdownCause,
+        child_state: FixtureChildState,
+    ) -> (ProgramOutcome, String, String) {
         use std::sync::atomic::{AtomicU32, Ordering as AtomicOrdering};
         static NEXT: AtomicU32 = AtomicU32::new(1);
         let sequence = NEXT.fetch_add(1, AtomicOrdering::Relaxed);
@@ -1112,6 +1124,10 @@ mod tests {
         let mut readiness = String::new();
         child_stderr.read_line(&mut readiness).unwrap();
         assert_eq!(readiness, "ready\n");
+        if let FixtureChildState::Exited(expected) = child_state {
+            let status = child.wait().unwrap();
+            assert_eq!(status.code(), Some(expected));
+        }
         let (sender, receiver) = mpsc::sync_channel(1);
         thread::spawn(move || record_reader(child_output, sender, "apt-protocol-output"));
         let mut output = Vec::new();
@@ -1158,7 +1174,7 @@ mod tests {
             ("trap '' INT; trap 'exit 0' TERM; printf 'ready\n' >&2; while :; do read ignored < /dev/zero || :; done", "child-term-escalation"),
             ("trap '' INT TERM; printf 'ready\n' >&2; while :; do read ignored < /dev/zero || :; done", "child-kill-escalation"),
         ] {
-            let (outcome, events, trace) = shutdown_fixture(command, false, ShutdownCause::Signal(2));
+            let (outcome, events, trace) = shutdown_fixture(command, false, ShutdownCause::Signal(2), FixtureChildState::Running);
             assert!(matches!(outcome, ProgramOutcome::Complete));
             assert!(events.contains("method-complete\t"));
             assert!(trace.contains(expected_transition));
@@ -1170,7 +1186,7 @@ mod tests {
     #[test]
     fn signal_before_terminal_reaps_but_refuses_completion() {
         let command = "trap 'exit 0' INT TERM; printf 'ready\n' >&2; while :; do read ignored < /dev/zero || :; done";
-        let (outcome, events, trace) = shutdown_fixture(command, true, ShutdownCause::Signal(2));
+        let (outcome, events, trace) = shutdown_fixture(command, true, ShutdownCause::Signal(2), FixtureChildState::Running);
         assert!(matches!(outcome, ProgramOutcome::Signaled(2)));
         assert!(!events.contains("method-complete"));
         assert!(trace.contains("event-channel-completion-refused"));
@@ -1180,7 +1196,7 @@ mod tests {
     #[test]
     fn clean_eof_reaps_resident_child_before_completion() {
         let command = "trap '' INT; trap 'exit 0' TERM; printf 'ready\n' >&2; while :; do read ignored < /dev/zero || :; done";
-        let (outcome, events, trace) = shutdown_fixture(command, false, ShutdownCause::InputEof);
+        let (outcome, events, trace) = shutdown_fixture(command, false, ShutdownCause::InputEof, FixtureChildState::Running);
         assert!(matches!(outcome, ProgramOutcome::Complete));
         assert!(events.contains("method-complete\t"));
         assert!(trace.contains("child-term-escalation"));
@@ -1189,12 +1205,22 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn nonzero_child_and_unexpected_signals_never_publish_completion() {
-        let (outcome, events, _) = shutdown_fixture("printf 'ready\n' >&2; exit 7", false, ShutdownCause::Signal(2));
+        let (outcome, events, _) = shutdown_fixture(
+            "printf 'ready\n' >&2; exit 7",
+            false,
+            ShutdownCause::Signal(2),
+            FixtureChildState::Exited(7),
+        );
         assert!(matches!(outcome, ProgramOutcome::Signaled(2)));
         assert!(!events.contains("method-complete"));
         for signal in [1, 15] {
-            let command = "trap 'exit 0' HUP TERM; while :; do read ignored < /dev/zero || :; done";
-            let (outcome, events, _) = shutdown_fixture(command, false, ShutdownCause::Signal(signal));
+            let command = "trap 'exit 0' HUP TERM; printf 'ready\n' >&2; while :; do read ignored < /dev/zero || :; done";
+            let (outcome, events, _) = shutdown_fixture(
+                command,
+                false,
+                ShutdownCause::Signal(signal),
+                FixtureChildState::Running,
+            );
             assert!(matches!(outcome, ProgramOutcome::Signaled(value) if value == signal));
             assert!(!events.contains("method-complete"));
         }
