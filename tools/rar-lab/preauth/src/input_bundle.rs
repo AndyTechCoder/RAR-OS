@@ -204,7 +204,7 @@ pub fn parse_input_bundle_v1(bytes: &[u8]) -> Result<InputBundleV1> {
             return Err(PreauthError::new("input-bundle-tar-type"));
         }
         let (name, size) = validate_input_bundle_header(header)?;
-        if previous_name.as_deref().is_some_and(|previous| previous >= name) {
+        if previous_name.as_deref().is_some_and(|previous| previous >= name.as_str()) {
             return Err(PreauthError::new("input-bundle-tar-order"));
         }
         if !names.insert(name.to_owned()) { return Err(PreauthError::new("input-bundle-duplicate")); }
