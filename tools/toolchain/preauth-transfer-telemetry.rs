@@ -1228,7 +1228,7 @@ mod tests {
         assert!(handle_child_record(&mut tracker, &record).unwrap().terminal);
         assert!(tracker.active.is_empty());
         assert_eq!(signal, Some(2));
-        assert_eq!(handle_child_record(&mut tracker, &record).unwrap_err().0, "terminal-unobserved");
+        assert!(matches!(handle_child_record(&mut tracker, &record), Err(Error("terminal-unobserved"))));
         drop(tracker);
         fs::remove_dir_all(root).unwrap();
     }
