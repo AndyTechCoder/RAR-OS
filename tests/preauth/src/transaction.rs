@@ -6,7 +6,8 @@ use std::os::unix::fs::symlink;
 use super::preauth::{
     ArchiveEntry, ArchivePlan, DescriptorDir, FrozenTransactionGraph, InputLockV4, MAX_INPUT_OBJECTS,
     MemberKind, OwnedSnapshot, PreauthError, TransactionEffects, TransactionMachine, TransactionPhase,
-    TRANSACTION_GRAPH_FIELDS, parse_input_bundle_v1, plan_deb_ar, plan_tar, sha256_hex, snapshot_to_private,
+    TRANSACTION_GRAPH_FIELDS, canonical_input_bundle_header, parse_input_bundle_v1, plan_deb_ar,
+    plan_tar, sha256_hex, snapshot_to_private,
     validate_closure_inputs,
 };
 
@@ -21,14 +22,13 @@ fn snapshot(slot: &str) -> OwnedSnapshot {
 }
 
 fn input_header(name: &str, bytes: &[u8]) -> [u8; 512] {
-    let mut header = [0u8; 512]; header[..name.len()].copy_from_slice(name.as_bytes());
-    header[100..108].copy_from_slice(b"0000644\0"); header[108..116].copy_from_slice(b"0000000\0");
-    header[116..124].copy_from_slice(b"0000000\0");
-    let size = format!("{:011o}\0", bytes.len()); header[124..136].copy_from_slice(size.as_bytes());
-    header[136..148].copy_from_slice(b"15226541000\0"); header[148..156].fill(b' '); header[156] = b'0';
-    header[257..263].copy_from_slice(b"ustar\0"); header[263..265].copy_from_slice(b"00");
-    let sum: u64 = header.iter().map(|byte| *byte as u64).sum();
-    header[148..156].copy_from_slice(format!("{sum:06o}\0 ").as_bytes()); header
+    canonical_input_bundle_header(name, bytes.len() as u64).unwrap()
+}
+
+fn recompute_input_header_checksum(header: &mut [u8]) {
+    header[148..156].fill(b' ');
+    let checksum: u64 = header[..512].iter().map(|byte| *byte as u64).sum();
+    header[148..156].copy_from_slice(format!("{checksum:06o}\0 ").as_bytes());
 }
 
 fn input_bundle_fixture() -> Vec<u8> { build_input_bundle(36, None) }
@@ -88,6 +88,33 @@ fn input_bundle_v1_is_canonical_complete_and_content_addressed() {
     assert_eq!(parse_input_bundle_v1(&wrong_mode).unwrap_err().code, "input-bundle-tar-metadata");
     let mut wrong_type = valid.clone(); wrong_type[156] = b'2';
     assert_eq!(parse_input_bundle_v1(&wrong_type).unwrap_err().code, "input-bundle-tar-type");
+
+    for (index, value) in [
+        (12, b'x'),    // nonzero name tail after the manifest.v1 terminator
+        (107, b' '),   // mode terminator
+        (115, b' '),   // uid terminator
+        (123, b' '),   // gid terminator
+        (135, b' '),   // size terminator
+        (147, b' '),   // mtime terminator
+        (157, b'x'),   // linkname
+        (264, b'1'),   // USTAR version
+        (265, b'x'),   // uname
+        (297, b'x'),   // gname
+        (329, b'x'),   // devmajor
+        (337, b'x'),   // devminor
+        (345, b'x'),   // prefix
+        (500, b'x'),   // final unused header bytes
+    ] {
+        let mut mutated = valid.clone();
+        mutated[index] = value;
+        recompute_input_header_checksum(&mut mutated[..512]);
+        assert_eq!(parse_input_bundle_v1(&mutated).unwrap_err().code, "input-bundle-tar-metadata");
+        assert!(parse_input_bundle_v1(&valid).is_ok());
+    }
+    let mut alternate_checksum_terminator = valid.clone();
+    alternate_checksum_terminator[154] = b' ';
+    assert_eq!(parse_input_bundle_v1(&alternate_checksum_terminator).unwrap_err().code,
+        "input-bundle-tar-metadata");
     let mut truncated = valid.clone(); truncated.truncate(truncated.len() - 800);
     assert!(parse_input_bundle_v1(&truncated).is_err());
 

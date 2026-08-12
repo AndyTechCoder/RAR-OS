@@ -124,6 +124,61 @@ fn octal(bytes: &[u8]) -> Result<u64> {
     u64::from_str_radix(value, 8).map_err(|_| PreauthError::new("input-bundle-tar-number"))
 }
 
+fn input_bundle_member_name(name: &str) -> bool {
+    name == "manifest.v1" || name == "objects.v1"
+        || (name.len() == 72 && name.starts_with("objects/") && digest(&name[8..]))
+}
+
+pub(crate) fn canonical_input_bundle_header(name: &str, size: u64) -> Result<[u8; 512]> {
+    if !input_bundle_member_name(name) || size > MAX_OBJECT {
+        return Err(PreauthError::new("input-bundle-tar-name"));
+    }
+    let mut header = [0u8; 512];
+    header[..name.len()].copy_from_slice(name.as_bytes());
+    header[100..108].copy_from_slice(b"0000644\0");
+    header[108..116].copy_from_slice(b"0000000\0");
+    header[116..124].copy_from_slice(b"0000000\0");
+    header[124..136].copy_from_slice(format!("{size:011o}\0").as_bytes());
+    header[136..148].copy_from_slice(b"15226541000\0");
+    header[148..156].fill(b' ');
+    header[156] = b'0';
+    header[257..263].copy_from_slice(b"ustar\0");
+    header[263..265].copy_from_slice(b"00");
+    let checksum: u64 = header.iter().map(|byte| *byte as u64).sum();
+    header[148..156].copy_from_slice(format!("{checksum:06o}\0 ").as_bytes());
+    Ok(header)
+}
+
+fn validate_input_bundle_header(header: &[u8]) -> Result<(String, u64)> {
+    if &header[257..263] != b"ustar\0" || header[156] != b'0' {
+        return Err(PreauthError::new("input-bundle-tar-type"));
+    }
+    let expected_checksum = octal(&header[148..156])?;
+    let actual_checksum: u64 = header.iter().enumerate()
+        .map(|(index, byte)| if (148..156).contains(&index) { b' ' as u64 } else { *byte as u64 })
+        .sum();
+    if expected_checksum != actual_checksum || octal(&header[100..108])? != 0o644
+        || octal(&header[108..116])? != 0 || octal(&header[116..124])? != 0
+        || octal(&header[136..148])? != SOURCE_DATE_EPOCH
+    {
+        return Err(PreauthError::new("input-bundle-tar-metadata"));
+    }
+    let name_end = header[..100].iter().position(|byte| *byte == 0).unwrap_or(100);
+    let name = std::str::from_utf8(&header[..name_end])
+        .map_err(|_| PreauthError::new("input-bundle-tar-name"))?;
+    if !input_bundle_member_name(name) {
+        return Err(PreauthError::new("input-bundle-tar-name"));
+    }
+    let size = octal(&header[124..136])?;
+    if size > MAX_OBJECT {
+        return Err(PreauthError::new("input-bundle-object-bound"));
+    }
+    if header != canonical_input_bundle_header(name, size)?.as_slice() {
+        return Err(PreauthError::new("input-bundle-tar-metadata"));
+    }
+    Ok((name.to_owned(), size))
+}
+
 pub fn parse_input_bundle_v1(bytes: &[u8]) -> Result<InputBundleV1> {
     if bytes.len() as u64 > MAX_AGGREGATE.saturating_add(16 * 1024 * 1024) {
         return Err(PreauthError::new("input-bundle-archive-bound"));
@@ -145,28 +200,15 @@ pub fn parse_input_bundle_v1(bytes: &[u8]) -> Result<InputBundleV1> {
             }
             continue;
         }
-        if zero_blocks != 0 || &header[257..263] != b"ustar\0" || header[156] != b'0' {
+        if zero_blocks != 0 {
             return Err(PreauthError::new("input-bundle-tar-type"));
         }
-        let expected = octal(&header[148..156])?;
-        let actual: u64 = header.iter().enumerate().map(|(index, byte)| if (148..156).contains(&index) { b' ' as u64 } else { *byte as u64 }).sum();
-        if expected != actual || octal(&header[100..108])? != 0o644 || octal(&header[108..116])? != 0
-            || octal(&header[116..124])? != 0 || octal(&header[136..148])? != SOURCE_DATE_EPOCH
-        {
-            return Err(PreauthError::new("input-bundle-tar-metadata"));
-        }
-        let name_end = header[..100].iter().position(|byte| *byte == 0).unwrap_or(100);
-        let name = std::str::from_utf8(&header[..name_end]).map_err(|_| PreauthError::new("input-bundle-tar-name"))?;
-        if name != "manifest.v1" && name != "objects.v1" && !(name.len() == 72 && name.starts_with("objects/") && digest(&name[8..])) {
-            return Err(PreauthError::new("input-bundle-tar-name"));
-        }
+        let (name, size) = validate_input_bundle_header(header)?;
         if previous_name.as_deref().is_some_and(|previous| previous >= name) {
             return Err(PreauthError::new("input-bundle-tar-order"));
         }
         if !names.insert(name.to_owned()) { return Err(PreauthError::new("input-bundle-duplicate")); }
         previous_name = Some(name.to_owned());
-        let size = octal(&header[124..136])?;
-        if size > MAX_OBJECT { return Err(PreauthError::new("input-bundle-object-bound")); }
         let payload_start = end;
         let padded = size.checked_add(511).ok_or_else(|| PreauthError::new("input-bundle-overflow"))? / 512 * 512;
         let payload_end = payload_start.checked_add(usize::try_from(padded).map_err(|_| PreauthError::new("input-bundle-overflow"))?).ok_or_else(|| PreauthError::new("input-bundle-overflow"))?;

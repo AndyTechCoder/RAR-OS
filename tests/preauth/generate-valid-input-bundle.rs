@@ -1,23 +1,12 @@
 #![deny(unsafe_code)]
 #[path="../../tools/rar-lab/preauth/src/lib.rs"] mod preauth;
 
-use preauth::sha256_hex;
+use preauth::{canonical_input_bundle_header, sha256_hex};
 
 fn hash(byte: char) -> String { std::iter::repeat_n(byte, 64).collect() }
 
 fn header(name: &str, bytes: &[u8]) -> [u8; 512] {
-    let mut header = [0u8; 512];
-    header[..name.len()].copy_from_slice(name.as_bytes());
-    header[100..108].copy_from_slice(b"0000644\0");
-    header[108..116].copy_from_slice(b"0000000\0");
-    header[116..124].copy_from_slice(b"0000000\0");
-    header[124..136].copy_from_slice(format!("{:011o}\0", bytes.len()).as_bytes());
-    header[136..148].copy_from_slice(b"15226541000\0");
-    header[148..156].fill(b' '); header[156] = b'0';
-    header[257..263].copy_from_slice(b"ustar\0"); header[263..265].copy_from_slice(b"00");
-    let checksum: u64 = header.iter().map(|byte| *byte as u64).sum();
-    header[148..156].copy_from_slice(format!("{checksum:06o}\0 ").as_bytes());
-    header
+    canonical_input_bundle_header(name, bytes.len() as u64).unwrap()
 }
 
 fn main() {

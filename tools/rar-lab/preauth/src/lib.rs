@@ -14,6 +14,7 @@ pub use base_oci::{BaseOciCanonical, canonicalize_base_oci, describe_base_oci};
 pub use descriptor_fs::{DescriptorDir, HeldSnapshot, snapshot_to_private};
 pub use hash::{sha256_hex, sha256_reader};
 pub use input_bundle::{InputBundleV1, InputObjectV1, parse_input_bundle_v1};
+pub(crate) use input_bundle::canonical_input_bundle_header;
 pub use json::Json;
 pub use package::{PackageManifest, PackageRow};
 pub use transaction::{ArchiveEntry, ArchivePlan, DebPlan, FrozenTransactionGraph, MAX_INPUT_OBJECTS,
