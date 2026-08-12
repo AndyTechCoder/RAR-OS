@@ -289,13 +289,20 @@ enum RecordOrSignal {
     Signal(i32),
 }
 
+fn resolve_record_message(message: RecordMessage, signal: Option<i32>) -> Result<RecordOrSignal> {
+    if let Some(signal) = signal { return Ok(RecordOrSignal::Signal(signal)); }
+    match message {
+        Ok(Some(record)) => Ok(RecordOrSignal::Record(record)),
+        Ok(None) => Ok(RecordOrSignal::Eof),
+        Err(error) => Err(error),
+    }
+}
+
 fn receive_record(receiver: &Receiver<RecordMessage>) -> Result<RecordOrSignal> {
     loop {
         if let Some(signal) = pending_signal() { return Ok(RecordOrSignal::Signal(signal)); }
         match receiver.recv_timeout(SHUTDOWN_POLL) {
-            Ok(Ok(Some(record))) => return Ok(RecordOrSignal::Record(record)),
-            Ok(Ok(None)) => return Ok(RecordOrSignal::Eof),
-            Ok(Err(error)) => return Err(error),
+            Ok(message) => return resolve_record_message(message, pending_signal()),
             Err(RecvTimeoutError::Timeout) => {},
             Err(RecvTimeoutError::Disconnected) => return Err(Error("protocol-reader")),
         }
@@ -1117,6 +1124,14 @@ mod tests {
         let trace_text = fs::read_to_string(trace_path).unwrap();
         fs::remove_dir_all(root).unwrap();
         (outcome, event_text, trace_text)
+    }
+
+    #[test]
+    fn captured_signal_precedes_concurrent_input_eof() {
+        assert!(matches!(
+            resolve_record_message(Ok(None), Some(2)).unwrap(),
+            RecordOrSignal::Signal(2)
+        ));
     }
 
     #[test]
