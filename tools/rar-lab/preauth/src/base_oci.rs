@@ -128,6 +128,9 @@ fn walk_raw_export(raw: &[u8]) -> Result<Vec<RawMember<'_>>> {
         let data_end = payload_start.checked_add(usize::try_from(size).map_err(|_| PreauthError::new("base-oci-tar-overflow"))?)
             .ok_or_else(|| PreauthError::new("base-oci-tar-overflow"))?;
         if payload_end > raw.len() { return Err(PreauthError::new("base-oci-tar-truncated")); }
+        if raw[data_end..payload_end].iter().any(|byte| *byte != 0) {
+            return Err(PreauthError::new("base-oci-tar-padding"));
+        }
         let kind = match header[156] {
             0 | b'0' => MemberKind::File,
             b'5' => MemberKind::Directory,

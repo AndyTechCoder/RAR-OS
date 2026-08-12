@@ -100,6 +100,14 @@ fn input_bundle_v1_is_canonical_complete_and_content_addressed() {
     let mut duplicate = members.clone(); duplicate.insert(1, duplicate[0].clone());
     assert!(matches!(parse_input_bundle_v1(&join_input_members(&duplicate)).unwrap_err().code,
         "input-bundle-tar-order" | "input-bundle-duplicate"));
+    let mut nonzero_padding = valid.clone();
+    let first_size_text = std::str::from_utf8(&nonzero_padding[124..136]).unwrap()
+        .trim_matches(char::from(0)).trim();
+    let first_size = usize::from_str_radix(first_size_text, 8).unwrap();
+    assert_ne!(first_size % 512, 0);
+    nonzero_padding[512 + first_size] = 1;
+    assert_eq!(parse_input_bundle_v1(&nonzero_padding).unwrap_err().code, "input-bundle-tar-padding");
+
     let mut substituted = valid.clone();
     let first_object = members.iter().find(|member| std::str::from_utf8(&member[..72]).unwrap_or("").starts_with("objects/")).unwrap();
     let first_at = valid.windows(first_object.len()).position(|window| window == first_object).unwrap();
@@ -277,8 +285,20 @@ fn snapshot_is_private_and_source_mutation_after_copy_cannot_change_consumed_byt
     let expected = sha256_hex(b"immutable bytes");
     let mut held = snapshot_to_private(&mut source, &private, "snapshot", &expected, 1024).unwrap();
     fs::write(format!("{base}/source/input"), b"attacker changed source").unwrap();
-    let mut consumed = Vec::new(); held.file.seek(SeekFrom::Start(0)).unwrap(); held.file.read_to_end(&mut consumed).unwrap();
-    assert_eq!(consumed, b"immutable bytes"); held.evidence.validate().unwrap();
+    let mut retained = held.file.try_clone().unwrap();
+    assert!(held.file.write_all(b"retained write").is_err());
+    assert!(retained.write_all(b"cloned retained write").is_err());
+    let mut consumed = Vec::new();
+    held.file.seek(SeekFrom::Start(0)).unwrap();
+    held.file.read_to_end(&mut consumed).unwrap();
+    assert_eq!(consumed, b"immutable bytes");
+    assert_eq!(sha256_hex(&consumed), expected);
+    let mut cloned = Vec::new();
+    retained.seek(SeekFrom::Start(0)).unwrap();
+    retained.read_to_end(&mut cloned).unwrap();
+    assert_eq!(cloned, consumed);
+    assert_eq!(sha256_hex(&cloned), held.evidence.digest);
+    held.evidence.validate().unwrap();
     drop(held); drop(private); drop(source_dir); drop(root); fs::remove_dir_all(base).unwrap();
 }
 

@@ -41,13 +41,13 @@ unsafe extern "C" {
 }
 
 #[cfg(target_os = "linux")]
+fn record_first_signal(slot: &AtomicI32, number: i32) -> bool {
+    slot.compare_exchange(0, number, Ordering::AcqRel, Ordering::Acquire).is_ok()
+}
+
+#[cfg(target_os = "linux")]
 extern "C" fn lifecycle_signal_handler(number: i32) {
-    if LIFECYCLE_SIGNAL
-        .compare_exchange(0, number, Ordering::AcqRel, Ordering::Acquire)
-        .is_err()
-    {
-        return;
-    }
+    if !record_first_signal(&LIFECYCLE_SIGNAL, number) { return; }
     let line: &[u8] = match number {
         1 => b"transition\twrapper-signal-hup\n",
         2 => b"transition\twrapper-signal-int\n",
@@ -284,16 +284,18 @@ fn pending_signal() -> Option<i32> {
 }
 
 enum RecordOrSignal {
-    Record(ProtocolRecord),
+    Record(ProtocolRecord, Option<i32>),
     Eof,
     Signal(i32),
 }
 
 fn resolve_record_message(message: RecordMessage, signal: Option<i32>) -> Result<RecordOrSignal> {
-    if let Some(signal) = signal { return Ok(RecordOrSignal::Signal(signal)); }
     match message {
-        Ok(Some(record)) => Ok(RecordOrSignal::Record(record)),
-        Ok(None) => Ok(RecordOrSignal::Eof),
+        Ok(Some(record)) => Ok(RecordOrSignal::Record(record, signal)),
+        Ok(None) => match signal {
+            Some(signal) => Ok(RecordOrSignal::Signal(signal)),
+            None => Ok(RecordOrSignal::Eof),
+        },
         Err(error) => Err(error),
     }
 }
@@ -485,8 +487,8 @@ fn proxy(real_method: &str, telemetry: &str, lifecycle: &str) -> Result<ProgramO
     thread::spawn(move || record_reader(child_output, child_sender, "apt-protocol-output"));
     let stdout = io::stdout();
     let mut apt_output = stdout.lock();
-    let startup = match receive_record(&child_receiver)? {
-        RecordOrSignal::Record(record) => record,
+    let (startup, startup_signal) = match receive_record(&child_receiver)? {
+        RecordOrSignal::Record(record, signal) => (record, signal),
         RecordOrSignal::Eof => return Err(Error("method-startup")),
         RecordOrSignal::Signal(signal) => {
             let shutdown = shutdown_child(
@@ -499,6 +501,13 @@ fn proxy(real_method: &str, telemetry: &str, lifecycle: &str) -> Result<ProgramO
     if startup.code != 100 { return Err(Error("method-startup")); }
     trace.transition("child-startup", tracker.total, tracker.active.len())?;
     apt_output.write_all(&startup.raw).and_then(|_| apt_output.flush()).map_err(|_| Error("apt-output-write"))?;
+    if let Some(signal) = startup_signal {
+        let shutdown = shutdown_child(
+            ShutdownCause::Signal(signal), &mut child, &mut child_input, &child_receiver,
+            &mut tracker, &mut trace, &mut apt_output, false,
+        )?;
+        return finish_proxy_shutdown(tracker, trace, shutdown);
+    }
 
     let (apt_sender, apt_receiver) = mpsc::sync_channel(1);
     thread::spawn(move || {
@@ -507,8 +516,8 @@ fn proxy(real_method: &str, telemetry: &str, lifecycle: &str) -> Result<ProgramO
         record_reader(input, apt_sender, "apt-protocol-input");
     });
     loop {
-        let input = match receive_record(&apt_receiver)? {
-            RecordOrSignal::Record(record) => record,
+        let (input, input_signal) = match receive_record(&apt_receiver)? {
+            RecordOrSignal::Record(record, signal) => (record, signal),
             RecordOrSignal::Eof => {
                 trace.transition("apt-stdin-eof", tracker.total, tracker.active.len())?;
                 let shutdown = shutdown_child(
@@ -533,10 +542,17 @@ fn proxy(real_method: &str, telemetry: &str, lifecycle: &str) -> Result<ProgramO
         }
         let input_pipe = child_input.as_mut().ok_or(Error("method-stdin"))?;
         input_pipe.write_all(&input.raw).and_then(|_| input_pipe.flush()).map_err(|_| Error("method-input-write"))?;
+        if let Some(signal) = input_signal {
+            let shutdown = shutdown_child(
+                ShutdownCause::Signal(signal), &mut child, &mut child_input, &child_receiver,
+                &mut tracker, &mut trace, &mut apt_output, false,
+            )?;
+            return finish_proxy_shutdown(tracker, trace, shutdown);
+        }
         if !acquire { continue; }
         loop {
-            let record = match receive_record(&child_receiver)? {
-                RecordOrSignal::Record(record) => record,
+            let (record, record_signal) = match receive_record(&child_receiver)? {
+                RecordOrSignal::Record(record, signal) => (record, signal),
                 RecordOrSignal::Eof => {
                     let shutdown = shutdown_child(
                         ShutdownCause::InputEof, &mut child, &mut child_input, &child_receiver,
@@ -556,6 +572,13 @@ fn proxy(real_method: &str, telemetry: &str, lifecycle: &str) -> Result<ProgramO
             let handled = handle_child_record(&mut tracker, &record)?;
             if handled.terminal { trace.transition("request-terminal", tracker.total, tracker.active.len())?; }
             apt_output.write_all(&record.raw).and_then(|_| apt_output.flush()).map_err(|_| Error("apt-output-write"))?;
+            if let Some(signal) = record_signal {
+                let shutdown = shutdown_child(
+                    ShutdownCause::Signal(signal), &mut child, &mut child_input, &child_receiver,
+                    &mut tracker, &mut trace, &mut apt_output, false,
+                )?;
+                return finish_proxy_shutdown(tracker, trace, shutdown);
+            }
             if handled.response_complete { break; }
         }
     }
@@ -1146,11 +1169,25 @@ mod tests {
     }
 
     #[test]
-    fn captured_signal_precedes_concurrent_input_eof() {
+    fn captured_signal_precedes_concurrent_input_eof_but_never_discards_a_record() {
         assert!(matches!(
             resolve_record_message(Ok(None), Some(2)).unwrap(),
             RecordOrSignal::Signal(2)
         ));
+        let record = ProtocolRecord { code: 201, raw: Vec::new(), fields: BTreeMap::new() };
+        assert!(matches!(
+            resolve_record_message(Ok(Some(record)), Some(2)).unwrap(),
+            RecordOrSignal::Record(ProtocolRecord { code: 201, .. }, Some(2))
+        ));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn first_shutdown_signal_wins_deterministically() {
+        let signal = AtomicI32::new(0);
+        assert!(record_first_signal(&signal, 2));
+        assert!(!record_first_signal(&signal, 15));
+        assert_eq!(signal.load(Ordering::Acquire), 2);
     }
 
     #[test]
@@ -1164,6 +1201,36 @@ mod tests {
             "https://127.0.0.1/x", "https://[::1]/x", "https://snapshot.debian.org\\@evil/x",
             "https://snapshot.debian.org/x#fragment", "https://snapshot.debian.org/white space",
         ] { assert!(canonical_https_url(raw).is_err(), "accepted {raw}"); }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn dequeued_terminal_is_applied_once_before_signal_completion() {
+        use std::sync::atomic::{AtomicU32, Ordering as AtomicOrdering};
+        static NEXT: AtomicU32 = AtomicU32::new(1);
+        let sequence = NEXT.fetch_add(1, AtomicOrdering::Relaxed);
+        let root = std::env::temp_dir().join(format!(
+            "rar-apt-record-signal-test-{}-{sequence}", std::process::id()
+        ));
+        fs::create_dir(&root).unwrap();
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o2770)).unwrap();
+        let mut tracker = Tracker::create_channel(root.to_str().unwrap(), 7000 + sequence).unwrap();
+        let mut request_fields = BTreeMap::new();
+        request_fields.insert("URI".to_owned(), vec!["https://snapshot.debian.org/item".to_owned()]);
+        tracker.request(&ProtocolRecord { code: 600, raw: Vec::new(), fields: request_fields }).unwrap();
+        let mut terminal_fields = BTreeMap::new();
+        terminal_fields.insert("URI".to_owned(), vec!["https://snapshot.debian.org/item".to_owned()]);
+        let terminal = ProtocolRecord { code: 201, raw: b"201 URI Done\n\n".to_vec(), fields: terminal_fields };
+        let (record, signal) = match resolve_record_message(Ok(Some(terminal)), Some(2)).unwrap() {
+            RecordOrSignal::Record(record, signal) => (record, signal),
+            _ => panic!("dequeued terminal was not preserved"),
+        };
+        assert!(handle_child_record(&mut tracker, &record).unwrap().terminal);
+        assert!(tracker.active.is_empty());
+        assert_eq!(signal, Some(2));
+        assert_eq!(handle_child_record(&mut tracker, &record).unwrap_err().0, "terminal-unobserved");
+        drop(tracker);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[cfg(target_os = "linux")]

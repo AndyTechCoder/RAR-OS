@@ -220,13 +220,35 @@ pub fn snapshot_to_private(
     }
     private_file.set_permissions(Permissions::from_mode(0o400))
         .map_err(|_| PreauthError::new("snapshot-seal"))?;
-    private_file.seek(SeekFrom::Start(0)).map_err(|_| PreauthError::new("snapshot-private-seek"))?;
+    private_file.sync_all().map_err(|_| PreauthError::new("snapshot-seal-sync"))?;
+    let sealed = private_file.metadata().map_err(|_| PreauthError::new("snapshot-private-stat"))?;
+    if !sealed.is_file() || sealed.nlink() != 1 || sealed.len() != copied
+        || sealed.permissions().mode() & 0o777 != 0o400
+    {
+        return Err(PreauthError::new("snapshot-seal-identity"));
+    }
+    drop(private_file);
+    let mut read_only = private.open_file(slot)
+        .map_err(|_| PreauthError::new("snapshot-private-reopen"))?;
+    let reopened = read_only.metadata().map_err(|_| PreauthError::new("snapshot-private-stat"))?;
+    if reopened.dev() != sealed.dev() || reopened.ino() != sealed.ino()
+        || reopened.len() != sealed.len() || reopened.nlink() != sealed.nlink()
+        || reopened.permissions().mode() & 0o777 != 0o400
+    {
+        return Err(PreauthError::new("snapshot-private-identity"));
+    }
+    let reopened_digest = sha256_reader(&mut read_only)
+        .map_err(|_| PreauthError::new("snapshot-private-rehash"))?;
+    if reopened_digest != digest {
+        return Err(PreauthError::new("snapshot-private-mutated"));
+    }
+    read_only.seek(SeekFrom::Start(0)).map_err(|_| PreauthError::new("snapshot-private-seek"))?;
     Ok(HeldSnapshot {
         evidence: OwnedSnapshot {
             slot: slot.to_owned(), digest, byte_len: copied, private_exclusive: true,
             writable_aliases: 0, source_identity_before: before_identity,
             source_identity_after: after_identity, source_link_count: after.nlink() as u32,
         },
-        file: private_file,
+        file: read_only,
     })
 }

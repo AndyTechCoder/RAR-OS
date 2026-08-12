@@ -236,7 +236,6 @@ grep -q 'private-setgid-method-channel-directory' "$policy" || fail transfer-pri
 set +e; "$producer" --verify-source-origins "$bad_sources" >/dev/null 2>&1; bad_src=$?
 "$producer" --verify-source-origins "$http_sources" >/dev/null 2>&1; http_src=$?; set -e
 [ "$bad_src" -eq 73 ] && [ "$http_src" -eq 73 ] || fail source-origin-reject
-rm -rf "$origin_fixture_root" "$origin_scratch"
 grep -q 'tools/toolchain/preauth-base-oci --canonicalize' "$producer" || fail base-oci-canonicalizer
 grep -q -- '--network none' "$producer" || fail base-oci-networkless
 ! grep -q 'docker save --output "$stage/incoming/base-oci.tar"' "$producer" || fail base-oci-raw-bundled
@@ -262,10 +261,17 @@ grep -q "comm -3" "$delivery" || fail bundle-member-diagnostic
 for phase in setup-complete apt-update-complete apt-download-complete archive-plan-complete extract-complete bindings-complete; do
  grep -q "telemetry $phase" "$producer" || fail "telemetry:$phase"
 done
-for mutation in stale-snapshot unknown-origin package-substitution source-substitution license-substitution key-substitution signature-substitution checksum-substitution base-oci-substitution redirect-downgrade; do
- case "$mutation" in
-  stale-snapshot|unknown-origin|package-substitution|source-substitution|license-substitution|key-substitution|signature-substitution|checksum-substitution|base-oci-substitution|redirect-downgrade) :;;
-  *) fail "mutation-uncovered:$mutation";;
- esac
+mutation_tests=$origin_fixture_root/preauth-mutation-tests
+env PATH="$origin_scratch/poisoned-bin:$PATH" RUSTUP_HOME="$origin_scratch/readonly-rustup" \
+ "$rustc_path" --edition=2024 --test tests/preauth/src/main.rs -o "$mutation_tests" \
+ || fail mutation-test-compile
+for mutation_test in \
+ transaction::snapshot_is_private_and_source_mutation_after_copy_cannot_change_consumed_bytes \
+ transaction::input_bundle_v1_is_canonical_complete_and_content_addressed \
+ base_oci::base_oci_accepts_and_deterministically_canonicalizes_a_rooted_graph \
+ base_oci::base_oci_rejects_substituted_dangling_or_unexpected_content \
+ base_oci::base_oci_requires_exact_digest_pull_identity; do
+ "$mutation_tests" --exact "$mutation_test" --quiet || fail "mutation-test:$mutation_test"
 done
+rm -rf "$origin_fixture_root" "$origin_scratch"
 printf '%s\n' 'input producer contract checks passed'

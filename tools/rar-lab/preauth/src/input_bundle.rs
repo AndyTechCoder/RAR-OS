@@ -172,6 +172,9 @@ pub fn parse_input_bundle_v1(bytes: &[u8]) -> Result<InputBundleV1> {
         let payload_end = payload_start.checked_add(usize::try_from(padded).map_err(|_| PreauthError::new("input-bundle-overflow"))?).ok_or_else(|| PreauthError::new("input-bundle-overflow"))?;
         let data_end = payload_start.checked_add(usize::try_from(size).map_err(|_| PreauthError::new("input-bundle-overflow"))?).ok_or_else(|| PreauthError::new("input-bundle-overflow"))?;
         if payload_end > bytes.len() { return Err(PreauthError::new("input-bundle-truncated")); }
+        if bytes[data_end..payload_end].iter().any(|byte| *byte != 0) {
+            return Err(PreauthError::new("input-bundle-tar-padding"));
+        }
         payloads.insert(name.to_owned(), &bytes[payload_start..data_end]);
         offset = payload_end;
     }

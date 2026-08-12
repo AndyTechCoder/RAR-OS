@@ -30,6 +30,20 @@ fn pax_record(key: &str, value: &str) -> String {
     format!("{total}{bare}")
 }
 
+fn corrupt_first_nonempty_padding(archive: &mut [u8]) {
+    let mut offset = 0usize;
+    loop {
+        let size_text = std::str::from_utf8(&archive[offset + 124..offset + 136]).unwrap()
+            .trim_matches(char::from(0)).trim();
+        let size = usize::from_str_radix(size_text, 8).unwrap();
+        if size % 512 != 0 {
+            archive[offset + 512 + size] = 1;
+            return;
+        }
+        offset += 512 + size.div_ceil(512) * 512;
+    }
+}
+
 fn render(members: &[Member]) -> Vec<u8> {
     let mut archive = Vec::new();
     for member in members {
@@ -130,6 +144,9 @@ fn base_oci_accepts_and_deterministically_canonicalizes_a_rooted_graph() {
     assert_eq!(first, second);
     assert_eq!(first.layer_count, 2);
     assert_eq!(first.config_sha256, sha256_hex(&layout.config));
+    let mut nonzero_padding = raw.clone();
+    corrupt_first_nonempty_padding(&mut nonzero_padding);
+    assert_eq!(canonicalize(&nonzero_padding).unwrap_err().code, "base-oci-tar-padding");
     // Canonical output depends only on validated content, not on raw framing noise.
     let mut noisy = Layout::default();
     noisy.lead_members = vec![pax(&pax_record("mtime", "1784332800.5"))];
