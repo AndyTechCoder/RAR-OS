@@ -320,7 +320,14 @@ grep -q 'docker run --rm --read-only' .github/workflows/specifications.yml || fa
 grep -q -- '--network none' .github/workflows/specifications.yml || fail "CI container network is not disabled"
 grep -q '^concurrency:$' .github/workflows/specifications.yml || fail "required CI concurrency control is missing"
 grep -q 'cancel-in-progress: true' .github/workflows/specifications.yml || fail "obsolete required CI runs are not cancelled"
-grep -q '^  workflow_dispatch:$' .github/workflows/development-probe.yml || fail "Development Probe is not manually dispatched"
+grep -q '^  repository_dispatch:$' .github/workflows/development-probe.yml || fail "Development Probe is not default-branch dispatched"
+if grep -q 'workflow_dispatch' .github/workflows/development-probe.yml; then
+    fail "Development Probe must not execute branch-selected workflow code"
+fi
+grep -q 'path: controller' .github/workflows/development-probe.yml || fail "Development Probe omits trusted controller checkout"
+grep -q 'path: source' .github/workflows/development-probe.yml || fail "Development Probe omits isolated source checkout"
+grep -q 'controller/tools/ci/run-development-probe.sh' .github/workflows/development-probe.yml || fail "Development Probe does not use trusted controller"
+grep -q 'github.event.client_payload.source_sha' .github/workflows/development-probe.yml || fail "Development Probe omits explicit source identity"
 grep -q 'uses: actions/upload-artifact@[0-9a-f]\{40\}' .github/workflows/development-probe.yml || fail "Development Probe evidence upload is not pinned"
 grep -q 'pipe_status=("${PIPESTATUS\[@\]}")' .github/workflows/development-probe.yml || fail "Development Probe does not preserve pipeline statuses"
 grep -q 'probe_status=${pipe_status\[0\]}' .github/workflows/development-probe.yml || fail "Development Probe does not preserve the real command status"
@@ -337,6 +344,7 @@ for boundary in \
     '--pids-limit 256' \
     '--security-opt no-new-privileges' \
     '--cap-drop ALL' \
+    'target=/controller,readonly' \
     'target=/workspace,readonly' \
     '/usr/bin/timeout --signal=TERM'; do
     grep -Fq -- "$boundary" tools/ci/run-cloud-target-probe.sh || fail "cloud target boundary missing: $boundary"
@@ -347,6 +355,8 @@ grep -q 'docker rm --force "$container_id"' tools/ci/run-cloud-target-probe.sh |
 grep -q '^    set -e$' tools/ci/run-cloud-target-probe.sh || fail "cloud target preflight does not fail closed"
 grep -q '^\[ "${state-}" = ready \]' tools/ci/run-cloud-target-probe.sh || fail "cloud target profile does not fail closed"
 grep -q 'verify-cloud-target-tools.sh' tools/ci/run-cloud-target-probe.sh || fail "cloud target tool verification is bypassed"
+grep -q 'controller checkout identity mismatch' tools/ci/run-cloud-target-probe.sh || fail "cloud target controller identity is not verified"
+grep -q 'source checkout identity mismatch' tools/ci/run-cloud-target-probe.sh || fail "cloud target source identity is not verified"
 for verified_input in compiler linker qemu firmware machine-profile; do
     grep -q "^verify_file $verified_input " tools/ci/verify-cloud-target-tools.sh || fail "cloud target input is not byte verified: $verified_input"
 done

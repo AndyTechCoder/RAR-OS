@@ -24,9 +24,11 @@
   architecture is CLEAN at `74d548b7217f9df36ef9fb610d05e0af08cfecb7`;
   correctness review's three P1 findings are remediated at
   `eb42708020f4230867f0c871580d02e80888d4af`; fresh exact-head correctness
-  review pending
-- Next automatic action: publish the correctness remediation/status head,
-  obtain fresh correctness review, then continue to security review
+  review is CLEAN at `39486625108c9a792cbddc43647450e92b900c89`;
+  security review accepted one High/P1 branch-selected controller authority gap;
+  security remediation in progress
+- Next automatic action: complete and publish the trusted-controller security
+  remediation, then obtain fresh security review
 - Mandatory-feature completion: 0% (0 of 11 grouped vertical-path outcomes)
 - Stretch-feature state: not started
 - Elapsed sprint time: less than one day

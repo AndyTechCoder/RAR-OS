@@ -6,16 +6,27 @@ fail() {
     exit 73
 }
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-cd "$root"
+controller_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
+cd "$controller_root"
 
 probe=${1-}
 [ "$probe" = milestone-a ] || fail "unsupported target probe"
 [ "${GITHUB_ACTIONS-}" = true ] || fail "GitHub Actions boundary missing"
 [ "${CI-}" = true ] || fail "CI boundary missing"
 [ "${RUNNER_OS-}" = Linux ] || fail "Linux runner required"
+[ -n "${GITHUB_WORKSPACE-}" ] || fail "GitHub workspace missing"
 [ -n "${RUNNER_TEMP-}" ] || fail "runner temporary root missing"
 [ -n "${RAR_PROBE_EVIDENCE_DIR-}" ] || fail "evidence directory missing"
+[ -n "${RAR_PROBE_CONTROLLER_ROOT-}" ] || fail "trusted controller root missing"
+[ -n "${RAR_PROBE_SOURCE_ROOT-}" ] || fail "untrusted source root missing"
+[ -n "${RAR_TRUSTED_CONTROLLER_SHA-}" ] || fail "trusted controller SHA missing"
+[ -n "${RAR_PROBE_SOURCE_SHA-}" ] || fail "untrusted source SHA missing"
+
+[ "$RAR_PROBE_CONTROLLER_ROOT" = "$controller_root" ] || fail "controller root mismatch"
+source_root=$(CDPATH= cd -- "$RAR_PROBE_SOURCE_ROOT" && pwd -P) || fail "source root unavailable"
+case "$source_root" in "$GITHUB_WORKSPACE"/source) ;; *) fail "source root outside fixed checkout" ;; esac
+[ "$(git rev-parse HEAD)" = "$RAR_TRUSTED_CONTROLLER_SHA" ] || fail "controller checkout identity mismatch"
+[ "$(git -C "$source_root" rev-parse HEAD)" = "$RAR_PROBE_SOURCE_SHA" ] || fail "source checkout identity mismatch"
 
 case "$RAR_PROBE_EVIDENCE_DIR" in
     "$RUNNER_TEMP"/*) ;;
@@ -23,9 +34,10 @@ case "$RAR_PROBE_EVIDENCE_DIR" in
 esac
 
 profile=tools/sprint-alpha/development-lab-v1.env
-driver=tools/sprint-alpha/probe-milestone-a.sh
+source_driver=$source_root/tools/sprint-alpha/probe-milestone-a.sh
+container_driver=/workspace/tools/sprint-alpha/probe-milestone-a.sh
 [ -f "$profile" ] && [ ! -L "$profile" ] || fail "reviewed Development Lab profile unavailable"
-[ -x "$driver" ] && [ ! -L "$driver" ] || fail "reviewed Milestone A driver unavailable"
+[ -f "$source_driver" ] && [ ! -L "$source_driver" ] || fail "untrusted Milestone A source driver unavailable"
 
 # The profile is shell data, not executable code. Its grammar is deliberately
 # restricted before the exact reviewed values are loaded.
@@ -53,7 +65,7 @@ case "$compiler_path" in /opt/rar-toolchain/*) ;; *) fail "compiler path outside
 case "$linker_path" in /opt/rar-toolchain/*) ;; *) fail "linker path outside pinned tool root" ;; esac
 case "$qemu_path" in /opt/rar-lab/bin/*) ;; *) fail "QEMU path outside pinned lab root" ;; esac
 case "$firmware_path" in /opt/rar-lab/firmware/*) ;; *) fail "firmware path outside pinned lab root" ;; esac
-case "$machine_profile_path" in /workspace/tools/sprint-alpha/*) ;; *) fail "machine profile path outside read-only source" ;; esac
+case "$machine_profile_path" in /controller/tools/sprint-alpha/*) ;; *) fail "machine profile path outside trusted controller" ;; esac
 for canonical_path in "$compiler_path" "$linker_path" "$qemu_path" "$firmware_path" "$machine_profile_path"; do
     case "$canonical_path" in *'/../'* | *'/./'* | */.. | */.) fail "noncanonical configured path" ;; esac
 done
@@ -88,7 +100,7 @@ set +e
         "build_storage_mib=$build_storage_mib" \
         "output_mib=$output_mib" \
         "timeout_seconds=$timeout_seconds"
-    /usr/bin/sha256sum "$profile" "$driver"
+    /usr/bin/sha256sum "$profile" "$source_driver"
     container_id=
     cleanup_container() {
         prior_status=$?
@@ -111,7 +123,8 @@ set +e
         --pids-limit 256 --security-opt no-new-privileges --cap-drop ALL \
         --tmpfs "/tmp:rw,nosuid,nodev,size=128m,uid=$container_uid,gid=$container_gid,mode=1777" \
         --tmpfs "/build:rw,exec,nosuid,nodev,size=${build_storage_mib}m,uid=$container_uid,gid=$container_gid,mode=700" \
-        --mount "type=bind,source=$root,target=/workspace,readonly" \
+        --mount "type=bind,source=$controller_root,target=/controller,readonly" \
+        --mount "type=bind,source=$source_root,target=/workspace,readonly" \
         --workdir /workspace \
         --env RAR_DEVELOPMENT_LAB=cloud-v1 \
         --env RAR_BUILD_ROOT=/build \
@@ -128,7 +141,7 @@ set +e
         --env "RAR_MACHINE_PROFILE_PATH=$machine_profile_path" \
         --env "RAR_MACHINE_PROFILE_SHA256=$machine_profile_sha256" \
         "$oci_image" \
-        /bin/sh -eu tools/ci/verify-cloud-target-tools.sh "$driver")
+        /bin/sh -eu /controller/tools/ci/verify-cloud-target-tools.sh "$container_driver")
     case "$container_id" in '' | *[!0-9a-f]*) fail "Docker returned an invalid container identity" ;; esac
     printf 'container_id=%s\n' "$container_id"
     /usr/bin/timeout --signal=TERM --kill-after=10 "$timeout_seconds" \

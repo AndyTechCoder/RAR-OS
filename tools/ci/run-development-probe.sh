@@ -1,14 +1,11 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-cd "$root"
+controller_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
+cd "$controller_root"
 
 probe=${1-}
 case "$probe" in
-    host-static)
-        tools/ci/check-sprint-static.sh
-        ;;
     milestone-a)
         tools/ci/run-cloud-target-probe.sh milestone-a
         ;;

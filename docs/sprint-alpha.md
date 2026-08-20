@@ -77,7 +77,8 @@ Tier 0, delta updates, more apps, C SDK, tiny local-model interface.
 - Each milestone uses its named `codex/sprint-*-...` branch, SSD worktree, and
   draft pull request.
 - Batch coherent fixes before pushes. Development Probes are manual and
-  non-gating; required milestone CI is strict.
+  non-gating repository-dispatch requests whose controller comes only from
+  `main`; required milestone CI is strict.
 - Correctness/security review occurs near milestone completion. Architecture
   review is added for public-contract or trust-boundary changes.
 - Never execute target code, QEMU, firmware, an emulator, or a VM locally.
@@ -89,6 +90,12 @@ checkpoint being described. Because a Git commit cannot contain its own SHA,
 the authoritative current branch head is resolved through the recorded PR and
 `git rev-parse HEAD`; status-only commits label their parent checkpoint rather
 than claiming to embed their own identity.
+
+The Release Driver requests a Development Probe through GitHub's repository
+dispatch API with event type `development-probe`, probe `milestone-a`, and an
+exact 40-character source commit SHA. It never asks the owner to run routine
+probes manually. The workflow controller always comes from `main`; only the
+separate source checkout comes from the requested SHA.
 
 ## Out of sprint
 

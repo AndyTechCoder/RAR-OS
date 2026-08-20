@@ -75,8 +75,13 @@ attested and retained for each run. It grants no target-input authority. All
 output-affecting tools and firmware must be pinned independently before target
 compilation or execution.
 
-Development Probes are manual, non-required workflows for iteration. A failed
-probe remains failed and cannot satisfy a milestone. Required milestone CI is
+Development Probes are manually requested through the repository-dispatch API
+and are non-required workflows for iteration. Repository dispatch always loads
+the controller from the default branch. The requested source SHA is checked out
+separately and is treated only as read-only, untrusted build input inside the
+isolated container; it cannot replace the launcher, approved profile, verifier,
+or evidence controller. A failed probe remains failed and cannot satisfy a
+milestone. Required milestone CI is
 strict, runs for pull requests and the resulting distinct `main` commit, and
 uses concurrency cancellation to discard obsolete runs. Feature-branch pushes
 do not duplicate the pull-request workflow for the same SHA.
@@ -123,6 +128,8 @@ approval.
 - Local policy and documentation checks execute no target code.
 - Workflow inspection proves expensive equivalent push/PR duplication is gone.
 - Development Probes retain complete logs, structured results, and exit status.
+- A tampered source branch cannot replace or execute the default-branch probe
+  controller on the outer runner.
 - Each milestone maps observable behavior to strict required CI evidence.
 - Exact runner, source, configuration, tool, firmware, and artifact identities
   are present before any cloud target execution is accepted.
