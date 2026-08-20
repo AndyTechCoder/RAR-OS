@@ -10,8 +10,8 @@
 - SSD worktree path: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/sprint-alpha-rebaseline`
 - Branch: `codex/sprint-alpha-rebaseline`
 - PR: [#7](https://github.com/AndyTechCoder/RAR-OS/pull/7), draft
-- Exact completed checkpoint described here: correctness remediation
-  `eb42708020f4230867f0c871580d02e80888d4af`
+- Exact completed checkpoint described here: trusted-controller security
+  remediation `107e9f3`
 - Authoritative current head: resolve PR #7 head and `git rev-parse HEAD`; this
   file does not claim that a commit can embed its own SHA
 - Completed functionality: workspace safety reconciliation, read-only historical
@@ -26,16 +26,16 @@
   `eb42708020f4230867f0c871580d02e80888d4af`; fresh exact-head correctness
   review is CLEAN at `39486625108c9a792cbddc43647450e92b900c89`;
   security review accepted one High/P1 branch-selected controller authority gap;
-  security remediation in progress
-- Next automatic action: complete and publish the trusted-controller security
-  remediation, then obtain fresh security review
+  remediation is complete at `107e9f3`; fresh exact-head security review pending
+- Next automatic action: publish the trusted-controller security remediation,
+  then obtain fresh security review
 - Mandatory-feature completion: 0% (0 of 11 grouped vertical-path outcomes)
 - Stretch-feature state: not started
 - Elapsed sprint time: less than one day
 - Remaining sprint time: 14 days; ends 2026-09-03 Europe/Sofia
 - Usage/reset risk: low at sprint start; first of three planned usage windows
-- Last durable checkpoint: correctness remediation
-  `eb42708020f4230867f0c871580d02e80888d4af`, 2026-08-20
+- Last durable checkpoint: trusted-controller security remediation `107e9f3`,
+  2026-08-20
 - Local target execution: forbidden. Local target compilation, linking, image
   creation, firmware loading, QEMU, emulator, VM, and guest execution are also
   forbidden.
