@@ -12,11 +12,23 @@ application behavior to stable Release 0 contracts. The task packets below
 remain the long-term gate definitions and later require their full architecture
 matrix and evidence.
 
+For Sprint Alpha cloud runs only, ADR 0017 suspends the separate Prompt 7 and
+per-profile first-guest owner-authorization clauses below. The replacement gate
+is the reviewed Development Lab profile and launcher with pinned target inputs,
+bounded resources, no guest networking or host integration, and retained
+evidence. This exception does not authorize local Mac execution, production
+authority, physical hardware, or a weaker final release gate.
+
+Within the named Sprint Alpha milestones, `../sprint-alpha.md` also replaces the
+global later-release out-of-scope sentence below only for the experimental
+vertical-path features it explicitly lists. Those prototypes do not satisfy or
+weaken their normal Release 1+ gates.
+
 ## Shared task-packet contract
 
 Every R0 task below is defined by this shared contract, its row in the task field matrix, and its detailed owner, dependencies, deliverables, and acceptance criteria.
 
-- **Approved specifications:** `docs/constitution.md`, `docs/from-scratch-policy.md`, `docs/release-roadmap.md`, `docs/architecture.md`, `docs/security-and-recovery.md`, `docs/interfaces-and-formats.md`, `docs/handoff.md`, `docs/host-safety.md`, ADRs 0001–0016, and this packet. A task uses only the subset relevant to its row and dependencies.
+- **Approved specifications:** `docs/constitution.md`, `docs/from-scratch-policy.md`, `docs/release-roadmap.md`, `docs/architecture.md`, `docs/security-and-recovery.md`, `docs/interfaces-and-formats.md`, `docs/handoff.md`, `docs/host-safety.md`, ADRs 0001–0017, and this packet. A task uses only the subset relevant to its row and dependencies.
 - **Global in-scope rule:** implement only the mechanisms, host tools, contracts, tests, and documentation named by the active task.
 - **Global out-of-scope rule:** no Release 1+ component model, filesystems, networking, GUI, agents, package system, applications, physical-device enablement, or unapproved stable contract. No task may weaken a prior gate.
 - **Ownership rule:** the paths in the matrix are exclusive write ownership while that task is active. Dependency paths are read-only unless the coordinator records an ownership handoff. Root and shared governance files require coordinator ownership.
@@ -232,7 +244,8 @@ Acceptance:
 
 1. R0-000 establishes the non-execution and certified-VM boundary.
 2. R0-001 and R0-002 establish tools/contracts without guest execution.
-3. Owner authorization unlocks the first certified VM boot.
+3. Owner authorization unlocks a future local certified VM boot; Sprint Alpha
+   cloud execution instead uses the ADR 0017 Development Lab gate above.
 4. R0-003, R0-004, and R0-005 run in parallel.
 5. R0-006 uses both full-architecture ports.
 6. R0-007 proves the component boundary.

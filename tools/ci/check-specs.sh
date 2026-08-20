@@ -60,6 +60,7 @@ sdk/generated/release-0/lib.rs
 tools/ci/check-specs.sh
 tools/ci/check-sprint-static.sh
 tools/ci/run-development-probe.sh
+tools/ci/run-cloud-target-probe.sh
 tools/ci/check-host-policy.sh
 tools/ci/test-host-policy.sh
 tools/ci/fixtures/host-policy/README.md
@@ -80,7 +81,7 @@ printf '%s\n' "$required_files" | while IFS= read -r file; do
     [ -s "$file" ] || fail "empty required file: $file"
 done
 
-for script in tools/ci/check-specs.sh tools/ci/check-sprint-static.sh tools/ci/run-development-probe.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
+for script in tools/ci/check-specs.sh tools/ci/check-sprint-static.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
     [ -x "$script" ] || fail "required script is not executable: $script"
 done
 
@@ -178,9 +179,9 @@ for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0
     [ "$matches" -eq 1 ] || fail "expected one indexed ADR for $number"
 done
 
-grep -q 'ADRs 0001–0016' docs/tasks/release-0.md || fail "Release 0 approved ADR range is stale"
+grep -q 'ADRs 0001–0017' docs/tasks/release-0.md || fail "Release 0 approved ADR range is stale"
 grep -q 'Build-plan and evidence schemas use version 3' docs/adr/0011-release-0-reproducibility-gate-phasing.md || fail "ADR 0011 build-plan/evidence schema version is stale"
-for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0014 0015 0016; do
+for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0014 0015 0016 0017; do
     if grep -q "ADR $number" docs/tasks/release-0.md; then
         printf '%s\n' "$adr_files" | grep -q "/$number-" || fail "task-referenced ADR $number is not indexed and approved"
     fi
@@ -321,6 +322,19 @@ grep -q 'uses: actions/upload-artifact@[0-9a-f]\{40\}' .github/workflows/develop
 grep -q 'status=${PIPESTATUS\[0\]}' .github/workflows/development-probe.yml || fail "Development Probe does not preserve the real command status"
 grep -q 'complete.log' .github/workflows/development-probe.yml || fail "Development Probe does not retain complete logs"
 grep -q 'result.json' .github/workflows/development-probe.yml || fail "Development Probe does not retain a structured result"
+grep -q 'tools/ci/run-cloud-target-probe.sh milestone-a' tools/ci/run-development-probe.sh || fail "Milestone A does not route through the cloud target boundary"
+for boundary in \
+    '--network none' \
+    '--cpus "$cpu_count"' \
+    '--memory "${memory_mib}m"' \
+    '--pids-limit 256' \
+    '--security-opt no-new-privileges' \
+    '--cap-drop ALL' \
+    'target=/workspace,readonly' \
+    '/usr/bin/timeout --signal=TERM'; do
+    grep -Fq -- "$boundary" tools/ci/run-cloud-target-probe.sh || fail "cloud target boundary missing: $boundary"
+done
+grep -q '^\[ "${state-}" = ready \]' tools/ci/run-cloud-target-probe.sh || fail "cloud target profile does not fail closed"
 grep -q -- '--read-only' .github/workflows/specifications.yml || fail "CI container root is not read-only"
 grep -Fq 'host_uid=$(/usr/bin/id -u)' .github/workflows/specifications.yml || fail "CI runner UID capture is missing"
 grep -Fq 'host_gid=$(/usr/bin/id -g)' .github/workflows/specifications.yml || fail "CI runner GID capture is missing"

@@ -84,6 +84,12 @@ Tier 0, delta updates, more apps, C SDK, tiny local-model interface.
 - Never compile/link the RAR target or create boot images locally.
 - Keep `SPRINT_STATUS.md` current at every durable transition.
 
+`SPRINT_STATUS.md` records the exact completed implementation or published
+checkpoint being described. Because a Git commit cannot contain its own SHA,
+the authoritative current branch head is resolved through the recorded PR and
+`git rev-parse HEAD`; status-only commits label their parent checkpoint rather
+than claiming to embed their own identity.
+
 ## Out of sprint
 
 Physical devices, production cloud services or credentials, production Secure
