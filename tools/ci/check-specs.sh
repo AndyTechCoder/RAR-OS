@@ -19,6 +19,7 @@ rustfmt.toml
 .editorconfig
 .gitignore
 .github/workflows/specifications.yml
+.github/workflows/development-probe.yml
 .codex/config.toml
 .codex/rules/host-safety.rules
 .codex/agents/architect.toml
@@ -33,6 +34,8 @@ docs/publication-record.md
 docs/host-safety.md
 docs/handoff-prompt.md
 docs/v1-alpha-execution.md
+docs/sprint-alpha.md
+SPRINT_STATUS.md
 docs/tasks/release-0.md
 docs/adr/0011-release-0-reproducibility-gate-phasing.md
 docs/adr/0012-release-0-host-bootstrap-trust-and-snapshot.md
@@ -41,6 +44,7 @@ docs/adr/0013-pre-copy-trust-and-mmio-authority.md
 docs/adr/0014-hardware-binding-and-record-identity.md
 docs/adr/0015-deterministic-validation-precedence.md
 docs/adr/0016-release-0-entry-validation-and-authority-closure.md
+docs/adr/0017-sprint-alpha-development-lab.md
 docs/release-0/contracts/README.md
 spec/boot/handoff-v1.fields
 spec/hardware/rhd-v1.fields
@@ -54,6 +58,8 @@ sdk/generated/release-0/generate.sh
 sdk/generated/release-0/check.sh
 sdk/generated/release-0/lib.rs
 tools/ci/check-specs.sh
+tools/ci/check-sprint-static.sh
+tools/ci/run-development-probe.sh
 tools/ci/check-host-policy.sh
 tools/ci/test-host-policy.sh
 tools/ci/fixtures/host-policy/README.md
@@ -74,7 +80,7 @@ printf '%s\n' "$required_files" | while IFS= read -r file; do
     [ -s "$file" ] || fail "empty required file: $file"
 done
 
-for script in tools/ci/check-specs.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
+for script in tools/ci/check-specs.sh tools/ci/check-sprint-static.sh tools/ci/run-development-probe.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
     [ -x "$script" ] || fail "required script is not executable: $script"
 done
 
@@ -129,7 +135,7 @@ duplicates=$(printf '%s\n' "$index_targets" | sort | uniq -d)
 
 adr_files=$(sed -n 's/^- \[ADR [^]]*\](\(adr\/[^)]*\.md\))$/docs\/\1/p' docs/README.md)
 adr_count=$(printf '%s\n' "$adr_files" | awk 'NF { count++ } END { print count + 0 }')
-[ "$adr_count" -eq 16 ] || fail "expected exactly 16 indexed ADRs"
+[ "$adr_count" -eq 17 ] || fail "expected exactly 17 indexed ADRs"
 
 approval_date=$(sed -n 's/^Date: //p' docs/approval-record.md)
 case "$approval_date" in
@@ -167,7 +173,7 @@ grep -qx "Status: Ready — Gate 0 owner approval recorded $approval_date" docs/
 grep -qx 'Status: Approved for Prompt 2 after repository publication' docs/handoff-prompt.md || fail "handoff prompt status is inconsistent"
 grep -qx 'Status: Approved for execution; begins after repository publication and GitHub authentication' docs/v1-alpha-execution.md || fail "execution runbook status is inconsistent"
 
-for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0014 0015 0016; do
+for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0014 0015 0016 0017; do
     matches=$(printf '%s\n' "$adr_files" | grep -c "/$number-")
     [ "$matches" -eq 1 ] || fail "expected one indexed ADR for $number"
 done
@@ -184,6 +190,7 @@ printf '%s\n' "$adr_files" | while IFS= read -r adr; do
     [ -s "$adr" ] || fail "missing or empty indexed ADR: $adr"
     case "$adr" in
         docs/adr/0013-* | docs/adr/0014-* | docs/adr/0015-* | docs/adr/0016-*) adr_approval_date=2026-07-17 ;;
+        docs/adr/0017-*) adr_approval_date=2026-08-20 ;;
         *) adr_approval_date=$approval_date ;;
     esac
     grep -qx "Status: Accepted — $adr_approval_date" "$adr" || fail "ADR status mismatch: $adr"
@@ -297,7 +304,7 @@ fi
 grep -q '^  validate:$' .github/workflows/specifications.yml || fail "same-runner CI validation job is missing"
 grep -q 'name: attest-runner-and-validate' .github/workflows/specifications.yml || fail "same-runner attestation/validation identity is missing"
 grep -Fq '[ "${ImageOS-}" = ubuntu24 ]' .github/workflows/specifications.yml || fail "CI runner image OS is not attested"
-grep -Fq '[ "${ImageVersion-}" = 20260714.240.1 ]' .github/workflows/specifications.yml || fail "CI runner image version is not attested"
+grep -Fq 'rar_ci_image_version=${ImageVersion-}' .github/workflows/specifications.yml || fail "CI runner image version is not attested"
 for runner_handoff in \
     'RAR_CI_RUNNER_IMAGE_OS=$ImageOS' \
     'RAR_CI_RUNNER_IMAGE_VERSION=$ImageVersion' \
@@ -306,6 +313,14 @@ for runner_handoff in \
     grep -Fq "$runner_handoff" .github/workflows/specifications.yml || fail "CI runner evidence handoff is incomplete: $runner_handoff"
 done
 grep -q 'docker run --rm --read-only' .github/workflows/specifications.yml || fail "same-runner pinned container launch is missing"
+grep -q -- '--network none' .github/workflows/specifications.yml || fail "CI container network is not disabled"
+grep -q '^concurrency:$' .github/workflows/specifications.yml || fail "required CI concurrency control is missing"
+grep -q 'cancel-in-progress: true' .github/workflows/specifications.yml || fail "obsolete required CI runs are not cancelled"
+grep -q '^  workflow_dispatch:$' .github/workflows/development-probe.yml || fail "Development Probe is not manually dispatched"
+grep -q 'uses: actions/upload-artifact@[0-9a-f]\{40\}' .github/workflows/development-probe.yml || fail "Development Probe evidence upload is not pinned"
+grep -q 'status=${PIPESTATUS\[0\]}' .github/workflows/development-probe.yml || fail "Development Probe does not preserve the real command status"
+grep -q 'complete.log' .github/workflows/development-probe.yml || fail "Development Probe does not retain complete logs"
+grep -q 'result.json' .github/workflows/development-probe.yml || fail "Development Probe does not retain a structured result"
 grep -q -- '--read-only' .github/workflows/specifications.yml || fail "CI container root is not read-only"
 grep -Fq 'host_uid=$(/usr/bin/id -u)' .github/workflows/specifications.yml || fail "CI runner UID capture is missing"
 grep -Fq 'host_gid=$(/usr/bin/id -g)' .github/workflows/specifications.yml || fail "CI runner GID capture is missing"

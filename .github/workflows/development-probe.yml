@@ -1,0 +1,92 @@
+name: Development Probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      probe:
+        description: Bounded probe to run
+        required: true
+        type: choice
+        options:
+          - host-static
+          - milestone-a
+
+permissions:
+  contents: read
+
+concurrency:
+  group: development-probe-${{ inputs.probe }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    name: ${{ inputs.probe }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      RAR_PROBE: ${{ inputs.probe }}
+      RAR_PROBE_EVIDENCE_DIR: ${{ runner.temp }}/rar-development-probe
+      RAR_CI_BOOTSTRAP_IMAGE: sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Attest runner and prepare bounded evidence
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        run: |
+          [[ "${ImageOS-}" == ubuntu24 ]]
+          [[ "${RUNNER_OS-}" == Linux ]]
+          [[ "${RUNNER_ARCH-}" == X64 ]]
+          install -d -m 700 "$RAR_PROBE_EVIDENCE_DIR"
+          {
+            printf 'source_sha=%s\n' "$GITHUB_SHA"
+            printf 'runner_image_os=%s\n' "$ImageOS"
+            printf 'runner_image_version=%s\n' "$ImageVersion"
+            printf 'runner_os=%s\n' "$RUNNER_OS"
+            printf 'runner_arch=%s\n' "$RUNNER_ARCH"
+            printf 'bootstrap_image=%s\n' "$RAR_CI_BOOTSTRAP_IMAGE"
+            printf 'probe=%s\n' "$RAR_PROBE"
+          } > "$RAR_PROBE_EVIDENCE_DIR/identity.v1"
+
+      - name: Run probe with complete log and real status
+        id: run_probe
+        shell: /usr/bin/bash --noprofile --norc {0}
+        run: |
+          set -o pipefail
+          set +e
+          tools/ci/run-development-probe.sh "$RAR_PROBE" \
+            2>&1 | tee "$RAR_PROBE_EVIDENCE_DIR/complete.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          printf '{"schema":"rar-development-probe-result-v1","probe":"%s","source_sha":"%s","status":%d}\n' \
+            "$RAR_PROBE" "$GITHUB_SHA" "$status" \
+            > "$RAR_PROBE_EVIDENCE_DIR/result.json"
+          exit "$status"
+
+      - name: Preserve pre-probe failure truthfully
+        if: always()
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        run: |
+          install -d -m 700 "$RAR_PROBE_EVIDENCE_DIR"
+          if [[ ! -f "$RAR_PROBE_EVIDENCE_DIR/complete.log" ]]; then
+            printf '%s\n' 'probe did not start; inspect workflow steps' \
+              > "$RAR_PROBE_EVIDENCE_DIR/complete.log"
+          fi
+          if [[ ! -f "$RAR_PROBE_EVIDENCE_DIR/result.json" ]]; then
+            printf '{"schema":"rar-development-probe-result-v1","probe":"%s","source_sha":"%s","status":125,"phase":"pre-probe-failure"}\n' \
+              "$RAR_PROBE" "$GITHUB_SHA" \
+              > "$RAR_PROBE_EVIDENCE_DIR/result.json"
+          fi
+
+      - name: Retain complete probe evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: development-probe-${{ inputs.probe }}-${{ github.sha }}
+          path: ${{ runner.temp }}/rar-development-probe
+          if-no-files-found: error
+          retention-days: 14

@@ -206,8 +206,8 @@ Gate 0 was approved on 2026-07-16. Every P0 item in this gate is complete as an 
 
 ## Immediate next items
 
-1. Publish the approved Gate 0 handoff package to the canonical repository.
-2. Execute Prompt 2 for R0-000 and R0-001 without running target artifacts.
-3. Perform the independent bootstrap correctness and security review.
-4. Remediate accepted findings before R0-002 contract work.
-5. Keep the first guest boot locked until the separate Prompt 7 owner authorization.
+1. Merge the reviewed Sprint Alpha 0.1 and cloud Development Lab rebaseline.
+2. Close draft PR #5 as superseded only after the replacement is durable.
+3. Execute Milestone A in the cloud-only Development Lab.
+4. Preserve strict local Mac non-execution and non-target-build rules.
+5. Continue Milestones B–G using `SPRINT_STATUS.md` as the durable checkpoint.

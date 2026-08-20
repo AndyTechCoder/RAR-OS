@@ -3,6 +3,15 @@
 Status: Ready — Gate 0 owner approval recorded 2026-07-16
 Rule: Release 0 proves architecture; it does not implement storage, networking, GUI, live updates, or consumer applications.
 
+## Sprint Alpha 0.1 overlay
+
+The owner-approved Sprint Alpha overlay in `../sprint-alpha.md` and ADR 0017
+temporarily replaces this packet's sequencing for the bounded Alpha vertical
+slice. It does not silently promote experimental storage, GUI, update, or
+application behavior to stable Release 0 contracts. The task packets below
+remain the long-term gate definitions and later require their full architecture
+matrix and evidence.
+
 ## Shared task-packet contract
 
 Every R0 task below is defined by this shared contract, its row in the task field matrix, and its detailed owner, dependencies, deliverables, and acceptance criteria.

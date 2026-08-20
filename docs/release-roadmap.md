@@ -3,6 +3,14 @@
 Status: Gate 0 approved direction — 2026-07-16
 Strategy: plan the complete architecture, deliver verified releases in sequence
 
+## Sprint Alpha 0.1 overlay
+
+The owner-approved, fourteen-day Sprint Alpha 0.1 vertical slice is defined in
+`sprint-alpha.md` and ADR 0017. It prioritizes authentic working functionality
+across the roadmap without deleting, renaming, or claiming completion of the
+long-term releases below. Cross-release Alpha prototypes remain experimental
+until their normal release gates, migrations, and evidence are complete.
+
 ## Release 0 — Architecture Laboratory
 
 Purpose: prove boot, portability, isolation, and observability.

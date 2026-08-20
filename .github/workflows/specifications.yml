@@ -1,11 +1,18 @@
 name: Specifications
 
 on:
-  push:
   pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: specifications-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   validate:
@@ -20,7 +27,18 @@ jobs:
         run: |
           set -u
           [ "${ImageOS-}" = ubuntu24 ]
-          [ "${ImageVersion-}" = 20260714.240.1 ]
+          rar_ci_image_version=${ImageVersion-}
+          rar_ci_image_date=${rar_ci_image_version%%.*}
+          rar_ci_image_rest=${rar_ci_image_version#*.}
+          [ "$rar_ci_image_rest" != "$rar_ci_image_version" ]
+          rar_ci_image_build=${rar_ci_image_rest%%.*}
+          rar_ci_image_revision=${rar_ci_image_rest#*.}
+          [ "$rar_ci_image_revision" != "$rar_ci_image_rest" ]
+          case "$rar_ci_image_revision" in *.*) exit 1 ;; esac
+          [ "${#rar_ci_image_date}" -eq 8 ]
+          for component in "$rar_ci_image_date" "$rar_ci_image_build" "$rar_ci_image_revision"; do
+            case "$component" in '' | *[!0-9]*) exit 1 ;; esac
+          done
           [ "${RUNNER_OS-}" = Linux ]
           [ "${RUNNER_ARCH-}" = X64 ]
           printf '%s\n' \
@@ -29,19 +47,21 @@ jobs:
             "RAR_CI_RUNNER_OS=$RUNNER_OS" \
             "RAR_CI_RUNNER_ARCH=$RUNNER_ARCH" >> "$GITHUB_ENV"
 
-      - name: Check out repository
+      - name: Check out exact source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Validate in pinned read-only container on attested runner
         shell: /usr/bin/dash -e {0}
         run: |
           host_uid=$(/usr/bin/id -u)
           host_gid=$(/usr/bin/id -g)
-          docker run --rm --read-only \
+          docker run --rm --read-only --network none \
             --user "$host_uid:$host_gid" \
+            --security-opt no-new-privileges --cap-drop ALL \
             --tmpfs "/tmp:rw,nosuid,nodev,size=128m,uid=$host_uid,gid=$host_gid,mode=1777" \
             --mount "type=bind,source=$GITHUB_WORKSPACE,target=/workspace" \
             --workdir /workspace \
@@ -55,8 +75,7 @@ jobs:
             --env CI \
             rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 \
             /usr/bin/dash -e -c '
-              tools/ci/check-specs.sh
-              /usr/bin/dash -n tools/rarbuild/rarbuild tools/rarbuild/bootstrap-lib.sh tests/host-safety/run.sh tests/bootstrap/run.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh
+              tools/ci/check-sprint-static.sh
               spec/fixtures/release-0/run.sh --ci
               sdk/generated/release-0/check.sh --compile
               tests/host-safety/run.sh

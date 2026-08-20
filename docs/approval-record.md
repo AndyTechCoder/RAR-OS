@@ -48,3 +48,24 @@ host-safety policy were configured.
 The approval applies to the foundation, architecture, safety, process, Release 0 task packet, and initial ADR documents listed in `docs/README.md` at repository publication. Their Gate 0 status approves the documented direction and Release 0 boundaries, not unreviewed later-release interface details.
 
 ADRs 0009 and 0010 formalize the already-present approved commitments to four cumulative tiers with separate profiles and to staged self-hosting in Release 6. They do not add a tier, change a tier meaning, move a release commitment, or authorize target execution.
+
+## Sprint Alpha 0.1 rebaseline approval
+
+Status: Approved
+
+The owner explicitly approved the Sprint Alpha 0.1 roadmap overlay and the
+cloud-only Development Lab trust-boundary change on 2026-08-20. ADR 0017 records
+the decision. The approval permits automated target builds and isolated guest
+execution only in the bounded repository-approved cloud Development Lab. It
+does not permit local target compilation, linking, image creation, firmware
+loading, QEMU, emulator, VM, or guest execution on the owner's Mac.
+
+The approval preserves the long-term Releases 0–7 plan, target isolation,
+signing, rollback, recovery, and data-separation commitments. Production
+one-shot authorization, physical hardware, production cloud authority, guest
+networking, host integration, passthrough, raw devices, elevated execution,
+and unrelated external access remain unauthorized.
+
+Sprint approval: approved
+Sprint approver: Andy / RAR project owner
+Rebaseline date: 2026-08-20

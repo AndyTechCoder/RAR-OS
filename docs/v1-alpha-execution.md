@@ -2,6 +2,15 @@
 
 Status: Approved for execution; begins after repository publication and GitHub authentication
 
+## Sprint Alpha 0.1 execution overlay
+
+ADR 0017 and `sprint-alpha.md` define the owner-approved fourteen-day Sprint
+Alpha release-driver sequence. For that sprint only, bounded automated target
+build and guest execution in the cloud Development Lab replace the manual
+Prompt 7/production-style authorization path as the implementation blocker.
+Local Mac target compilation and execution remain forbidden. The staged prompts
+below remain the long-term release-gate and production-hardening record.
+
 ## V1 alpha definition
 
 V1 alpha is complete when Releases 0–6 in `release-roadmap.md` pass. It includes all four simulated tiers, custom OS foundations, signed components/layers, data isolation, recovery, updates, networking/Wi-Fi, adaptive GUI, multi-user applications, continuity, agent readiness, SDKs, and self-hosting.

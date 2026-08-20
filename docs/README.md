@@ -29,6 +29,8 @@ Status: Gate 0 approved on 2026-07-16
 - [Release 0 Task Packets](tasks/release-0.md)
 - [Initial Codex Handoff Prompt](handoff-prompt.md)
 - [V1 Alpha Codex Execution Runbook](v1-alpha-execution.md)
+- [Sprint Alpha 0.1](sprint-alpha.md)
+- [Durable Sprint Status](../SPRINT_STATUS.md)
 - [Project Backlog](../BACKLOG.md)
 
 ## Architecture decisions
@@ -49,5 +51,6 @@ Status: Gate 0 approved on 2026-07-16
 - [ADR 0014: Hardware Binding and Record Identity](adr/0014-hardware-binding-and-record-identity.md)
 - [ADR 0015: Deterministic Validation Precedence](adr/0015-deterministic-validation-precedence.md)
 - [ADR 0016: Release 0 Entry Validation and Authority Closure](adr/0016-release-0-entry-validation-and-authority-closure.md)
+- [ADR 0017: Sprint Alpha 0.1 and Cloud Development Lab](adr/0017-sprint-alpha-development-lab.md)
 
 Gate 0 approval makes the indexed direction and the Release 0 task packet implementation contracts. It does not approve later release-specific interfaces early, prevent ADR-governed evolution, or make a technical implementation permanently irreplaceable.
