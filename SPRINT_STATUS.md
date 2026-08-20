@@ -10,8 +10,8 @@
 - SSD worktree path: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/sprint-alpha-rebaseline`
 - Branch: `codex/sprint-alpha-rebaseline`
 - PR: [#7](https://github.com/AndyTechCoder/RAR-OS/pull/7), draft
-- Exact completed checkpoint described here: Specifications dispatch security
-  remediation `239905938081e52972abf8b5212e8cd5d456580e`
+- Exact completed checkpoint described here: payload-independent failure evidence
+  remediation `5c9d30ee2e37e279774d2f67bf450c33d194a3d2`
 - Authoritative current head: resolve PR #7 head and `git rev-parse HEAD`; this
   file does not claim that a commit can embed its own SHA
 - Completed functionality: workspace safety reconciliation, read-only historical
@@ -30,16 +30,17 @@
   is complete at `239905938081e52972abf8b5212e8cd5d456580e`; fresh exact-head
   security review is CLEAN at `98e41f3ba7ec4f84311b938bcc6dc9659fda0bc9`;
   correctness review accepted one P2 malformed-payload evidence gap; remediation
-  implemented and verification pending
-- Next automatic action: verify and publish payload-independent failure evidence,
-  then obtain fresh correctness review
+  is complete at `5c9d30ee2e37e279774d2f67bf450c33d194a3d2`; fresh exact-head
+  correctness review pending
+- Next automatic action: publish payload-independent failure evidence, then obtain
+  fresh correctness review
 - Mandatory-feature completion: 0% (0 of 11 grouped vertical-path outcomes)
 - Stretch-feature state: not started
 - Elapsed sprint time: less than one day
 - Remaining sprint time: 14 days; ends 2026-09-03 Europe/Sofia
 - Usage/reset risk: low at sprint start; first of three planned usage windows
-- Last durable checkpoint: Specifications dispatch security remediation
-  `239905938081e52972abf8b5212e8cd5d456580e`, 2026-08-20
+- Last durable checkpoint: payload-independent failure evidence remediation
+  `5c9d30ee2e37e279774d2f67bf450c33d194a3d2`, 2026-08-20
 - Local target execution: forbidden. Local target compilation, linking, image
   creation, firmware loading, QEMU, emulator, VM, and guest execution are also
   forbidden.
