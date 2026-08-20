@@ -10,8 +10,8 @@
 - SSD worktree path: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/sprint-alpha-rebaseline`
 - Branch: `codex/sprint-alpha-rebaseline`
 - PR: [#7](https://github.com/AndyTechCoder/RAR-OS/pull/7), draft
-- Exact completed checkpoint described here: second cloud-boundary remediation
-  `45f3debbdb0859c581c4104503b112196ab48993`
+- Exact completed checkpoint described here: correctness remediation
+  `eb42708020f4230867f0c871580d02e80888d4af`
 - Authoritative current head: resolve PR #7 head and `git rev-parse HEAD`; this
   file does not claim that a commit can embed its own SHA
 - Completed functionality: workspace safety reconciliation, read-only historical
@@ -22,18 +22,18 @@
   pending
 - Unresolved accepted findings: all five architecture findings are remediated;
   architecture is CLEAN at `74d548b7217f9df36ef9fb610d05e0af08cfecb7`;
-  correctness review accepted three P1 failures involving masked preflight
-  errors, untracked timeout cleanup, and incomplete-log success; consolidated
-  correctness remediation in progress
-- Next automatic action: complete and publish correctness remediation, obtain
-  fresh correctness review, then continue to security review
+  correctness review's three P1 findings are remediated at
+  `eb42708020f4230867f0c871580d02e80888d4af`; fresh exact-head correctness
+  review pending
+- Next automatic action: publish the correctness remediation/status head,
+  obtain fresh correctness review, then continue to security review
 - Mandatory-feature completion: 0% (0 of 11 grouped vertical-path outcomes)
 - Stretch-feature state: not started
 - Elapsed sprint time: less than one day
 - Remaining sprint time: 14 days; ends 2026-09-03 Europe/Sofia
 - Usage/reset risk: low at sprint start; first of three planned usage windows
-- Last durable checkpoint: second cloud-boundary remediation
-  `45f3debbdb0859c581c4104503b112196ab48993`, 2026-08-20
+- Last durable checkpoint: correctness remediation
+  `eb42708020f4230867f0c871580d02e80888d4af`, 2026-08-20
 - Local target execution: forbidden. Local target compilation, linking, image
   creation, firmware loading, QEMU, emulator, VM, and guest execution are also
   forbidden.
