@@ -18,8 +18,9 @@
   source, ADR 0017, Sprint Alpha plan, quiet required CI, manual Development
   Probe, and durable status framework
 - Current Development Probe state: not dispatched; no target code exists on this branch
-- Current required CI state: local non-executing static checks pass; PR #7 CI
-  pending
+- Current required CI state: local non-executing static checks pass; PR #7 run
+  `32353707478` did not start because GitHub reported failed account payments or
+  an insufficient Actions spending limit
 - Unresolved accepted findings: all five architecture findings are remediated;
   architecture is CLEAN at `74d548b7217f9df36ef9fb610d05e0af08cfecb7`;
   correctness review's three P1 findings are remediated at
@@ -33,8 +34,10 @@
   is complete at `5c9d30ee2e37e279774d2f67bf450c33d194a3d2`; fresh exact-head
   architecture, correctness, and security reviews are CLEAN at implementation
   head `f1bd50a5a86aeb8e2354cb642068861162848db4`
-- Next automatic action: confirm required CI and exact-head review gates, mark PR
-  #7 ready, and merge when green
+- Blocking condition: GitHub Actions billing/spending must be restored by the
+  repository owner; Codex cannot change account billing
+- Next automatic action: after billing is restored, rerun required CI, reconfirm
+  exact-head review gates, mark PR #7 ready, and merge when green
 - Mandatory-feature completion: 0% (0 of 11 grouped vertical-path outcomes)
 - Stretch-feature state: not started
 - Elapsed sprint time: less than one day
