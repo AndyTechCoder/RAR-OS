@@ -61,6 +61,7 @@ tools/ci/check-specs.sh
 tools/ci/check-sprint-static.sh
 tools/ci/run-development-probe.sh
 tools/ci/run-cloud-target-probe.sh
+tools/ci/verify-cloud-target-tools.sh
 tools/ci/check-host-policy.sh
 tools/ci/test-host-policy.sh
 tools/ci/fixtures/host-policy/README.md
@@ -81,7 +82,7 @@ printf '%s\n' "$required_files" | while IFS= read -r file; do
     [ -s "$file" ] || fail "empty required file: $file"
 done
 
-for script in tools/ci/check-specs.sh tools/ci/check-sprint-static.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
+for script in tools/ci/check-specs.sh tools/ci/check-sprint-static.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/verify-cloud-target-tools.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
     [ -x "$script" ] || fail "required script is not executable: $script"
 done
 
@@ -325,6 +326,7 @@ grep -q 'result.json' .github/workflows/development-probe.yml || fail "Developme
 grep -q 'tools/ci/run-cloud-target-probe.sh milestone-a' tools/ci/run-development-probe.sh || fail "Milestone A does not route through the cloud target boundary"
 for boundary in \
     '--network none' \
+    '--user "$container_uid:$container_gid"' \
     '--cpus "$cpu_count"' \
     '--memory "${memory_mib}m"' \
     '--pids-limit 256' \
@@ -335,6 +337,10 @@ for boundary in \
     grep -Fq -- "$boundary" tools/ci/run-cloud-target-probe.sh || fail "cloud target boundary missing: $boundary"
 done
 grep -q '^\[ "${state-}" = ready \]' tools/ci/run-cloud-target-probe.sh || fail "cloud target profile does not fail closed"
+grep -q 'verify-cloud-target-tools.sh' tools/ci/run-cloud-target-probe.sh || fail "cloud target tool verification is bypassed"
+for verified_input in compiler linker qemu firmware machine-profile; do
+    grep -q "^verify_file $verified_input " tools/ci/verify-cloud-target-tools.sh || fail "cloud target input is not byte verified: $verified_input"
+done
 grep -q -- '--read-only' .github/workflows/specifications.yml || fail "CI container root is not read-only"
 grep -Fq 'host_uid=$(/usr/bin/id -u)' .github/workflows/specifications.yml || fail "CI runner UID capture is missing"
 grep -Fq 'host_gid=$(/usr/bin/id -g)' .github/workflows/specifications.yml || fail "CI runner GID capture is missing"

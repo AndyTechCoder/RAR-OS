@@ -20,11 +20,12 @@
 - Current Development Probe state: not dispatched; no target code exists on this branch
 - Current required CI state: local non-executing static checks pass; PR #7 CI
   pending
-- Unresolved accepted findings: the three architecture findings at
-  `cdcf02b540bec213830caea1cdb17c308036988b` are remediated at
-  `851bcc96679d894b062d4dafcec1fc640cafaed4`; fresh exact-head review pending
-- Next automatic action: publish the remediation/status head and obtain fresh
-  architecture review, followed sequentially by correctness and security
+- Unresolved accepted findings: the first three architecture findings are
+  remediated; fresh review at `a41a94557290911e3cb19605d3317fb259787d31`
+  accepted two P1 gaps for non-root container identity and actual tool/firmware
+  digest enforcement; second consolidated remediation in progress
+- Next automatic action: complete and publish the second remediation, then
+  obtain fresh architecture review followed by correctness and security
 - Mandatory-feature completion: 0% (0 of 11 grouped vertical-path outcomes)
 - Stretch-feature state: not started
 - Elapsed sprint time: less than one day

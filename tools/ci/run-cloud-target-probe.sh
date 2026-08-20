@@ -29,13 +29,13 @@ driver=tools/sprint-alpha/probe-milestone-a.sh
 
 # The profile is shell data, not executable code. Its grammar is deliberately
 # restricted before the exact reviewed values are loaded.
-if grep -Ev '^(schema|state|oci_image|compiler_sha256|linker_sha256|qemu_sha256|firmware_sha256|machine_profile_sha256|cpu_count|memory_mib|build_storage_mib|output_mib|timeout_seconds)=[A-Za-z0-9._:/@+-]+$' "$profile" | grep -q .; then
+if grep -Ev '^(schema|state|oci_image|compiler_path|compiler_sha256|linker_path|linker_sha256|qemu_path|qemu_sha256|firmware_path|firmware_sha256|machine_profile_path|machine_profile_sha256|container_uid|container_gid|cpu_count|memory_mib|build_storage_mib|output_mib|timeout_seconds)=[A-Za-z0-9._:/@+-]+$' "$profile" | grep -q .; then
     fail "Development Lab profile grammar invalid"
 fi
-for key in schema state oci_image compiler_sha256 linker_sha256 qemu_sha256 firmware_sha256 machine_profile_sha256 cpu_count memory_mib build_storage_mib output_mib timeout_seconds; do
+for key in schema state oci_image compiler_path compiler_sha256 linker_path linker_sha256 qemu_path qemu_sha256 firmware_path firmware_sha256 machine_profile_path machine_profile_sha256 container_uid container_gid cpu_count memory_mib build_storage_mib output_mib timeout_seconds; do
     [ "$(grep -c "^$key=" "$profile")" -eq 1 ] || fail "Development Lab profile key invalid: $key"
 done
-[ "$(wc -l < "$profile" | tr -d ' ')" -eq 13 ] || fail "Development Lab profile has unexpected fields"
+[ "$(wc -l < "$profile" | tr -d ' ')" -eq 20 ] || fail "Development Lab profile has unexpected fields"
 # shellcheck disable=SC1090
 . "./$profile"
 
@@ -49,6 +49,16 @@ for digest_name in compiler_sha256 linker_sha256 qemu_sha256 firmware_sha256 mac
     [ "${#digest_value}" -eq 64 ] || fail "$digest_name length invalid"
     case "$digest_value" in *[!0-9a-f]*) fail "$digest_name is not lowercase hexadecimal" ;; esac
 done
+case "$compiler_path" in /opt/rar-toolchain/*) ;; *) fail "compiler path outside pinned tool root" ;; esac
+case "$linker_path" in /opt/rar-toolchain/*) ;; *) fail "linker path outside pinned tool root" ;; esac
+case "$qemu_path" in /opt/rar-lab/bin/*) ;; *) fail "QEMU path outside pinned lab root" ;; esac
+case "$firmware_path" in /opt/rar-lab/firmware/*) ;; *) fail "firmware path outside pinned lab root" ;; esac
+case "$machine_profile_path" in /workspace/tools/sprint-alpha/*) ;; *) fail "machine profile path outside read-only source" ;; esac
+for canonical_path in "$compiler_path" "$linker_path" "$qemu_path" "$firmware_path" "$machine_profile_path"; do
+    case "$canonical_path" in *'/../'* | *'/./'* | */.. | */.) fail "noncanonical configured path" ;; esac
+done
+[ "${container_uid-}" = 65532 ] || fail "container UID invalid"
+[ "${container_gid-}" = 65532 ] || fail "container GID invalid"
 [ "${cpu_count-}" = 2 ] || fail "CPU bound invalid"
 [ "${memory_mib-}" = 2048 ] || fail "memory bound invalid"
 [ "${build_storage_mib-}" = 4096 ] || fail "storage bound invalid"
@@ -70,6 +80,8 @@ set +e
         "qemu_sha256=$qemu_sha256" \
         "firmware_sha256=$firmware_sha256" \
         "machine_profile_sha256=$machine_profile_sha256" \
+        "container_uid=$container_uid" \
+        "container_gid=$container_gid" \
         "cpu_count=$cpu_count" \
         "memory_mib=$memory_mib" \
         "build_storage_mib=$build_storage_mib" \
@@ -78,21 +90,29 @@ set +e
     /usr/bin/sha256sum "$profile" "$driver"
     /usr/bin/timeout --signal=TERM --kill-after=10 "$timeout_seconds" \
         docker run --rm --read-only --network none \
+        --user "$container_uid:$container_gid" \
         --cpus "$cpu_count" --memory "${memory_mib}m" --memory-swap "${memory_mib}m" \
         --pids-limit 256 --security-opt no-new-privileges --cap-drop ALL \
-        --tmpfs "/tmp:rw,nosuid,nodev,size=128m,mode=1777" \
-        --tmpfs "/build:rw,exec,nosuid,nodev,size=${build_storage_mib}m,mode=700" \
+        --tmpfs "/tmp:rw,nosuid,nodev,size=128m,uid=$container_uid,gid=$container_gid,mode=1777" \
+        --tmpfs "/build:rw,exec,nosuid,nodev,size=${build_storage_mib}m,uid=$container_uid,gid=$container_gid,mode=700" \
         --mount "type=bind,source=$root,target=/workspace,readonly" \
         --workdir /workspace \
         --env RAR_DEVELOPMENT_LAB=cloud-v1 \
         --env RAR_BUILD_ROOT=/build \
+        --env "RAR_CONTAINER_UID=$container_uid" \
+        --env "RAR_CONTAINER_GID=$container_gid" \
+        --env "RAR_COMPILER_PATH=$compiler_path" \
         --env "RAR_COMPILER_SHA256=$compiler_sha256" \
+        --env "RAR_LINKER_PATH=$linker_path" \
         --env "RAR_LINKER_SHA256=$linker_sha256" \
+        --env "RAR_QEMU_PATH=$qemu_path" \
         --env "RAR_QEMU_SHA256=$qemu_sha256" \
+        --env "RAR_FIRMWARE_PATH=$firmware_path" \
         --env "RAR_FIRMWARE_SHA256=$firmware_sha256" \
+        --env "RAR_MACHINE_PROFILE_PATH=$machine_profile_path" \
         --env "RAR_MACHINE_PROFILE_SHA256=$machine_profile_sha256" \
         "$oci_image" \
-        /bin/sh -eu "$driver"
+        /bin/sh -eu tools/ci/verify-cloud-target-tools.sh "$driver"
 ) > "$target_log" 2>&1
 status=$?
 set -e
