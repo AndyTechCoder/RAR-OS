@@ -28,9 +28,11 @@
   the Development Probe High/P1 is remediated at `107e9f3`; fresh review accepted
   one sibling High/P1 branch-selected Specifications controller gap; remediation
   is complete at `239905938081e52972abf8b5212e8cd5d456580e`; fresh exact-head
-  security review pending
-- Next automatic action: publish the Specifications dispatch removal, then obtain
-  fresh security review
+  security review is CLEAN at `98e41f3ba7ec4f84311b938bcc6dc9659fda0bc9`;
+  correctness review accepted one P2 malformed-payload evidence gap; remediation
+  implemented and verification pending
+- Next automatic action: verify and publish payload-independent failure evidence,
+  then obtain fresh correctness review
 - Mandatory-feature completion: 0% (0 of 11 grouped vertical-path outcomes)
 - Stretch-feature state: not started
 - Elapsed sprint time: less than one day

@@ -338,6 +338,8 @@ grep -q 'log_status=${pipe_status\[1\]}' .github/workflows/development-probe.yml
 grep -q 'development-probe-status.sh "$probe_status" "$log_status"' .github/workflows/development-probe.yml || fail "Development Probe does not combine pipeline failures safely"
 grep -q 'complete.log' .github/workflows/development-probe.yml || fail "Development Probe does not retain complete logs"
 grep -q 'result.json' .github/workflows/development-probe.yml || fail "Development Probe does not retain a structured result"
+grep -Fq 'name: development-probe-${{ github.run_id }}-${{ github.run_attempt }}' .github/workflows/development-probe.yml || fail "Development Probe artifact name is not payload-independent"
+grep -Fq '"probe":"unverified","controller_sha":"unverified","source_sha":"unverified"' .github/workflows/development-probe.yml || fail "Development Probe fallback result is not payload-independent"
 grep -q 'tools/ci/run-cloud-target-probe.sh milestone-a' tools/ci/run-development-probe.sh || fail "Milestone A does not route through the cloud target boundary"
 for boundary in \
     '--network none' \

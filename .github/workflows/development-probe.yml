@@ -9,12 +9,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: development-probe-${{ github.event.client_payload.probe }}-${{ github.event.client_payload.source_sha }}
+  group: development-probe
   cancel-in-progress: true
 
 jobs:
   probe:
-    name: ${{ github.event.client_payload.probe }}
+    name: development-probe
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -96,8 +96,8 @@ jobs:
               > "$RAR_PROBE_EVIDENCE_DIR/complete.log"
           fi
           if [[ ! -f "$RAR_PROBE_EVIDENCE_DIR/result.json" ]]; then
-            printf '{"schema":"rar-development-probe-result-v1","probe":"%s","controller_sha":"%s","source_sha":"%s","status":125,"phase":"pre-probe-failure"}\n' \
-              "$RAR_PROBE" "$RAR_TRUSTED_CONTROLLER_SHA" "$RAR_PROBE_SOURCE_SHA" \
+            printf '%s\n' \
+              '{"schema":"rar-development-probe-result-v1","probe":"unverified","controller_sha":"unverified","source_sha":"unverified","status":125,"phase":"pre-probe-failure"}' \
               > "$RAR_PROBE_EVIDENCE_DIR/result.json"
           fi
 
@@ -105,7 +105,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: development-probe-${{ github.event.client_payload.probe }}-${{ github.event.client_payload.source_sha }}
+          name: development-probe-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/rar-development-probe
           if-no-files-found: error
           retention-days: 14
