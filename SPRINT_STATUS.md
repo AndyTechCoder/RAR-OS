@@ -25,9 +25,10 @@
   correctness review's three P1 findings are remediated at
   `eb42708020f4230867f0c871580d02e80888d4af`; fresh exact-head correctness
   review is CLEAN at `39486625108c9a792cbddc43647450e92b900c89`;
-  security review accepted one High/P1 branch-selected controller authority gap;
-  remediation is complete at `107e9f3`; fresh exact-head security review pending
-- Next automatic action: publish the trusted-controller security remediation,
+  the Development Probe High/P1 is remediated at `107e9f3`; fresh review accepted
+  one sibling High/P1 branch-selected Specifications controller gap; remediation
+  implemented and verification pending
+- Next automatic action: verify and publish the Specifications dispatch removal,
   then obtain fresh security review
 - Mandatory-feature completion: 0% (0 of 11 grouped vertical-path outcomes)
 - Stretch-feature state: not started

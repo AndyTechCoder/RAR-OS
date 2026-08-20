@@ -320,6 +320,9 @@ grep -q 'docker run --rm --read-only' .github/workflows/specifications.yml || fa
 grep -q -- '--network none' .github/workflows/specifications.yml || fail "CI container network is not disabled"
 grep -q '^concurrency:$' .github/workflows/specifications.yml || fail "required CI concurrency control is missing"
 grep -q 'cancel-in-progress: true' .github/workflows/specifications.yml || fail "obsolete required CI runs are not cancelled"
+if grep -q 'workflow_dispatch' .github/workflows/specifications.yml; then
+    fail "Specifications workflow must not execute branch-selected workflow code"
+fi
 grep -q '^  repository_dispatch:$' .github/workflows/development-probe.yml || fail "Development Probe is not default-branch dispatched"
 if grep -q 'workflow_dispatch' .github/workflows/development-probe.yml; then
     fail "Development Probe must not execute branch-selected workflow code"
