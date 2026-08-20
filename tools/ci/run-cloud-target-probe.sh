@@ -71,6 +71,7 @@ output_blocks=$((output_mib * 2048))
 
 set +e
 (
+    set -e
     ulimit -f "$output_blocks"
     printf '%s\n' \
         "probe=$probe" \
@@ -88,8 +89,23 @@ set +e
         "output_mib=$output_mib" \
         "timeout_seconds=$timeout_seconds"
     /usr/bin/sha256sum "$profile" "$driver"
-    /usr/bin/timeout --signal=TERM --kill-after=10 "$timeout_seconds" \
-        docker run --rm --read-only --network none \
+    container_id=
+    cleanup_container() {
+        prior_status=$?
+        trap - EXIT HUP INT TERM
+        set +e
+        if [ -n "$container_id" ]; then
+            if ! docker rm --force "$container_id" >/dev/null 2>&1; then
+                echo "cloud-target-probe: failed to terminate disposable container" >&2
+                [ "$prior_status" -ne 0 ] || prior_status=74
+            fi
+        fi
+        exit "$prior_status"
+    }
+    trap cleanup_container EXIT
+    trap 'exit 75' HUP INT TERM
+
+    container_id=$(docker create --read-only --network none \
         --user "$container_uid:$container_gid" \
         --cpus "$cpu_count" --memory "${memory_mib}m" --memory-swap "${memory_mib}m" \
         --pids-limit 256 --security-opt no-new-privileges --cap-drop ALL \
@@ -112,7 +128,11 @@ set +e
         --env "RAR_MACHINE_PROFILE_PATH=$machine_profile_path" \
         --env "RAR_MACHINE_PROFILE_SHA256=$machine_profile_sha256" \
         "$oci_image" \
-        /bin/sh -eu tools/ci/verify-cloud-target-tools.sh "$driver"
+        /bin/sh -eu tools/ci/verify-cloud-target-tools.sh "$driver")
+    case "$container_id" in '' | *[!0-9a-f]*) fail "Docker returned an invalid container identity" ;; esac
+    printf 'container_id=%s\n' "$container_id"
+    /usr/bin/timeout --signal=TERM --kill-after=10 "$timeout_seconds" \
+        docker start --attach "$container_id"
 ) > "$target_log" 2>&1
 status=$?
 set -e

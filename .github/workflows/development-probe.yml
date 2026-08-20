@@ -58,10 +58,15 @@ jobs:
           set +e
           tools/ci/run-development-probe.sh "$RAR_PROBE" \
             2>&1 | tee "$RAR_PROBE_EVIDENCE_DIR/complete.log"
-          status=${PIPESTATUS[0]}
+          pipe_status=("${PIPESTATUS[@]}")
+          probe_status=${pipe_status[0]}
+          log_status=${pipe_status[1]}
+          selection=$(tools/ci/development-probe-status.sh "$probe_status" "$log_status")
+          status=${selection%%|*}
+          phase=${selection#*|}
           set -e
-          printf '{"schema":"rar-development-probe-result-v1","probe":"%s","source_sha":"%s","status":%d}\n' \
-            "$RAR_PROBE" "$GITHUB_SHA" "$status" \
+          printf '{"schema":"rar-development-probe-result-v1","probe":"%s","source_sha":"%s","probe_status":%d,"log_status":%d,"status":%d,"phase":"%s"}\n' \
+            "$RAR_PROBE" "$GITHUB_SHA" "$probe_status" "$log_status" "$status" "$phase" \
             > "$RAR_PROBE_EVIDENCE_DIR/result.json"
           exit "$status"
 

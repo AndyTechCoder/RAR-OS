@@ -62,6 +62,8 @@ tools/ci/check-sprint-static.sh
 tools/ci/run-development-probe.sh
 tools/ci/run-cloud-target-probe.sh
 tools/ci/verify-cloud-target-tools.sh
+tools/ci/development-probe-status.sh
+tools/ci/test-development-probe-policy.sh
 tools/ci/check-host-policy.sh
 tools/ci/test-host-policy.sh
 tools/ci/fixtures/host-policy/README.md
@@ -82,7 +84,7 @@ printf '%s\n' "$required_files" | while IFS= read -r file; do
     [ -s "$file" ] || fail "empty required file: $file"
 done
 
-for script in tools/ci/check-specs.sh tools/ci/check-sprint-static.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/verify-cloud-target-tools.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
+for script in tools/ci/check-specs.sh tools/ci/check-sprint-static.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/verify-cloud-target-tools.sh tools/ci/development-probe-status.sh tools/ci/test-development-probe-policy.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
     [ -x "$script" ] || fail "required script is not executable: $script"
 done
 
@@ -320,7 +322,10 @@ grep -q '^concurrency:$' .github/workflows/specifications.yml || fail "required 
 grep -q 'cancel-in-progress: true' .github/workflows/specifications.yml || fail "obsolete required CI runs are not cancelled"
 grep -q '^  workflow_dispatch:$' .github/workflows/development-probe.yml || fail "Development Probe is not manually dispatched"
 grep -q 'uses: actions/upload-artifact@[0-9a-f]\{40\}' .github/workflows/development-probe.yml || fail "Development Probe evidence upload is not pinned"
-grep -q 'status=${PIPESTATUS\[0\]}' .github/workflows/development-probe.yml || fail "Development Probe does not preserve the real command status"
+grep -q 'pipe_status=("${PIPESTATUS\[@\]}")' .github/workflows/development-probe.yml || fail "Development Probe does not preserve pipeline statuses"
+grep -q 'probe_status=${pipe_status\[0\]}' .github/workflows/development-probe.yml || fail "Development Probe does not preserve the real command status"
+grep -q 'log_status=${pipe_status\[1\]}' .github/workflows/development-probe.yml || fail "Development Probe does not preserve log-capture status"
+grep -q 'development-probe-status.sh "$probe_status" "$log_status"' .github/workflows/development-probe.yml || fail "Development Probe does not combine pipeline failures safely"
 grep -q 'complete.log' .github/workflows/development-probe.yml || fail "Development Probe does not retain complete logs"
 grep -q 'result.json' .github/workflows/development-probe.yml || fail "Development Probe does not retain a structured result"
 grep -q 'tools/ci/run-cloud-target-probe.sh milestone-a' tools/ci/run-development-probe.sh || fail "Milestone A does not route through the cloud target boundary"
@@ -336,6 +341,10 @@ for boundary in \
     '/usr/bin/timeout --signal=TERM'; do
     grep -Fq -- "$boundary" tools/ci/run-cloud-target-probe.sh || fail "cloud target boundary missing: $boundary"
 done
+grep -q 'container_id=$(docker create ' tools/ci/run-cloud-target-probe.sh || fail "cloud target container identity is not captured"
+grep -q 'docker start --attach "$container_id"' tools/ci/run-cloud-target-probe.sh || fail "cloud target container lifecycle is not attached"
+grep -q 'docker rm --force "$container_id"' tools/ci/run-cloud-target-probe.sh || fail "cloud target container cleanup is not enforced"
+grep -q '^    set -e$' tools/ci/run-cloud-target-probe.sh || fail "cloud target preflight does not fail closed"
 grep -q '^\[ "${state-}" = ready \]' tools/ci/run-cloud-target-probe.sh || fail "cloud target profile does not fail closed"
 grep -q 'verify-cloud-target-tools.sh' tools/ci/run-cloud-target-probe.sh || fail "cloud target tool verification is bypassed"
 for verified_input in compiler linker qemu firmware machine-profile; do

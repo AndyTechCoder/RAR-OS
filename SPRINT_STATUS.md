@@ -21,11 +21,12 @@
 - Current required CI state: local non-executing static checks pass; PR #7 CI
   pending
 - Unresolved accepted findings: all five architecture findings are remediated;
-  the non-root container and actual tool/firmware/profile digest enforcement
-  remediation is at `45f3debbdb0859c581c4104503b112196ab48993`;
-  fresh exact-head review pending
-- Next automatic action: publish the second remediation/status head, then obtain
-  fresh architecture review followed by correctness and security
+  architecture is CLEAN at `74d548b7217f9df36ef9fb610d05e0af08cfecb7`;
+  correctness review accepted three P1 failures involving masked preflight
+  errors, untracked timeout cleanup, and incomplete-log success; consolidated
+  correctness remediation in progress
+- Next automatic action: complete and publish correctness remediation, obtain
+  fresh correctness review, then continue to security review
 - Mandatory-feature completion: 0% (0 of 11 grouped vertical-path outcomes)
 - Stretch-feature state: not started
 - Elapsed sprint time: less than one day
