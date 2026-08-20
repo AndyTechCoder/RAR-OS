@@ -10,8 +10,8 @@
 - SSD worktree path: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/sprint-alpha-rebaseline`
 - Branch: `codex/sprint-alpha-rebaseline`
 - PR: [#7](https://github.com/AndyTechCoder/RAR-OS/pull/7), draft
-- Exact completed checkpoint described here: consolidated remediation
-  `851bcc96679d894b062d4dafcec1fc640cafaed4`
+- Exact completed checkpoint described here: second cloud-boundary remediation
+  `45f3debbdb0859c581c4104503b112196ab48993`
 - Authoritative current head: resolve PR #7 head and `git rev-parse HEAD`; this
   file does not claim that a commit can embed its own SHA
 - Completed functionality: workspace safety reconciliation, read-only historical
@@ -20,19 +20,19 @@
 - Current Development Probe state: not dispatched; no target code exists on this branch
 - Current required CI state: local non-executing static checks pass; PR #7 CI
   pending
-- Unresolved accepted findings: the first three architecture findings are
-  remediated; fresh review at `a41a94557290911e3cb19605d3317fb259787d31`
-  accepted two P1 gaps for non-root container identity and actual tool/firmware
-  digest enforcement; second consolidated remediation in progress
-- Next automatic action: complete and publish the second remediation, then
-  obtain fresh architecture review followed by correctness and security
+- Unresolved accepted findings: all five architecture findings are remediated;
+  the non-root container and actual tool/firmware/profile digest enforcement
+  remediation is at `45f3debbdb0859c581c4104503b112196ab48993`;
+  fresh exact-head review pending
+- Next automatic action: publish the second remediation/status head, then obtain
+  fresh architecture review followed by correctness and security
 - Mandatory-feature completion: 0% (0 of 11 grouped vertical-path outcomes)
 - Stretch-feature state: not started
 - Elapsed sprint time: less than one day
 - Remaining sprint time: 14 days; ends 2026-09-03 Europe/Sofia
 - Usage/reset risk: low at sprint start; first of three planned usage windows
-- Last durable checkpoint: consolidated remediation
-  `851bcc96679d894b062d4dafcec1fc640cafaed4`, 2026-08-20
+- Last durable checkpoint: second cloud-boundary remediation
+  `45f3debbdb0859c581c4104503b112196ab48993`, 2026-08-20
 - Local target execution: forbidden. Local target compilation, linking, image
   creation, firmware loading, QEMU, emulator, VM, and guest execution are also
   forbidden.
