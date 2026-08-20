@@ -31,9 +31,10 @@
   security review is CLEAN at `98e41f3ba7ec4f84311b938bcc6dc9659fda0bc9`;
   correctness review accepted one P2 malformed-payload evidence gap; remediation
   is complete at `5c9d30ee2e37e279774d2f67bf450c33d194a3d2`; fresh exact-head
-  correctness review pending
-- Next automatic action: publish payload-independent failure evidence, then obtain
-  fresh correctness review
+  architecture, correctness, and security reviews are CLEAN at implementation
+  head `f1bd50a5a86aeb8e2354cb642068861162848db4`
+- Next automatic action: confirm required CI and exact-head review gates, mark PR
+  #7 ready, and merge when green
 - Mandatory-feature completion: 0% (0 of 11 grouped vertical-path outcomes)
 - Stretch-feature state: not started
 - Elapsed sprint time: less than one day
