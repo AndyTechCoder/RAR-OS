@@ -69,3 +69,21 @@ and unrelated external access remain unauthorized.
 Sprint approval: approved
 Sprint approver: Andy / RAR project owner
 Rebaseline date: 2026-08-20
+
+## End-of-week demonstrator approval
+
+Status: Approved
+
+On 2026-08-25, the owner directed the sprint to deliver a working bootable GUI
+version by the end of the week while retaining the previously approved RAR OS
+requirements and long-term expansion plan. ADR 0018 narrows Alpha completeness
+to an authentic, minimal vertical demonstration without converting experimental
+later-release prototypes into production-complete claims.
+
+The owner also clarified that GitHub is the durable source of truth; SSD
+repository/worktree data is temporary working state. The exact RAR OS subtree
+may be used, but unrelated, irreplaceable SSD data must not be read or changed.
+
+Sprint adjustment: approved
+Approver: Andy / RAR project owner
+Adjustment date: 2026-08-25

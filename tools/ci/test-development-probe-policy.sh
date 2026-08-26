@@ -15,4 +15,20 @@ status=$?
 set -e
 [ "$status" -eq 73 ]
 
+for milestone in b c d e f g; do
+    set +e
+    tools/ci/run-development-probe.sh "milestone-$milestone" >/dev/null 2>&1
+    status=$?
+    set -e
+    [ "$status" -eq 73 ]
+done
+
+# Source branches never receive launch authority: there is exactly one QEMU
+# execution site, and it is the trusted controller launcher.
+[ "$(grep -RIl '^"\$qemu" \\' tools/ci tools/sprint-alpha | wc -l | tr -d ' ')" -eq 1 ]
+grep -q '^"$qemu" \\' tools/ci/launch-cloud-target.sh
+! grep -q 'RAR_QEMU_' tools/ci/verify-cloud-target-tools.sh
+! grep -q 'RAR_FIRMWARE_' tools/ci/verify-cloud-target-tools.sh
+! grep -q 'source_root,target=/workspace' tools/ci/launch-cloud-target.sh
+
 echo "development probe policy checks passed"

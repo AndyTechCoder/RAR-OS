@@ -4,11 +4,45 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 cd "$root"
 
+budget_check=false
+case "$root" in '/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/'*) budget_check=true ;; esac
+[ "$budget_check" = false ] || /bin/sh tools/ci/check-workspace-budget.sh >/dev/null
+# Bound every individual disposable fixture produced by this phase to 64 MiB.
+ulimit -f 131072
+
 tools/ci/check-specs.sh
 /bin/sh -n \
     tools/ci/check-sprint-static.sh \
+    tools/ci/check-local-sprint-preflight.sh \
+    tools/ci/check-remote-sprint-preflight.sh \
+    tools/ci/test-local-sprint-preflight-policy.sh \
+    tools/ci/check-development-lab-profile.sh \
+    tools/ci/test-development-lab-profile-policy.sh \
+    tools/ci/verify-remote-checkpoint.sh \
+    tools/ci/test-remote-checkpoint-policy.sh \
+    tools/ci/verify-frozen-artifact.sh \
+    tools/ci/test-frozen-artifact-policy.sh \
+    tools/ci/run-alpha-scenario.sh \
+    tools/ci/check-alpha-dependencies.sh \
+    tools/ci/test-alpha-dependency-policy.sh \
+    tools/ci/check-alpha-crypto-references.sh \
+    tools/ci/test-alpha-crypto-reference-policy.sh \
+    tools/ci/check-trusted-launcher-policy.sh \
+    tools/ci/test-trusted-launcher-policy.sh \
+    tools/ci/verify-launch-evidence.sh \
+    tools/ci/test-launch-evidence-policy.sh \
+    tools/ci/wait-for-launch-release.sh \
+    tools/ci/test-launch-handshake-policy.sh \
+    tools/ci/prepare-launch-control.sh \
+    tools/ci/check-workspace-budget.sh \
+    tools/ci/test-workspace-budget-policy.sh \
+    tools/ci/verify-pinned-file.sh \
+    tools/ci/test-pinned-file-policy.sh \
+    tools/ci/check-qmp-client-contract.sh \
+    tools/ci/hash-source-tree.sh \
     tools/ci/run-development-probe.sh \
     tools/ci/run-cloud-target-probe.sh \
+    tools/ci/launch-cloud-target.sh \
     tools/ci/verify-cloud-target-tools.sh \
     tools/ci/development-probe-status.sh \
     tools/ci/test-development-probe-policy.sh \
@@ -22,5 +56,18 @@ tools/ci/check-specs.sh
     sdk/generated/release-0/check.sh
 
 tools/ci/test-development-probe-policy.sh
+/bin/sh tools/ci/test-development-lab-profile-policy.sh
+tools/ci/test-local-sprint-preflight-policy.sh
+/bin/sh tools/ci/test-remote-checkpoint-policy.sh
+/bin/sh tools/ci/test-frozen-artifact-policy.sh
+/bin/sh tools/ci/test-alpha-dependency-policy.sh
+/bin/sh tools/ci/test-alpha-crypto-reference-policy.sh
+/bin/sh tools/ci/test-trusted-launcher-policy.sh
+/bin/sh tools/ci/test-launch-evidence-policy.sh
+/bin/sh tools/ci/test-launch-handshake-policy.sh
+/bin/sh tools/ci/test-workspace-budget-policy.sh
+/bin/sh tools/ci/test-pinned-file-policy.sh
+
+[ "$budget_check" = false ] || /bin/sh tools/ci/check-workspace-budget.sh >/dev/null
 
 echo "sprint static checks passed"

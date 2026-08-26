@@ -6,8 +6,8 @@ cd "$controller_root"
 
 probe=${1-}
 case "$probe" in
-    milestone-a)
-        tools/ci/run-cloud-target-probe.sh milestone-a
+    milestone-a | milestone-b | milestone-c | milestone-d | milestone-e | milestone-f | milestone-g)
+        tools/ci/run-cloud-target-probe.sh "$probe"
         ;;
     *)
         echo "unsupported development probe: $probe" >&2

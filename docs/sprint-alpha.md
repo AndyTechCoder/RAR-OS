@@ -1,14 +1,38 @@
 # RAR OS Sprint Alpha 0.1
 
-Status: Owner-approved rebaseline — 2026-08-20
-Time box: 14 days, ending 2026-09-03 in Europe/Sofia
+Status: Owner-approved end-of-week rebaseline — 2026-08-25
+Time box: ends 2026-08-30 at 23:59 in America/Los_Angeles
 
 ## Objective
 
-Build the closest authentic implementation of the RAR OS vision that can be
-demonstrated reproducibly in the cloud. Every milestone adds observable
-functionality. Experimental Alpha behavior does not become a stable long-term
-contract merely because it crosses a later roadmap release.
+Produce one authentic, bootable, graphical RAR OS vertical slice from a clean
+GitHub checkout in the cloud. The Alpha must visibly work while representing
+the architecture's isolation, recovery, data separation, signed-layer update,
+and rollback principles in minimal tested form. These prototypes do not claim
+production completeness or silently close their later roadmap releases.
+
+## End-of-week completion contract
+
+Alpha 0.1 is complete only when one retained cloud demonstration proves that a
+clean checkout:
+
+1. reproducibly builds RAR-owned x86-64 target code with no unapproved linked
+   target dependency;
+2. boots RAR Root → Recovery → Nucleus in the approved Development Lab;
+3. displays an interactive framebuffer GUI and accepts keyboard and pointer
+   input;
+4. opens a launcher, terminal, settings, and at least two native demo apps;
+5. runs isolated components through capability-controlled IPC and restarts one
+   deliberately crashed component without losing the rest of the experience;
+6. keeps system and preserved-data regions separate and demonstrates recovery
+   while a verified test file remains unchanged;
+7. installs or replaces a signed layer, rejects a tampered layer, and rolls back
+   a failed activation without rebuilding the whole OS; and
+8. publishes the exact source, tool, firmware, artifact and evidence identities,
+   plus build, boot, debugging, recovery, update and extension documentation.
+
+Passing only a mock, host application, Linux process, screenshot, prerecorded
+animation, or unbooted image does not satisfy this contract.
 
 ## Mandatory vertical path
 
@@ -52,17 +76,19 @@ component failure invokes recovery while verified intact data remains unchanged.
 
 ### E — Interactive experience
 
-The OS displays a framebuffer shell, accepts keyboard input, launches a terminal,
-and runs at least two native demonstrations or applications.
+The OS displays a framebuffer shell, accepts keyboard and pointer input, opens
+the launcher, terminal, and settings, and runs at least two native
+demonstrations or applications.
 
 ### F — Signed layers, update, and rollback
 
 The OS installs or replaces a signed component/layer, rejects tampering,
-demonstrates replacement without a full reboot where supported, and rolls back.
+demonstrates replacement without a full reboot on the selected x86-64 Alpha
+profile while an unaffected component continues, and rolls back.
 
-### G — Maximum breadth and closure
+### G — End-of-week closure and maximum breadth
 
-The mandatory Alpha acceptance demonstration passes from a clean checkout.
+The end-of-week completion contract passes from a clean checkout.
 Remaining time follows this order: simple persistence, A/B system state,
 adaptive layouts, browser-accessible RAR Lab, virtual networking/minimal native
 service, principals, Rust SDK/sample, agent/mock-provider contract, ARM64,
@@ -74,16 +100,27 @@ Tier 0, delta updates, more apps, C SDK, tiny local-model interface.
   set at a time.
 - Worktrees live only under the SSD `worktrees/` directory and use the SSD
   `repository/` Git metadata.
-- Each milestone uses its named `codex/sprint-*-...` branch, SSD worktree, and
-  draft pull request.
-- Batch coherent fixes before pushes. Development Probes are manual and
-  non-gating repository-dispatch requests whose controller comes only from
-  `main`; required milestone CI is strict.
+- After this rebaseline merges, Milestones A–G use one
+  `codex/sprint-alpha-vertical` branch, one SSD worktree, and one draft pull
+  request. Each milestone is a pushed, tested checkpoint on that branch; do not
+  create seven scattered implementation tasks or PRs.
+- Batch coherent fixes before pushes. A–G Development Probes are automatically
+  requested repository-dispatch acceptance gates whose trusted controller comes
+  only from `main`; branch protection is separate, and neither can substitute
+  for the other.
 - Correctness/security review occurs near milestone completion. Architecture
   review is added for public-contract or trust-boundary changes.
 - Never execute target code, QEMU, firmware, an emulator, or a VM locally.
 - Never compile/link the RAR target or create boot images locally.
 - Keep `SPRINT_STATUS.md` current at every durable transition.
+- Every durable transition is pushed before the next implementation task begins.
+- Published milestone commits and annotated checkpoint tags are append-only: no
+  force-push, tag movement/deletion, rebase, or history rewrite.
+- Diagnose once and batch a coherent repair. Retry an ordinary failure at most
+  twice; on a third identical failure, record one blocker and stop without a
+  polling loop or persistent goal.
+- Never start implementation while GitHub Actions cannot start a job or while
+  the local Codex state store lacks safe disk headroom.
 
 `SPRINT_STATUS.md` records the exact completed implementation or published
 checkpoint being described. Because a Git commit cannot contain its own SHA,
@@ -91,11 +128,12 @@ the authoritative current branch head is resolved through the recorded PR and
 `git rev-parse HEAD`; status-only commits label their parent checkpoint rather
 than claiming to embed their own identity.
 
-The Release Driver requests a Development Probe through GitHub's repository
-dispatch API with event type `development-probe`, probe `milestone-a`, and an
-exact 40-character source commit SHA. It never asks the owner to run routine
-probes manually. The workflow controller always comes from `main`; only the
-separate source checkout comes from the requested SHA.
+The Release Driver requests each Development Probe through GitHub's repository
+dispatch API with event type `development-probe`, the corresponding probe
+`milestone-a` through `milestone-g`, and an exact 40-character source commit
+SHA. It never asks the owner to run routine probes manually. The workflow
+controller always comes from `main`; only the separate source checkout comes
+from the requested SHA.
 
 ## Out of sprint
 

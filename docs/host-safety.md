@@ -12,7 +12,11 @@ and guest execution occur only in the owner-approved cloud Development Lab
 defined by ADR 0017. A future local RAR Lab profile would still require a
 separate explicit owner decision.
 
-Codex is authorized to modify any file inside this repository and its Git metadata, including destructive rewrites. Automatic review may approve repository-confined work and publication to the canonical `AndyTechCoder/RAR-OS` GitHub repository. All other external effects fail closed under `.codex/config.toml` and `.codex/rules/host-safety.rules`.
+Codex is authorized to modify repository working files and ordinary Git metadata.
+It may not rewrite or discard published sprint history. Automatic review may
+approve repository-confined work and publication to the canonical
+`AndyTechCoder/RAR-OS` GitHub repository. All other external effects fail closed
+under `.codex/config.toml` and `.codex/rules/host-safety.rules`.
 
 ## Forbidden actions
 
@@ -32,9 +36,49 @@ Agents, tools, scripts, and contributors must never:
 ## Allowed host activity
 
 - Read and edit source and documentation.
-- Run Git, text-processing, documentation, lint, static-analysis, compiler, linker, and packaging tools.
+- Run Git without force/history-rewrite operations.
+- Run text-processing, documentation, lint, static-analysis, and reviewed
+  repository scripts that are provably host-only.
+- Compiler, linker, object-copy, packaging, firmware, and image commands may not
+  run directly on the Mac. A reviewed host-only script may compile only its own
+  diagnostic/test helper when it cannot select or emit a RAR target artifact.
 - Inspect target binaries without executing them.
 - Run host-only tests that contain no target OS code.
+
+## SSD data-safety boundary
+
+The SSD contains unrelated irreplaceable owner data. On the owner's Mac, the
+only RAR OS workspace is the exact subtree
+`/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha`.
+
+- Do not read, list, search, size, hash, permission-change, move, or delete any
+  parent, sibling, or unrelated SSD path.
+- Do not run volume-wide cleanup, wildcard deletion, recursive permission
+  changes, filesystem repair, formatting, or imaging.
+- GitHub is authoritative. An SSD worktree is removed only after its clean,
+  pushed commits are merged and the exact merge is verified remotely.
+- Scratch and artifacts may be replaced only inside their exact RAR OS
+  subdirectories. No failure grants permission to broaden cleanup.
+- If the volume is absent, renamed, unexpectedly mounted, or the resolved path
+  escapes the exact subtree, stop before any write.
+- The repository selects the `rar-os-ssd` permission profile. Codex requires its
+  definition to be installed once at user level from the reviewed
+  `.codex/rar-os-ssd-user-fragment.toml`; repository config cannot grant itself
+  a new machine permission profile. Until installed, task startup fails closed.
+  The profile grants local commands only minimal runtime reads and read/write
+  access to this exact subtree. Start every RAR OS task from its SSD worktree;
+  do not select a legacy sandbox mode or add the historical Mac source folder
+  as a runtime workspace root.
+- A repository fragment or nested `codex sandbox` smoke test cannot prove which
+  profile governs the current task. Before unattended implementation, the owner
+  must install the exact reviewed fragment, start a fresh task from the SSD
+  worktree with that named profile selected and no legacy override, and retain
+  the one-time in-product confinement check: a write inside the exact subtree
+  succeeds while a read and write outside it are denied. Until then this is a
+  manual fail-closed blocker, not a mechanically satisfied preflight.
+- `.rar-os-workspace-identity` is a path-continuity guard marker, not proof of a
+  physical disk's identity. It detects an absent, renamed, or mismatched RAR OS
+  workspace; it does not authenticate the SSD or unrelated content on it.
 
 Repository command-prefix rules are defense in depth, not an exhaustive command-family parser. Absolute executable paths, shell or environment wrappers, build-tool indirection, launcher scripts, and unknown emulator names receive no implicit exception: the automatic reviewer denies uncertain parsing or non-canonical destinations, and R0-000 validates the fully resolved executable and argument vector before any process spawn.
 

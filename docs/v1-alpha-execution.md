@@ -4,8 +4,9 @@ Status: Approved for execution; begins after repository publication and GitHub a
 
 ## Sprint Alpha 0.1 execution overlay
 
-ADR 0017 and `sprint-alpha.md` define the owner-approved fourteen-day Sprint
-Alpha release-driver sequence. For that sprint only, bounded automated target
+ADRs 0017–0018 and `sprint-alpha.md` define the owner-approved Sprint Alpha
+release-driver sequence and end-of-week demonstrator. For that sprint only,
+bounded automated target
 build and guest execution in the cloud Development Lab replace the manual
 Prompt 7/production-style authorization path as the implementation blocker.
 Local Mac target compilation and execution remain forbidden. The staged prompts

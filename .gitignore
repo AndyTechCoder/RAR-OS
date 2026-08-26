@@ -5,6 +5,7 @@
 
 # Host tools and editors
 .DS_Store
+._*
 .idea/
 .vscode/
 *.swp

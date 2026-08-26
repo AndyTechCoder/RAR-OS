@@ -1,50 +1,34 @@
 # Sprint Alpha 0.1 Status
 
-- Current milestone: Rebaseline (pre-Milestone A)
-- Milestone objective: Establish the approved cloud Development Lab boundary,
-  quiet pipeline, sprint roadmap overlay, and durable release-driver state.
-- Current observable outcome: SSD workspace and canonical `main` reconciled;
-  historical source mechanically read-only; cloud Development Lab ADR, quiet
-  pipeline, roadmap overlay, and non-executing local checks implemented.
-- Active task/chat: Sprint Release Driver (`01a01e23-adfc-7861-ab84-8f67e14dcb22`)
-- SSD worktree path: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/sprint-alpha-rebaseline`
+- Date: 2026-08-26
+- Current milestone: End-of-week rebaseline, before Milestone A target implementation
+- Objective: merge the trusted cloud Development Lab controller, then implement
+  and retain the authentic A–G bootable GUI vertical slice
+- Worktree: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/sprint-alpha-rebaseline`
 - Branch: `codex/sprint-alpha-rebaseline`
-- PR: [#7](https://github.com/AndyTechCoder/RAR-OS/pull/7), draft
-- Exact completed checkpoint described here: payload-independent failure evidence
-  remediation `5c9d30ee2e37e279774d2f67bf450c33d194a3d2`
-- Authoritative current head: resolve PR #7 head and `git rev-parse HEAD`; this
-  file does not claim that a commit can embed its own SHA
-- Completed functionality: workspace safety reconciliation, read-only historical
-  source, ADR 0017, Sprint Alpha plan, quiet required CI, manual Development
-  Probe, and durable status framework
-- Current Development Probe state: not dispatched; no target code exists on this branch
-- Current required CI state: local non-executing static checks pass; PR #7 run
-  `32353707478` did not start because GitHub reported failed account payments or
-  an insufficient Actions spending limit
-- Unresolved accepted findings: all five architecture findings are remediated;
-  architecture is CLEAN at `74d548b7217f9df36ef9fb610d05e0af08cfecb7`;
-  correctness review's three P1 findings are remediated at
-  `eb42708020f4230867f0c871580d02e80888d4af`; fresh exact-head correctness
-  review is CLEAN at `39486625108c9a792cbddc43647450e92b900c89`;
-  the Development Probe High/P1 is remediated at `107e9f3`; fresh review accepted
-  one sibling High/P1 branch-selected Specifications controller gap; remediation
-  is complete at `239905938081e52972abf8b5212e8cd5d456580e`; fresh exact-head
-  security review is CLEAN at `98e41f3ba7ec4f84311b938bcc6dc9659fda0bc9`;
-  correctness review accepted one P2 malformed-payload evidence gap; remediation
-  is complete at `5c9d30ee2e37e279774d2f67bf450c33d194a3d2`; fresh exact-head
-  architecture, correctness, and security reviews are CLEAN at implementation
-  head `f1bd50a5a86aeb8e2354cb642068861162848db4`
-- Blocking condition: GitHub Actions billing/spending must be restored by the
-  repository owner; Codex cannot change account billing
-- Next automatic action: after billing is restored, rerun required CI, reconfirm
-  exact-head review gates, mark PR #7 ready, and merge when green
-- Mandatory-feature completion: 0% (0 of 11 grouped vertical-path outcomes)
-- Stretch-feature state: not started
-- Elapsed sprint time: less than one day
-- Remaining sprint time: 14 days; ends 2026-09-03 Europe/Sofia
-- Usage/reset risk: low at sprint start; first of three planned usage windows
-- Last durable checkpoint: payload-independent failure evidence remediation
-  `5c9d30ee2e37e279774d2f67bf450c33d194a3d2`, 2026-08-20
-- Local target execution: forbidden. Local target compilation, linking, image
-  creation, firmware loading, QEMU, emulator, VM, and guest execution are also
-  forbidden.
+- Pull request: [#7](https://github.com/AndyTechCoder/RAR-OS/pull/7), draft
+- Current outcome: the controller transition, decision-complete A–G packet,
+  experimental signing contract, cumulative 45-observation acceptance protocol,
+  two-build reproducibility check, isolated build/launch boundaries, frozen
+  artifact, QMP evidence path, and bounded SSD/static safeguards are complete in
+  the reviewed working diff
+- Validation: `tools/ci/check-sprint-static.sh` and `git diff --check` pass;
+  post-run SSD budget check passes with about 132608 KiB in the dedicated RAR OS
+  workspace and 128 KiB of combined `out/` data
+- Independent review: architecture CLEAN; correctness CLEAN; security CLEAN on
+  the current controller implementation diff, with no target execution
+- Target functionality: 0%; no RAR OS target implementation has started, built,
+  booted, or run
+- Development Lab state: intentionally `blocked` until reviewed real build and
+  launch OCI/tool/firmware/QMP/crypto identities replace every unavailable pin
+- External blockers: GitHub Actions billing/spending still produces zero-step
+  failures; the Mac internal disk remains below the 10 GiB unattended-work
+  threshold; and the reviewed `rar-os-ssd` user profile still needs one-time
+  owner installation/evidence in a fresh SSD-root task
+- Next durable action: commit and push this single reviewed checkpoint to PR #7;
+  do not rerun failed Actions, merge, tag, activate the lab, or start Milestone A
+  until every external precondition is genuinely green
+- Deadline: 2026-08-30 23:59 America/Los_Angeles
+- Local safety: target compilation, image creation, firmware loading, QEMU,
+  emulator, VM, guest execution, macOS modification, and access outside the
+  dedicated RAR OS SSD subtree remain forbidden

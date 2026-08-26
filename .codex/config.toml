@@ -5,16 +5,13 @@
 model = "gpt-5.6-sol"
 model_reasoning_effort = "medium"
 
-sandbox_mode = "workspace-write"
+default_permissions = "rar-os-ssd"
 approval_policy = "on-request"
 approvals_reviewer = "auto_review"
 allow_login_shell = false
 
-[sandbox_workspace_write]
-writable_roots = []
-network_access = false
-exclude_tmpdir_env_var = true
-exclude_slash_tmp = true
+[features]
+goals = false
 
 [shell_environment_policy]
 inherit = "core"
@@ -38,8 +35,9 @@ the active AndyTechCoder/RAR-OS repository and its protected Git metadata.
 Approve when all side effects are confined to this repository, including:
 - editing, creating, moving, or deleting repository files;
 - repository-local build output under target/, out/, or evidence/;
-- host compiler, static-analysis, formatting, test, and documentation commands
-  whose target code is not executed;
+- repository-provided host-only policy, static-analysis, formatting, test, and
+  documentation scripts that cannot compile, link, image, or execute RAR target
+  code on the Mac;
 - Git index, branch, worktree, commit, and repository metadata operations for
   this repository;
 - authenticated fetch, push, PR readiness, and evidence-gated merge operations whose only remote target
@@ -47,6 +45,9 @@ Approve when all side effects are confined to this repository, including:
 
 Deny every request that could affect anything outside the repository, except
 the exact GitHub publication exception above. In particular deny:
+- on the owner's Mac, any read, enumeration, write, move, deletion, permission
+  change, or cleanup outside `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha`,
+  including its parents, siblings, and all unrelated SSD content;
 - writes, moves, deletion, permission changes, or persistence outside the repo;
 - sudo, administrator, root, login-shell, or broad unsandboxed execution;
 - macOS settings, applications, services, login items, launch agents/daemons,
@@ -56,6 +57,9 @@ the exact GitHub publication exception above. In particular deny:
   microphone passthrough, or host filesystem sharing;
 - direct QEMU or other target/emulator execution before the separately recorded
   owner authorization for a certified RAR Lab profile;
+- direct compiler, linker, object-copy, boot-image, firmware-image, or target
+  build commands on the owner's Mac; target build and execution occur only in
+  the approved cloud Development Lab;
 - network access to any destination other than the canonical GitHub repository;
 - credential discovery, export, logging, or transmission;
 - changing .codex/config.toml, .codex/rules, AGENTS.md, docs/host-safety.md, or
@@ -63,6 +67,12 @@ the exact GitHub publication exception above. In particular deny:
 - requests to expand writable roots, enable general network access, disable the
   sandbox, enable danger-full-access, or change the reviewer away from this
   policy.
+
+Do not approve broad cleanup, recursive permission changes, or retry/poll loops.
+Do not approve force-push, force-with-lease, remote ref deletion, tag movement,
+history rewrite, or any command that discards a pushed sprint checkpoint.
+Worktree removal is eligible only for one exact registered RAR OS worktree after
+its clean commits and merge are verified on the canonical GitHub repository.
 
 If command parsing, destination, path ownership, or side effects are uncertain,
 deny the request. Do not convert a denial into a broader alternative.

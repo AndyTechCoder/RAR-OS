@@ -21,6 +21,7 @@ rustfmt.toml
 .github/workflows/specifications.yml
 .github/workflows/development-probe.yml
 .codex/config.toml
+.codex/rar-os-ssd-user-fragment.toml
 .codex/rules/host-safety.rules
 .codex/agents/architect.toml
 .codex/agents/explorer.toml
@@ -37,6 +38,9 @@ docs/v1-alpha-execution.md
 docs/sprint-alpha.md
 SPRINT_STATUS.md
 docs/tasks/release-0.md
+docs/tasks/sprint-alpha-vertical.md
+spec/alpha/evidence/README.md
+spec/alpha/evidence/acceptance-v1.plan
 docs/adr/0011-release-0-reproducibility-gate-phasing.md
 docs/adr/0012-release-0-host-bootstrap-trust-and-snapshot.md
 docs/release-0/build/prompt-4-remediation.md
@@ -45,6 +49,8 @@ docs/adr/0014-hardware-binding-and-record-identity.md
 docs/adr/0015-deterministic-validation-precedence.md
 docs/adr/0016-release-0-entry-validation-and-authority-closure.md
 docs/adr/0017-sprint-alpha-development-lab.md
+docs/adr/0018-end-of-week-demonstrator.md
+docs/adr/0019-alpha-layer-signing.md
 docs/release-0/contracts/README.md
 spec/boot/handoff-v1.fields
 spec/hardware/rhd-v1.fields
@@ -59,14 +65,48 @@ sdk/generated/release-0/check.sh
 sdk/generated/release-0/lib.rs
 tools/ci/check-specs.sh
 tools/ci/check-sprint-static.sh
+tools/ci/check-local-sprint-preflight.sh
+tools/ci/check-remote-sprint-preflight.sh
+tools/ci/test-local-sprint-preflight-policy.sh
+tools/ci/check-development-lab-profile.sh
+tools/ci/test-development-lab-profile-policy.sh
+tools/ci/verify-remote-checkpoint.sh
+tools/ci/test-remote-checkpoint-policy.sh
+tools/ci/verify-frozen-artifact.sh
+tools/ci/test-frozen-artifact-policy.sh
+tools/ci/run-alpha-scenario.sh
+tools/ci/check-alpha-dependencies.sh
+tools/ci/test-alpha-dependency-policy.sh
+tools/ci/check-alpha-crypto-references.sh
+tools/ci/test-alpha-crypto-reference-policy.sh
+tools/ci/check-trusted-launcher-policy.sh
+tools/ci/test-trusted-launcher-policy.sh
+tools/ci/verify-launch-evidence.sh
+tools/ci/test-launch-evidence-policy.sh
+tools/ci/wait-for-launch-release.sh
+tools/ci/test-launch-handshake-policy.sh
+tools/ci/prepare-launch-control.sh
+tools/ci/check-workspace-budget.sh
+tools/ci/test-workspace-budget-policy.sh
+tools/ci/verify-pinned-file.sh
+tools/ci/test-pinned-file-policy.sh
+tools/ci/check-qmp-client-contract.sh
+tools/ci/hash-source-tree.sh
 tools/ci/run-development-probe.sh
 tools/ci/run-cloud-target-probe.sh
+tools/ci/launch-cloud-target.sh
 tools/ci/verify-cloud-target-tools.sh
 tools/ci/development-probe-status.sh
 tools/ci/test-development-probe-policy.sh
 tools/ci/check-host-policy.sh
 tools/ci/test-host-policy.sh
 tools/ci/fixtures/host-policy/README.md
+tools/sprint-alpha/README.md
+tools/sprint-alpha/development-lab-v1.env
+tools/sprint-alpha/x86_64-q35-v1.profile
+tools/sprint-alpha/alpha-crypto-references-v1.env
+tools/sprint-alpha/qmp-client-v1.env
+tools/sprint-alpha/qmp-client-v1.md
 tools/rarbuild/bootstrap-lib.sh
 tools/rarbuild/contracts/rar-host-check-v2.fields
 tools/rarbuild/contracts/rar-host-test-v2.fields
@@ -84,8 +124,18 @@ printf '%s\n' "$required_files" | while IFS= read -r file; do
     [ -s "$file" ] || fail "empty required file: $file"
 done
 
-for script in tools/ci/check-specs.sh tools/ci/check-sprint-static.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/verify-cloud-target-tools.sh tools/ci/development-probe-status.sh tools/ci/test-development-probe-policy.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
+for script in tools/ci/check-specs.sh tools/ci/check-sprint-static.sh tools/ci/check-local-sprint-preflight.sh tools/ci/check-remote-sprint-preflight.sh tools/ci/test-local-sprint-preflight-policy.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/launch-cloud-target.sh tools/ci/prepare-launch-control.sh tools/ci/wait-for-launch-release.sh tools/ci/check-workspace-budget.sh tools/ci/verify-cloud-target-tools.sh tools/ci/development-probe-status.sh tools/ci/test-development-probe-policy.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
     [ -x "$script" ] || fail "required script is not executable: $script"
+done
+
+grep -qx 'Status: Owner-approved execution contract — 2026-08-25' docs/tasks/sprint-alpha-vertical.md || fail "Sprint Alpha vertical packet is not approved"
+[ "$(sed -n '1p' spec/alpha/evidence/acceptance-v1.plan)" = schema=rar-alpha-acceptance-plan-v1 ] || fail "Alpha evidence protocol schema is invalid"
+[ "$(awk -F '|' '!/^#/ && !/^schema=/ && NF { count++; if (NF != 5 || $1 !~ /^[A-G]$/ || $2 !~ /^(none|continue|key:[a-z0-9-]+|pointer:[0-9]+,[0-9]+,[0-9]+)$/ || $3 !~ /^[a-z0-9:-]+$/ || $4 !~ /^[a-z0-9-]+$/ || $5 !~ /^[01]$/) bad=1 } END { if (bad) exit 1; print count + 0 }' spec/alpha/evidence/acceptance-v1.plan)" -eq 45 ] || fail "Alpha evidence protocol is incomplete or malformed"
+/bin/sh tools/ci/check-development-lab-profile.sh >/dev/null
+[ "$(sed -n '1p' tools/sprint-alpha/x86_64-q35-v1.profile)" = 'schema=rar-development-machine-profile-v1' ] || fail "Sprint Alpha machine profile schema is invalid"
+grep -qx 'acceleration=tcg' tools/sprint-alpha/x86_64-q35-v1.profile || fail "Sprint Alpha machine profile must use software emulation"
+for disabled_boundary in 'network=none' 'audio=none' 'host_sharing=none' 'passthrough=none'; do
+    grep -qx "$disabled_boundary" tools/sprint-alpha/x86_64-q35-v1.profile || fail "Sprint Alpha machine profile boundary is missing: $disabled_boundary"
 done
 
 [ "$(sed -n '2,$p' spec/fixtures/release-0/cases.v1 | awk -F '|' 'NR > 1 { count++ } END { print count + 0 }')" -eq 23 ] || fail "R0-002 binary fixture manifest is incomplete"
@@ -139,7 +189,7 @@ duplicates=$(printf '%s\n' "$index_targets" | sort | uniq -d)
 
 adr_files=$(sed -n 's/^- \[ADR [^]]*\](\(adr\/[^)]*\.md\))$/docs\/\1/p' docs/README.md)
 adr_count=$(printf '%s\n' "$adr_files" | awk 'NF { count++ } END { print count + 0 }')
-[ "$adr_count" -eq 17 ] || fail "expected exactly 17 indexed ADRs"
+[ "$adr_count" -eq 19 ] || fail "expected exactly 19 indexed ADRs"
 
 approval_date=$(sed -n 's/^Date: //p' docs/approval-record.md)
 case "$approval_date" in
@@ -177,14 +227,14 @@ grep -qx "Status: Ready — Gate 0 owner approval recorded $approval_date" docs/
 grep -qx 'Status: Approved for Prompt 2 after repository publication' docs/handoff-prompt.md || fail "handoff prompt status is inconsistent"
 grep -qx 'Status: Approved for execution; begins after repository publication and GitHub authentication' docs/v1-alpha-execution.md || fail "execution runbook status is inconsistent"
 
-for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0014 0015 0016 0017; do
+for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0014 0015 0016 0017 0018 0019; do
     matches=$(printf '%s\n' "$adr_files" | grep -c "/$number-")
     [ "$matches" -eq 1 ] || fail "expected one indexed ADR for $number"
 done
 
-grep -q 'ADRs 0001–0017' docs/tasks/release-0.md || fail "Release 0 approved ADR range is stale"
+grep -q 'ADRs 0001–0018' docs/tasks/release-0.md || fail "Release 0 approved ADR range is stale"
 grep -q 'Build-plan and evidence schemas use version 3' docs/adr/0011-release-0-reproducibility-gate-phasing.md || fail "ADR 0011 build-plan/evidence schema version is stale"
-for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0014 0015 0016 0017; do
+for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0014 0015 0016 0017 0018; do
     if grep -q "ADR $number" docs/tasks/release-0.md; then
         printf '%s\n' "$adr_files" | grep -q "/$number-" || fail "task-referenced ADR $number is not indexed and approved"
     fi
@@ -195,6 +245,8 @@ printf '%s\n' "$adr_files" | while IFS= read -r adr; do
     case "$adr" in
         docs/adr/0013-* | docs/adr/0014-* | docs/adr/0015-* | docs/adr/0016-*) adr_approval_date=2026-07-17 ;;
         docs/adr/0017-*) adr_approval_date=2026-08-20 ;;
+        docs/adr/0018-*) adr_approval_date=2026-08-25 ;;
+        docs/adr/0019-*) adr_approval_date=2026-08-26 ;;
         *) adr_approval_date=$approval_date ;;
     esac
     grep -qx "Status: Accepted — $adr_approval_date" "$adr" || fail "ADR status mismatch: $adr"
@@ -229,17 +281,32 @@ if grep -nE '^- `\[[^x]\]` \*\*P0' BACKLOG.md; then
     fail "Gate 0 P0 backlog item does not use the complete status"
 fi
 
-if find . -path ./.git -prune -o -path ./out -prune -o -path ./spec/fixtures/release-0/bin -prune -o -type f -exec grep -nHE '[[:blank:]]+$' {} +; then
+if find . -path ./.git -prune -o -name '._*' -prune -o -path ./out -prune -o -path ./spec/fixtures/release-0/bin -prune -o -type f -exec grep -nHE '[[:blank:]]+$' {} +; then
     fail "trailing whitespace found"
 fi
 
-if find . -path ./.git -prune -o -path ./out -prune -o -path ./spec/fixtures/release-0/bin -prune -o -type f -exec grep -nHE '^(<<<<<<<|=======|>>>>>>>)' {} +; then
+if find . -path ./.git -prune -o -name '._*' -prune -o -path ./out -prune -o -path ./spec/fixtures/release-0/bin -prune -o -type f -exec grep -nHE '^(<<<<<<<|=======|>>>>>>>)' {} +; then
     fail "merge-conflict marker found"
 fi
 
 grep -Eq 'uses: actions/checkout@[0-9a-f]{40}([[:space:]]|$)' .github/workflows/specifications.yml || fail "GitHub checkout action is not pinned by commit"
 grep -qx 'channel = "1.95.0"' rust-toolchain.toml || fail "Rust toolchain is not pinned to 1.95.0"
-grep -qx 'members = \[\]' Cargo.toml || fail "Gate 0 workspace must not contain implementation crates"
+if ! grep -qx 'members = \[\]' Cargo.toml; then
+    grep -qx 'alpha_workspace = true' Cargo.toml || fail 'nonempty workspace lacks the explicit Alpha marker'
+    grep -q '^Status: Owner-approved execution contract' docs/tasks/sprint-alpha-vertical.md || fail 'Alpha workspace lacks its execution contract'
+fi
+/bin/sh tools/ci/check-alpha-dependencies.sh >/dev/null
+
+crypto_refs=tools/sprint-alpha/alpha-crypto-references-v1.env
+grep -qx 'schema=rar-alpha-crypto-reference-inventory-v1' "$crypto_refs" || fail 'Alpha crypto reference inventory schema invalid'
+grep -qx 'reference_1=OpenSSL' "$crypto_refs" || fail 'first Alpha crypto reference is not fixed'
+grep -qx 'version_1=3.0.13' "$crypto_refs" || fail 'OpenSSL reference version drifted'
+grep -qx 'license_1=Apache-2.0' "$crypto_refs" || fail 'OpenSSL reference license missing'
+grep -qx 'reference_2=libsodium' "$crypto_refs" || fail 'second Alpha crypto reference is not fixed'
+grep -qx 'version_2=1.0.19' "$crypto_refs" || fail 'libsodium reference version drifted'
+grep -qx 'license_2=ISC' "$crypto_refs" || fail 'libsodium reference license missing'
+/bin/sh tools/ci/check-alpha-crypto-references.sh >/dev/null
+/bin/sh tools/ci/check-qmp-client-contract.sh >/dev/null
 
 class_b_inventory=tools/toolchain/class-b-host-tools.v1
 [ "$(sed -n '1p' "$class_b_inventory")" = 'schema=rar-class-b-host-tool-inventory-v1' ] || fail "Class B inventory schema is invalid"
@@ -340,7 +407,10 @@ grep -q 'complete.log' .github/workflows/development-probe.yml || fail "Developm
 grep -q 'result.json' .github/workflows/development-probe.yml || fail "Development Probe does not retain a structured result"
 grep -Fq 'name: development-probe-${{ github.run_id }}-${{ github.run_attempt }}' .github/workflows/development-probe.yml || fail "Development Probe artifact name is not payload-independent"
 grep -Fq '"probe":"unverified","controller_sha":"unverified","source_sha":"unverified"' .github/workflows/development-probe.yml || fail "Development Probe fallback result is not payload-independent"
-grep -q 'tools/ci/run-cloud-target-probe.sh milestone-a' tools/ci/run-development-probe.sh || fail "Milestone A does not route through the cloud target boundary"
+grep -q 'milestone-a | milestone-b | milestone-c | milestone-d | milestone-e | milestone-f | milestone-g' tools/ci/run-development-probe.sh || fail "A-G probes do not share the cloud target boundary"
+grep -q 'source plus compiler/linker only' tools/ci/run-cloud-target-probe.sh || fail 'untrusted build phase is missing'
+grep -q 'no source mount' tools/ci/run-cloud-target-probe.sh || fail 'trusted launch phase is missing'
+grep -q 'exact emulator argument vector' tools/ci/run-cloud-target-probe.sh || fail 'trusted launcher ownership is missing'
 for boundary in \
     '--network none' \
     '--user "$container_uid:$container_gid"' \
@@ -354,17 +424,26 @@ for boundary in \
     '/usr/bin/timeout --signal=TERM'; do
     grep -Fq -- "$boundary" tools/ci/run-cloud-target-probe.sh || fail "cloud target boundary missing: $boundary"
 done
-grep -q 'container_id=$(docker create ' tools/ci/run-cloud-target-probe.sh || fail "cloud target container identity is not captured"
-grep -q 'docker start --attach "$container_id"' tools/ci/run-cloud-target-probe.sh || fail "cloud target container lifecycle is not attached"
-grep -q 'docker rm --force "$container_id"' tools/ci/run-cloud-target-probe.sh || fail "cloud target container cleanup is not enforced"
+grep -q 'build_id=$(docker create ' tools/ci/run-cloud-target-probe.sh || fail "cloud build container identity is not captured"
+grep -q 'launch_id=$(docker create ' tools/ci/run-cloud-target-probe.sh || fail "cloud launch container identity is not captured"
+grep -q 'docker start --attach "$build_id"' tools/ci/run-cloud-target-probe.sh || fail "cloud build lifecycle is not attached"
+grep -q 'docker start "$launch_id"' tools/ci/run-cloud-target-probe.sh || fail "cloud launch lifecycle is not started"
+grep -q 'docker cp "$launch_id:/evidence/."' tools/ci/run-cloud-target-probe.sh || fail "live bounded evidence is not copied"
+grep -q 'docker wait "$launch_id"' tools/ci/run-cloud-target-probe.sh || fail "cloud launch lifecycle is not joined"
+grep -q 'docker rm --force "$build_id"' tools/ci/run-cloud-target-probe.sh || fail "cloud build cleanup is not enforced"
+grep -q 'docker rm --force "$launch_id"' tools/ci/run-cloud-target-probe.sh || fail "cloud launch cleanup is not enforced"
 grep -q '^    set -e$' tools/ci/run-cloud-target-probe.sh || fail "cloud target preflight does not fail closed"
-grep -q '^\[ "${state-}" = ready \]' tools/ci/run-cloud-target-probe.sh || fail "cloud target profile does not fail closed"
+grep -q '^\[ "$state" = ready \]' tools/ci/run-cloud-target-probe.sh || fail "cloud target profile does not fail closed"
 grep -q 'verify-cloud-target-tools.sh' tools/ci/run-cloud-target-probe.sh || fail "cloud target tool verification is bypassed"
-grep -q 'controller checkout identity mismatch' tools/ci/run-cloud-target-probe.sh || fail "cloud target controller identity is not verified"
-grep -q 'source checkout identity mismatch' tools/ci/run-cloud-target-probe.sh || fail "cloud target source identity is not verified"
-for verified_input in compiler linker qemu firmware machine-profile; do
+grep -q 'controller identity mismatch' tools/ci/run-cloud-target-probe.sh || fail "cloud target controller identity is not verified"
+grep -q 'source identity mismatch' tools/ci/run-cloud-target-probe.sh || fail "cloud target source identity is not verified"
+for verified_input in compiler linker; do
     grep -q "^verify_file $verified_input " tools/ci/verify-cloud-target-tools.sh || fail "cloud target input is not byte verified: $verified_input"
 done
+for verified_input in qemu firmware machine-profile; do
+    grep -q "^verify_file $verified_input " tools/ci/launch-cloud-target.sh || fail "trusted launch input is not byte verified: $verified_input"
+done
+/bin/sh tools/ci/check-trusted-launcher-policy.sh tools/ci/launch-cloud-target.sh >/dev/null
 grep -q -- '--read-only' .github/workflows/specifications.yml || fail "CI container root is not read-only"
 grep -Fq 'host_uid=$(/usr/bin/id -u)' .github/workflows/specifications.yml || fail "CI runner UID capture is missing"
 grep -Fq 'host_gid=$(/usr/bin/id -g)' .github/workflows/specifications.yml || fail "CI runner GID capture is missing"

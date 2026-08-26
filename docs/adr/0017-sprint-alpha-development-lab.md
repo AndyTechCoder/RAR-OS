@@ -69,20 +69,39 @@ Every Development Lab execution must use:
 - retained source, configuration, runner, tool, firmware, and artifact hashes;
 - retained complete logs, serial output, structured result, and real exit status.
 
+Build and launch authority are separate and their image digests must differ. A
+digest-pinned build image grants only the reviewed compiler/linker identities
+and may consume and execute repository-controlled build code from the untrusted
+source SHA. That code is intentionally untrusted cloud-sandbox work: it may
+carry its own executable bytes, but receives no controller QEMU, firmware,
+profile, launch-evidence, credential, or network authority, and its output is
+never accepted as proof that the trusted launch occurred. It emits only one
+bounded artifact at a fixed path. The controller
+freezes and hashes that artifact, terminates the build phase, then supplies it
+to a separately pinned launch image. The launch phase mounts no source checkout;
+only the trusted default-branch launcher may access QEMU, firmware, the reviewed
+machine profile, QMP client, scenario plan, writable evidence, or construct
+emulator arguments. The launcher re-hashes the artifact, applies the QEMU
+sandbox, and a fixed A–G harness owns input, fault triggers, captures, timeout,
+and emulator exit status.
+
 The `ubuntu-24.04` GitHub-hosted runner label is repository-approved only as an
 orchestrator. Its observed `ImageOS`, `ImageVersion`, OS, and architecture are
 attested and retained for each run. It grants no target-input authority. All
 output-affecting tools and firmware must be pinned independently before target
 compilation or execution.
 
-Development Probes are manually requested through the repository-dispatch API
-and are non-required workflows for iteration. Repository dispatch always loads
+Development Probes A through G are requested through the repository-dispatch API.
+They are not branch-protection checks, but the active Alpha packet makes the
+successful exact-source probe and immutable tag mandatory acceptance evidence
+for each milestone. Repository dispatch always loads
 the controller from the default branch. The requested source SHA is checked out
 separately and is treated only as read-only, untrusted build input inside the
 isolated container; it cannot replace the launcher, approved profile, verifier,
 or evidence controller. A failed probe remains failed and cannot satisfy a
 milestone. Required milestone CI is
-strict, runs for pull requests and the resulting distinct `main` commit, and
+strict, continues to run Gate 0 checks plus Alpha static checks for pull requests
+and the resulting distinct `main` commit, and
 uses concurrency cancellation to discard obsolete runs. Feature-branch pushes
 do not duplicate the pull-request workflow for the same SHA.
 
@@ -96,7 +115,9 @@ superseded with its history and evidence preserved.
 
 ## Consequences
 
-- Milestone A can begin immediately after this rebaseline merges.
+- Milestone A can begin only after this rebaseline and ready controller merge,
+  Actions executes real green steps, the SSD profile is confirmed, and local
+  storage preflight passes.
 - Cloud probe evidence is development evidence, not production certification.
 - Cross-release Alpha prototypes need explicit limitations and later migration.
 - Production-grade one-shot authorization remains required before production
