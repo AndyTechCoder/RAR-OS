@@ -89,6 +89,8 @@ tools/ci/check-remote-sprint-preflight.sh
 tools/ci/test-local-sprint-preflight-policy.sh
 tools/ci/check-development-lab-profile.sh
 tools/ci/test-development-lab-profile-policy.sh
+tools/ci/check-development-lab-profile-v2.sh
+tools/ci/test-development-lab-profile-v2-policy.sh
 tools/ci/verify-remote-checkpoint.sh
 tools/ci/test-remote-checkpoint-policy.sh
 tools/ci/verify-frozen-artifact.sh
@@ -127,6 +129,7 @@ tools/ci/test-host-policy.sh
 tools/ci/fixtures/host-policy/README.md
 tools/sprint-alpha/README.md
 tools/sprint-alpha/development-lab-v1.env
+tools/sprint-alpha/development-lab-v2.env
 tools/sprint-alpha/x86_64-q35-v1.profile
 tools/sprint-alpha/alpha-crypto-references-v1.env
 tools/sprint-alpha/qmp-client-v1.env
@@ -159,7 +162,7 @@ printf '%s\n' "$required_files" | while IFS= read -r file; do
     [ -s "$file" ] || fail "empty required file: $file"
 done
 
-for script in tools/ci/check-specs.sh tools/ci/check-sprint-static.sh tools/ci/check-local-sprint-preflight.sh tools/ci/check-remote-sprint-preflight.sh tools/ci/test-local-sprint-preflight-policy.sh tools/ci/check-alpha-preimplementation-contracts.sh tools/ci/test-alpha-preimplementation-contract-policy.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/launch-cloud-target.sh tools/ci/prepare-launch-control.sh tools/ci/wait-for-launch-release.sh tools/ci/check-workspace-budget.sh tools/ci/verify-cloud-target-tools.sh tools/ci/development-probe-status.sh tools/ci/test-development-probe-policy.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
+for script in tools/ci/check-specs.sh tools/ci/check-sprint-static.sh tools/ci/check-local-sprint-preflight.sh tools/ci/check-remote-sprint-preflight.sh tools/ci/test-local-sprint-preflight-policy.sh tools/ci/check-alpha-preimplementation-contracts.sh tools/ci/test-alpha-preimplementation-contract-policy.sh tools/ci/check-development-lab-profile-v2.sh tools/ci/test-development-lab-profile-v2-policy.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/launch-cloud-target.sh tools/ci/prepare-launch-control.sh tools/ci/wait-for-launch-release.sh tools/ci/check-workspace-budget.sh tools/ci/verify-cloud-target-tools.sh tools/ci/development-probe-status.sh tools/ci/test-development-probe-policy.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
     [ -x "$script" ] || fail "required script is not executable: $script"
 done
 
@@ -167,6 +170,7 @@ grep -qx 'Status: Owner-approved execution contract — 2026-08-25' docs/tasks/s
 [ "$(sed -n '1p' spec/alpha/evidence/acceptance-v1.plan)" = schema=rar-alpha-acceptance-plan-v1 ] || fail "Alpha evidence protocol schema is invalid"
 [ "$(awk -F '|' '!/^#/ && !/^schema=/ && NF { count++; if (NF != 5 || $1 !~ /^[A-G]$/ || $2 !~ /^(none|continue|key:[a-z0-9-]+|pointer:[0-9]+,[0-9]+,[0-9]+)$/ || $3 !~ /^[a-z0-9:-]+$/ || $4 !~ /^[a-z0-9-]+$/ || $5 !~ /^[01]$/) bad=1 } END { if (bad) exit 1; print count + 0 }' spec/alpha/evidence/acceptance-v1.plan)" -eq 45 ] || fail "Alpha evidence protocol is incomplete or malformed"
 /bin/sh tools/ci/check-development-lab-profile.sh >/dev/null
+/bin/sh tools/ci/check-development-lab-profile-v2.sh >/dev/null
 /bin/sh tools/ci/check-sprint-alpha-gate-report-policy.sh >/dev/null
 /bin/sh tools/ci/test-proposed-adr-classifier-policy.sh >/dev/null
 [ "$(/bin/sh tools/ci/classify-proposed-adr.sh \

@@ -29,7 +29,9 @@
 - Development Lab state: the three-role v2 field schemas and transcript contract
   are source-ready pending final re-review. Exact per-role mounts, bounded
   outputs, empty allowlisted environments, and no-extra-authority rules are
-  bound and their policy tests pass. Provisioning is absent,
+  bound and their policy tests pass. The exact v2 profile instance and
+  single-pass validator are complete, fast, independently reviewed, and reject
+  every activating identity or ready state. Provisioning is absent,
   candidate images remain unbuilt, the legacy v1 profile is permanently
   non-activating, and real immutable output identities plus a reviewed v2
   controller are still required
@@ -48,9 +50,9 @@
   spending limit; the reviewed `rar-os-ssd` user profile still
   needs one-time owner installation/evidence in a fresh SSD-root task
 - Next durable action: complete a focused boot-detail proposal, re-review the
-  Lab contract, and push this honest checkpoint. The v2 controller may then be
-  implemented without provisioning or target execution while the owner decides
-  the boot detail proposal. External Lab gates remain mandatory before target work
+  owner choices for ADRs 0022/0023, then implement the v2 controller without
+  provisioning or target execution. External Lab gates remain mandatory before
+  target work
 - Deadline: 2026-08-30 23:59 America/Los_Angeles
 - Local safety: target compilation, image creation, firmware loading, QEMU,
   emulator, VM, guest execution, macOS modification, and access outside the

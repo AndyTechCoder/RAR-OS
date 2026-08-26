@@ -17,6 +17,12 @@ passes its validator and negative tests, receives independent
 correctness and security review, and merges to `main`. No workflow may download,
 install, or discover an unpinned substitute at probe time.
 
+`development-lab-v2.env` is the exact non-activating instance of that shape.
+`check-development-lab-profile-v2.sh` accepts only its complete blocked form;
+any activating identity or `state=ready` fails until the real immutable inputs,
+reproduction evidence, and reviewed controller exist. Its policy tests mutate
+state, fields, bounds, grammar, and file type without contacting cloud services.
+
 The machine profile is host-controller data, not a stable target interface. It
 requires software emulation, bounded resources, no networking, no passthrough,
 no host sharing, read-only firmware, disposable snapshot storage, serial

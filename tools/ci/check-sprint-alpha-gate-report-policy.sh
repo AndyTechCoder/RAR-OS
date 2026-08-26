@@ -14,6 +14,7 @@ for required in \
     'gui_input_authority=decision-required' \
     'contract_structure=' \
     'lab_contracts=' \
+    'lab_profile_v2=' \
     'boot_contracts=' \
     'preimplementation_contracts=' \
     'adr_0022=' \

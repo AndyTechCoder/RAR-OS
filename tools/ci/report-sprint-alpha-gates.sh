@@ -56,6 +56,7 @@ image_inputs=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/rar-lab/images/image-
 crypto_references=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/sprint-alpha/alpha-crypto-references-v1.env")
 qmp_client=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/sprint-alpha/qmp-client-v1.env")
 lab_profile=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/sprint-alpha/development-lab-v1.env")
+lab_profile_v2=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/sprint-alpha/development-lab-v2.env")
 
 local_repository_gates=ready
 for state in "$workspace_boundary" "$internal_disk" "$ssd_capacity" "$workspace_budget"; do
@@ -94,6 +95,7 @@ printf '%s\n' \
     "crypto_references=$crypto_references" \
     "qmp_client=$qmp_client" \
     "lab_profile=$lab_profile" \
+    "lab_profile_v2=$lab_profile_v2" \
     'remote_workflow=external-evidence-required' \
     'pr_gate=external-evidence-required' \
     'target_implementation=not-started' \
