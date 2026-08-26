@@ -33,8 +33,12 @@ case "$workspace_kib" in '' | *[!0-9]*) workspace_budget=unknown ;; *)
     if [ "$workspace_kib" -le "$maximum_workspace_kib" ]; then workspace_budget=ready; else workspace_budget=blocked; fi
 esac
 
-adr_0020=$(/bin/sh "$root/tools/ci/classify-proposed-adr.sh" "$root/docs/proposals/0020-alpha-reference-oracle-isolation.md")
-adr_0021=$(/bin/sh "$root/tools/ci/classify-proposed-adr.sh" "$root/docs/proposals/0021-alpha-boot-payload-boundary.md")
+adr_0020=$(/bin/sh "$root/tools/ci/classify-proposed-adr.sh" \
+    "$root/docs/adr/0020-alpha-reference-oracle-isolation.md" 0020 \
+    "$root/docs/approval-record.md")
+adr_0021=$(/bin/sh "$root/tools/ci/classify-proposed-adr.sh" \
+    "$root/docs/adr/0021-alpha-boot-payload-boundary.md" 0021 \
+    "$root/docs/approval-record.md")
 image_inputs=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/rar-lab/images/image-inputs-v1.env")
 crypto_references=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/sprint-alpha/alpha-crypto-references-v1.env")
 qmp_client=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/sprint-alpha/qmp-client-v1.env")

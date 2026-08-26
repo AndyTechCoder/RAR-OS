@@ -5,8 +5,22 @@ LANG=C
 export LC_ALL LANG
 
 record=${1-}
+expected_number=${2-}
+approval_record=${3-}
+expected_approver='Andy / RAR project owner'
 [ -f "$record" ] && [ ! -L "$record" ] || exit 1
-/usr/bin/sed -n '1p' "$record" | /usr/bin/grep -Eq '^# ADR [0-9]{4}: [A-Za-z0-9 -]+$' || exit 1
+case "$expected_number" in
+    [0-9][0-9][0-9][0-9]) ;;
+    *) exit 1 ;;
+esac
+[ -f "$approval_record" ] && [ ! -L "$approval_record" ] || exit 1
+first_line=$(/usr/bin/sed -n '1p' "$record")
+case "$first_line" in
+    "# ADR $expected_number: "*) ;;
+    *) exit 1 ;;
+esac
+/usr/bin/printf '%s\n' "$first_line" |
+    /usr/bin/grep -Eq '^# ADR [0-9]{4}: [A-Za-z0-9 -]+$' || exit 1
 [ "$(/usr/bin/grep -c '^Status:' "$record")" -eq 1 ] || exit 1
 [ "$(/usr/bin/grep -c '^Decision:' "$record")" -eq 1 ] || exit 1
 status=$(/usr/bin/sed -n '3p' "$record")
@@ -40,4 +54,16 @@ case "$month" in
 esac
 [ "$day_value" -ge 1 ] && [ "$day_value" -le "$maximum_day" ] || exit 1
 case "$decision" in 'Decision: Alternative '[ABC]) ;; *) exit 1 ;; esac
+
+[ "$(/usr/bin/grep -c '^Architecture decision approval:' "$approval_record")" -eq 1 ] || exit 1
+[ "$(/usr/bin/sed -n 's/^Architecture decision approval: //p' "$approval_record")" = approved ] || exit 1
+[ "$(/usr/bin/grep -c '^Architecture decision approver:' "$approval_record")" -eq 1 ] || exit 1
+approver=$(/usr/bin/sed -n 's/^Architecture decision approver: //p' "$approval_record")
+[ "$approver" = "$expected_approver" ] || exit 1
+[ "$(/usr/bin/grep -c '^Architecture decision date:' "$approval_record")" -eq 1 ] || exit 1
+approved_date=$(/usr/bin/sed -n 's/^Architecture decision date: //p' "$approval_record")
+[ "$date" = "$approved_date" ] || exit 1
+[ "$(/usr/bin/grep -c "^ADR $expected_number decision:" "$approval_record")" -eq 1 ] || exit 1
+approved_decision=$(/usr/bin/sed -n "s/^ADR $expected_number decision: //p" "$approval_record")
+[ "$decision" = "Decision: $approved_decision" ] || exit 1
 printf '%s\n' accepted

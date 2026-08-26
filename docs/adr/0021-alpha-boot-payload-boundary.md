@@ -1,7 +1,11 @@
 # ADR 0021: Alpha Boot Payload and Handoff Boundary
 
-Status: Proposed — owner decision required
-Decision: Undecided
+Status: Accepted — 2026-08-26
+Decision: Alternative C
+
+Approval basis: explicit owner approval after a plain-language explanation on
+2026-08-26 of the Root → Recovery → Nucleus boot responsibilities and the
+Alpha-only, replaceable FAT/ELF boundary.
 
 ## Context
 
@@ -28,7 +32,7 @@ package, filesystem, Root A/B, or production recovery format.
 - Leave room for signed A/B Root and Recovery layouts without pretending Alpha
   already implements them.
 
-## Alternatives
+## Considered options
 
 ### A. One UEFI application containing all three stages
 
@@ -55,20 +59,21 @@ Recovery makes no firmware call. It independently validates and loads the
 Nucleus ELF64 image, constructs every R0-002 source as producer `Recovery`,
 establishes immutable/DMA-revoked source preconditions, constructs the approved
 R0-002 entry, and enters Nucleus. No R0-002 descriptor uses a mixed or implicit
-Root producer. This option is proposed.
+Root producer. This option is selected.
 
 ### D. Implement the production partition, A/B, and RAR filesystem layout now
 
 This best resembles the final architecture but pulls persistent storage,
 updates, migration, and recovery policy into Milestone A before a first boot.
 
-## Proposed direction
+## Decision
 
-Alternative C is proposed. No target implementation or image recipe may assume
-it until the owner accepts this ADR or selects another alternative.
+Alternative C is selected. A reviewed experimental specification remains
+mandatory before target implementation or an image recipe assumes the
+Alpha-only boundary.
 
-If accepted, a reviewed experimental specification must be committed before
-target code. It must define:
+Before target implementation, a reviewed experimental specification must be
+committed. It must define:
 
 - the exact fixed Alpha-only paths for Root, Recovery, and Nucleus;
 - accepted ELF64 class, machine, type, segment, alignment, relocation, bounds,
@@ -107,7 +112,7 @@ target code. It must define:
 - explicit Alpha limitations: no production boot trust, persistent format, or
   update compatibility claim.
 
-## Consequences if accepted
+## Consequences
 
 - Root alone contains UEFI-facing code; Recovery and Nucleus are freestanding.
 - Root validates Recovery, while Recovery—not Root—owns Nucleus validation and
@@ -120,6 +125,22 @@ target code. It must define:
   signatures, and RAR filesystem work to their approved milestones.
 - The private Alpha Root-to-Recovery entry is replaceable and never becomes the
   stable RAR ABI by accident.
+
+## Security and data impact
+
+Firmware authority ends once Root successfully exits boot services. Recovery
+receives no callable firmware pointer, independently validates Nucleus, and
+owns every source described to Nucleus through R0-002. Checked bounds, W^X,
+explicit ownership transfer, immutable source bytes, and DMA revocation prevent
+the bootstrap shortcut from granting implicit authority. This Alpha boot format
+contains no user data and makes no production boot-trust claim.
+
+## Compatibility and migration
+
+The FAT paths, ELF payloads, and Root-to-Recovery entry are explicitly
+experimental Alpha contracts. A later signed RAR image/package and A/B storage
+design replaces them through a reviewed migration ADR. The approved R0-002
+Nucleus entry contract remains unchanged across that replacement.
 
 ## Validation
 

@@ -13,8 +13,9 @@ is a RAR OS target image and no provisioning workflow is currently authorized.
    the launch base. Target source is never present in the final launch image.
 
 `image-inputs-v1.env` is `decision-blocked`: researched upstream inputs are
-immutable, but version 1 cannot transition to ready or authorize image output
-while ADR 0020 is Proposed. The official amd64 Docker manifest digests were
+immutable, but version 1 cannot express the separate reference-image topology
+selected by accepted ADR 0020 and therefore cannot transition to ready or
+authorize image output. The official amd64 Docker manifest digests were
 resolved from Docker Registry v2; Rust component hashes came from the publisher
 `.sha256` files; the OpenSSL checksum came from its official release; the
 libsodium archive was streamed independently from both publisher and GitHub
@@ -22,9 +23,9 @@ release URLs and produced the same SHA-256; and QEMU/OVMF versions were selected
 from Debian's `20260803T000000Z` bookworm amd64 snapshot index. The fixed source
 epoch is that snapshot instant (`2026-08-03T00:00:00Z`).
 
-Accepting an ADR requires a new reviewed input/output schema. Candidate
-provisioning remains deliberately absent while ADR 0020 is Proposed.
-The future provisioner must use a pinned isolated builder, a bounded fresh
+A new reviewed input/output schema must implement the accepted topology.
+Candidate provisioning remains deliberately absent until that schema and its
+real identities pass independent review. The future provisioner must use a pinned isolated builder, a bounded fresh
 context, two independent OCI exports, byte/digest comparison, complete
 inventories and licenses, retained evidence, and no publication authority. It
 must not expose reference oracles to the untrusted build role or run on the Mac.

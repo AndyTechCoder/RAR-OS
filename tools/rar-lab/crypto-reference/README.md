@@ -11,7 +11,8 @@ exposed to the untrusted target build image.
 The OpenSSL 3.0.13 reference uses its own CLI from the independently maintained
 OpenSSL source release. The two reference implementations remain independent;
 the RAR harness does not share target implementation code or decide acceptance
-semantics. ADR 0020 is still Proposed, so the version-1 crypto inventory is
-unconditionally blocked and cannot express ready executable authority. An
-accepted topology requires a new reviewed inventory schema with exact sources,
-licenses, role identity, paths, and executable hashes.
+semantics. Accepted ADR 0020 selects a separate reference image and
+controller-owned comparison phase. The version-1 crypto inventory remains
+unconditionally blocked because it cannot express that topology. A new reviewed
+inventory schema must bind exact sources, licenses, role identity, paths, and
+executable hashes before activation.

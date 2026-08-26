@@ -18,14 +18,30 @@ write_record() {
         printf '%s\n' 'Fixture body.'
     } > "$file"
 }
-reject() { if /bin/sh "$checker" "$1" >/dev/null 2>&1; then exit 1; fi; }
+approval=$work/approval
+write_approval() {
+    date=$1
+    decision=$2
+    approver=${3-'Andy / RAR project owner'}
+    {
+        printf '%s\n' 'Architecture decision approval: approved'
+        printf 'Architecture decision approver: %s\n' "$approver"
+        printf 'Architecture decision date: %s\n' "$date"
+        printf 'ADR 9999 decision: %s\n' "$decision"
+    } > "$approval"
+}
+classify() { /bin/sh "$checker" "$1" "${2-9999}" "$approval"; }
+reject() { if classify "$1" "${2-9999}" >/dev/null 2>&1; then exit 1; fi; }
 
+write_approval 2026-08-26 'Alternative C'
 write_record "$work/proposed" 'Proposed — owner decision required' Undecided
-[ "$(/bin/sh "$checker" "$work/proposed")" = owner-decision-required ]
+[ "$(classify "$work/proposed")" = owner-decision-required ]
 for choice in A B C; do
+    write_approval 2026-08-26 "Alternative $choice"
     write_record "$work/accepted-$choice" 'Accepted — 2026-08-26' "Alternative $choice"
-    [ "$(/bin/sh "$checker" "$work/accepted-$choice")" = accepted ]
+    [ "$(classify "$work/accepted-$choice")" = accepted ]
 done
+write_approval 2026-08-26 'Alternative C'
 write_record "$work/bad-date" Accepted 'Alternative C'
 reject "$work/bad-date"
 for bad_date in abcd-ef-gh 2026-99-99 2026-02-29 2026-04-31; do
@@ -33,7 +49,9 @@ for bad_date in abcd-ef-gh 2026-99-99 2026-02-29 2026-04-31; do
     reject "$work/bad-$bad_date"
 done
 write_record "$work/leap" 'Accepted — 2028-02-29' 'Alternative C'
-[ "$(/bin/sh "$checker" "$work/leap")" = accepted ]
+write_approval 2028-02-29 'Alternative C'
+[ "$(classify "$work/leap")" = accepted ]
+write_approval 2026-08-26 'Alternative C'
 write_record "$work/decoy" 'Proposed — owner decision required' Undecided
 printf '%s\n%s\n' 'Status: Accepted — 2026-08-26' 'Decision: Alternative C' >> "$work/decoy"
 reject "$work/decoy"
@@ -42,4 +60,18 @@ printf '%s\n' 'Decision: Alternative A' >> "$work/conflict"
 reject "$work/conflict"
 /bin/ln -s "$work/proposed" "$work/link"
 reject "$work/link"
+
+write_record "$work/accepted" 'Accepted — 2026-08-26' 'Alternative C'
+reject "$work/accepted" 0020
+write_approval 2026-08-27 'Alternative C'
+reject "$work/accepted"
+write_approval 2026-08-26 'Alternative B'
+reject "$work/accepted"
+write_approval 2026-08-26 'Alternative C' ''
+reject "$work/accepted"
+write_approval 2026-08-26 'Alternative C' 'Different owner'
+reject "$work/accepted"
+write_approval 2026-08-26 'Alternative C'
+/usr/bin/printf '%s\n' 'Architecture decision approval: approved' >> "$approval"
+reject "$work/accepted"
 printf '%s\n' 'Proposed ADR classifier negative checks passed'

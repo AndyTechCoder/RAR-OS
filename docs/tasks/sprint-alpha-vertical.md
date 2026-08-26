@@ -14,7 +14,7 @@ and rollback. A host mock, Linux-hosted UI, or unbooted image is not acceptance.
 ## Approved specifications
 
 - Constitution, from-scratch policy, architecture, security/recovery, formats,
-  host safety, ADRs 0001–0019, and `release-0.md`.
+  host safety, ADRs 0001–0021, and `release-0.md`.
 - R0-002 boot and hardware contracts under `spec/boot/`, `spec/hardware/`, and
   `sdk/generated/release-0/` are authoritative and read-only dependencies unless
   an ADR-governed correction is independently approved.

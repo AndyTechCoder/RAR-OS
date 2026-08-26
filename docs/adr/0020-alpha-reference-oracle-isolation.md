@@ -1,12 +1,17 @@
 # ADR 0020: Alpha Reference-Oracle Isolation
 
-Status: Proposed — owner decision required
-Decision: Undecided
+Status: Accepted — 2026-08-26
+Decision: Alternative C
 
-No candidate provisioner or workflow is included while this decision remains
-open. The build-image recipe preserves ADR 0017's compiler/linker-only boundary;
-adding any oracle execution topology requires an accepted decision and a new
-independent review.
+Approval basis: explicit owner approval after a plain-language explanation on
+2026-08-26. The owner confirmed that production cloud wiring may follow later;
+the Alpha retains the isolated role and evidence contract without claiming a
+production service is complete.
+
+This decision authorizes the minimum isolated Alpha reference role and
+controller-owned comparison phase. Candidate identities and provisioning still
+require independent review before activation. Production service integration
+is outside the Alpha claim.
 
 ## Context
 
@@ -32,7 +37,7 @@ which party owns cryptographic comparison evidence.
   reviewable without entering a target image.
 - The build and launch roles must remain independently replaceable.
 
-## Alternatives
+## Considered options
 
 ### A. Keep both oracles in the untrusted build container
 
@@ -57,13 +62,13 @@ comparison evidence. The launch image remains reference- and compiler-free.
 This most closely preserves ADR 0017, at the cost of a fourth image, a new
 experimental transcript contract, and additional retained evidence.
 
-## Proposed direction
+## Decision
 
-Alternative C is proposed. No implementation, image provisioning, profile
-activation, or Milestone F work may assume that choice until the owner accepts
-this ADR or selects another alternative.
+Alternative C is selected. No profile may become ready and no Milestone F
+evidence may pass until the distinct reference image, bounded transcript, and
+controller-owned comparison phase have real reviewed identities.
 
-## Consequences if accepted
+## Consequences
 
 - The image-input and Development Lab profiles gain a separately pinned
   reference-image identity.
@@ -73,6 +78,21 @@ this ADR or selects another alternative.
 - Candidate provisioning proves build/reference/launch role absence rules and
   retains all three inventories, licenses, hashes, and exact publishable bytes.
 - No reference code or transcript parser links into RAR OS.
+
+## Security and data impact
+
+The untrusted target build cannot read, execute, replace, or link either
+reference implementation. The isolated reference role receives only the
+bounded experimental transcript: no source checkout, target-launch authority,
+network, credentials, owner data, or writable controller files. Reference
+outputs are development evidence and do not establish production trust.
+
+## Compatibility and migration
+
+The Alpha transcript and reference-image identity are experimental controller
+contracts, not target formats or dependencies. Production cloud integration may
+replace them through a later reviewed ADR without changing RAR target
+algorithms, signatures, or package formats.
 
 ## Validation
 

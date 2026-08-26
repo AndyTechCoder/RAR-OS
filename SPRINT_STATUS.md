@@ -17,29 +17,29 @@
 - Validation: `tools/ci/check-sprint-static.sh` passes locally without compiling
   or executing target or QMP code; Linux QMP compilation/fake-server tests and
   any future candidate provisioning remain deliberately unexecuted
-- Independent review: final architecture, correctness, and security reviews are
-  clean after remediation, including the gate reporter and Proposed ADR 0021;
-  Proposed ADR 0020 remains an intentional owner decision before any
-  reference-oracle provisioning or Milestone F work
+- Independent review: the prior architecture, correctness, and security reviews
+  were clean after remediation; ADRs 0020 and 0021 are now owner-approved and
+  this exact approval-record change still needs fresh review
 - Target functionality: 0%; no RAR OS target implementation has started, built,
   booted, or run
 - Development Lab state: upstream image/tool inputs are `decision-blocked` and the
   QMP client is `source-ready`; provisioning remains absent, candidate images
   remain unbuilt, and the active
   Lab profile remains `blocked` until candidate evidence is reviewed, immutable
-  output identities replace every unavailable pin, and Proposed ADR 0020
-  resolves reference-oracle isolation
-- Boot implementation state: Proposed ADR 0021 records the previously missing
-  Alpha boot-volume, payload-loader, and Root-to-Recovery boundary; no target
-  code may assume its proposed option before owner acceptance
-- External blockers: the 2026-08-26 local preflight still fails because the Mac
-  internal disk is below 10 GiB free; GitHub PR #7 is open/draft at the pushed
-  head with no check result; and the reviewed `rar-os-ssd` user profile still
+  output identities replace every unavailable pin, and a new reviewed schema
+  implements ADR 0020's isolated reference-image topology
+- Boot implementation state: accepted ADR 0021 selects the Alpha boot-volume,
+  payload-loader, and Root-to-Recovery boundary; its experimental specification
+  must be reviewed before target code or image recipes begin
+- External blockers: the 2026-08-26 local preflight still reports the existing
+  internal-space safeguard; GitHub PR #7 is open/draft and its workflow ran zero
+  steps because GitHub reported failed account payments or an exhausted Actions
+  spending limit; the reviewed `rar-os-ssd` user profile still
   needs one-time owner installation/evidence in a fresh SSD-root task
-- Next durable action: retain this reviewed checkpoint in PR #7, then resolve
-  ADRs 0020/0021 and the external Lab preconditions; do not retry zero-step Actions,
-  merge, tag, activate the lab, or start Milestone A until every precondition is
-  genuinely green
+- Next durable action: review and push this architecture-decision checkpoint,
+  then restore GitHub Actions billing and complete the external Lab
+  preconditions; do not retry the zero-step workflow, merge, tag, activate the
+  lab, or start Milestone A until every precondition is genuinely green
 - Deadline: 2026-08-30 23:59 America/Los_Angeles
 - Local safety: target compilation, image creation, firmware loading, QEMU,
   emulator, VM, guest execution, macOS modification, and access outside the

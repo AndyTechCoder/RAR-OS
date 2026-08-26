@@ -87,3 +87,20 @@ may be used, but unrelated, irreplaceable SSD data must not be read or changed.
 Sprint adjustment: approved
 Approver: Andy / RAR project owner
 Adjustment date: 2026-08-25
+
+## Sprint Alpha architecture decisions
+
+Status: Approved
+
+On 2026-08-26, after receiving plain-language explanations, the owner approved
+Alternative C for ADR 0020 and Alternative C for ADR 0021. ADR 0020 isolates
+host-only cryptographic references from untrusted target builds in a separate
+cloud role; production cloud-service wiring remains later work. ADR 0021 uses
+the authentic Alpha boot chain Root → Recovery → Nucleus with an explicitly
+replaceable FAT/ELF bootstrap boundary.
+
+Architecture decision approval: approved
+Architecture decision approver: Andy / RAR project owner
+Architecture decision date: 2026-08-26
+ADR 0020 decision: Alternative C
+ADR 0021 decision: Alternative C

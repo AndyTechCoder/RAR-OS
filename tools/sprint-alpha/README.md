@@ -33,10 +33,11 @@ the build sandbox is residual untrusted computation and cannot satisfy launch
 or milestone evidence.
 
 `alpha-crypto-references-v1.env` is a separate Class C host-only inventory for
-Milestone F interoperability. Version 1 is unconditionally blocked while ADR
-0020 is Proposed: it cannot express a ready oracle topology or grant executable
-paths. An accepted ADR requires a new reviewed inventory schema. The references
-never become target dependencies or enter the untrusted build image.
+Milestone F interoperability. Version 1 remains unconditionally blocked: it
+cannot express the isolated reference-image topology selected by accepted ADR
+0020 or grant executable paths. A new reviewed inventory schema must bind that
+topology and real identities before activation. The references never become
+target dependencies or enter the untrusted build image.
 
 `qmp-client-v1.env` is the reproducibility and replacement contract for the
 RAR-owned acceptance harness client. `source-ready` records reviewed source and

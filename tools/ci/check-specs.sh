@@ -51,8 +51,8 @@ docs/adr/0016-release-0-entry-validation-and-authority-closure.md
 docs/adr/0017-sprint-alpha-development-lab.md
 docs/adr/0018-end-of-week-demonstrator.md
 docs/adr/0019-alpha-layer-signing.md
-docs/proposals/0020-alpha-reference-oracle-isolation.md
-docs/proposals/0021-alpha-boot-payload-boundary.md
+docs/adr/0020-alpha-reference-oracle-isolation.md
+docs/adr/0021-alpha-boot-payload-boundary.md
 docs/release-0/contracts/README.md
 spec/boot/handoff-v1.fields
 spec/hardware/rhd-v1.fields
@@ -213,7 +213,7 @@ duplicates=$(printf '%s\n' "$index_targets" | sort | uniq -d)
 
 adr_files=$(sed -n 's/^- \[ADR [^]]*\](\(adr\/[^)]*\.md\))$/docs\/\1/p' docs/README.md)
 adr_count=$(printf '%s\n' "$adr_files" | awk 'NF { count++ } END { print count + 0 }')
-[ "$adr_count" -eq 19 ] || fail "expected exactly 19 indexed ADRs"
+[ "$adr_count" -eq 21 ] || fail "expected exactly 21 indexed ADRs"
 
 approval_date=$(sed -n 's/^Date: //p' docs/approval-record.md)
 case "$approval_date" in
@@ -224,6 +224,12 @@ esac
 grep -qx 'Status: Approved' docs/approval-record.md || fail "approval record status is not approved"
 grep -qx 'Approval: approved' docs/approval-record.md || fail "approval statement is not approved"
 grep -q '^Approver: .\+' docs/approval-record.md || fail "approval record has no approver"
+[ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
+    docs/adr/0020-alpha-reference-oracle-isolation.md 0020 \
+    docs/approval-record.md)" = accepted ] || fail "ADR 0020 is not bound to owner approval"
+[ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
+    docs/adr/0021-alpha-boot-payload-boundary.md 0021 \
+    docs/approval-record.md)" = accepted ] || fail "ADR 0021 is not bound to owner approval"
 grep -qx "Status: Gate 0 approved on $approval_date" docs/README.md || fail "index approval date disagrees with approval record"
 grep -q "Gate 0 was approved on $approval_date" README.md || fail "root README approval date disagrees with approval record"
 grep -qx 'Status: Draft PR open' docs/publication-record.md || fail "initial publication record status is inconsistent"
@@ -251,7 +257,7 @@ grep -qx "Status: Ready — Gate 0 owner approval recorded $approval_date" docs/
 grep -qx 'Status: Approved for Prompt 2 after repository publication' docs/handoff-prompt.md || fail "handoff prompt status is inconsistent"
 grep -qx 'Status: Approved for execution; begins after repository publication and GitHub authentication' docs/v1-alpha-execution.md || fail "execution runbook status is inconsistent"
 
-for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0014 0015 0016 0017 0018 0019; do
+for number in 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0014 0015 0016 0017 0018 0019 0020 0021; do
     matches=$(printf '%s\n' "$adr_files" | grep -c "/$number-")
     [ "$matches" -eq 1 ] || fail "expected one indexed ADR for $number"
 done
@@ -270,7 +276,7 @@ printf '%s\n' "$adr_files" | while IFS= read -r adr; do
         docs/adr/0013-* | docs/adr/0014-* | docs/adr/0015-* | docs/adr/0016-*) adr_approval_date=2026-07-17 ;;
         docs/adr/0017-*) adr_approval_date=2026-08-20 ;;
         docs/adr/0018-*) adr_approval_date=2026-08-25 ;;
-        docs/adr/0019-*) adr_approval_date=2026-08-26 ;;
+        docs/adr/0019-* | docs/adr/0020-* | docs/adr/0021-*) adr_approval_date=2026-08-26 ;;
         *) adr_approval_date=$approval_date ;;
     esac
     grep -qx "Status: Accepted — $adr_approval_date" "$adr" || fail "ADR status mismatch: $adr"
