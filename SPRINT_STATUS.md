@@ -37,8 +37,12 @@
   order, non-overlap, freeze, reference verification, launch evidence, and
   retention without containing runnable cloud commands. Its focused review is
   clean after binding the conditional reference verdict into final evidence and
-  enforcing every phase row exactly. Real immutable output
-  identities plus a reviewed runnable v2 controller are still required
+  enforcing every phase row exactly. The bounded binary reference-evidence and
+  strict controller-verdict contracts now have accepted/not-required fixtures
+  and adversarial host-only validation. The owner confirmed that cloud
+  infrastructure exists, but wiring and provisioning are intentionally deferred;
+  this checkpoint performs neither. Real immutable output identities plus a
+  reviewed runnable v2 controller are still required
 - Boot implementation state: accepted ADR 0021 selects the Alpha boot-volume,
   payload-loader, and Root-to-Recovery boundary. The candidate specification is
   explicitly `draft-incomplete` and cannot authorize implementation until its

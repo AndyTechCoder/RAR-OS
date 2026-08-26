@@ -12,7 +12,7 @@ build.Containerfile
 image-inputs-v1.env
 launch-base.Containerfile
 launch.Containerfile'
-actual=$(find "$images" -mindepth 1 -maxdepth 1 -print | /usr/bin/sed "s|^$images/||" | /usr/bin/sort)
+actual=$(find "$images" -mindepth 1 -maxdepth 1 ! -name '._*' -print | /usr/bin/sed "s|^$images/||" | /usr/bin/sort)
 [ "$actual" = "$expected" ] || exit 1
 find "$images" -type l -print | /usr/bin/grep -q . && exit 1
 

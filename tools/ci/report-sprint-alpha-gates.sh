@@ -52,6 +52,12 @@ fi
 lab_contracts=$(/usr/bin/sed -n 's/^readiness=//p' "$root/spec/alpha/lab/development-lab-profile-v2.fields")
 boot_contracts=$(/usr/bin/sed -n 's/^readiness=//p' "$root/spec/alpha/boot/alpha-boot-v0.fields")
 preimplementation_contracts=blocked
+reference_verdict_contract=blocked
+fixtures=$root/spec/alpha/lab/fixtures
+if /bin/sh "$root/tools/ci/check-reference-verdict-v0.sh" "$fixtures/reference-verdict-accepted.v0" milestone-f "$fixtures/controller-context.v0" "$fixtures/source-context.v0" "$fixtures/comparison-transcript.v0" "$fixtures/reference-inventory.v0" "$fixtures/comparison-evidence.v0" "$fixtures/reference-harness.v0" >/dev/null &&
+    /bin/sh "$root/tools/ci/check-reference-verdict-v0.sh" "$fixtures/reference-verdict-not-required.v0" milestone-a "$fixtures/controller-context.v0" "$fixtures/source-context.v0" "$fixtures/comparison-transcript.v0" none none none >/dev/null; then
+    reference_verdict_contract=source-ready
+fi
 image_inputs=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/rar-lab/images/image-inputs-v1.env")
 crypto_references=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/sprint-alpha/alpha-crypto-references-v1.env")
 qmp_client=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/sprint-alpha/qmp-client-v1.env")
@@ -91,6 +97,7 @@ printf '%s\n' \
     "lab_contracts=$lab_contracts" \
     "boot_contracts=$boot_contracts" \
     "preimplementation_contracts=$preimplementation_contracts" \
+    "reference_verdict_contract=$reference_verdict_contract" \
     'gui_input_authority=decision-required' \
     "image_inputs=$image_inputs" \
     "crypto_references=$crypto_references" \

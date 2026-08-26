@@ -47,6 +47,16 @@ spec/alpha/lab/image-inventory-v2.fields
 spec/alpha/lab/crypto-reference-inventory-v2.fields
 spec/alpha/lab/comparison-transcript-v0.fields
 spec/alpha/lab/controller-state-machine-v0.fields
+spec/alpha/lab/reference-evidence-v0.fields
+spec/alpha/lab/fixtures/controller-context.v0
+spec/alpha/lab/fixtures/source-context.v0
+spec/alpha/lab/fixtures/reference-inventory.v0
+spec/alpha/lab/fixtures/reference-harness.v0
+spec/alpha/lab/fixtures/comparison-transcript.v0
+spec/alpha/lab/fixtures/comparison-evidence.v0
+spec/alpha/lab/fixtures/reference-verdict-accepted.v0
+spec/alpha/lab/fixtures/reference-verdict-not-required.v0
+spec/alpha/lab/fixtures/generate.sh
 spec/alpha/lab/cases.v0
 spec/alpha/boot/README.md
 spec/alpha/boot/alpha-boot-v0.fields
@@ -94,6 +104,10 @@ tools/ci/check-development-lab-profile-v2.sh
 tools/ci/test-development-lab-profile-v2-policy.sh
 tools/ci/check-development-controller-v2.sh
 tools/ci/test-development-controller-v2-policy.sh
+tools/ci/check-reference-evidence-v0.sh
+tools/ci/test-reference-evidence-v0-policy.sh
+tools/ci/check-reference-verdict-v0.sh
+tools/ci/test-reference-verdict-v0-policy.sh
 tools/ci/verify-remote-checkpoint.sh
 tools/ci/test-remote-checkpoint-policy.sh
 tools/ci/verify-frozen-artifact.sh
@@ -166,7 +180,7 @@ printf '%s\n' "$required_files" | while IFS= read -r file; do
     [ -s "$file" ] || fail "empty required file: $file"
 done
 
-for script in tools/ci/check-specs.sh tools/ci/check-sprint-static.sh tools/ci/check-local-sprint-preflight.sh tools/ci/check-remote-sprint-preflight.sh tools/ci/test-local-sprint-preflight-policy.sh tools/ci/check-alpha-preimplementation-contracts.sh tools/ci/test-alpha-preimplementation-contract-policy.sh tools/ci/check-development-lab-profile-v2.sh tools/ci/test-development-lab-profile-v2-policy.sh tools/ci/check-development-controller-v2.sh tools/ci/test-development-controller-v2-policy.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/launch-cloud-target.sh tools/ci/prepare-launch-control.sh tools/ci/wait-for-launch-release.sh tools/ci/check-workspace-budget.sh tools/ci/verify-cloud-target-tools.sh tools/ci/development-probe-status.sh tools/ci/test-development-probe-policy.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
+for script in tools/ci/check-specs.sh tools/ci/check-sprint-static.sh tools/ci/check-local-sprint-preflight.sh tools/ci/check-remote-sprint-preflight.sh tools/ci/test-local-sprint-preflight-policy.sh tools/ci/check-alpha-preimplementation-contracts.sh tools/ci/test-alpha-preimplementation-contract-policy.sh tools/ci/check-development-lab-profile-v2.sh tools/ci/test-development-lab-profile-v2-policy.sh tools/ci/check-development-controller-v2.sh tools/ci/test-development-controller-v2-policy.sh tools/ci/check-reference-evidence-v0.sh tools/ci/test-reference-evidence-v0-policy.sh tools/ci/check-reference-verdict-v0.sh tools/ci/test-reference-verdict-v0-policy.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/launch-cloud-target.sh tools/ci/prepare-launch-control.sh tools/ci/wait-for-launch-release.sh tools/ci/check-workspace-budget.sh tools/ci/verify-cloud-target-tools.sh tools/ci/development-probe-status.sh tools/ci/test-development-probe-policy.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/alpha/lab/fixtures/generate.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
     [ -x "$script" ] || fail "required script is not executable: $script"
 done
 
@@ -176,6 +190,9 @@ grep -qx 'Status: Owner-approved execution contract — 2026-08-25' docs/tasks/s
 /bin/sh tools/ci/check-development-lab-profile.sh >/dev/null
 /bin/sh tools/ci/check-development-lab-profile-v2.sh >/dev/null
 /bin/sh tools/ci/check-development-controller-v2.sh >/dev/null
+/bin/sh tools/ci/check-reference-evidence-v0.sh spec/alpha/lab/fixtures/comparison-evidence.v0 spec/alpha/lab/fixtures/comparison-transcript.v0 spec/alpha/lab/fixtures/reference-inventory.v0 spec/alpha/lab/fixtures/reference-harness.v0 >/dev/null
+/bin/sh tools/ci/check-reference-verdict-v0.sh spec/alpha/lab/fixtures/reference-verdict-accepted.v0 milestone-f spec/alpha/lab/fixtures/controller-context.v0 spec/alpha/lab/fixtures/source-context.v0 spec/alpha/lab/fixtures/comparison-transcript.v0 spec/alpha/lab/fixtures/reference-inventory.v0 spec/alpha/lab/fixtures/comparison-evidence.v0 spec/alpha/lab/fixtures/reference-harness.v0 >/dev/null
+/bin/sh tools/ci/check-reference-verdict-v0.sh spec/alpha/lab/fixtures/reference-verdict-not-required.v0 milestone-a spec/alpha/lab/fixtures/controller-context.v0 spec/alpha/lab/fixtures/source-context.v0 spec/alpha/lab/fixtures/comparison-transcript.v0 none none none >/dev/null
 /bin/sh tools/ci/check-sprint-alpha-gate-report-policy.sh >/dev/null
 /bin/sh tools/ci/test-proposed-adr-classifier-policy.sh >/dev/null
 [ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
@@ -340,11 +357,11 @@ if grep -nE '^- `\[[^x]\]` \*\*P0' BACKLOG.md; then
     fail "Gate 0 P0 backlog item does not use the complete status"
 fi
 
-if find . -path ./.git -prune -o -name '._*' -prune -o -path ./out -prune -o -path ./spec/fixtures/release-0/bin -prune -o -type f -exec grep -nHE '[[:blank:]]+$' {} +; then
+if find . -path ./.git -prune -o -name '._*' -prune -o -path ./out -prune -o -path ./spec/fixtures/release-0/bin -prune -o -path ./spec/alpha/lab/fixtures/comparison-transcript.v0 -prune -o -path ./spec/alpha/lab/fixtures/comparison-evidence.v0 -prune -o -type f -exec grep -nHE '[[:blank:]]+$' {} +; then
     fail "trailing whitespace found"
 fi
 
-if find . -path ./.git -prune -o -name '._*' -prune -o -path ./out -prune -o -path ./spec/fixtures/release-0/bin -prune -o -type f -exec grep -nHE '^(<<<<<<<|=======|>>>>>>>)' {} +; then
+if find . -path ./.git -prune -o -name '._*' -prune -o -path ./out -prune -o -path ./spec/fixtures/release-0/bin -prune -o -path ./spec/alpha/lab/fixtures/comparison-transcript.v0 -prune -o -path ./spec/alpha/lab/fixtures/comparison-evidence.v0 -prune -o -type f -exec grep -nHE '^(<<<<<<<|=======|>>>>>>>)' {} +; then
     fail "merge-conflict marker found"
 fi
 

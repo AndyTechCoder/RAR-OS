@@ -43,8 +43,8 @@ output_encoding|ed25519-sign|signature:64
 output_encoding|ed25519-verify|accepted:u8:0-or-1
 canonical_order=case_id-strictly-ascending
 range_rule=header-and-record-table-before-payload,checked-nonoverlapping-contained-ranges
+payload_order=record-order,input-then-target-output,contiguous,no-gaps,final-output-ends-at-total-bytes
 hash_rule=payload_sha256-covers-exact-input-then-target-output
 reference_rule=both-references-recompute-every-record-and-match-each-other-and-target
 evidence_rule=source-sha,transcript-sha,reference-image-digest,reference-binary-sha,harness-sha,per-case-results
 failure_rule=reject-before-signing-evidence
-

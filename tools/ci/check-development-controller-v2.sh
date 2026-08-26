@@ -65,7 +65,7 @@ for required in \
     'phase_count=9' \
     'role_overlap_rule=at-most-one-role-container-running,controller-never-enters-build-or-reference-filesystem,build-and-reference-never-receive-controller-tree' \
     'inactive_rule=blocked-profile-means-no-container-command,no-cloud-command,no-network-command,no-credential-read' \
-    'verdict_rule|reference|F-G:accepted-only-after-both-references-match-each-other-and-target,A-E:not-required-only-from-trusted-controller,canonical-record-bound-to-probe+transcript-digest+reference-inventory-digest,phase-8-requires-exactly-one-verdict,retained-set-includes-verdict-and-digest' \
+    'verdict_rule|reference|F-G:accepted-only-after-both-references-match-each-other-and-target-with-real-inventory-and-evidence-digests,A-E:not-required-only-from-trusted-controller-with-zero-inventory-and-evidence-digests,canonical-record-bound-to-probe+controller+source+transcript,phase-8-requires-exactly-one-verdict,retained-set-includes-verdict-and-digest' \
     'publication_rule=no-push,no-PR-change,no-merge,no-release,no-deployment' \
     'target_rule=cloud-only-never-Mac,artifact-unsigned-until-Milestone-F-evidence,reference-code-never-target-linked'; do
     [ "$(/usr/bin/grep -Fxc -- "$required" "$contract")" -eq 1 ] || fail "contract row missing or duplicated: $required"

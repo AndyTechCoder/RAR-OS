@@ -11,7 +11,7 @@ expected='README.md
 build-plan.v1
 json.rs
 main.rs'
-actual=$(find "$tree" -mindepth 1 -maxdepth 1 -print | /usr/bin/sed "s|^$tree/||" | /usr/bin/sort)
+actual=$(find "$tree" -mindepth 1 -maxdepth 1 ! -name '._*' -print | /usr/bin/sed "s|^$tree/||" | /usr/bin/sort)
 [ "$actual" = "$expected" ] || exit 1
 find "$tree" -type l -print | /usr/bin/grep -q . && exit 1
 

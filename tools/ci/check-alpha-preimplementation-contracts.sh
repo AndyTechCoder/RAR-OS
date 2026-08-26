@@ -79,6 +79,15 @@ for file in \
     "$lab/crypto-reference-inventory-v2.fields" \
     "$lab/comparison-transcript-v0.fields" \
     "$lab/controller-state-machine-v0.fields" \
+    "$lab/reference-evidence-v0.fields" \
+    "$lab/fixtures/controller-context.v0" \
+    "$lab/fixtures/source-context.v0" \
+    "$lab/fixtures/reference-inventory.v0" \
+    "$lab/fixtures/reference-harness.v0" \
+    "$lab/fixtures/comparison-transcript.v0" \
+    "$lab/fixtures/comparison-evidence.v0" \
+    "$lab/fixtures/reference-verdict-accepted.v0" \
+    "$lab/fixtures/reference-verdict-not-required.v0" \
     "$lab/cases.v0" \
     "$boot/README.md" \
     "$boot/alpha-boot-v0.fields" \
@@ -92,6 +101,7 @@ for fields in \
     "$lab/crypto-reference-inventory-v2.fields" \
     "$lab/comparison-transcript-v0.fields" \
     "$lab/controller-state-machine-v0.fields" \
+    "$lab/reference-evidence-v0.fields" \
     "$boot/alpha-boot-v0.fields"; do
     validate_field_file "$fields"
 done
@@ -99,8 +109,9 @@ done
 require_digest "$lab/development-lab-profile-v2.fields" 86ca738fdfdef78b68d750375039ab316dff2976f0c1dd7f440eea59a881e06c
 require_digest "$lab/image-inventory-v2.fields" aa4c763f78c04b904e517221677fdad2e3a5a1e9b9d2d4d71dfbf26208fed9bd
 require_digest "$lab/crypto-reference-inventory-v2.fields" 62914ec46eb5ce005ed94b22dcbd5937aadb8424890532eca0a87e204a1635e5
-require_digest "$lab/comparison-transcript-v0.fields" 9d60bc1870fbf8cb8184e6bde512cb4eebd47d20ed63ef36e6f8182f5d596aa5
-require_digest "$lab/controller-state-machine-v0.fields" 07bdd7852147eb438f06e192f187b0cd357cb45427c5a1052c753471b42cb585
+require_digest "$lab/comparison-transcript-v0.fields" 5f03fafed5eda2d373174aa0565ab08d009e07fe34e3bd7d2dc9c27c927dd9d7
+require_digest "$lab/controller-state-machine-v0.fields" 71756b7d93b0ae11a3c229fbbff15e436118a0e0d29ff4ab38bb4b5b33a03cbe
+require_digest "$lab/reference-evidence-v0.fields" 2edbb270323d5fd074d3adc2929c695e0bb7ca957464ea814627ea82fc0c259e
 require_digest "$lab/cases.v0" 966d84739240b871d2dd22e362ce07ec0e82706cbde32dfd4e493c0bd9758342
 require_digest "$boot/alpha-boot-v0.fields" 8a97440b2366e3554cca8948c47d0df8e3146230a1d049ead48a105612623e0e
 require_digest "$boot/cases.v0" 370f829f791681cb4c1fb96dbf850f9535751a7a64295534562ea47a9f84bee3
@@ -108,7 +119,7 @@ require_digest "$boot/cases.v0" 370f829f791681cb4c1fb96dbf850f9535751a7a64295534
 if find "$lab" "$boot" ! -name '._*' -type l -print | /usr/bin/grep -q .; then
     fail 'contract tree contains a symbolic link'
 fi
-if find "$lab" "$boot" ! -name '._*' -type f -exec /usr/bin/grep -nHE '[[:blank:]]+$' {} + |
+if find "$lab" "$boot" ! -name '._*' ! -name 'comparison-transcript.v0' ! -name 'comparison-evidence.v0' -type f -exec /usr/bin/grep -nHE '[[:blank:]]+$' {} + |
     /usr/bin/grep -q .; then
     fail 'contract tree contains trailing whitespace'
 fi
@@ -158,6 +169,9 @@ require_line "$transcript" 'failure_rule=reject-before-signing-evidence'
 [ "$(/usr/bin/grep -c '^wire_field|TranscriptHeaderV0|' "$transcript")" -eq 9 ] || fail 'transcript header layout is incomplete'
 [ "$(/usr/bin/grep -c '^wire_field|TranscriptRecordV0|' "$transcript")" -eq 10 ] || fail 'transcript record layout is incomplete'
 validate_case_file "$lab/cases.v0" 'schema=rar-alpha-lab-contract-cases-v0' 34
+/bin/sh "$root/tools/ci/check-reference-evidence-v0.sh" "$lab/fixtures/comparison-evidence.v0" "$lab/fixtures/comparison-transcript.v0" "$lab/fixtures/reference-inventory.v0" "$lab/fixtures/reference-harness.v0" >/dev/null || fail 'reference evidence fixture is invalid'
+/bin/sh "$root/tools/ci/check-reference-verdict-v0.sh" "$lab/fixtures/reference-verdict-accepted.v0" milestone-f "$lab/fixtures/controller-context.v0" "$lab/fixtures/source-context.v0" "$lab/fixtures/comparison-transcript.v0" "$lab/fixtures/reference-inventory.v0" "$lab/fixtures/comparison-evidence.v0" "$lab/fixtures/reference-harness.v0" >/dev/null || fail 'accepted reference verdict fixture is invalid'
+/bin/sh "$root/tools/ci/check-reference-verdict-v0.sh" "$lab/fixtures/reference-verdict-not-required.v0" milestone-a "$lab/fixtures/controller-context.v0" "$lab/fixtures/source-context.v0" "$lab/fixtures/comparison-transcript.v0" none none none >/dev/null || fail 'not-required reference verdict fixture is invalid'
 
 boot_contract=$boot/alpha-boot-v0.fields
 require_line "$boot_contract" 'schema=rar-alpha-x86_64-boot-v0'

@@ -31,6 +31,13 @@ runs only for Milestones F/G; the launch role receives only the frozen artifact;
 and controller-owned verification precedes bounded retention. At most one role
 container may run, and the controller tree never enters build or reference.
 
+`reference-evidence-v0.fields` fixes the bounded binary evidence emitted by the
+isolated reference role and the 13-line controller-owned verdict. F/G verdicts
+require both references and the target output to match for every transcript
+record. A–E verdicts explicitly say `not-required`, carry zero reference/evidence
+digests, and prove that no reference role ran. The final evidence set retains the
+verdict and its digest.
+
 The v1 Lab, image, and crypto inventory files remain permanently blocked. The
 v2 field schemas define the replacement shape but do not contain runnable image
 digests or authorize provisioning. A candidate instance becomes `ready` only in

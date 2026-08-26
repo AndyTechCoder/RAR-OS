@@ -18,6 +18,7 @@ for required in \
     'lab_controller_v2=' \
     'boot_contracts=' \
     'preimplementation_contracts=' \
+    'reference_verdict_contract=' \
     'adr_0022=' \
     'adr_0023=' \
     'target_implementation=not-started'; do

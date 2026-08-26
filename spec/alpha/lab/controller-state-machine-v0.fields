@@ -14,7 +14,7 @@ phase|7|launch|launch|A-G|frozen-artifact-read-only+machine-profile+trusted-cont
 phase|8|evidence-verify|controller|A-G|launch-evidence+acceptance-plan+frozen-digests+role-inventories+reference-verdict|accepted-evidence-set+reference-verdict-digest|9
 phase|9|retain|controller|A-G|accepted-evidence-set+reference-verdict-digest|bounded-retained-evidence+completion-report+reference-verdict|complete
 skip_rule|reference|A-E|emit-controller-owned-reference-verdict-not-required,no-reference-container-created,continue-at-phase-7
-verdict_rule|reference|F-G:accepted-only-after-both-references-match-each-other-and-target,A-E:not-required-only-from-trusted-controller,canonical-record-bound-to-probe+transcript-digest+reference-inventory-digest,phase-8-requires-exactly-one-verdict,retained-set-includes-verdict-and-digest
+verdict_rule|reference|F-G:accepted-only-after-both-references-match-each-other-and-target-with-real-inventory-and-evidence-digests,A-E:not-required-only-from-trusted-controller-with-zero-inventory-and-evidence-digests,canonical-record-bound-to-probe+controller+source+transcript,phase-8-requires-exactly-one-verdict,retained-set-includes-verdict-and-digest
 freshness_rule|build-one-build-two|distinct-fresh-containers,distinct-empty-output-mounts,same-source-digest,same-tool-identities
 reproducibility_rule|freeze|artifact-one-equals-artifact-two,transcript-one-equals-transcript-two,compare-size-then-sha256-then-bytes
 handoff_rule|all|stop-and-remove-producing-role,open-output-no-follow,validate-type-owner-mode-links-size,copy-to-fresh-controller-file,hash-and-recheck-same-descriptor,unmount-source-before-next-role
