@@ -23,7 +23,9 @@ release URLs and produced the same SHA-256; and QEMU/OVMF versions were selected
 from Debian's `20260803T000000Z` bookworm amd64 snapshot index. The fixed source
 epoch is that snapshot instant (`2026-08-03T00:00:00Z`).
 
-A new reviewed input/output schema must implement the accepted topology.
+A reviewed controller must consume the role schemas in `spec/alpha/lab/` and
+bind them to real input/output identities. The schemas themselves do not
+authorize provisioning.
 Candidate provisioning remains deliberately absent until that schema and its
 real identities pass independent review. The future provisioner must use a pinned isolated builder, a bounded fresh
 context, two independent OCI exports, byte/digest comparison, complete

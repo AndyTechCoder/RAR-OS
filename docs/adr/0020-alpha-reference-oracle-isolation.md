@@ -68,6 +68,11 @@ Alternative C is selected. No profile may become ready and no Milestone F
 evidence may pass until the distinct reference image, bounded transcript, and
 controller-owned comparison phase have real reviewed identities.
 
+The experimental preimplementation contracts are fixed in
+`spec/alpha/lab/`. They define disjoint build, reference, and launch role
+inventories plus the bounded comparison transcript. These source contracts do
+not activate, provision, or authorize any cloud role.
+
 ## Consequences
 
 - The image-input and Development Lab profiles gain a separately pinned

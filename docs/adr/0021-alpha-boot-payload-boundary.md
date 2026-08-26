@@ -72,6 +72,13 @@ Alternative C is selected. A reviewed experimental specification remains
 mandatory before target implementation or an image recipe assumes the
 Alpha-only boundary.
 
+The incomplete candidate preimplementation contract is in `spec/alpha/boot/`.
+It currently records the image geometry, stage paths, ELF acceptance rules,
+Root-to-Recovery entry candidate, fixed Alpha fixtures, and negative cases. Its
+explicit blocked status prevents implementation from inventing the remaining
+byte-layout, memory-attribute, timer, and x86 control-state details. It does not
+authorize target compilation, image creation, or execution on the Mac.
+
 Before target implementation, a reviewed experimental specification must be
 committed. It must define:
 

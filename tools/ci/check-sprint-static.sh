@@ -18,6 +18,8 @@ tools/ci/check-specs.sh
     tools/ci/check-sprint-alpha-gate-report-policy.sh \
     tools/ci/classify-proposed-adr.sh \
     tools/ci/test-proposed-adr-classifier-policy.sh \
+    tools/ci/check-alpha-preimplementation-contracts.sh \
+    tools/ci/test-alpha-preimplementation-contract-policy.sh \
     tools/ci/check-remote-sprint-preflight.sh \
     tools/ci/test-local-sprint-preflight-policy.sh \
     tools/ci/check-development-lab-profile.sh \
@@ -67,6 +69,8 @@ tools/ci/check-specs.sh
 tools/ci/test-development-probe-policy.sh
 /bin/sh tools/ci/check-sprint-alpha-gate-report-policy.sh
 /bin/sh tools/ci/test-proposed-adr-classifier-policy.sh
+/bin/sh tools/ci/check-alpha-preimplementation-contracts.sh
+/bin/sh tools/ci/test-alpha-preimplementation-contract-policy.sh
 /bin/sh tools/ci/test-development-lab-profile-policy.sh
 tools/ci/test-local-sprint-preflight-policy.sh
 /bin/sh tools/ci/test-remote-checkpoint-policy.sh

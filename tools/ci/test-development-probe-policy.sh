@@ -29,6 +29,8 @@ done
 grep -q '^"$qemu" \\' tools/ci/launch-cloud-target.sh
 ! grep -q 'RAR_QEMU_' tools/ci/verify-cloud-target-tools.sh
 ! grep -q 'RAR_FIRMWARE_' tools/ci/verify-cloud-target-tools.sh
+! grep -q 'RAR_REFERENCE_' tools/ci/run-cloud-target-probe.sh
+! grep -q 'verify_file .*reference' tools/ci/verify-cloud-target-tools.sh
 ! grep -q 'source_root,target=/workspace' tools/ci/launch-cloud-target.sh
 
 echo "development probe policy checks passed"

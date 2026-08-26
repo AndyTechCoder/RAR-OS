@@ -39,6 +39,19 @@ adr_0020=$(/bin/sh "$root/tools/ci/classify-proposed-adr.sh" \
 adr_0021=$(/bin/sh "$root/tools/ci/classify-proposed-adr.sh" \
     "$root/docs/adr/0021-alpha-boot-payload-boundary.md" 0021 \
     "$root/docs/approval-record.md")
+adr_0022=$(/bin/sh "$root/tools/ci/classify-proposed-adr.sh" \
+    "$root/docs/proposals/0022-alpha-graphics-input-authority.md" 0022 \
+    "$root/docs/approval-record.md")
+adr_0023=$(/bin/sh "$root/tools/ci/classify-proposed-adr.sh" \
+    "$root/docs/proposals/0023-alpha-boot-determinism-and-entry-state.md" 0023 \
+    "$root/docs/approval-record.md")
+contract_structure=blocked
+if /bin/sh "$root/tools/ci/check-alpha-preimplementation-contracts.sh" >/dev/null; then
+    contract_structure=ready
+fi
+lab_contracts=$(/usr/bin/sed -n 's/^readiness=//p' "$root/spec/alpha/lab/development-lab-profile-v2.fields")
+boot_contracts=$(/usr/bin/sed -n 's/^readiness=//p' "$root/spec/alpha/boot/alpha-boot-v0.fields")
+preimplementation_contracts=blocked
 image_inputs=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/rar-lab/images/image-inputs-v1.env")
 crypto_references=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/sprint-alpha/alpha-crypto-references-v1.env")
 qmp_client=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/sprint-alpha/qmp-client-v1.env")
@@ -50,6 +63,9 @@ for state in "$workspace_boundary" "$internal_disk" "$ssd_capacity" "$workspace_
 done
 [ "$adr_0020" = accepted ] || local_repository_gates=blocked
 [ "$adr_0021" = accepted ] || local_repository_gates=blocked
+[ "$contract_structure" = ready ] || local_repository_gates=blocked
+[ "$lab_contracts" = source-ready-pending-review ] || local_repository_gates=blocked
+[ "$boot_contracts" = ready ] || local_repository_gates=blocked
 [ "$image_inputs" = ready ] || local_repository_gates=blocked
 [ "$crypto_references" = ready ] || local_repository_gates=blocked
 [ "$qmp_client" = ready ] || local_repository_gates=blocked
@@ -67,6 +83,13 @@ printf '%s\n' \
     'permission_profile=manual-evidence-required' \
     "adr_0020=$adr_0020" \
     "adr_0021=$adr_0021" \
+    "adr_0022=$adr_0022" \
+    "adr_0023=$adr_0023" \
+    "contract_structure=$contract_structure" \
+    "lab_contracts=$lab_contracts" \
+    "boot_contracts=$boot_contracts" \
+    "preimplementation_contracts=$preimplementation_contracts" \
+    'gui_input_authority=decision-required' \
     "image_inputs=$image_inputs" \
     "crypto_references=$crypto_references" \
     "qmp_client=$qmp_client" \

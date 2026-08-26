@@ -77,8 +77,6 @@ set +e
             --env "RAR_CONTAINER_UID=$container_uid" --env "RAR_CONTAINER_GID=$container_gid" \
             --env "RAR_COMPILER_PATH=$compiler_path" --env "RAR_COMPILER_SHA256=$compiler_sha256" \
             --env "RAR_LINKER_PATH=$linker_path" --env "RAR_LINKER_SHA256=$linker_sha256" \
-            --env "RAR_REFERENCE_1_PATH=$path_1" --env "RAR_REFERENCE_1_SHA256=$sha256_1" \
-            --env "RAR_REFERENCE_2_PATH=$path_2" --env "RAR_REFERENCE_2_SHA256=$sha256_2" \
             "$build_oci_image" /bin/sh -eu /controller/tools/ci/verify-cloud-target-tools.sh "$container_driver")
         case "$build_id" in '' | *[!0-9a-f]*) fail 'invalid build-container identity' ;; esac
         /usr/bin/timeout --signal=TERM --kill-after=10 "$timeout_seconds" docker start --attach "$build_id"

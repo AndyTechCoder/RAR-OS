@@ -11,6 +11,13 @@ for required in \
     'permission_profile=manual-evidence-required' \
     'remote_workflow=external-evidence-required' \
     'pr_gate=external-evidence-required' \
+    'gui_input_authority=decision-required' \
+    'contract_structure=' \
+    'lab_contracts=' \
+    'boot_contracts=' \
+    'preimplementation_contracts=' \
+    'adr_0022=' \
+    'adr_0023=' \
     'target_implementation=not-started'; do
     /usr/bin/grep -Fq "$required" "$reporter" || exit 1
 done

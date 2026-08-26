@@ -69,7 +69,7 @@ machine_hash=${machine_output%% *}
     -e 's|^qmp_client_path=unavailable$|qmp_client_path=/opt/rar-lab/bin/rar-qmp-client|' \
     -e 's/^qmp_client_sha256=unavailable$/qmp_client_sha256=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff/' \
     "$root/tools/sprint-alpha/development-lab-v1.env" > "$profile"
-/bin/sh "$checker" "$profile" "$machine" "$qmp_contract" "$work/controller" >/dev/null
+expect_rejected superseded-ready-v1-profile
 
 /usr/bin/printf '%s\n' mutation >> "$work/controller/tools/rar-lab/qmp-client/main.rs"
 expect_rejected mutated-qmp-source

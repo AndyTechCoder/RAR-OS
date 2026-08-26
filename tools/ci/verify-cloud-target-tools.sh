@@ -25,10 +25,10 @@ verify_file() {
 
 verify_file compiler "${RAR_COMPILER_PATH-}" "${RAR_COMPILER_SHA256-}"
 verify_file linker "${RAR_LINKER_PATH-}" "${RAR_LINKER_SHA256-}"
-verify_file openssl-reference "${RAR_REFERENCE_1_PATH-}" "${RAR_REFERENCE_1_SHA256-}"
-verify_file libsodium-reference "${RAR_REFERENCE_2_PATH-}" "${RAR_REFERENCE_2_SHA256-}"
-case "$("${RAR_REFERENCE_1_PATH-}" version)" in 'OpenSSL 3.0.13 '*) ;; *) fail 'OpenSSL reference version mismatch' ;; esac
-[ "$("${RAR_REFERENCE_2_PATH-}" --version)" = 'libsodium-reference 1.0.19' ] || fail 'libsodium reference version mismatch'
+for forbidden in RAR_REFERENCE_1_PATH RAR_REFERENCE_1_SHA256 RAR_REFERENCE_2_PATH RAR_REFERENCE_2_SHA256; do
+    eval "value=\${$forbidden-}"
+    [ -z "$value" ] || fail 'reference authority leaked into untrusted build role'
+done
 
 driver=${1-}
 [ -f "$driver" ] && [ ! -L "$driver" ] || fail "probe driver unavailable"

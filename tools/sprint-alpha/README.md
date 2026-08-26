@@ -1,17 +1,19 @@
 # Sprint Alpha Development Lab Controller
 
-`development-lab-v1.env` is trusted controller data loaded only from GitHub
-`main`. It deliberately remains `state=blocked`: the repository currently has
+`development-lab-v1.env` is permanently non-activating legacy controller data.
+Accepted ADR 0020 requires a three-role v2 topology, so the v1 validator rejects
+even a syntactically complete `state=ready` profile. The repository currently has
 no reviewed, role-separated build and launch OCI images containing byte-pinned
 target compiler/linker or QEMU/UEFI inputs. A Development Probe therefore
 refuses before creating a container or executing source-branch code.
 
-Activation requires separate build and launch image digests and a reviewed
-change that replaces every `unavailable` value
+The replacement contracts in `spec/alpha/lab/` define separate build,
+reference, and launch roles and a bounded comparison transcript. They are
+source-ready but do not provision or activate the Lab. A reviewed v2 controller
+still must bind real image digests and replace every `unavailable` value
 with a real canonical path or SHA-256 identity, changes `state` to `ready`,
-updates `machine_profile_sha256` to the exact hash of
-`x86_64-q35-v1.profile`, passes `check-development-lab-profile.sh` in both its
-blocked and ready fixtures plus all negative tests, receives independent
+updates `machine_profile_sha256` to the exact hash of the selected profile,
+passes its validator and negative tests, receives independent
 correctness and security review, and merges to `main`. No workflow may download,
 install, or discover an unpinned substitute at probe time.
 
@@ -20,12 +22,14 @@ requires software emulation, bounded resources, no networking, no passthrough,
 no host sharing, read-only firmware, disposable snapshot storage, serial
 capture, and a Unix QMP endpoint confined to the disposable cloud build root.
 
-The two OCI roles have distinct reviewed digests. The untrusted source checkout
+The three OCI roles have distinct reviewed digests. The untrusted source checkout
 is mounted only into the build container and may execute arbitrary
 repository-controlled build code there. That bounded, no-network cloud phase
 receives compiler/linker identities but no controller-granted QEMU, firmware,
-profile, credentials, or accepted launch-evidence authority. After it stops, the controller
-copies, bounds, and hashes only `/build/rar-os-alpha.img`. A second launch image
+reference tools, profile, credentials, or accepted launch-evidence authority.
+After it stops, the controller copies and bounds only the frozen artifact and
+comparison transcript. The reference role receives only the transcript and
+emits comparison evidence. A separate launch image
 mounts the frozen artifact, writable bounded evidence, and trusted controller—
 but never source. It re-hashes the artifact and uses the fixed sandboxed QEMU
 argv plus trusted A–G QMP scenario harness. Source-supplied emulator activity in

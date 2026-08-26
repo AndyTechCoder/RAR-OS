@@ -13,6 +13,6 @@ OpenSSL source release. The two reference implementations remain independent;
 the RAR harness does not share target implementation code or decide acceptance
 semantics. Accepted ADR 0020 selects a separate reference image and
 controller-owned comparison phase. The version-1 crypto inventory remains
-unconditionally blocked because it cannot express that topology. A new reviewed
-inventory schema must bind exact sources, licenses, role identity, paths, and
-executable hashes before activation.
+unconditionally blocked because it cannot express that topology. A reviewed
+controller must bind exact sources, licenses, role identity, paths, and
+executable hashes to the schemas in `spec/alpha/lab/` before activation.

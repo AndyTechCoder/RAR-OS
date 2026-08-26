@@ -39,6 +39,17 @@ docs/sprint-alpha.md
 SPRINT_STATUS.md
 docs/tasks/release-0.md
 docs/tasks/sprint-alpha-vertical.md
+docs/proposals/0022-alpha-graphics-input-authority.md
+docs/proposals/0023-alpha-boot-determinism-and-entry-state.md
+spec/alpha/lab/README.md
+spec/alpha/lab/development-lab-profile-v2.fields
+spec/alpha/lab/image-inventory-v2.fields
+spec/alpha/lab/crypto-reference-inventory-v2.fields
+spec/alpha/lab/comparison-transcript-v0.fields
+spec/alpha/lab/cases.v0
+spec/alpha/boot/README.md
+spec/alpha/boot/alpha-boot-v0.fields
+spec/alpha/boot/cases.v0
 spec/alpha/evidence/README.md
 spec/alpha/evidence/acceptance-v1.plan
 docs/adr/0011-release-0-reproducibility-gate-phasing.md
@@ -72,6 +83,8 @@ tools/ci/report-sprint-alpha-gates.sh
 tools/ci/check-sprint-alpha-gate-report-policy.sh
 tools/ci/classify-proposed-adr.sh
 tools/ci/test-proposed-adr-classifier-policy.sh
+tools/ci/check-alpha-preimplementation-contracts.sh
+tools/ci/test-alpha-preimplementation-contract-policy.sh
 tools/ci/check-remote-sprint-preflight.sh
 tools/ci/test-local-sprint-preflight-policy.sh
 tools/ci/check-development-lab-profile.sh
@@ -146,7 +159,7 @@ printf '%s\n' "$required_files" | while IFS= read -r file; do
     [ -s "$file" ] || fail "empty required file: $file"
 done
 
-for script in tools/ci/check-specs.sh tools/ci/check-sprint-static.sh tools/ci/check-local-sprint-preflight.sh tools/ci/check-remote-sprint-preflight.sh tools/ci/test-local-sprint-preflight-policy.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/launch-cloud-target.sh tools/ci/prepare-launch-control.sh tools/ci/wait-for-launch-release.sh tools/ci/check-workspace-budget.sh tools/ci/verify-cloud-target-tools.sh tools/ci/development-probe-status.sh tools/ci/test-development-probe-policy.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
+for script in tools/ci/check-specs.sh tools/ci/check-sprint-static.sh tools/ci/check-local-sprint-preflight.sh tools/ci/check-remote-sprint-preflight.sh tools/ci/test-local-sprint-preflight-policy.sh tools/ci/check-alpha-preimplementation-contracts.sh tools/ci/test-alpha-preimplementation-contract-policy.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/launch-cloud-target.sh tools/ci/prepare-launch-control.sh tools/ci/wait-for-launch-release.sh tools/ci/check-workspace-budget.sh tools/ci/verify-cloud-target-tools.sh tools/ci/development-probe-status.sh tools/ci/test-development-probe-policy.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
     [ -x "$script" ] || fail "required script is not executable: $script"
 done
 
@@ -156,6 +169,13 @@ grep -qx 'Status: Owner-approved execution contract — 2026-08-25' docs/tasks/s
 /bin/sh tools/ci/check-development-lab-profile.sh >/dev/null
 /bin/sh tools/ci/check-sprint-alpha-gate-report-policy.sh >/dev/null
 /bin/sh tools/ci/test-proposed-adr-classifier-policy.sh >/dev/null
+[ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
+    docs/proposals/0022-alpha-graphics-input-authority.md 0022 \
+    docs/approval-record.md)" = owner-decision-required ] || fail "ADR 0022 decision state is inconsistent"
+[ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
+    docs/proposals/0023-alpha-boot-determinism-and-entry-state.md 0023 \
+    docs/approval-record.md)" = owner-decision-required ] || fail "ADR 0023 decision state is inconsistent"
+/bin/sh tools/ci/check-alpha-preimplementation-contracts.sh >/dev/null
 [ "$(sed -n '1p' tools/sprint-alpha/x86_64-q35-v1.profile)" = 'schema=rar-development-machine-profile-v1' ] || fail "Sprint Alpha machine profile schema is invalid"
 grep -qx 'acceleration=tcg' tools/sprint-alpha/x86_64-q35-v1.profile || fail "Sprint Alpha machine profile must use software emulation"
 for disabled_boundary in 'network=none' 'audio=none' 'host_sharing=none' 'passthrough=none'; do

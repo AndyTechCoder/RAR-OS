@@ -59,3 +59,8 @@ Status: Gate 0 approved on 2026-07-16
 - [ADR 0021: Alpha Boot Payload and Handoff Boundary](adr/0021-alpha-boot-payload-boundary.md)
 
 Gate 0 approval makes the indexed direction and the Release 0 task packet implementation contracts. It does not approve later release-specific interfaces early, prevent ADR-governed evolution, or make a technical implementation permanently irreplaceable.
+
+## Open Alpha architecture decision
+
+- [Proposed ADR 0022: Alpha Graphics and Input Authority](proposals/0022-alpha-graphics-input-authority.md)
+- [Proposed ADR 0023: Alpha Boot Determinism and Entry State](proposals/0023-alpha-boot-determinism-and-entry-state.md)
