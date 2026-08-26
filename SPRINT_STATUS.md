@@ -51,6 +51,10 @@
   inspect but do not compile or execute changed Rust; isolated cloud test
   evidence remains blocked on a reviewed pinned host compiler identity. The
   core has no implemented filesystem, process, network, cloud, or copy authority
+- Probe dispatch state: the top-level Development Probe now validates the v2
+  blocked plan and stops with status 73. The superseded v1 two-role runner also
+  stops before reading cloud context or issuing any container command; no
+  default dispatch path can reach it after ADR 0020
 - Boot implementation state: accepted ADR 0021 selects the Alpha boot-volume,
   payload-loader, and Root-to-Recovery boundary. The candidate specification is
   explicitly `draft-incomplete` and cannot authorize implementation until its

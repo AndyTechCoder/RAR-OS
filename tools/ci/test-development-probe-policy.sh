@@ -23,6 +23,10 @@ for milestone in b c d e f g; do
     [ "$status" -eq 73 ]
 done
 
+grep -Fqx "        printf '%s\\n' 'development probe blocked: v2 controller is reviewed but inactive; v1 is permanently retired' >&2" tools/ci/run-development-probe.sh
+! grep -Fq 'run-cloud-target-probe.sh' tools/ci/run-development-probe.sh
+grep -Fqx "fail 'v1 two-role controller is permanently retired by ADR 0020; use only a reviewed active v2 controller'" tools/ci/run-cloud-target-probe.sh
+
 # Source branches never receive launch authority: there is exactly one QEMU
 # execution site, and it is the trusted controller launcher.
 [ "$(grep -RIl '^"\$qemu" \\' tools/ci tools/sprint-alpha | wc -l | tr -d ' ')" -eq 1 ]

@@ -6,6 +6,7 @@ controller_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 cd "$controller_root"
 probe=${1-}
 case "$probe" in milestone-a | milestone-b | milestone-c | milestone-d | milestone-e | milestone-f | milestone-g) ;; *) fail 'unsupported target probe' ;; esac
+fail 'v1 two-role controller is permanently retired by ADR 0020; use only a reviewed active v2 controller'
 [ "${GITHUB_ACTIONS-}" = true ] && [ "${CI-}" = true ] && [ "${RUNNER_OS-}" = Linux ] || fail 'cloud CI boundary missing'
 for name in GITHUB_WORKSPACE RUNNER_TEMP RAR_PROBE_EVIDENCE_DIR RAR_PROBE_CONTROLLER_ROOT RAR_PROBE_SOURCE_ROOT RAR_TRUSTED_CONTROLLER_SHA RAR_PROBE_SOURCE_SHA; do
     eval "value=\${$name-}"
