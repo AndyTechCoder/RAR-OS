@@ -82,6 +82,9 @@ for file in \
     "$lab/controller-handoff-v0.fields" \
     "$lab/controller-handoff-manifest-v0.fields" \
     "$lab/controller-handoff-cases.v0" \
+    "$lab/controller-helper-inventory-v0.fields" \
+    "$lab/controller-helper-build-evidence-v0.fields" \
+    "$lab/controller-helper-cases.v0" \
     "$lab/reference-evidence-v0.fields" \
     "$lab/fixtures/controller-context.v0" \
     "$lab/fixtures/source-context.v0" \
@@ -106,6 +109,8 @@ for fields in \
     "$lab/controller-state-machine-v0.fields" \
     "$lab/controller-handoff-v0.fields" \
     "$lab/controller-handoff-manifest-v0.fields" \
+    "$lab/controller-helper-inventory-v0.fields" \
+    "$lab/controller-helper-build-evidence-v0.fields" \
     "$lab/reference-evidence-v0.fields" \
     "$boot/alpha-boot-v0.fields"; do
     validate_field_file "$fields"
@@ -119,6 +124,9 @@ require_digest "$lab/controller-state-machine-v0.fields" 71756b7d93b0ae11a3c229f
 require_digest "$lab/controller-handoff-v0.fields" e4645da70ff7153facb9d811795b6001c345357fae02e95fd75b0ca4874ef80e
 require_digest "$lab/controller-handoff-manifest-v0.fields" d36e0d6edf5bb1ad3155e205acad3b3c20a638e2debd10635f2e5f133952ee2a
 require_digest "$lab/controller-handoff-cases.v0" 652521315b2f68e92991a70fd16c9a7697b918df524664922eb477871555af3a
+require_digest "$lab/controller-helper-inventory-v0.fields" f8a6a19aa3d776e237f28a7513745682eb9a7bcae2be6a3ced1c510192af961c
+require_digest "$lab/controller-helper-build-evidence-v0.fields" 4b314231e881e755ecba5d63adaff4b2f588340e63df8a513b2b6e51cf0390a1
+require_digest "$lab/controller-helper-cases.v0" 08e36412d104cc5c41169faf5d5e4dd423eb7fbfb0dba0623911423c51238e59
 require_digest "$lab/reference-evidence-v0.fields" 2edbb270323d5fd074d3adc2929c695e0bb7ca957464ea814627ea82fc0c259e
 require_digest "$lab/cases.v0" 966d84739240b871d2dd22e362ce07ec0e82706cbde32dfd4e493c0bd9758342
 require_digest "$boot/alpha-boot-v0.fields" 8a97440b2366e3554cca8948c47d0df8e3146230a1d049ead48a105612623e0e
@@ -191,6 +199,15 @@ require_line "$manifest" 'canonical_rule=total-bytes-256,ordinal-1..999,basename
 require_line "$manifest" 'durability_rule=fdatasync-manifest-then-close-then-fsync-controller-manifest-root-before-next-role'
 [ "$(/usr/bin/grep -c '^wire_field|HandoffManifestV0|' "$manifest")" -eq 19 ] || fail 'controller handoff manifest layout is incomplete'
 validate_case_file "$lab/controller-handoff-cases.v0" 'schema=rar-alpha-controller-handoff-cases-v0' 46
+helper_inventory=$lab/controller-helper-inventory-v0.fields
+helper_evidence=$lab/controller-helper-build-evidence-v0.fields
+require_line "$helper_inventory" 'blocked_rule=decision+topology+all-builder+compiler+source+binary+evidence-identities-unavailable'
+require_line "$helper_inventory" 'authority_rule=helper-filesystem-descriptors-only,no-process-spawn,no-network,no-container-api,no-cloud-api,no-credential,no-GitHub-write,no-target-launch'
+require_line "$helper_inventory" 'activation_rule=inventory+compiler-closure+source+binary+build-evidence+test-evidence-reviewed-and-bound-before-v2-controller-ready'
+require_line "$helper_evidence" 'binary_rule=build-1-sha256-equals-build-2-sha256-equals-final-binary-sha256,binary-bytes-1..16777216'
+require_line "$helper_evidence" 'execution_rule=build-count-2,reproducible-yes,network-none,status-accepted'
+require_line "$helper_evidence" 'failure_rule=missing,extra,duplicate,reordered,malformed,unapproved-decision,topology-mismatch,zero-digest,build-mismatch,oversize,networked,nonfresh,test-failure,or-nonzero-status-rejects'
+validate_case_file "$lab/controller-helper-cases.v0" 'schema=rar-alpha-controller-helper-cases-v0' 40
 /bin/sh "$root/tools/ci/check-reference-evidence-v0.sh" "$lab/fixtures/comparison-evidence.v0" "$lab/fixtures/comparison-transcript.v0" "$lab/fixtures/reference-inventory.v0" "$lab/fixtures/reference-harness.v0" >/dev/null || fail 'reference evidence fixture is invalid'
 /bin/sh "$root/tools/ci/check-reference-verdict-v0.sh" "$lab/fixtures/reference-verdict-accepted.v0" milestone-f "$lab/fixtures/controller-context.v0" "$lab/fixtures/source-context.v0" "$lab/fixtures/comparison-transcript.v0" "$lab/fixtures/reference-inventory.v0" "$lab/fixtures/comparison-evidence.v0" "$lab/fixtures/reference-harness.v0" >/dev/null || fail 'accepted reference verdict fixture is invalid'
 /bin/sh "$root/tools/ci/check-reference-verdict-v0.sh" "$lab/fixtures/reference-verdict-not-required.v0" milestone-a "$lab/fixtures/controller-context.v0" "$lab/fixtures/source-context.v0" "$lab/fixtures/comparison-transcript.v0" none none none >/dev/null || fail 'not-required reference verdict fixture is invalid'

@@ -67,6 +67,7 @@ qmp_client=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/sprint-alpha/qmp-client
 lab_profile=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/sprint-alpha/development-lab-v1.env")
 lab_profile_v2=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/sprint-alpha/development-lab-v2.env")
 lab_controller_v2=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/sprint-alpha/development-controller-v2.plan")
+controller_helper=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/sprint-alpha/controller-helper-v0.env")
 
 local_repository_gates=ready
 for state in "$workspace_boundary" "$internal_disk" "$ssd_capacity" "$workspace_budget"; do
@@ -81,6 +82,9 @@ done
 [ "$crypto_references" = ready ] || local_repository_gates=blocked
 [ "$qmp_client" = ready ] || local_repository_gates=blocked
 [ "$lab_profile" = ready ] || local_repository_gates=blocked
+[ "$lab_profile_v2" = ready ] || local_repository_gates=blocked
+[ "$lab_controller_v2" = ready ] || local_repository_gates=blocked
+[ "$controller_helper" = ready ] || local_repository_gates=blocked
 
 printf '%s\n' \
     'schema=rar-sprint-alpha-gate-report-v1' \
@@ -109,6 +113,7 @@ printf '%s\n' \
     "lab_profile=$lab_profile" \
     "lab_profile_v2=$lab_profile_v2" \
     "lab_controller_v2=$lab_controller_v2" \
+    "controller_helper=$controller_helper" \
     'remote_workflow=external-evidence-required' \
     'pr_gate=external-evidence-required' \
     'target_implementation=not-started' \

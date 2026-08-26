@@ -47,6 +47,13 @@ case table makes races, aliases, wrong ownership, extra outputs, and partial
 copies fail before the next role can start. The manifest is a fixed 256-byte
 experimental host record, validated and durably synchronized before progression.
 
+`controller-helper-inventory-v0.fields` and its build-evidence contract define
+the identities required to turn that primitive into a trusted Linux helper.
+They are deliberately topology-neutral while ADR 0024 is undecided: the checked
+instance contains no compiler, builder, source, binary, or evidence identity and
+cannot become ready. Whichever alternative is accepted must reproduce the same
+bounded helper twice and bind isolated test evidence before controller activation.
+
 The v1 Lab, image, and crypto inventory files remain permanently blocked. The
 v2 field schemas define the replacement shape but do not contain runnable image
 digests or authorize provisioning. A candidate instance becomes `ready` only in

@@ -16,6 +16,7 @@ for required in \
     'lab_contracts=' \
     'lab_profile_v2=' \
     'lab_controller_v2=' \
+    'controller_helper=' \
     'boot_contracts=' \
     'preimplementation_contracts=' \
     'reference_verdict_contract=' \

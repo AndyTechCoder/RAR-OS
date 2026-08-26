@@ -59,6 +59,11 @@
   build choices and recommends a twice-reproduced, fully pinned compiler closure
   on the approved Linux runner for Alpha. It remains owner-decision-required;
   no helper compilation, cloud provisioning, or execution is authorized
+- Controller-helper inventory: an option-neutral blocked instance now binds the
+  required builder, compiler closure, trusted source, golden vector, twice-
+  reproduced binary, and isolated test-evidence identities. All activating
+  values remain `unavailable`; 40 declarative cases and mutation tests prevent
+  a ready claim before ADR 0024 acceptance and real reviewed cloud evidence
 - Boot implementation state: accepted ADR 0021 selects the Alpha boot-volume,
   payload-loader, and Root-to-Recovery boundary. The candidate specification is
   explicitly `draft-incomplete` and cannot authorize implementation until its
