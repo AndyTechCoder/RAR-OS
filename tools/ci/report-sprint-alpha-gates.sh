@@ -45,6 +45,9 @@ adr_0022=$(/bin/sh "$root/tools/ci/classify-proposed-adr.sh" \
 adr_0023=$(/bin/sh "$root/tools/ci/classify-proposed-adr.sh" \
     "$root/docs/proposals/0023-alpha-boot-determinism-and-entry-state.md" 0023 \
     "$root/docs/approval-record.md")
+adr_0024=$(/bin/sh "$root/tools/ci/classify-proposed-adr.sh" \
+    "$root/docs/proposals/0024-alpha-controller-helper-build-trust.md" 0024 \
+    "$root/docs/approval-record.md")
 contract_structure=blocked
 if /bin/sh "$root/tools/ci/check-alpha-preimplementation-contracts.sh" >/dev/null; then
     contract_structure=ready
@@ -93,6 +96,7 @@ printf '%s\n' \
     "adr_0021=$adr_0021" \
     "adr_0022=$adr_0022" \
     "adr_0023=$adr_0023" \
+    "adr_0024=$adr_0024" \
     "contract_structure=$contract_structure" \
     "lab_contracts=$lab_contracts" \
     "boot_contracts=$boot_contracts" \

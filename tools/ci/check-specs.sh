@@ -41,6 +41,7 @@ docs/tasks/release-0.md
 docs/tasks/sprint-alpha-vertical.md
 docs/proposals/0022-alpha-graphics-input-authority.md
 docs/proposals/0023-alpha-boot-determinism-and-entry-state.md
+docs/proposals/0024-alpha-controller-helper-build-trust.md
 spec/alpha/lab/README.md
 spec/alpha/lab/development-lab-profile-v2.fields
 spec/alpha/lab/image-inventory-v2.fields
@@ -212,6 +213,9 @@ grep -qx 'Status: Owner-approved execution contract — 2026-08-25' docs/tasks/s
 [ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
     docs/proposals/0023-alpha-boot-determinism-and-entry-state.md 0023 \
     docs/approval-record.md)" = owner-decision-required ] || fail "ADR 0023 decision state is inconsistent"
+[ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
+    docs/proposals/0024-alpha-controller-helper-build-trust.md 0024 \
+    docs/approval-record.md)" = owner-decision-required ] || fail "ADR 0024 decision state is inconsistent"
 /bin/sh tools/ci/check-alpha-preimplementation-contracts.sh >/dev/null
 [ "$(sed -n '1p' tools/sprint-alpha/x86_64-q35-v1.profile)" = 'schema=rar-development-machine-profile-v1' ] || fail "Sprint Alpha machine profile schema is invalid"
 grep -qx 'acceleration=tcg' tools/sprint-alpha/x86_64-q35-v1.profile || fail "Sprint Alpha machine profile must use software emulation"

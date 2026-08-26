@@ -21,6 +21,7 @@ for required in \
     'reference_verdict_contract=' \
     'adr_0022=' \
     'adr_0023=' \
+    'adr_0024=' \
     'target_implementation=not-started'; do
     /usr/bin/grep -Fq "$required" "$reporter" || exit 1
 done

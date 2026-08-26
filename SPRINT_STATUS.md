@@ -55,6 +55,10 @@
   blocked plan and stops with status 73. The superseded v1 two-role runner also
   stops before reading cloud context or issuing any container command; no
   default dispatch path can reach it after ADR 0020
+- Controller-helper build trust: proposed ADR 0024 records three bounded cloud
+  build choices and recommends a twice-reproduced, fully pinned compiler closure
+  on the approved Linux runner for Alpha. It remains owner-decision-required;
+  no helper compilation, cloud provisioning, or execution is authorized
 - Boot implementation state: accepted ADR 0021 selects the Alpha boot-volume,
   payload-loader, and Root-to-Recovery boundary. The candidate specification is
   explicitly `draft-incomplete` and cannot authorize implementation until its
