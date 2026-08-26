@@ -23,6 +23,13 @@ any activating identity or `state=ready` fails until the real immutable inputs,
 reproduction evidence, and reviewed controller exist. Its policy tests mutate
 state, fields, bounds, grammar, and file type without contacting cloud services.
 
+`development-controller-v2.plan` is the exact blocked nine-phase controller
+plan. Its validator fixes the actor and order of preflight, two fresh builds,
+freeze, isolated reference, reference verification, launch, evidence
+verification, and retention. It contains no command line and cannot activate a
+container or cloud service; mutations that allow activation, change role actors,
+remove freeze, reorder phases, or substitute a symbolic plan fail.
+
 The machine profile is host-controller data, not a stable target interface. It
 requires software emulation, bounded resources, no networking, no passthrough,
 no host sharing, read-only firmware, disposable snapshot storage, serial

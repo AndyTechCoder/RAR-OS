@@ -78,6 +78,7 @@ for file in \
     "$lab/image-inventory-v2.fields" \
     "$lab/crypto-reference-inventory-v2.fields" \
     "$lab/comparison-transcript-v0.fields" \
+    "$lab/controller-state-machine-v0.fields" \
     "$lab/cases.v0" \
     "$boot/README.md" \
     "$boot/alpha-boot-v0.fields" \
@@ -90,6 +91,7 @@ for fields in \
     "$lab/image-inventory-v2.fields" \
     "$lab/crypto-reference-inventory-v2.fields" \
     "$lab/comparison-transcript-v0.fields" \
+    "$lab/controller-state-machine-v0.fields" \
     "$boot/alpha-boot-v0.fields"; do
     validate_field_file "$fields"
 done
@@ -98,6 +100,7 @@ require_digest "$lab/development-lab-profile-v2.fields" 86ca738fdfdef78b68d75037
 require_digest "$lab/image-inventory-v2.fields" aa4c763f78c04b904e517221677fdad2e3a5a1e9b9d2d4d71dfbf26208fed9bd
 require_digest "$lab/crypto-reference-inventory-v2.fields" 62914ec46eb5ce005ed94b22dcbd5937aadb8424890532eca0a87e204a1635e5
 require_digest "$lab/comparison-transcript-v0.fields" 9d60bc1870fbf8cb8184e6bde512cb4eebd47d20ed63ef36e6f8182f5d596aa5
+require_digest "$lab/controller-state-machine-v0.fields" 07bdd7852147eb438f06e192f187b0cd357cb45427c5a1052c753471b42cb585
 require_digest "$lab/cases.v0" 966d84739240b871d2dd22e362ce07ec0e82706cbde32dfd4e493c0bd9758342
 require_digest "$boot/alpha-boot-v0.fields" 8a97440b2366e3554cca8948c47d0df8e3146230a1d049ead48a105612623e0e
 require_digest "$boot/cases.v0" 370f829f791681cb4c1fb96dbf850f9535751a7a64295534562ea47a9f84bee3

@@ -33,8 +33,12 @@
   single-pass validator are complete, fast, independently reviewed, and reject
   every activating identity or ready state. Provisioning is absent,
   candidate images remain unbuilt, the legacy v1 profile is permanently
-  non-activating, and real immutable output identities plus a reviewed v2
-  controller are still required
+  non-activating. The blocked nine-phase v2 controller plan now fixes role
+  order, non-overlap, freeze, reference verification, launch evidence, and
+  retention without containing runnable cloud commands. Its focused review is
+  clean after binding the conditional reference verdict into final evidence and
+  enforcing every phase row exactly. Real immutable output
+  identities plus a reviewed runnable v2 controller are still required
 - Boot implementation state: accepted ADR 0021 selects the Alpha boot-volume,
   payload-loader, and Root-to-Recovery boundary. The candidate specification is
   explicitly `draft-incomplete` and cannot authorize implementation until its

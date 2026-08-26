@@ -24,6 +24,13 @@ evidence. Target-build output cannot declare itself verified. Missing,
 duplicated, reordered, malformed, oversized, unknown-critical, or mismatched
 comparison records fail before signing evidence can pass.
 
+`controller-state-machine-v0.fields` fixes the controller order before any
+runnable v2 controller exists. Two fresh build roles run first; the trusted
+controller freezes only identical bounded outputs; the isolated reference role
+runs only for Milestones F/G; the launch role receives only the frozen artifact;
+and controller-owned verification precedes bounded retention. At most one role
+container may run, and the controller tree never enters build or reference.
+
 The v1 Lab, image, and crypto inventory files remain permanently blocked. The
 v2 field schemas define the replacement shape but do not contain runnable image
 digests or authorize provisioning. A candidate instance becomes `ready` only in
@@ -32,4 +39,3 @@ reproduction evidence.
 
 This is Development Lab evidence, not production trust, certification, or a
 target dependency. No file in this directory links into or ships with RAR OS.
-

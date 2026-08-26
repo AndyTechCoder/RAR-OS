@@ -1,0 +1,14 @@
+schema=rar-alpha-development-controller-plan-v0
+state=blocked
+contract=spec/alpha/lab/controller-state-machine-v0.fields
+profile=tools/sprint-alpha/development-lab-v2.env
+01|preflight|controller|A-G|validated-identities
+02|build-one|build|A-G|artifact-one+transcript-one
+03|build-two|build|A-G|artifact-two+transcript-two
+04|freeze|controller|A-G|frozen-artifact+frozen-transcript+digests
+05|reference|reference|F-G|comparison-evidence
+06|reference-verify|controller|F-G|reference-verdict
+07|launch|launch|A-G|launch-evidence
+08|evidence-verify|controller|A-G|accepted-evidence-set+reference-verdict-digest
+09|retain|controller|A-G|bounded-retained-evidence+completion-report+reference-verdict
+activation=forbidden

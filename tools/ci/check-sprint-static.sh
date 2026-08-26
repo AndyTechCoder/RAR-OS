@@ -26,6 +26,8 @@ tools/ci/check-specs.sh
     tools/ci/test-development-lab-profile-policy.sh \
     tools/ci/check-development-lab-profile-v2.sh \
     tools/ci/test-development-lab-profile-v2-policy.sh \
+    tools/ci/check-development-controller-v2.sh \
+    tools/ci/test-development-controller-v2-policy.sh \
     tools/ci/verify-remote-checkpoint.sh \
     tools/ci/test-remote-checkpoint-policy.sh \
     tools/ci/verify-frozen-artifact.sh \
@@ -75,6 +77,7 @@ tools/ci/test-development-probe-policy.sh
 /bin/sh tools/ci/test-alpha-preimplementation-contract-policy.sh
 /bin/sh tools/ci/test-development-lab-profile-policy.sh
 /bin/sh tools/ci/test-development-lab-profile-v2-policy.sh
+/bin/sh tools/ci/test-development-controller-v2-policy.sh
 tools/ci/test-local-sprint-preflight-policy.sh
 /bin/sh tools/ci/test-remote-checkpoint-policy.sh
 /bin/sh tools/ci/test-frozen-artifact-policy.sh
