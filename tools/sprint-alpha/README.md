@@ -44,3 +44,9 @@ build-plan identities while deliberately leaving the binary unavailable; it
 does not activate the Lab. Activation requires a twice-reproduced cloud binary
 hash, version/license/verb checks, and equality with the binary hash in the Lab
 profile. The client is a pinned host/lab tool and never ships in RAR OS.
+
+`tools/ci/report-sprint-alpha-gates.sh` is a read-only orientation report for a
+task already rooted in the exact SSD workspace. It reports all local and
+repository decision gates at once instead of stopping at the first failure. It
+never contacts GitHub, proves the active Codex permission profile, or replaces
+the strict local/remote preflight gates; those remain separate evidence.

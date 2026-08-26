@@ -61,3 +61,4 @@ Gate 0 approval makes the indexed direction and the Release 0 task packet implem
 ## Pending owner decisions
 
 - [Proposed ADR 0020: Alpha Reference-Oracle Isolation](proposals/0020-alpha-reference-oracle-isolation.md)
+- [Proposed ADR 0021: Alpha Boot Payload and Handoff Boundary](proposals/0021-alpha-boot-payload-boundary.md)

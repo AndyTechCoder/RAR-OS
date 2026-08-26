@@ -52,6 +52,7 @@ docs/adr/0017-sprint-alpha-development-lab.md
 docs/adr/0018-end-of-week-demonstrator.md
 docs/adr/0019-alpha-layer-signing.md
 docs/proposals/0020-alpha-reference-oracle-isolation.md
+docs/proposals/0021-alpha-boot-payload-boundary.md
 docs/release-0/contracts/README.md
 spec/boot/handoff-v1.fields
 spec/hardware/rhd-v1.fields
@@ -67,6 +68,10 @@ sdk/generated/release-0/lib.rs
 tools/ci/check-specs.sh
 tools/ci/check-sprint-static.sh
 tools/ci/check-local-sprint-preflight.sh
+tools/ci/report-sprint-alpha-gates.sh
+tools/ci/check-sprint-alpha-gate-report-policy.sh
+tools/ci/classify-proposed-adr.sh
+tools/ci/test-proposed-adr-classifier-policy.sh
 tools/ci/check-remote-sprint-preflight.sh
 tools/ci/test-local-sprint-preflight-policy.sh
 tools/ci/check-development-lab-profile.sh
@@ -149,6 +154,8 @@ grep -qx 'Status: Owner-approved execution contract — 2026-08-25' docs/tasks/s
 [ "$(sed -n '1p' spec/alpha/evidence/acceptance-v1.plan)" = schema=rar-alpha-acceptance-plan-v1 ] || fail "Alpha evidence protocol schema is invalid"
 [ "$(awk -F '|' '!/^#/ && !/^schema=/ && NF { count++; if (NF != 5 || $1 !~ /^[A-G]$/ || $2 !~ /^(none|continue|key:[a-z0-9-]+|pointer:[0-9]+,[0-9]+,[0-9]+)$/ || $3 !~ /^[a-z0-9:-]+$/ || $4 !~ /^[a-z0-9-]+$/ || $5 !~ /^[01]$/) bad=1 } END { if (bad) exit 1; print count + 0 }' spec/alpha/evidence/acceptance-v1.plan)" -eq 45 ] || fail "Alpha evidence protocol is incomplete or malformed"
 /bin/sh tools/ci/check-development-lab-profile.sh >/dev/null
+/bin/sh tools/ci/check-sprint-alpha-gate-report-policy.sh >/dev/null
+/bin/sh tools/ci/test-proposed-adr-classifier-policy.sh >/dev/null
 [ "$(sed -n '1p' tools/sprint-alpha/x86_64-q35-v1.profile)" = 'schema=rar-development-machine-profile-v1' ] || fail "Sprint Alpha machine profile schema is invalid"
 grep -qx 'acceleration=tcg' tools/sprint-alpha/x86_64-q35-v1.profile || fail "Sprint Alpha machine profile must use software emulation"
 for disabled_boundary in 'network=none' 'audio=none' 'host_sharing=none' 'passthrough=none'; do

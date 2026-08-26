@@ -39,14 +39,15 @@ Implementation does not start until all of these pass:
    SSD worktree with at least 10 GiB free on the Mac's internal disk.
 3. `tools/ci/check-remote-sprint-preflight.sh` proves the exact GitHub head,
    a successful required workflow with real steps, and an immutable checkpoint.
-4. `tools/sprint-alpha/development-lab-v1.env` is changed from `blocked` to
-   `ready` only with reviewed, real SHA-256 identities for distinct build/launch
-   OCI images, compiler, linker, QEMU, firmware, machine profile, and QMP
-   client. The crypto reference inventory must also be `ready` with its two
-   reviewed paths and digests before A, so F needs no controller mutation. The
-   ready controller must be merged to `main` before a source-branch Development
-   Probe can run.
+4. ADR 0020 is accepted and new reviewed Development Lab, image, and crypto
+   inventory schemas bind the selected isolated reference topology. The active
+   Lab profile becomes `ready` only with real reviewed identities for every
+   build, reference, and launch role plus compiler, linker, QEMU, firmware,
+   machine profile, QMP client, and reference executables. The ready controller
+   must be merged to `main` before a source-branch Development Probe can run.
 5. PR #7 is green, independently reviewed, merged, and verified on GitHub.
+6. ADR 0021 is accepted and its Alpha-only boot payload/entry specification is
+   reviewed before Milestone A target files or image recipes are created.
 
 PR #7 is also the one-time pre-A controller transition. Before any untrusted
 Alpha source is built, `main` must contain the generic A–G dispatch controller,
