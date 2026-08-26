@@ -45,7 +45,12 @@
   reviewed runnable v2 controller are still required. The controller's
   host-only stop/open/copy/recheck handoff and 256-byte durable manifest are now
   byte-bound with 46 positive and adversarial cases; their descriptor-based
-  implementation is not yet present
+  implementation is not yet present. The dependency-free, unsafe-free host
+  core now implements the manifest codec and streaming SHA-256, defines seven
+  focused tests, and includes an independent 256-byte golden vector. Local gates
+  inspect but do not compile or execute changed Rust; isolated cloud test
+  evidence remains blocked on a reviewed pinned host compiler identity. The
+  core has no implemented filesystem, process, network, cloud, or copy authority
 - Boot implementation state: accepted ADR 0021 selects the Alpha boot-volume,
   payload-loader, and Root-to-Recovery boundary. The candidate specification is
   explicitly `draft-incomplete` and cannot authorize implementation until its

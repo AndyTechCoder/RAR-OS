@@ -1,0 +1,10 @@
+schema=rar-controller-handoff-build-plan-v0
+rustc_channel=1.95.0
+rustc_identity=unavailable
+crate_name=rar_controller_handoff_core
+source=lib.rs
+test_args=--edition=2024,--test,-C,debuginfo=0,--remap-path-prefix=/controller=.
+dependency_count=0
+target_linked=false
+test_execution=blocked-pending-reviewed-isolated-cloud-host-tool-identity
+status=codec-source-only-no-copy-authority

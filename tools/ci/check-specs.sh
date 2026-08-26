@@ -107,6 +107,7 @@ tools/ci/check-development-lab-profile-v2.sh
 tools/ci/test-development-lab-profile-v2-policy.sh
 tools/ci/check-development-controller-v2.sh
 tools/ci/test-development-controller-v2-policy.sh
+tools/ci/check-controller-handoff-core.sh
 tools/ci/check-reference-evidence-v0.sh
 tools/ci/test-reference-evidence-v0-policy.sh
 tools/ci/check-reference-verdict-v0.sh
@@ -159,6 +160,12 @@ tools/rar-lab/qmp-client/README.md
 tools/rar-lab/qmp-client/build-plan.v1
 tools/rar-lab/qmp-client/json.rs
 tools/rar-lab/qmp-client/main.rs
+tools/rar-lab/controller-handoff/README.md
+tools/rar-lab/controller-handoff/build-plan.v0
+tools/rar-lab/controller-handoff/fixtures/manifest-golden.v0.hex
+tools/rar-lab/controller-handoff/lib.rs
+tools/rar-lab/controller-handoff/manifest.rs
+tools/rar-lab/controller-handoff/sha256.rs
 tools/rar-lab/crypto-reference/README.md
 tools/rar-lab/crypto-reference/libsodium-reference.c
 tools/rar-lab/images/README.md
@@ -183,7 +190,7 @@ printf '%s\n' "$required_files" | while IFS= read -r file; do
     [ -s "$file" ] || fail "empty required file: $file"
 done
 
-for script in tools/ci/check-specs.sh tools/ci/check-sprint-static.sh tools/ci/check-local-sprint-preflight.sh tools/ci/check-remote-sprint-preflight.sh tools/ci/test-local-sprint-preflight-policy.sh tools/ci/check-alpha-preimplementation-contracts.sh tools/ci/test-alpha-preimplementation-contract-policy.sh tools/ci/check-development-lab-profile-v2.sh tools/ci/test-development-lab-profile-v2-policy.sh tools/ci/check-development-controller-v2.sh tools/ci/test-development-controller-v2-policy.sh tools/ci/check-reference-evidence-v0.sh tools/ci/test-reference-evidence-v0-policy.sh tools/ci/check-reference-verdict-v0.sh tools/ci/test-reference-verdict-v0-policy.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/launch-cloud-target.sh tools/ci/prepare-launch-control.sh tools/ci/wait-for-launch-release.sh tools/ci/check-workspace-budget.sh tools/ci/verify-cloud-target-tools.sh tools/ci/development-probe-status.sh tools/ci/test-development-probe-policy.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/alpha/lab/fixtures/generate.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
+for script in tools/ci/check-specs.sh tools/ci/check-sprint-static.sh tools/ci/check-local-sprint-preflight.sh tools/ci/check-remote-sprint-preflight.sh tools/ci/test-local-sprint-preflight-policy.sh tools/ci/check-alpha-preimplementation-contracts.sh tools/ci/test-alpha-preimplementation-contract-policy.sh tools/ci/check-development-lab-profile-v2.sh tools/ci/test-development-lab-profile-v2-policy.sh tools/ci/check-development-controller-v2.sh tools/ci/test-development-controller-v2-policy.sh tools/ci/check-controller-handoff-core.sh tools/ci/check-reference-evidence-v0.sh tools/ci/test-reference-evidence-v0-policy.sh tools/ci/check-reference-verdict-v0.sh tools/ci/test-reference-verdict-v0-policy.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/launch-cloud-target.sh tools/ci/prepare-launch-control.sh tools/ci/wait-for-launch-release.sh tools/ci/check-workspace-budget.sh tools/ci/verify-cloud-target-tools.sh tools/ci/development-probe-status.sh tools/ci/test-development-probe-policy.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/alpha/lab/fixtures/generate.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
     [ -x "$script" ] || fail "required script is not executable: $script"
 done
 
@@ -193,6 +200,7 @@ grep -qx 'Status: Owner-approved execution contract — 2026-08-25' docs/tasks/s
 /bin/sh tools/ci/check-development-lab-profile.sh >/dev/null
 /bin/sh tools/ci/check-development-lab-profile-v2.sh >/dev/null
 /bin/sh tools/ci/check-development-controller-v2.sh >/dev/null
+/bin/sh tools/ci/check-controller-handoff-core.sh >/dev/null
 /bin/sh tools/ci/check-reference-evidence-v0.sh spec/alpha/lab/fixtures/comparison-evidence.v0 spec/alpha/lab/fixtures/comparison-transcript.v0 spec/alpha/lab/fixtures/reference-inventory.v0 spec/alpha/lab/fixtures/reference-harness.v0 >/dev/null
 /bin/sh tools/ci/check-reference-verdict-v0.sh spec/alpha/lab/fixtures/reference-verdict-accepted.v0 milestone-f spec/alpha/lab/fixtures/controller-context.v0 spec/alpha/lab/fixtures/source-context.v0 spec/alpha/lab/fixtures/comparison-transcript.v0 spec/alpha/lab/fixtures/reference-inventory.v0 spec/alpha/lab/fixtures/comparison-evidence.v0 spec/alpha/lab/fixtures/reference-harness.v0 >/dev/null
 /bin/sh tools/ci/check-reference-verdict-v0.sh spec/alpha/lab/fixtures/reference-verdict-not-required.v0 milestone-a spec/alpha/lab/fixtures/controller-context.v0 spec/alpha/lab/fixtures/source-context.v0 spec/alpha/lab/fixtures/comparison-transcript.v0 none none none >/dev/null
