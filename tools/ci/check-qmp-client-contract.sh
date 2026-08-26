@@ -16,12 +16,20 @@ if /usr/bin/grep -Ev '^(schema|state|owner|version|license|source_tree|source_sh
 [ "$replacement" = versioned-host-tool-contract ] || exit 1
 case "$state" in
     blocked) [ "$source_tree|$source_sha256|$build_plan_sha256|$binary_sha256" = 'unavailable|unavailable|unavailable|unavailable' ] || exit 1 ;;
-    ready)
+    source-ready | ready)
         [ "$source_tree" = /controller/tools/rar-lab/qmp-client ] || exit 1
-        for digest in "$source_sha256" "$build_plan_sha256" "$binary_sha256"; do
+        for digest in "$source_sha256" "$build_plan_sha256"; do
             [ "${#digest}" -eq 64 ] || exit 1
             case "$digest" in *[!0-9a-f]*) exit 1 ;; esac
         done
+        case "$state:$binary_sha256" in
+            source-ready:unavailable) ;;
+            ready:*)
+                [ "${#binary_sha256}" -eq 64 ] || exit 1
+                case "$binary_sha256" in *[!0-9a-f]*) exit 1 ;; esac
+                ;;
+            *) exit 1 ;;
+        esac
         actual_tree=$controller_root/${source_tree#/controller/}
         [ -d "$actual_tree" ] && [ ! -L "$actual_tree" ] || exit 1
         /bin/mkdir -p "$controller_root/out"

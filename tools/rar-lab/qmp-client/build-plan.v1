@@ -1,0 +1,16 @@
+schema=rar-qmp-build-plan-v1
+owner=RAR
+language=Rust
+edition=2024
+target=x86_64-unknown-linux-musl
+crate_name=rar_qmp_client
+entry=main.rs
+module=json.rs
+dependency_policy=rust-std-only
+compiler=/opt/rar-toolchain/bin/rustc
+test_output=/build/rar-qmp-client-tests
+binary_output=/build/rar-qmp-client
+test_args=--edition=2024,--test,-C,debuginfo=0,--remap-path-prefix=/controller=.
+release_args=--edition=2024,-C,opt-level=s,-C,debuginfo=0,-C,strip=symbols,-C,codegen-units=1,-C,panic=abort,-C,metadata=rar_qmp_client_v1,--remap-path-prefix=/controller=.,--target=x86_64-unknown-linux-musl
+install_path=/opt/rar-lab/bin/rar-qmp-client
+network=none

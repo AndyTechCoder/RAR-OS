@@ -19,9 +19,6 @@ checker=$root/tools/ci/check-alpha-crypto-references.sh
     -e 's|^path_2=unavailable$|path_2=/opt/rar-reference/bin/libsodium-reference|' \
     -e 's/^sha256_2=unavailable$/sha256_2=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/' \
     "$root/tools/sprint-alpha/alpha-crypto-references-v1.env" > "$fixture"
-/bin/sh "$checker" "$fixture" >/dev/null
-/usr/bin/sed 's|^path_2=.*$|path_2=/opt/rar-reference/bin/openssl|' "$fixture" > "$work/bad"
-if /bin/sh "$checker" "$work/bad" >/dev/null 2>&1; then exit 1; fi
-/usr/bin/sed 's/^sha256_2=.*$/sha256_2=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/' "$fixture" > "$work/bad"
-if /bin/sh "$checker" "$work/bad" >/dev/null 2>&1; then exit 1; fi
+if /bin/sh "$checker" "$fixture" >/dev/null 2>&1; then exit 1; fi
+if /bin/sh "$checker" "$root/tools/sprint-alpha/alpha-crypto-references-v1.env" --require-ready >/dev/null 2>&1; then exit 1; fi
 printf '%s\n' 'Alpha crypto reference negative checks passed'

@@ -122,11 +122,12 @@ No parallel writer may touch these paths.
   fixture private key is public test data and cannot support a production claim.
 - Its two independent Class C references are OpenSSL 3.0.13 (Apache-2.0) and
   libsodium 1.0.19 (ISC), inventoried in
-  `tools/sprint-alpha/alpha-crypto-references-v1.env`. Before F, their exact
-  executable/harness paths and SHA-256 identities must replace `unavailable`,
-  receive review, and already exist in the network-disabled build image. They
-  are host-only comparison oracles and never link into or ship with RAR target
-  code.
+  `tools/sprint-alpha/alpha-crypto-references-v1.env`. Version 1 is permanently
+  blocked and grants no executable authority. Before F, ADR 0020 must be
+  accepted and a new reviewed inventory/topology schema must bind the isolated
+  reference role, executable/harness identities, comparison evidence, and
+  absence from the untrusted build image. The references are host-only
+  comparison oracles and never link into or ship with RAR target code.
 - No ambient syscall, global administrator mode, direct device access from apps,
   raw Rust ABI, executable pointer, or undocumented cross-subsystem call is
   allowed. All authority is explicit and least-privilege.

@@ -34,3 +34,8 @@ paths outside `/tmp` and `/evidence`, unknown chords, duplicate output names,
 and non-Unix sockets fail closed. Version output is exactly
 `rar-qmp-client 1`. Replacement requires a versioned contract and new reviewed
 source, build-plan, and binary identities.
+
+Contract state is monotonic: `blocked` has no usable source identity;
+`source-ready` binds reviewed RAR source and its build plan but cannot launch;
+`ready` additionally binds the twice-reproduced cloud binary. Only `ready` may
+be referenced by an active Development Lab profile.

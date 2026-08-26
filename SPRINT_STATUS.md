@@ -10,24 +10,31 @@
 - Current outcome: the controller transition, decision-complete A–G packet,
   experimental signing contract, cumulative 45-observation acceptance protocol,
   two-build reproducibility check, isolated build/launch boundaries, frozen
-  artifact, QMP evidence path, and bounded SSD/static safeguards are complete in
-  the reviewed working diff
-- Validation: `tools/ci/check-sprint-static.sh` and `git diff --check` pass;
-  post-run SSD budget check passes with about 132608 KiB in the dedicated RAR OS
-  workspace and 128 KiB of combined `out/` data
-- Independent review: architecture CLEAN; correctness CLEAN; security CLEAN on
-  the current controller implementation diff, with no target execution
+  artifact, bounded SSD/static safeguards, RAR-owned QMP client source and fault
+  tests, immutable Development Lab input pins, and role-separated draft image
+  recipes are complete in the working diff
+- Validation: `tools/ci/check-sprint-static.sh` passes locally without compiling
+  or executing target or QMP code; Linux QMP compilation/fake-server tests and
+  any future candidate provisioning remain deliberately unexecuted
+- Independent review: final architecture, correctness, and security reviews are
+  clean after remediation; Proposed ADR 0020 remains an intentional owner
+  decision before any reference-oracle provisioning or Milestone F work
 - Target functionality: 0%; no RAR OS target implementation has started, built,
   booted, or run
-- Development Lab state: intentionally `blocked` until reviewed real build and
-  launch OCI/tool/firmware/QMP/crypto identities replace every unavailable pin
+- Development Lab state: upstream image/tool inputs are `decision-blocked` and the
+  QMP client is `source-ready`; provisioning remains absent, candidate images
+  remain unbuilt, and the active
+  Lab profile remains `blocked` until candidate evidence is reviewed, immutable
+  output identities replace every unavailable pin, and Proposed ADR 0020
+  resolves reference-oracle isolation
 - External blockers: GitHub Actions billing/spending still produces zero-step
   failures; the Mac internal disk remains below the 10 GiB unattended-work
   threshold; and the reviewed `rar-os-ssd` user profile still needs one-time
   owner installation/evidence in a fresh SSD-root task
-- Next durable action: commit and push this single reviewed checkpoint to PR #7;
-  do not rerun failed Actions, merge, tag, activate the lab, or start Milestone A
-  until every external precondition is genuinely green
+- Next durable action: retain this reviewed checkpoint in PR #7, then resolve
+  ADR 0020 and the external Lab preconditions; do not retry zero-step Actions,
+  merge, tag, activate the lab, or start Milestone A until every precondition is
+  genuinely green
 - Deadline: 2026-08-30 23:59 America/Los_Angeles
 - Local safety: target compilation, image creation, firmware loading, QEMU,
   emulator, VM, guest execution, macOS modification, and access outside the

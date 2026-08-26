@@ -51,6 +51,7 @@ docs/adr/0016-release-0-entry-validation-and-authority-closure.md
 docs/adr/0017-sprint-alpha-development-lab.md
 docs/adr/0018-end-of-week-demonstrator.md
 docs/adr/0019-alpha-layer-signing.md
+docs/proposals/0020-alpha-reference-oracle-isolation.md
 docs/release-0/contracts/README.md
 spec/boot/handoff-v1.fields
 spec/hardware/rhd-v1.fields
@@ -91,6 +92,11 @@ tools/ci/test-workspace-budget-policy.sh
 tools/ci/verify-pinned-file.sh
 tools/ci/test-pinned-file-policy.sh
 tools/ci/check-qmp-client-contract.sh
+tools/ci/check-qmp-client-source.sh
+tools/ci/test-qmp-client-source-policy.sh
+tools/ci/check-development-image-inputs.sh
+tools/ci/check-development-image-sources.sh
+tools/ci/test-development-image-policy.sh
 tools/ci/hash-source-tree.sh
 tools/ci/run-development-probe.sh
 tools/ci/run-cloud-target-probe.sh
@@ -107,6 +113,17 @@ tools/sprint-alpha/x86_64-q35-v1.profile
 tools/sprint-alpha/alpha-crypto-references-v1.env
 tools/sprint-alpha/qmp-client-v1.env
 tools/sprint-alpha/qmp-client-v1.md
+tools/rar-lab/qmp-client/README.md
+tools/rar-lab/qmp-client/build-plan.v1
+tools/rar-lab/qmp-client/json.rs
+tools/rar-lab/qmp-client/main.rs
+tools/rar-lab/crypto-reference/README.md
+tools/rar-lab/crypto-reference/libsodium-reference.c
+tools/rar-lab/images/README.md
+tools/rar-lab/images/build.Containerfile
+tools/rar-lab/images/image-inputs-v1.env
+tools/rar-lab/images/launch-base.Containerfile
+tools/rar-lab/images/launch.Containerfile
 tools/rarbuild/bootstrap-lib.sh
 tools/rarbuild/contracts/rar-host-check-v2.fields
 tools/rarbuild/contracts/rar-host-test-v2.fields
@@ -307,6 +324,8 @@ grep -qx 'version_2=1.0.19' "$crypto_refs" || fail 'libsodium reference version 
 grep -qx 'license_2=ISC' "$crypto_refs" || fail 'libsodium reference license missing'
 /bin/sh tools/ci/check-alpha-crypto-references.sh >/dev/null
 /bin/sh tools/ci/check-qmp-client-contract.sh >/dev/null
+/bin/sh tools/ci/check-qmp-client-source.sh >/dev/null
+/bin/sh tools/ci/check-development-image-sources.sh >/dev/null
 
 class_b_inventory=tools/toolchain/class-b-host-tools.v1
 [ "$(sed -n '1p' "$class_b_inventory")" = 'schema=rar-class-b-host-tool-inventory-v1' ] || fail "Class B inventory schema is invalid"

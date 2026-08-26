@@ -23,11 +23,11 @@ qmp_source_hash=$(/bin/sh "$root/tools/ci/hash-source-tree.sh" "$work/controller
 qmp_plan_output=$(/usr/bin/shasum -a 256 "$work/controller/tools/rar-lab/qmp-client/build-plan.v1")
 qmp_plan_hash=${qmp_plan_output%% *}
 /usr/bin/sed \
-    -e 's/^state=blocked$/state=ready/' \
-    -e 's|^source_tree=unavailable$|source_tree=/controller/tools/rar-lab/qmp-client|' \
-    -e "s/^source_sha256=unavailable$/source_sha256=$qmp_source_hash/" \
-    -e "s/^build_plan_sha256=unavailable$/build_plan_sha256=$qmp_plan_hash/" \
-    -e 's/^binary_sha256=unavailable$/binary_sha256=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff/' \
+    -e 's/^state=.*$/state=ready/' \
+    -e 's|^source_tree=.*$|source_tree=/controller/tools/rar-lab/qmp-client|' \
+    -e "s/^source_sha256=.*$/source_sha256=$qmp_source_hash/" \
+    -e "s/^build_plan_sha256=.*$/build_plan_sha256=$qmp_plan_hash/" \
+    -e 's/^binary_sha256=.*$/binary_sha256=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff/' \
     "$root/tools/sprint-alpha/qmp-client-v1.env" > "$qmp_contract"
 
 /bin/sh "$checker" "$root/tools/sprint-alpha/development-lab-v1.env" "$machine" >/dev/null

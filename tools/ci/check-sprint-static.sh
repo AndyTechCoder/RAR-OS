@@ -39,6 +39,11 @@ tools/ci/check-specs.sh
     tools/ci/verify-pinned-file.sh \
     tools/ci/test-pinned-file-policy.sh \
     tools/ci/check-qmp-client-contract.sh \
+    tools/ci/check-qmp-client-source.sh \
+    tools/ci/test-qmp-client-source-policy.sh \
+    tools/ci/check-development-image-inputs.sh \
+    tools/ci/check-development-image-sources.sh \
+    tools/ci/test-development-image-policy.sh \
     tools/ci/hash-source-tree.sh \
     tools/ci/run-development-probe.sh \
     tools/ci/run-cloud-target-probe.sh \
@@ -66,6 +71,8 @@ tools/ci/test-local-sprint-preflight-policy.sh
 /bin/sh tools/ci/test-launch-evidence-policy.sh
 /bin/sh tools/ci/test-launch-handshake-policy.sh
 /bin/sh tools/ci/test-workspace-budget-policy.sh
+/bin/sh tools/ci/test-qmp-client-source-policy.sh
+/bin/sh tools/ci/test-development-image-policy.sh
 /bin/sh tools/ci/test-pinned-file-policy.sh
 
 [ "$budget_check" = false ] || /bin/sh tools/ci/check-workspace-budget.sh >/dev/null

@@ -57,3 +57,7 @@ Status: Gate 0 approved on 2026-07-16
 - [ADR 0019: Alpha Layer Signing Profile](adr/0019-alpha-layer-signing.md)
 
 Gate 0 approval makes the indexed direction and the Release 0 task packet implementation contracts. It does not approve later release-specific interfaces early, prevent ADR-governed evolution, or make a technical implementation permanently irreplaceable.
+
+## Pending owner decisions
+
+- [Proposed ADR 0020: Alpha Reference-Oracle Isolation](proposals/0020-alpha-reference-oracle-isolation.md)

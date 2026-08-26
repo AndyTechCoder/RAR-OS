@@ -33,12 +33,14 @@ the build sandbox is residual untrusted computation and cannot satisfy launch
 or milestone evidence.
 
 `alpha-crypto-references-v1.env` is a separate Class C host-only inventory for
-Milestone F interoperability. It remains blocked until the named OpenSSL and
-libsodium reference executables/harnesses have real reviewed paths and hashes
-inside the no-network build image. They never become target dependencies.
+Milestone F interoperability. Version 1 is unconditionally blocked while ADR
+0020 is Proposed: it cannot express a ready oracle topology or grant executable
+paths. An accepted ADR requires a new reviewed inventory schema. The references
+never become target dependencies or enter the untrusted build image.
 
 `qmp-client-v1.env` is the reproducibility and replacement contract for the
-RAR-owned acceptance harness client. Activation requires its reviewed source
-tree identity, build-plan hash, binary hash, version, license, fixed verb set,
-and equality with the binary hash in the Lab profile. The client is a pinned
-host/lab tool and never ships in RAR OS.
+RAR-owned acceptance harness client. `source-ready` records reviewed source and
+build-plan identities while deliberately leaving the binary unavailable; it
+does not activate the Lab. Activation requires a twice-reproduced cloud binary
+hash, version/license/verb checks, and equality with the binary hash in the Lab
+profile. The client is a pinned host/lab tool and never ships in RAR OS.
