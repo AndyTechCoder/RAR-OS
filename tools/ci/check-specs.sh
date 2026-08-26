@@ -47,6 +47,9 @@ spec/alpha/lab/image-inventory-v2.fields
 spec/alpha/lab/crypto-reference-inventory-v2.fields
 spec/alpha/lab/comparison-transcript-v0.fields
 spec/alpha/lab/controller-state-machine-v0.fields
+spec/alpha/lab/controller-handoff-v0.fields
+spec/alpha/lab/controller-handoff-manifest-v0.fields
+spec/alpha/lab/controller-handoff-cases.v0
 spec/alpha/lab/reference-evidence-v0.fields
 spec/alpha/lab/fixtures/controller-context.v0
 spec/alpha/lab/fixtures/source-context.v0

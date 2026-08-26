@@ -42,7 +42,10 @@
   and adversarial host-only validation. The owner confirmed that cloud
   infrastructure exists, but wiring and provisioning are intentionally deferred;
   this checkpoint performs neither. Real immutable output identities plus a
-  reviewed runnable v2 controller are still required
+  reviewed runnable v2 controller are still required. The controller's
+  host-only stop/open/copy/recheck handoff and 256-byte durable manifest are now
+  byte-bound with 46 positive and adversarial cases; their descriptor-based
+  implementation is not yet present
 - Boot implementation state: accepted ADR 0021 selects the Alpha boot-volume,
   payload-loader, and Root-to-Recovery boundary. The candidate specification is
   explicitly `draft-incomplete` and cannot authorize implementation until its

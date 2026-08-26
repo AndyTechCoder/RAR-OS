@@ -38,6 +38,15 @@ record. A–E verdicts explicitly say `not-required`, carry zero reference/evide
 digests, and prove that no reference role ran. The final evidence set retains the
 verdict and its digest.
 
+`controller-handoff-v0.fields` fixes the host-only stop/open/copy/recheck
+primitive used between isolated roles. The controller opens an exact basename
+relative to its own directory descriptor without following links, copies only
+from and to already-open descriptors, hashes the exact bytes copied, and
+rechecks the same source descriptor before publishing a manifest. Its negative
+case table makes races, aliases, wrong ownership, extra outputs, and partial
+copies fail before the next role can start. The manifest is a fixed 256-byte
+experimental host record, validated and durably synchronized before progression.
+
 The v1 Lab, image, and crypto inventory files remain permanently blocked. The
 v2 field schemas define the replacement shape but do not contain runnable image
 digests or authorize provisioning. A candidate instance becomes `ready` only in
