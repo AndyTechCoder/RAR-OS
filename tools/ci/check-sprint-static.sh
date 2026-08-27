@@ -59,6 +59,9 @@ tools/ci/check-specs.sh
     tools/ci/prepare-launch-control.sh \
     tools/ci/check-workspace-budget.sh \
     tools/ci/check-workspace-budget-values.sh \
+    tools/ci/require-ephemeral-policy-test-root.sh \
+    tools/ci/check-ephemeral-policy-test-confinement.sh \
+    tools/ci/run-ephemeral-policy-tests.sh \
     tools/ci/test-workspace-budget-policy.sh \
     tools/ci/verify-pinned-file.sh \
     tools/ci/test-pinned-file-policy.sh \
@@ -86,30 +89,15 @@ tools/ci/check-specs.sh
     sdk/generated/release-0/check.sh
 
 tools/ci/test-development-probe-policy.sh
+/bin/sh tools/ci/check-ephemeral-policy-test-confinement.sh
 /bin/sh tools/ci/check-sprint-alpha-gate-report-policy.sh
 /bin/sh tools/ci/test-proposed-adr-classifier-policy.sh
 /bin/sh tools/ci/check-alpha-preimplementation-contracts.sh
-/bin/sh tools/ci/test-alpha-preimplementation-contract-policy.sh
-/bin/sh tools/ci/test-development-lab-profile-policy.sh
-/bin/sh tools/ci/test-development-lab-profile-v2-policy.sh
-/bin/sh tools/ci/test-development-controller-v2-policy.sh
 /bin/sh tools/ci/test-controller-handoff-attempt-v0-policy.sh
-/bin/sh tools/ci/test-controller-helper-inventory-v0-policy.sh
-/bin/sh tools/ci/test-controller-helper-evidence-v0-policy.sh
-/bin/sh tools/ci/test-reference-evidence-v0-policy.sh
-/bin/sh tools/ci/test-reference-verdict-v0-policy.sh
-tools/ci/test-local-sprint-preflight-policy.sh
 /bin/sh tools/ci/test-remote-checkpoint-policy.sh
-/bin/sh tools/ci/test-frozen-artifact-policy.sh
-/bin/sh tools/ci/test-alpha-dependency-policy.sh
-/bin/sh tools/ci/test-alpha-crypto-reference-policy.sh
-/bin/sh tools/ci/test-trusted-launcher-policy.sh
-/bin/sh tools/ci/test-launch-evidence-policy.sh
-/bin/sh tools/ci/test-launch-handshake-policy.sh
 /bin/sh tools/ci/test-workspace-budget-policy.sh
-/bin/sh tools/ci/test-qmp-client-source-policy.sh
 /bin/sh tools/ci/test-development-image-policy.sh
-/bin/sh tools/ci/test-pinned-file-policy.sh
+printf '%s\n' 'mutation policy evidence: external read-only-source CI step required'
 
 [ "$budget_check" = false ] || /bin/sh tools/ci/check-workspace-budget.sh >/dev/null
 

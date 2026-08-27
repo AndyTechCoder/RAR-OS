@@ -5,9 +5,9 @@ LANG=C
 export LC_ALL LANG
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-output_root=$root/out
-/bin/mkdir -p "$output_root"
-work=$(mktemp -d "$output_root/trusted-launcher.XXXXXX")
+scratch=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
+[ "$scratch" != disabled ] || { printf '%s\n' 'trusted launcher mutations skipped: ephemeral CI required'; exit 0; }
+work=$(mktemp -d "$scratch/trusted-launcher.XXXXXX")
 trap '/bin/rm -rf "$work"' EXIT HUP INT TERM
 checker=$root/tools/ci/check-trusted-launcher-policy.sh
 canonical=$root/tools/ci/launch-cloud-target.sh

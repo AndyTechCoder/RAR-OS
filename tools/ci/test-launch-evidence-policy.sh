@@ -5,9 +5,9 @@ LANG=C
 export LC_ALL LANG
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-output_root=$root/out
-/bin/mkdir -p "$output_root"
-work=$(mktemp -d "$output_root/launch-evidence.XXXXXX")
+scratch=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
+[ "$scratch" != disabled ] || { printf '%s\n' 'launch evidence mutations skipped: ephemeral CI required'; exit 0; }
+work=$(mktemp -d "$scratch/launch-evidence.XXXXXX")
 trap '/bin/rm -rf "$work"' EXIT HUP INT TERM
 checker=$root/tools/ci/verify-launch-evidence.sh
 protocol=$root/spec/alpha/evidence/acceptance-v1.plan

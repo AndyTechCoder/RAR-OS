@@ -6,29 +6,9 @@ check="$root/tools/ci/check-host-policy.sh"
 config="$root/.codex/config.toml"
 rules="$root/.codex/rules/host-safety.rules"
 permissions="$root/.codex/rar-os-ssd-user-fragment.toml"
-output_root="$root/out"
-
-if [ -L "$output_root" ]; then
-    echo "host-policy output root must not be a symbolic link" >&2
-    exit 1
-fi
-
-if [ ! -e "$output_root" ]; then
-    mkdir "$output_root"
-fi
-
-[ -d "$output_root" ] || {
-    echo "host-policy output root is not a directory" >&2
-    exit 1
-}
-
-resolved_output_root=$(CDPATH= cd -- "$output_root" && pwd -P)
-[ "$resolved_output_root" = "$root/out" ] || {
-    echo "host-policy output root resolves outside the repository" >&2
-    exit 1
-}
-
-work=$(mktemp -d "$output_root/host-policy-tests.XXXXXX")
+scratch=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
+[ "$scratch" != disabled ] || { printf '%s\n' 'host policy mutations skipped: ephemeral CI required'; exit 0; }
+work=$(mktemp -d "$scratch/host-policy-tests.XXXXXX")
 trap '/bin/rm -rf "$work"' EXIT HUP INT TERM
 
 "$check" "$config" "$rules" "$permissions" >/dev/null

@@ -127,6 +127,17 @@ authorize execution on this Mac or constitute production certification.
 1. **Documentation/scaffold:** no RAR executable exists.
 2. **Local static checks:** documentation, formatting, and host-only checks only;
    no target compilation, linking, image creation, or firmware loading.
+   Mutation-based policy tests skip without writing on the Mac and SSD. They
+   obtain a scratch path only from
+   `tools/ci/require-ephemeral-policy-test-root.sh`, which admits the dedicated
+   pinned validation container's bounded `/tmp` tmpfs after verifying its
+   container shape, exact clean source revision, mount flags, and size. The
+   workflow uses an independent exact-revision checkout that the earlier
+   validation container cannot access, then mounts it read-only. `/tmp` is the
+   only approved policy-test scratch path. Docker may expose isolated writable
+   pseudo-filesystems such as `/dev`; they are not host-backed, are not accepted
+   by the guard, and policy-test work paths cannot target them. Incomplete
+   Linux/CI evidence fails closed.
 3. **Cloud Development Lab:** bounded automated target builds and isolated guest
    execution under ADR 0017.
 4. **Future local launcher certification:** unsafe VM configurations are

@@ -5,10 +5,9 @@ LANG=C
 export LC_ALL LANG
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-output=$root/out
-[ ! -L "$output" ] || exit 1
-/bin/mkdir -p "$output"
-work=$(mktemp -d "$output/controller-helper-evidence.XXXXXX")
+scratch=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
+[ "$scratch" != disabled ] || { printf '%s\n' 'controller helper evidence mutations skipped: ephemeral CI required'; exit 0; }
+work=$(mktemp -d "$scratch/controller-helper-evidence.XXXXXX")
 trap '/bin/rm -rf "$work"' EXIT HUP INT TERM
 fixtures=$root/spec/alpha/lab/fixtures/controller-helper
 build_checker=$root/tools/ci/check-controller-helper-build-evidence-v0.sh

@@ -5,10 +5,9 @@ LANG=C
 export LC_ALL LANG
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-output=$root/out
-[ ! -L "$output" ] || exit 1
-/bin/mkdir -p "$output"
-work=$(mktemp -d "$output/controller-helper.XXXXXX")
+scratch=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
+[ "$scratch" != disabled ] || { printf '%s\n' 'controller helper inventory mutations skipped: ephemeral CI required'; exit 0; }
+work=$(mktemp -d "$scratch/controller-helper.XXXXXX")
 trap '/bin/rm -rf "$work"' EXIT HUP INT TERM
 source=$root/tools/sprint-alpha/controller-helper-v0.env
 checker=$root/tools/ci/check-controller-helper-inventory-v0.sh

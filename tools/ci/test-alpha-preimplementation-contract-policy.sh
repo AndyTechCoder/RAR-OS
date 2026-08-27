@@ -5,10 +5,9 @@ LANG=C
 export LC_ALL LANG
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-output_root=$root/out
-[ ! -L "$output_root" ] || exit 1
-/bin/mkdir -p "$output_root"
-work=$(mktemp -d "$output_root/alpha-contracts.XXXXXX")
+scratch=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
+[ "$scratch" != disabled ] || { printf '%s\n' 'alpha contract policy mutations skipped: ephemeral CI required'; exit 0; }
+work=$(mktemp -d "$scratch/alpha-contracts.XXXXXX")
 trap '/bin/rm -rf "$work"' EXIT HUP INT TERM
 checker=$root/tools/ci/check-alpha-preimplementation-contracts.sh
 source=$root/spec/alpha

@@ -5,10 +5,9 @@ LANG=C
 export LC_ALL LANG
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-output_root=$root/out
-[ ! -L "$output_root" ] || exit 1
-/bin/mkdir -p "$output_root"
-work=$(mktemp -d "$output_root/lab-profile-v2.XXXXXX")
+scratch=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
+[ "$scratch" != disabled ] || { printf '%s\n' 'lab profile v2 mutations skipped: ephemeral CI required'; exit 0; }
+work=$(mktemp -d "$scratch/lab-profile-v2.XXXXXX")
 trap '/bin/rm -rf "$work"' EXIT HUP INT TERM
 source=$root/tools/sprint-alpha/development-lab-v2.env
 checker=$root/tools/ci/check-development-lab-profile-v2.sh

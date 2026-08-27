@@ -2,13 +2,9 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-output_root=$root/out
-[ ! -L "$output_root" ] || {
-    printf '%s\n' 'preflight test output root is a symbolic link' >&2
-    exit 1
-}
-/bin/mkdir -p "$output_root"
-work=$(mktemp -d "$output_root/local-preflight.XXXXXX")
+scratch=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
+[ "$scratch" != disabled ] || { printf '%s\n' 'local preflight mutations skipped: ephemeral CI required'; exit 0; }
+work=$(mktemp -d "$scratch/local-preflight.XXXXXX")
 trap '/bin/rm -rf "$work"' EXIT HUP INT TERM
 safe=$work/safe
 repo=$safe/repository

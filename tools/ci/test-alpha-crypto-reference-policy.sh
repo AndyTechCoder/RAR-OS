@@ -5,9 +5,9 @@ LANG=C
 export LC_ALL LANG
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-output_root=$root/out
-/bin/mkdir -p "$output_root"
-work=$(mktemp -d "$output_root/alpha-crypto.XXXXXX")
+scratch=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
+[ "$scratch" != disabled ] || { printf '%s\n' 'alpha crypto policy mutations skipped: ephemeral CI required'; exit 0; }
+work=$(mktemp -d "$scratch/alpha-crypto.XXXXXX")
 trap '/bin/rm -rf "$work"' EXIT HUP INT TERM
 fixture=$work/references.env
 checker=$root/tools/ci/check-alpha-crypto-references.sh

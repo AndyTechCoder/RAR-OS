@@ -2,8 +2,9 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-/bin/mkdir -p "$root/out"
-work=$(mktemp -d "$root/out/launch-handshake.XXXXXX")
+scratch=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
+[ "$scratch" != disabled ] || { printf '%s\n' 'launch handshake mutations skipped: ephemeral CI required'; exit 0; }
+work=$(mktemp -d "$scratch/launch-handshake.XXXXXX")
 trap '/bin/rm -rf "$work"' EXIT HUP INT TERM
 /bin/mkdir "$work/to-host" "$work/to-launch"
 # Permission preparation is Linux-CI-only. The Mac test reads the fixed policy

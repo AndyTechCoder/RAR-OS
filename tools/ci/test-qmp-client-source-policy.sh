@@ -2,8 +2,9 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-/bin/mkdir -p "$root/out"
-work=$(mktemp -d "$root/out/qmp-source.XXXXXX")
+scratch=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
+[ "$scratch" != disabled ] || { printf '%s\n' 'QMP source mutations skipped: ephemeral CI required'; exit 0; }
+work=$(mktemp -d "$scratch/qmp-source.XXXXXX")
 trap '/bin/rm -rf "$work"' EXIT HUP INT TERM
 tree=$work/qmp-client
 /bin/cp -R "$root/tools/rar-lab/qmp-client" "$tree"

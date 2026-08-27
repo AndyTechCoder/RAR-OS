@@ -5,9 +5,9 @@ LANG=C
 export LC_ALL LANG
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-output_root=$root/out
-/bin/mkdir -p "$output_root"
-work=$(mktemp -d "$output_root/alpha-deps.XXXXXX")
+scratch=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
+[ "$scratch" != disabled ] || { printf '%s\n' 'alpha dependency policy mutations skipped: ephemeral CI required'; exit 0; }
+work=$(mktemp -d "$scratch/alpha-deps.XXXXXX")
 trap '/bin/rm -rf "$work"' EXIT HUP INT TERM
 checker=$work/check.sh
 /usr/bin/sed "s|^root=.*|root='$work/repo'|" "$root/tools/ci/check-alpha-dependencies.sh" > "$checker"

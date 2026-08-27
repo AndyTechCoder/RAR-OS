@@ -4,9 +4,9 @@ LC_ALL=C
 LANG=C
 export LC_ALL LANG
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-output_root=$root/out
-/bin/mkdir -p "$output_root"
-work=$(mktemp -d "$output_root/pinned-file.XXXXXX")
+scratch=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
+[ "$scratch" != disabled ] || { printf '%s\n' 'pinned file mutations skipped: ephemeral CI required'; exit 0; }
+work=$(mktemp -d "$scratch/pinned-file.XXXXXX")
 trap '/bin/rm -rf "$work"' EXIT HUP INT TERM
 file=$work/tool
 /usr/bin/printf '%s\n' original > "$file"

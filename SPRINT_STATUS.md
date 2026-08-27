@@ -87,9 +87,12 @@
   against their actual selected inputs. They reject aliases, hardlinks when the
   host filesystem supports exercising them, path escape, stale logs, reused
   job/root nonces, missing/duplicate cases, and self-declared results without
-  controller context. Synthetic text fixtures and adversarial mutations pass
-  locally without compiling or running the helper; they are explicitly
-  non-activating and are not cloud evidence
+  controller context. Immutable and static checks pass locally without
+  compiling or running the helper. Mutation-based policy tests skip locally
+  before writing and require a dedicated pinned validation container with
+  an independent clean exact-revision checkout mounted read-only and a bounded
+  `nosuid,nodev` tmpfs as their only approved scratch; they are explicitly
+  non-activating and are not helper build/test or cloud execution evidence
 - Boot implementation state: accepted ADR 0021 selects the Alpha boot-volume,
   payload-loader, and Root-to-Recovery boundary. The candidate specification is
   explicitly `draft-incomplete` and cannot authorize implementation until its
