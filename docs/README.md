@@ -71,3 +71,4 @@ Gate 0 approval makes the indexed direction and the Release 0 task packet implem
 - [Proposed ADR 0025: Alpha Pre-GUI Evidence Input and Continuity Sequencing](proposals/0025-alpha-gui-continuity-evidence-sequencing.md)
 - [Proposed ADR 0026: Alpha Platform Payload and State Sources](proposals/0026-alpha-platform-payload-and-state-sources.md)
 - [Alpha Decision Integration Plan](proposals/alpha-decision-integration-plan.md)
+- [Sprint Alpha Completion Evidence Map](tasks/sprint-alpha-completion-evidence-map.md)

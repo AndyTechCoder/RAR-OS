@@ -49,7 +49,12 @@ After exact owner acceptance, one architecture-owned contract change must:
    assigned boot/Recovery/Nucleus adapter and deterministic image-tool paths.
    Milestone D keeps its existing state/recovery/storage paths and receives no
    raw device authority.
-4. Keep ADR 0022's optional peripheral record reserved but absent. Reserving a
+4. Update both non-authoritative execution maps in the same change. The A map
+   must bind ADR 0026 at its start gate and cover Root staging, Recovery outer-
+   source validation, the fixed Core bootstrap, and all four immutable sources.
+   The B–G map must add C loader ownership and D inner-state parsing without
+   granting either milestone A boot-path ownership.
+5. Keep ADR 0022's optional peripheral record reserved but absent. Reserving a
    separately framed record does not select an input transport or create a
    capability.
 
@@ -101,11 +106,12 @@ ranges, rights, interrupts, DMA bounds if unavoidable, validation order, error
 outcomes, and attenuation rules.
 
 The corresponding default-branch profile/controller change is reviewed and
-merged separately. Only then may the E packet name the exact Recovery/Nucleus
-Alpha-adapter files receiving temporary ownership. It must not grant entire
-boot or architecture directories. The E gate reruns complete cumulative A–D
-boot, R0, memory, isolation, and recovery evidence plus architecture,
-correctness, and security review before accepting graphics/input behavior.
+merged separately. Only then may the authoritative vertical packet and B–G
+execution map name the exact Recovery/Nucleus Alpha-adapter files receiving
+temporary E ownership. They must not grant entire boot or architecture
+directories. The E gate reruns complete cumulative A–D boot, R0, memory,
+isolation, and recovery evidence plus architecture, correctness, and security
+review before accepting graphics/input behavior.
 
 ## Milestone payload ownership after integration
 
@@ -140,4 +146,3 @@ reviews required by the changed trust boundary or format.
   missing identities, or draft/failed checks cannot become readiness.
 - No local target compilation, image creation, firmware loading, VM launch, or
   target execution occurs on the Mac or SSD.
-

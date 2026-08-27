@@ -128,6 +128,10 @@
   recommended decisions into pre-A boot/platform/controller, pre-B evidence-
   protocol, and pre-E peripheral-authority gates. It records no approval and
   changes no active packet, protocol, ownership, or readiness state
+- Completion proof readiness: a non-authoritative eight-item traceability map
+  now separates guest observations from same-run build, identity, authority,
+  recovery, update, capture, and documentation proof. It explicitly records
+  that no implementation or completion evidence exists at this checkpoint
 - Static enforcement: required-file, authority-status, ADR-classification, and
   exact approval-sentence checks now cover both execution maps, the owner brief,
   and proposed ADRs 0025/0026 so preparation cannot silently become
