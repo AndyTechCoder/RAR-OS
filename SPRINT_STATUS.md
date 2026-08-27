@@ -121,6 +121,9 @@
   C to E. C would prove restart plus peer continuity; cumulative E–G probes
   would prove real GUI continuity. The proposal records no decision and changes
   no active protocol
+- Owner decision readiness: the plain-language choice brief now explains ADR
+  0025 alongside ADRs 0022–0024 and provides one exact four-decision approval
+  sentence. The brief remains non-authoritative and records no approval
 - GUI/input architecture: proposed ADR 0022 identifies the authority missing
   from R0-002. It remains owner-decision-required, so it does not block the
   Milestone A boot foundation but must be accepted before Milestone E target

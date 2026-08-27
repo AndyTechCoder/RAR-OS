@@ -2,7 +2,7 @@
 
 Status: Explanatory only — no decision is recorded by this document
 
-This page summarizes the three open Alpha proposals in plain language. The
+This page summarizes the four open Alpha proposals in plain language. The
 proposal files remain authoritative. Creating or reading this page does not
 accept an ADR, authorize execution, or make a blocked contract ready.
 
@@ -40,6 +40,29 @@ These two decisions are independent: ADR 0023 defines guest boot behavior;
 ADR 0024 defines how a cloud-only host helper is produced. Both are required
 before Milestone A, but neither authorizes Mac execution or a VM launch.
 
+## Decision needed before Milestone B
+
+### ADR 0025 — How should tests work before keyboard and GUI support exist?
+
+Recommended: **Alternative B**.
+
+RAR would create a new reviewed test-plan version. Milestones B–D would start
+their deterministic tests automatically, in strict order, instead of pretending
+to consume keyboard shortcuts before an input driver exists. The post-crash GUI
+continuity check would stay in the same sequence but become mandatory from
+Milestone E, when a real GUI exists.
+
+- Benefit: early milestones remain honest and testable without hidden keyboard
+  or GUI code, while later milestones still prove the GUI survives a component
+  crash.
+- Cost: the trusted controller and evidence verifiers must bind a new exact
+  plan version and reject the old version for every new run.
+- The active plan remains unchanged until this decision is accepted and the
+  replacement passes independent review.
+
+ADR 0025 is required before Milestone B. It does not authorize target code,
+cloud execution, or input/GUI implementation.
+
 ## Decision needed later, before graphics and input
 
 ### ADR 0022 — How should the Alpha GUI receive real device authority?
@@ -68,7 +91,7 @@ Every existing evidence and safety gate would remain in force.
 
 When the owner is available, an unambiguous approval can be recorded as:
 
-`Approve ADR 0023 Alternative C, ADR 0024 Alternative A, and ADR 0022 Alternative C.`
+`Approve ADR 0023 Alternative C, ADR 0024 Alternative A, ADR 0022 Alternative C, and ADR 0025 Alternative B.`
 
-The owner may approve only ADRs 0023 and 0024 first and defer ADR 0022 until
+The owner may approve ADRs 0023, 0024, and 0025 first and defer ADR 0022 until
 Milestone E. Any different selection must name the ADR and alternative exactly.
