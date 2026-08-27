@@ -35,6 +35,10 @@ acceptance rows.
   replace guest behavior.
 - A contract, trust-boundary, dependency, persistent-data, tier, native-app, or
   release-commitment change stops the writer and returns to ADR review.
+- Active acceptance v1 tries to trigger B–D with keyboard input before E owns
+  any input path. No hidden early keyboard handler or unconsumed-input marker is
+  permitted. Proposed ADR 0025 must be decided and the selected reviewed
+  protocol version bound before B begins.
 
 ## B — Nucleus memory and execution
 

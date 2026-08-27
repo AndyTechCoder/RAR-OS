@@ -112,11 +112,15 @@
   Milestone E is the first graphics owner. No synthetic marker or hidden pre-E
   component is permitted; an architecture-governed continuity witness or plan
   correction is required before C starts
-- Proposed resolution: ADR 0025 recommends preserving the GUI-continuity row's
-  exact post-crash position while changing only its minimum milestone from C to
-  E in a new reviewed protocol version. C would prove restart plus peer
-  continuity; cumulative E–G probes would prove real GUI continuity. The
-  proposal records no decision and changes no active protocol
+- Acceptance-input defect: the fixed plan injects keyboard shortcuts to trigger
+  B, C, and D, but input authority and implementation first exist at E. No
+  hidden pre-E keyboard handler or marker without consumed input is permitted
+- Proposed resolution: ADR 0025 recommends a new reviewed protocol version that
+  auto-chains B–D through strict ordered `none` inputs, preserves the GUI-
+  continuity row's exact post-crash position, and changes only its minimum from
+  C to E. C would prove restart plus peer continuity; cumulative E–G probes
+  would prove real GUI continuity. The proposal records no decision and changes
+  no active protocol
 - GUI/input architecture: proposed ADR 0022 identifies the authority missing
   from R0-002. It remains owner-decision-required, so it does not block the
   Milestone A boot foundation but must be accepted before Milestone E target
