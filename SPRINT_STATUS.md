@@ -128,6 +128,10 @@
   exact approval-sentence checks now cover both execution maps, the owner brief,
   and proposed ADR 0025 so preparation cannot silently become authoritative or
   disappear
+- Gate-report migration: schema v1 remains unchanged. Proposed ADR 0025 now
+  requires a versioned v2 compatibility cutover exposing ADR 0025, protocol-v2,
+  and fail-closed Milestone B states if the proposal is accepted; no active
+  readiness or public format changed
 - GUI/input architecture: proposed ADR 0022 identifies the authority missing
   from R0-002. It remains owner-decision-required, so it does not block the
   Milestone A boot foundation but must be accepted before Milestone E target

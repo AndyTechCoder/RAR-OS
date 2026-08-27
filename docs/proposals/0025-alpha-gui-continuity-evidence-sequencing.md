@@ -164,6 +164,21 @@ authority, data, device access, or host capability is introduced.
 - After activation, every new A–G probe rejects v1; v1 is retained only as
   immutable historical evidence from runs that predate the cutover.
 
+## Gate-report compatibility and migration
+
+The current read-only Sprint gate report remains schema v1 and must not gain
+fields silently. If this ADR is accepted, its implementation creates gate-
+report schema v2 with explicit `adr_0025`, `acceptance_protocol_v2`, and
+`milestone_b_readiness` fields. V2 reports the protocol as
+`reviewed-implementation-required` after decision acceptance and cannot report
+Milestone B ready until the exact reviewed protocol/controller/verifier cutover
+is complete and prior Milestone A evidence exists.
+
+Gate-report v1 remains immutable historical orientation output. After the v2
+cutover, new coordinating tools bind v2 exactly; they do not reinterpret v1 or
+accept missing fields as ready. Strict local/remote preflight evidence remains
+separate and unchanged.
+
 ## Replacement path
 
 The Alpha evidence protocol is experimental. Production fault-containment and
