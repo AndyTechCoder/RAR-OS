@@ -29,11 +29,11 @@ exclude = [
 policy = """
 ## RAR OS repository boundary
 
-The user authorizes autonomous work, including destructive edits, only inside
+The user authorizes autonomous work, including non-destructive edits, only inside
 the active AndyTechCoder/RAR-OS repository and its protected Git metadata.
 
 Approve when all side effects are confined to this repository, including:
-- editing, creating, moving, or deleting repository files;
+- editing or creating repository files without deleting existing content;
 - repository-local build output under target/, out/, or evidence/;
 - repository-provided host-only policy, static-analysis, formatting, test, and
   documentation scripts that cannot compile, link, image, or execute RAR target
@@ -69,10 +69,21 @@ the exact GitHub publication exception above. In particular deny:
   policy.
 
 Do not approve broad cleanup, recursive permission changes, or retry/poll loops.
+Do not approve file or directory deletion, content-discarding cleanup, or Git
+operations intended to discard repository content, even inside the repository.
+This denial applies regardless of executable path or indirection, including
+`rm`/`rmdir`/`unlink`, `git rm`/`git clean`, `find -delete`, shell or environment
+wrappers, scripting-runtime unlink calls, patch-file deletion, and rename or
+copy operations that overwrite an existing destination. Repository write access
+is not a filesystem-level no-unlink capability; the reviewer must deny any
+uncertain mutation instead of claiming the permission profile alone guarantees
+non-deletion.
 Do not approve force-push, force-with-lease, remote ref deletion, tag movement,
 history rewrite, or any command that discards a pushed sprint checkpoint.
-Worktree removal is eligible only for one exact registered RAR OS worktree after
-its clean commits and merge are verified on the canonical GitHub repository.
+Worktree removal remains forbidden while the current no-deletion directive is
+active. If the owner later lifts it explicitly, removal is eligible only for one
+exact registered RAR OS worktree after its clean commits and merge are verified
+on the canonical GitHub repository.
 
 If command parsing, destination, path ownership, or side effects are uncertain,
 deny the request. Do not convert a denial into a broader alternative.

@@ -47,12 +47,12 @@ rules=$(resolve_repository_file "$requested_rules")
 permissions=$(resolve_repository_file "$requested_permissions")
 
 if [ "$config" = "$root/.codex/config.toml" ]; then
-    expected_config_sha256='aeeca8f06538ee1238d274e788e3ccd2881977e8730f8b559aaa29472e3cb96c'
+    expected_config_sha256='c1574e149ba223b7508945ff4e8bd8f4b66c23baaa649e47242bdf64b725c53c'
     [ "$(sha256_file "$config")" = "$expected_config_sha256" ] || fail "canonical Codex configuration integrity mismatch"
 fi
 
 if [ "$rules" = "$root/.codex/rules/host-safety.rules" ]; then
-    expected_rules_sha256='cc3ab2808879aae076ca3612c7c8ac3cb39e062096e29caed8cbff32a1af7ca7'
+    expected_rules_sha256='5af4986d62154e0a3b39b5c993d841c40e65463f13a74bde3aea58c9a94d9800'
     [ "$(sha256_file "$rules")" = "$expected_rules_sha256" ] || fail "canonical host safety rules integrity mismatch"
 fi
 
@@ -197,6 +197,7 @@ auto_review_policy=$(awk '
 ' "$config") || fail "auto-review policy must be one closed triple-double-quoted value"
 
 required_policy_phrases='Approve when all side effects are confined to this repository
+editing or creating repository files without deleting existing content
 https://github.com/AndyTechCoder/RAR-OS
 Deny every request that could affect anything outside the repository
 direct QEMU or other target/emulator execution
@@ -204,6 +205,8 @@ direct compiler, linker, object-copy, boot-image, firmware-image, or target
 network access to any destination other than the canonical GitHub repository
 changing .codex/config.toml
 Do not approve force-push, force-with-lease
+This denial applies regardless of executable path or indirection
+is not a filesystem-level no-unlink capability
 If command parsing, destination, path ownership, or side effects are uncertain
 deny the request. Do not convert a denial into a broader alternative.'
 
@@ -213,7 +216,7 @@ done
 
 if ! awk '
     /^[[:space:]]*($|#)/ { next }
-    $0 !~ /^prefix_rule\(pattern = \["[^"]+"\], decision = "forbidden", justification = "[^"]+"\)$/ {
+    $0 !~ /^prefix_rule\(pattern = \["[^"]+"(, "[^"]+")*\], decision = "forbidden", justification = "[^"]+"\)$/ {
         print "invalid or non-forbidden host safety rule at line " NR ": " $0 > "/dev/stderr"
         invalid = 1
     }
@@ -246,6 +249,19 @@ pmset
 chmod
 chown
 chflags
+rm
+/bin/rm
+/usr/bin/rm
+rmdir
+/bin/rmdir
+/usr/bin/rmdir
+unlink
+/bin/unlink
+/usr/bin/unlink
+find
+/usr/bin/find
+command
+env
 cargo
 rustc
 clang
@@ -285,6 +301,14 @@ printf '%s\n' "$required_forbidden_commands" | while IFS= read -r command; do
     ' "$rules"; then
         fail "missing unique forbidden prefix rule for $command"
     fi
+done
+
+for command_pair in 'git rm' 'git clean'; do
+    first=${command_pair%% *}
+    second=${command_pair#* }
+    prefix="prefix_rule(pattern = [\"$first\", \"$second\"], decision = \"forbidden\","
+    [ "$(grep -Fc -- "$prefix" "$rules")" -eq 1 ] ||
+        fail "missing unique forbidden prefix rule for $command_pair"
 done
 
 echo "host policy configuration passed"
