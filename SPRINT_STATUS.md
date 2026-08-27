@@ -124,6 +124,10 @@
 - Owner decision readiness: the plain-language choice brief now explains ADR
   0025 alongside ADRs 0022–0024 and provides one exact four-decision approval
   sentence. The brief remains non-authoritative and records no approval
+- Static enforcement: required-file, authority-status, ADR-classification, and
+  exact approval-sentence checks now cover both execution maps, the owner brief,
+  and proposed ADR 0025 so preparation cannot silently become authoritative or
+  disappear
 - GUI/input architecture: proposed ADR 0022 identifies the authority missing
   from R0-002. It remains owner-decision-required, so it does not block the
   Milestone A boot foundation but must be accepted before Milestone E target
