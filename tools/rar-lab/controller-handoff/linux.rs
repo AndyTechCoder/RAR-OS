@@ -46,6 +46,7 @@ const MAX_ENUMERATION_ENTRIES: usize = 1_001;
 const MAX_ENUMERATION_NAME_BYTES: usize = 64 * 999 + 3;
 const MAX_INTERRUPTED_RETRIES: usize = 16;
 const F_GETFD: c_int = 1;
+const F_SETFD: c_int = 2;
 const FD_CLOEXEC: c_int = 1;
 
 #[repr(C)]
@@ -270,10 +271,10 @@ fn root_identity(metadata: &Metadata) -> RootIdentity {
     }
 }
 
-fn retry_read(file: &mut File, buffer: &mut [u8]) -> io::Result<usize> {
+fn retry_interrupted<T>(mut operation: impl FnMut() -> io::Result<T>) -> io::Result<T> {
     let mut interrupted = 0usize;
     loop {
-        match file.read(buffer) {
+        match operation() {
             Err(error) if error.kind() == io::ErrorKind::Interrupted && interrupted < MAX_INTERRUPTED_RETRIES => {
                 interrupted += 1;
                 continue;
@@ -283,17 +284,12 @@ fn retry_read(file: &mut File, buffer: &mut [u8]) -> io::Result<usize> {
     }
 }
 
+fn retry_read(file: &mut File, buffer: &mut [u8]) -> io::Result<usize> {
+    retry_interrupted(|| file.read(buffer))
+}
+
 fn retry_write(file: &mut File, buffer: &[u8]) -> io::Result<usize> {
-    let mut interrupted = 0usize;
-    loop {
-        match file.write(buffer) {
-            Err(error) if error.kind() == io::ErrorKind::Interrupted && interrupted < MAX_INTERRUPTED_RETRIES => {
-                interrupted += 1;
-                continue;
-            }
-            result => return result,
-        }
-    }
+    retry_interrupted(|| file.write(buffer))
 }
 
 #[derive(Default)]
@@ -438,6 +434,14 @@ mod tests {
         assert_eq!(parse_directory_records(&record(b"x"), &mut Vec::new(), &mut across_buffers).unwrap_err().code, "directory-entry-bound");
         let mut over_names = EnumerationBudget { entries: 0, name_bytes: MAX_ENUMERATION_NAME_BYTES };
         assert_eq!(parse_directory_records(&record(b"x"), &mut Vec::new(), &mut over_names).unwrap_err().code, "directory-name-bound");
+
+        let mut interrupted = 0usize;
+        let exhausted: io::Result<()> = retry_interrupted(|| {
+            interrupted += 1;
+            Err(io::Error::from(io::ErrorKind::Interrupted))
+        });
+        assert_eq!(exhausted.unwrap_err().kind(), io::ErrorKind::Interrupted);
+        assert_eq!(interrupted, MAX_INTERRUPTED_RETRIES + 1);
     }
 
     #[test]
@@ -466,6 +470,18 @@ mod tests {
         assert_eq!(
             LinuxRoot::from_verified_owned_fd(OwnedFd::from(wrong_file), wrong).err().unwrap().code,
             "root-attestation-mismatch",
+        );
+        let no_cloexec_file = File::open(&source_path).unwrap();
+        let no_cloexec_metadata = no_cloexec_file.metadata().unwrap();
+        // SAFETY: F_SETFD with zero clears only descriptor flags and does not
+        // transfer ownership of the live test descriptor.
+        assert_eq!(unsafe { fcntl(no_cloexec_file.as_raw_fd(), F_SETFD, 0) }, 0);
+        let no_cloexec = ControllerRootAttestation::from_controller_observation(
+            no_cloexec_metadata.dev(), no_cloexec_metadata.ino(), LinuxRootPurpose::Source,
+        );
+        assert_eq!(
+            LinuxRoot::from_verified_owned_fd(OwnedFd::from(no_cloexec_file), no_cloexec).err().unwrap().code,
+            "root-not-cloexec",
         );
 
         let mut source = adopt(&source_path, LinuxRootPurpose::Source);
@@ -511,6 +527,15 @@ mod tests {
         );
         fs::set_permissions(&destination_path, fs::Permissions::from_mode(0o700)).unwrap();
         ops.remove_created(&mut destination, "mutated.bin", identity).unwrap();
+
+        let rollback = open_child(
+            &destination, "rollback.bin", O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, MODE_0600, "test-create",
+        ).unwrap();
+        drop(rollback);
+        rollback_unjournaled_creation(&mut destination, "rollback.bin").unwrap();
+        assert!(!destination_path.join("rollback.bin").exists());
+        let missing = rollback_unjournaled_creation(&mut destination, "missing.bin").unwrap_err();
+        assert_eq!(missing.code, "cleanup-uncertain");
 
         let (manifest, manifest_identity) = ops.create_manifest(&mut manifests, "handoff-p02-o001.v0").unwrap();
         drop(manifest);
