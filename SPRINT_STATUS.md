@@ -1,27 +1,26 @@
 # Sprint Alpha 0.1 Status
 
-- Date: 2026-08-26
+- Date: 2026-08-27
 - Current milestone: End-of-week rebaseline, before Milestone A target implementation
 - Objective: merge the trusted cloud Development Lab controller, then implement
   and retain the authentic A–G bootable GUI vertical slice
 - Worktree: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/sprint-alpha-rebaseline`
 - Branch: `codex/sprint-alpha-rebaseline`
 - Pull request: [#7](https://github.com/AndyTechCoder/RAR-OS/pull/7), draft
-- Recorded pushed parent checkpoint:
-  `106728463e935bc9048db189e4bbad77e9ac987f`. It contains the controller
-  transition, A–G packet/maps, proposed ADRs 0022–0026, owner brief,
-  decision-integration gates, eight-item completion-evidence map, and
-  source-only static guards. The current reviewed status/handoff correction is
-  intentionally not claimed to be part of that parent SHA; its successor is
-  published only after review
-- Validation of the current successor diff against the recorded parent:
-  changed shell syntax, whitespace, proposed-ADR immutable-fixture
-  classification, exact authority-status lines, all three decision gates, and
-  the structural presence of all eight completion-evidence map sections pass
-  focused read-only checks. No Alpha completion evidence is claimed. The full
-  mutation-capable specification suite is not claimed locally; its
-  writes/deletions are confined to the approved ephemeral CI container. The
-  recorded parent's required GitHub workflow failed with zero executed steps
+- Remote PR head: `a39a805abfdbd673085a9ba50f565aee65566464`.
+  Local reviewed source/safety checkpoint:
+  `233bdd85f0d875cd4e7efb1e933798ebcb1c1111`, followed only by this status
+  correction. The local branch is intentionally unpushed while every
+  private-repository Actions job is account-blocked before runner assignment.
+  Its four source/safety commits fix branch whitespace/hash bindings, strengthen
+  no-deletion auto-review and command rules, bind the authoritative directive
+  in `AGENTS.md` and host safety, and add one digest-bound read-only local gate
+- Validation of the local successor: the worktree is clean; full-branch
+  whitespace, tracked-shell syntax, and the bound host-policy checker pass via
+  `/bin/sh tools/ci/check-local-readonly.sh`. The Alpha preimplementation
+  contract structure also passed before the read-only wrapper was narrowed and
+  digest-bound. No Alpha completion evidence is claimed. The mutation-capable
+  specification suite remains cloud-only and is not claimed locally
 - Independent review: architecture, correctness, and security reviews are clean
   for the proposed Alpha platform/state boundary after bootstrap, parser,
   immutable-source, and ownership remediation. Consolidated correctness review
@@ -172,10 +171,13 @@
   Milestone A boot foundation but must be accepted before Milestone E target
   graphics/input code
 - External blockers: the 2026-08-26 local preflight still reports the existing
-  internal-space safeguard; GitHub PR #7 is open/draft and its workflow ran zero
-  steps because GitHub reported failed account payments or an exhausted Actions
-  spending limit; the reviewed `rar-os-ssd` user profile still
-  needs one-time owner installation/evidence in a fresh SSD-root task
+  internal-space safeguard; GitHub PR #7 is open/draft and the exact latest job
+  has no runner and no steps. GitHub's annotation says: `The job was not started
+  because recent account payments have failed or your spending limit needs to
+  be increased.` The private repository cannot obtain the required real-step
+  gate until that account condition is fixed. The reviewed `rar-os-ssd` user
+  profile still needs one-time owner installation/evidence in a fresh SSD-root
+  task
 - Next durable action: record exact owner choices for ADRs 0023, 0024, and 0026,
   make the boot contract and v2 controller/helper evidence genuinely ready, and
   pass the external Lab/PR/checkpoint gates before Milestone A. ADR 0025 remains
