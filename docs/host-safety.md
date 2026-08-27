@@ -55,10 +55,12 @@ only RAR OS workspace is the exact subtree
   parent, sibling, or unrelated SSD path.
 - Do not run volume-wide cleanup, wildcard deletion, recursive permission
   changes, filesystem repair, formatting, or imaging.
-- GitHub is authoritative. An SSD worktree is removed only after its clean,
-  pushed commits are merged and the exact merge is verified remotely.
-- Scratch and artifacts may be replaced only inside their exact RAR OS
-  subdirectories. No failure grants permission to broaden cleanup.
+- GitHub is authoritative, but the current owner directive is to delete nothing in the RAR OS workspace.
+- No-deletion scope: files, directories, scratch, artifacts, and worktrees.
+- No-overwrite scope: moving or copying over an existing path is forbidden.
+- Duration: this remains in force after merge until explicitly lifted by the owner.
+- Future removal rule: after an explicit lift, only one exact registered worktree may be removed after clean pushed commits, exact remote merge verification, and separate review.
+- No failure grants permission to broaden cleanup.
 - The production workspace-budget check is fixed to this exact subtree and to
   the reviewed 10-GiB free, 8-GiB workspace, and 512-MiB output ceilings. It
   rejects path arguments and environment overrides. Its numeric test helper

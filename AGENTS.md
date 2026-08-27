@@ -74,9 +74,11 @@ read-only and must not approve their own implementation.
 - Never read, enumerate, modify, move, permission-change, or delete any sibling
   or parent content on `/Volumes/Z Slim`. Never run cleanup against the volume,
   `Andy’s folder`, or `Codex`; operate only on an exact RAR OS path.
-- Never delete a task worktree until its commits are pushed, its PR is merged,
-  the merge is verified on GitHub, and the worktree is clean. Use `git worktree
-  remove` for that exact registered worktree; never use broad recursive cleanup.
+- Current owner directive: delete nothing in the RAR OS workspace.
+- No-deletion scope: files, directories, scratch, artifacts, and worktrees.
+- No-overwrite scope: moving or copying over an existing path is forbidden.
+- Duration: this remains in force after merge until explicitly lifted by the owner.
+- Future removal rule: after an explicit lift, only one exact registered worktree may be removed after clean pushed commits, exact remote merge verification, and separate review.
 - Run one writer at a time. Reviews are read-only. Do not create a persistent
   goal or heartbeat that retries after the task has already reported a blocker.
 - After the rebaseline, keep the end-of-week implementation in one vertical

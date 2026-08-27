@@ -251,6 +251,15 @@ for script in tools/ci/check-specs.sh tools/ci/check-sprint-static.sh tools/ci/c
 done
 
 grep -qx 'Status: Owner-approved execution contract — 2026-08-25' docs/tasks/sprint-alpha-vertical.md || fail "Sprint Alpha vertical packet is not approved"
+for policy_file in AGENTS.md docs/host-safety.md; do
+    for directive in \
+        '- No-deletion scope: files, directories, scratch, artifacts, and worktrees.' \
+        '- No-overwrite scope: moving or copying over an existing path is forbidden.' \
+        '- Duration: this remains in force after merge until explicitly lifted by the owner.' \
+        '- Future removal rule: after an explicit lift, only one exact registered worktree may be removed after clean pushed commits, exact remote merge verification, and separate review.'; do
+        [ "$(grep -Fxc -- "$directive" "$policy_file")" -eq 1 ] || fail "no-deletion directive is missing, duplicated, or altered in $policy_file: $directive"
+    done
+done
 [ "$(sed -n '1p' spec/alpha/evidence/acceptance-v1.plan)" = schema=rar-alpha-acceptance-plan-v1 ] || fail "Alpha evidence protocol schema is invalid"
 [ "$(awk -F '|' '!/^#/ && !/^schema=/ && NF { count++; if (NF != 5 || $1 !~ /^[A-G]$/ || $2 !~ /^(none|continue|key:[a-z0-9-]+|pointer:[0-9]+,[0-9]+,[0-9]+)$/ || $3 !~ /^[a-z0-9:-]+$/ || $4 !~ /^[a-z0-9-]+$/ || $5 !~ /^[01]$/) bad=1 } END { if (bad) exit 1; print count + 0 }' spec/alpha/evidence/acceptance-v1.plan)" -eq 45 ] || fail "Alpha evidence protocol is incomplete or malformed"
 /bin/sh tools/ci/check-development-lab-profile.sh >/dev/null
