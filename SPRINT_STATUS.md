@@ -9,8 +9,9 @@
 - Pull request: [#7](https://github.com/AndyTechCoder/RAR-OS/pull/7), draft
 - Remote PR head: `a39a805abfdbd673085a9ba50f565aee65566464`.
   Local reviewed source/safety checkpoint:
-  `233bdd85f0d875cd4e7efb1e933798ebcb1c1111`, followed only by this status
-  correction. The local branch is intentionally unpushed while every
+  `233bdd85f0d875cd4e7efb1e933798ebcb1c1111`. Subsequent local commits are
+  documentation-only status and recovery-runbook corrections. The branch is
+  intentionally unpushed while every
   private-repository Actions job is account-blocked before runner assignment.
   Its four source/safety commits fix branch whitespace/hash bindings, strengthen
   no-deletion auto-review and command rules, bind the authoritative directive
