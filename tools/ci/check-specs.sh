@@ -292,6 +292,24 @@ grep -Fqx '## Gate 2 — before Milestone B implementation' \
     docs/proposals/alpha-decision-integration-plan.md || fail "Alpha decision Gate 2 is missing"
 grep -Fqx '## Gate 3 — before Milestone E graphics/input implementation' \
     docs/proposals/alpha-decision-integration-plan.md || fail "Alpha decision Gate 3 is missing"
+grep -Fqx '## Implementation task transition' \
+    docs/proposals/alpha-decision-integration-plan.md || fail "Alpha implementation task transition is missing"
+grep -Fq 'implementation task. After PR #7 is green, reviewed, merged, and verified—and' \
+    docs/proposals/alpha-decision-integration-plan.md || fail "Alpha implementation transition omits the PR #7 merge gate"
+grep -Fq 'after every accepted-decision, contract, controller, Lab, SSD-profile, capacity,' \
+    docs/proposals/alpha-decision-integration-plan.md || fail "Alpha implementation transition omits cumulative gates"
+grep -Fq 'and immutable-checkpoint precondition passes—the release driver creates the' \
+    docs/proposals/alpha-decision-integration-plan.md || fail "Alpha implementation transition omits the immutable-checkpoint gate"
+grep -Fq 'packet-required fresh SSD worktree and `codex/sprint-alpha-vertical` branch from' \
+    docs/proposals/alpha-decision-integration-plan.md || fail "Alpha implementation transition omits the fresh vertical worktree"
+grep -Fq 'the verified `main` merge. Exactly one Medium-effort writer task owns the active' \
+    docs/proposals/alpha-decision-integration-plan.md || fail "Alpha implementation transition omits verified main or one Medium writer"
+grep -Fq 'milestone paths, and that task has no persistent goal.' \
+    docs/proposals/alpha-decision-integration-plan.md || fail "Alpha implementation transition permits a persistent goal"
+grep -Fq 'No preparation task may carry unmerged state, inherited target authority, or a' \
+    docs/proposals/alpha-decision-integration-plan.md || fail "Alpha implementation transition permits inherited preparation state"
+grep -Fq 'starts at the exact verified `main` merge with no inherited working diff.' \
+    docs/proposals/alpha-decision-integration-plan.md || fail "Alpha implementation checklist permits an inherited diff"
 grep -qx 'Status: Non-authoritative preparation — no completion evidence exists yet' \
     docs/tasks/sprint-alpha-completion-evidence-map.md || fail "Alpha completion evidence map overstates readiness"
 [ "$(grep -Ec '^### [1-8]\. ' docs/tasks/sprint-alpha-completion-evidence-map.md)" -eq 8 ] || fail "Alpha completion evidence map must retain exactly eight items"

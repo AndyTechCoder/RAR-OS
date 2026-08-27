@@ -7,23 +7,26 @@
 - Worktree: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/sprint-alpha-rebaseline`
 - Branch: `codex/sprint-alpha-rebaseline`
 - Pull request: [#7](https://github.com/AndyTechCoder/RAR-OS/pull/7), draft
-- Current outcome: the controller transition, decision-complete A–G packet,
-  experimental signing contract, cumulative 45-observation acceptance protocol,
-  two-build reproducibility check, isolated build/launch boundaries, frozen
-  artifact, bounded SSD/static safeguards, RAR-owned QMP client source and fault
-  tests, immutable Development Lab input pins, and role-separated draft image
-  recipes are complete. The working diff adds the source-ready candidate for
-  isolated build/reference/launch lab contracts and an explicitly incomplete
-  Alpha boot-contract draft, including negative cases and static validators
-- Validation: `tools/ci/check-sprint-static.sh` passes locally without compiling
-  or executing target or QMP code; Linux QMP compilation/fake-server tests and
-  any future candidate provisioning remain deliberately unexecuted
-- Independent review: the fresh deep review found and fixed the Lab runtime
-  mount/output authority gap. It correctly blocked the boot draft from being
-  called source-ready because deterministic GPT/FAT bytes, final R0 source
-  placement, total UEFI attributes, timer provenance, and NX/WP state still
-  require a focused decision. Architecture, correctness, and security re-review
-  are clean for committing this blocked checkpoint, not for target implementation
+- Recorded pushed parent checkpoint:
+  `106728463e935bc9048db189e4bbad77e9ac987f`. It contains the controller
+  transition, A–G packet/maps, proposed ADRs 0022–0026, owner brief,
+  decision-integration gates, eight-item completion-evidence map, and
+  source-only static guards. The current reviewed status/handoff correction is
+  intentionally not claimed to be part of that parent SHA; its successor is
+  published only after review
+- Validation of the current successor diff against the recorded parent:
+  changed shell syntax, whitespace, proposed-ADR immutable-fixture
+  classification, exact authority-status lines, all three decision gates, and
+  the structural presence of all eight completion-evidence map sections pass
+  focused read-only checks. No Alpha completion evidence is claimed. The full
+  mutation-capable specification suite is not claimed locally; its
+  writes/deletions are confined to the approved ephemeral CI container. The
+  recorded parent's required GitHub workflow failed with zero executed steps
+- Independent review: architecture, correctness, and security reviews are clean
+  for the proposed Alpha platform/state boundary after bootstrap, parser,
+  immutable-source, and ownership remediation. Consolidated correctness review
+  is clean for the decision-integration and completion-evidence maps. These are
+  source-only preparation reviews, not target implementation or completion proof
 - Target functionality: 0%; no RAR OS target implementation has started, built,
   booted, or run
 - Development Lab state: the three-role v2 field schemas and transcript contract
@@ -128,23 +131,30 @@
   recommended decisions into pre-A boot/platform/controller, pre-B evidence-
   protocol, and pre-E peripheral-authority gates. It records no approval and
   changes no active packet, protocol, ownership, or readiness state
+- Implementation-task boundary: this persistent preparation goal and rebaseline
+  worktree cannot roll into Milestone A. After PR #7 and every precondition pass,
+  implementation begins from verified `main` in the packet-required fresh SSD
+  worktree, `codex/sprint-alpha-vertical` branch, one Medium writer task, and no
+  persistent goal
 - Completion proof readiness: a non-authoritative eight-item traceability map
   now separates guest observations from same-run build, identity, authority,
   recovery, update, capture, and documentation proof. It explicitly records
   that no implementation or completion evidence exists at this checkpoint
 - Static enforcement: required-file, authority-status, ADR-classification, and
   exact approval-sentence checks now cover both execution maps, the owner brief,
-  and proposed ADRs 0025/0026 so preparation cannot silently become
-  authoritative or disappear
+  proposed ADRs 0025/0026, all three decision-integration gates, and all eight
+  completion-proof items so preparation cannot silently become authoritative,
+  incomplete, or disappear
 - Gate-report migration: schema v1 remains unchanged. Proposed ADR 0025 now
   requires a versioned v2 compatibility cutover exposing ADR 0025, protocol-v2,
   and fail-closed Milestone B states if the proposal is accepted; no active
   readiness or public format changed
 - Platform delivery/state gaps: the existing Alpha boot grants no runtime
-  storage authority and delivers no component/app/state bytes. Proposed ADR
-  0026 recommends a private Root-staged component bundle plus separate initial
-  system/preserved state sources in one bounded Alpha envelope. It records no
-  decision, persistence claim, device authority, or implementation readiness
+  storage authority and delivers no Core/component/app/state bytes. Proposed
+  ADR 0026 recommends four immutable Root-staged sources—fixed Core bootstrap,
+  component bundle, initial system state, and initial preserved data—in one
+  bounded Alpha envelope. It records no decision, persistence claim, device
+  authority, or implementation readiness
 - E ownership gap: proposed ADR 0022 now explicitly requires narrow temporary
   Recovery/Nucleus adapter ownership, separate trusted profile/controller work,
   and full cumulative A–D revalidation instead of allowing E to edit unowned

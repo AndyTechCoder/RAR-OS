@@ -130,6 +130,20 @@ Any later need to cross these path boundaries requires explicit temporary
 ownership, cumulative revalidation through the active milestone, and the
 reviews required by the changed trust boundary or format.
 
+## Implementation task transition
+
+This preparation branch, worktree, and persistent goal do not become the Alpha
+implementation task. After PR #7 is green, reviewed, merged, and verified—and
+after every accepted-decision, contract, controller, Lab, SSD-profile, capacity,
+and immutable-checkpoint precondition passes—the release driver creates the
+packet-required fresh SSD worktree and `codex/sprint-alpha-vertical` branch from
+the verified `main` merge. Exactly one Medium-effort writer task owns the active
+milestone paths, and that task has no persistent goal.
+
+No preparation task may carry unmerged state, inherited target authority, or a
+stale base into Milestone A. If any precondition fails during transition, the
+implementation task is not created and this document grants no fallback path.
+
 ## Final activation checklist
 
 - Exact owner choices are recorded; no explanatory document self-approves.
@@ -142,6 +156,8 @@ reviews required by the changed trust boundary or format.
   into a milestone implementation branch.
 - The authoritative packet names every added owned path and exact temporary
   cross-milestone file before a writer starts.
+- The preparation task has ended and the fresh one-writer implementation task
+  starts at the exact verified `main` merge with no inherited working diff.
 - Required GitHub workflows execute real steps and pass; zero-step failures,
   missing identities, or draft/failed checks cannot become readiness.
 - No local target compilation, image creation, firmware loading, VM launch, or
