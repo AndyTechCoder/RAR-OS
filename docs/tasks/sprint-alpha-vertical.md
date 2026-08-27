@@ -46,8 +46,12 @@ Implementation does not start until all of these pass:
    machine profile, QMP client, and reference executables. The ready controller
    must be merged to `main` before a source-branch Development Probe can run.
 5. PR #7 is green, independently reviewed, merged, and verified on GitHub.
-6. ADR 0021 is accepted and its Alpha-only boot payload/entry specification is
-   reviewed before Milestone A target files or image recipes are created.
+6. ADR 0021 and ADR 0023 are accepted, and the resulting Alpha boot contract is
+   marked `ready` after fresh architecture, correctness, and security review,
+   before Milestone A target files or image recipes are created.
+7. ADR 0024 is accepted and real twice-reproduced helper build/test evidence,
+   the ready v2 Lab profile, and the reviewed runnable v2 controller are merged
+   before any source-branch Development Probe or untrusted target build runs.
 
 PR #7 is also the one-time pre-A controller transition. Before any untrusted
 Alpha source is built, `main` must contain the generic A–G dispatch controller,
@@ -58,6 +62,12 @@ may not edit `.github/workflows/` or trusted `tools/ci/` controller code; any
 later controller change is a separately reviewed ADR-governed `main` change.
 
 No missing precondition may be converted into a mock or a local target build.
+
+### Milestone-specific gate
+
+ADR 0022 does not block Milestones A–D. It must be accepted, and its exact
+experimental peripheral-grant contract must be marked ready after fresh review,
+before Milestone E graphics or input target code begins.
 
 ## Branch, task, and checkpoint contract
 

@@ -145,7 +145,7 @@ require_digest "$lab/development-lab-profile-v2.fields" 86ca738fdfdef78b68d75037
 require_digest "$lab/image-inventory-v2.fields" aa4c763f78c04b904e517221677fdad2e3a5a1e9b9d2d4d71dfbf26208fed9bd
 require_digest "$lab/crypto-reference-inventory-v2.fields" 62914ec46eb5ce005ed94b22dcbd5937aadb8424890532eca0a87e204a1635e5
 require_digest "$lab/comparison-transcript-v0.fields" 5f03fafed5eda2d373174aa0565ab08d009e07fe34e3bd7d2dc9c27c927dd9d7
-require_digest "$lab/controller-state-machine-v0.fields" 71756b7d93b0ae11a3c229fbbff15e436118a0e0d29ff4ab38bb4b5b33a03cbe
+require_digest "$lab/controller-state-machine-v0.fields" c8f0c35ed55ba2785858562f4c7fabda3c5abc16e1af76af03d44a914bc5cc99
 require_digest "$lab/controller-handoff-v0.fields" dc589f4c57891e1292f608c5b5514a97fe25df928b69342ac8e9e1f72560852e
 require_digest "$lab/controller-handoff-manifest-v0.fields" ce13ec2588c21a8879d1eecf56ad9178d0f94806d3ffdd2d95af30ec206f9b02
 require_digest "$lab/controller-handoff-cases.v0" e23032bf96424850f6840ce6136b486c2fea433b378fd902365c47aac776d7eb
@@ -154,7 +154,7 @@ require_digest "$lab/controller-handoff-attempt-cases.v0" 69a574038d6574bae00e0b
 require_digest "$lab/controller-helper-inventory-v0.fields" f8a6a19aa3d776e237f28a7513745682eb9a7bcae2be6a3ced1c510192af961c
 require_digest "$lab/controller-helper-build-evidence-v0.fields" 2d48e4575c09619286455b437b15f4adfcec9a27768382e405639be20204cbcf
 require_digest "$lab/controller-helper-build-receipt-v0.fields" 23800a09f0480211357c7c01e233fed605792d4000b93954a46b9f091de16a2f
-require_digest "$lab/controller-helper-test-evidence-v0.fields" 72aa7e234926c5b46c7f929ca8e1de9ed76df88b87387bc737d1852e1509885d
+require_digest "$lab/controller-helper-test-evidence-v0.fields" bbef4dd6a0e343c8c9c1dae140cf65f4a24c7e80d1ceea9661c8d14706acb7fc
 require_digest "$lab/controller-helper-cases.v0" 08e36412d104cc5c41169faf5d5e4dd423eb7fbfb0dba0623911423c51238e59
 require_digest "$lab/reference-evidence-v0.fields" 2edbb270323d5fd074d3adc2929c695e0bb7ca957464ea814627ea82fc0c259e
 require_digest "$lab/cases.v0" 966d84739240b871d2dd22e362ce07ec0e82706cbde32dfd4e493c0bd9758342
@@ -254,7 +254,7 @@ require_line "$helper_test_evidence" 'schema=rar-alpha-controller-helper-test-ev
 require_line "$helper_receipt" 'producer_rule=trusted-outer-controller-after-builder-termination'
 require_line "$helper_receipt" 'freshness_rule=build-ordinal-1-or-2,distinct-job+root-across-pair,fresh-root-yes,preexisting-output-no'
 require_line "$helper_test_evidence" 'identity_rule=controller-sha-40-lowercase-hex,job-nonce+runner+source+binary+golden+case-results+log-digests-64-lowercase-nonzero-sha256-and-match-controller-selected-inputs'
-require_line "$helper_test_evidence" 'result_rule=producer-trusted-outer-controller,test-count-11,failed-count-0,network-none,observed-exit-status-0,status-accepted'
+require_line "$helper_test_evidence" 'result_rule=producer-trusted-outer-controller,test-count-13,failed-count-0,network-none,observed-exit-status-0,status-accepted'
 validate_case_file "$lab/controller-helper-cases.v0" 'schema=rar-alpha-controller-helper-cases-v0' 40
 helper_fixtures=$lab/fixtures/controller-helper
 /bin/sh "$root/tools/ci/check-controller-helper-build-evidence-v0.sh" "$helper_fixtures/build-evidence.v0" "$root" adr-0024-alternative-a runner-closure 1111111111111111111111111111111111111111 "$helper_fixtures/runner-image.v0" "$helper_fixtures/source-tree.v0" "$helper_fixtures/build-plan.v0" "$helper_fixtures/golden-vector.v0" "$helper_fixtures/builder-inventory.v0" "$helper_fixtures/compiler-closure.v0" "$helper_fixtures/compiler.v0" "$helper_fixtures/helper-build-1.v0" "$helper_fixtures/helper-build-2.v0" "$helper_fixtures/helper-final.v0" "$helper_fixtures/build-1-receipt.v0" "$helper_fixtures/build-2-receipt.v0" "$helper_fixtures/build-1.log.v0" "$helper_fixtures/build-2.log.v0" "$helper_fixtures/test-evidence.v0" "$helper_fixtures/test-cases.v0" "$helper_fixtures/test.log.v0" >/dev/null || fail 'synthetic controller helper build evidence is invalid'

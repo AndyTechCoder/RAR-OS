@@ -61,6 +61,9 @@ if /bin/sh "$root/tools/ci/check-reference-verdict-v0.sh" "$fixtures/reference-v
     /bin/sh "$root/tools/ci/check-reference-verdict-v0.sh" "$fixtures/reference-verdict-not-required.v0" milestone-a "$fixtures/controller-context.v0" "$fixtures/source-context.v0" "$fixtures/comparison-transcript.v0" none none none >/dev/null; then
     reference_verdict_contract=source-ready
 fi
+if [ "$contract_structure" = ready ] && [ "$lab_contracts" = source-ready ] && [ "$reference_verdict_contract" = source-ready ]; then
+    preimplementation_contracts=ready
+fi
 image_inputs=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/rar-lab/images/image-inputs-v1.env")
 crypto_references=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/sprint-alpha/alpha-crypto-references-v1.env")
 qmp_client=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/sprint-alpha/qmp-client-v1.env")
@@ -69,22 +72,42 @@ lab_profile_v2=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/sprint-alpha/develo
 lab_controller_v2=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/sprint-alpha/development-controller-v2.plan")
 controller_helper=$(/usr/bin/sed -n 's/^state=//p' "$root/tools/sprint-alpha/controller-helper-v0.env")
 
+controller_readiness=blocked
+if [ "$adr_0024" = accepted ] && [ "$lab_profile_v2" = ready ] && [ "$lab_controller_v2" = ready ] && [ "$controller_helper" = ready ]; then
+    controller_readiness=ready
+fi
+milestone_a_readiness=blocked
+if [ "$adr_0023" = accepted ] && [ "$boot_contracts" = ready ] && [ "$preimplementation_contracts" = ready ] && [ "$controller_readiness" = ready ]; then
+    milestone_a_readiness=ready
+fi
+gui_input_authority=decision-required
+gui_contract=$root/spec/alpha/input/alpha-peripheral-grant-v0.fields
+gui_contract_validator=$root/tools/ci/check-alpha-gui-input-contract.sh
+if [ "$adr_0022" = accepted ]; then
+    gui_input_authority=contract-required
+    if [ -f "$gui_contract" ] && [ ! -L "$gui_contract" ] && [ -x "$gui_contract_validator" ] &&
+        /bin/sh "$gui_contract_validator" "$gui_contract" >/dev/null &&
+        [ "$(/usr/bin/sed -n 's/^readiness=//p' "$gui_contract")" = ready ]; then
+        gui_input_authority=ready
+    fi
+fi
+milestone_e_readiness=blocked
+if [ "$adr_0022" = accepted ] && [ "$gui_input_authority" = ready ]; then
+    milestone_e_readiness=external-prior-milestone-evidence-required
+fi
+
 local_repository_gates=ready
 for state in "$workspace_boundary" "$internal_disk" "$ssd_capacity" "$workspace_budget"; do
     [ "$state" = ready ] || local_repository_gates=blocked
 done
 [ "$adr_0020" = accepted ] || local_repository_gates=blocked
 [ "$adr_0021" = accepted ] || local_repository_gates=blocked
-[ "$contract_structure" = ready ] || local_repository_gates=blocked
-[ "$lab_contracts" = source-ready-pending-review ] || local_repository_gates=blocked
-[ "$boot_contracts" = ready ] || local_repository_gates=blocked
-[ "$image_inputs" = ready ] || local_repository_gates=blocked
-[ "$crypto_references" = ready ] || local_repository_gates=blocked
-[ "$qmp_client" = ready ] || local_repository_gates=blocked
-[ "$lab_profile" = ready ] || local_repository_gates=blocked
-[ "$lab_profile_v2" = ready ] || local_repository_gates=blocked
-[ "$lab_controller_v2" = ready ] || local_repository_gates=blocked
-[ "$controller_helper" = ready ] || local_repository_gates=blocked
+[ "$preimplementation_contracts" = ready ] || local_repository_gates=blocked
+
+overall=blocked
+if [ "$local_repository_gates" = ready ] && [ "$milestone_a_readiness" = ready ]; then
+    overall=external-evidence-required
+fi
 
 printf '%s\n' \
     'schema=rar-sprint-alpha-gate-report-v1' \
@@ -106,7 +129,7 @@ printf '%s\n' \
     "boot_contracts=$boot_contracts" \
     "preimplementation_contracts=$preimplementation_contracts" \
     "reference_verdict_contract=$reference_verdict_contract" \
-    'gui_input_authority=decision-required' \
+    "gui_input_authority=$gui_input_authority" \
     "image_inputs=$image_inputs" \
     "crypto_references=$crypto_references" \
     "qmp_client=$qmp_client" \
@@ -114,8 +137,11 @@ printf '%s\n' \
     "lab_profile_v2=$lab_profile_v2" \
     "lab_controller_v2=$lab_controller_v2" \
     "controller_helper=$controller_helper" \
+    "controller_readiness=$controller_readiness" \
+    "milestone_a_readiness=$milestone_a_readiness" \
+    "milestone_e_readiness=$milestone_e_readiness" \
     'remote_workflow=external-evidence-required' \
     'pr_gate=external-evidence-required' \
     'target_implementation=not-started' \
     "local_repository_gates=$local_repository_gates" \
-    'overall=blocked'
+    "overall=$overall"

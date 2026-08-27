@@ -5,8 +5,11 @@ LANG=C
 export LC_ALL LANG
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-images=${1-$root/tools/rar-lab/images}
+expected_images=$root/tools/rar-lab/images
+images=${1-$expected_images}
+[ "$images" = "$expected_images" ] || exit 1
 [ -d "$images" ] && [ ! -L "$images" ] || exit 1
+[ "$(CDPATH= cd -- "$images" && pwd -P)" = "$expected_images" ] || exit 1
 expected='README.md
 build.Containerfile
 image-inputs-v1.env
@@ -19,14 +22,15 @@ find "$images" -type l -print | /usr/bin/grep -q . && exit 1
 build=$images/build.Containerfile
 launch_base=$images/launch-base.Containerfile
 launch=$images/launch.Containerfile
+/bin/sh "$root/tools/ci/check-containerfile-static-policy.sh" "$build" "$launch_base" "$launch" >/dev/null
 [ "$(/usr/bin/grep -c '^FROM \${BUILD_BASE}$' "$build")" -eq 1 ] || exit 1
 [ "$(/usr/bin/grep -c '^FROM \${LAUNCH_BASE}$' "$launch_base")" -eq 1 ] || exit 1
 [ "$(/usr/bin/grep -c '^FROM \${BUILD_IMAGE} AS qmp-builder$' "$launch")" -eq 1 ] || exit 1
 [ "$(/usr/bin/grep -c '^FROM \${LAUNCH_BASE_IMAGE}$' "$launch")" -eq 1 ] || exit 1
 for file in "$build" "$launch_base" "$launch"; do
-    ! /usr/bin/grep -Ei '(^FROM .*:latest|--privileged|--network[= ]host|apt-get[[:space:]]+upgrade|ADD[[:space:]]+https?://|curl[^\n]*\|[[:space:]]*(sh|bash))' "$file" >/dev/null || exit 1
     /usr/bin/grep -Fq 'USER 65532:65532' "$file" || exit 1
 done
+/usr/bin/grep -Fq 'install -d -m 0700 /bootstrap' "$build" || exit 1
 for digest in RUST_MUSL_SHA256 RUST_NONE_SHA256 RUST_UEFI_SHA256; do
     /usr/bin/grep -Fq "\$$digest" "$build" || exit 1
 done

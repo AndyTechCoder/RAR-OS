@@ -63,6 +63,8 @@ done
 
 for required in \
     'phase_count=9' \
+    'phase|1|preflight|controller|A-G|trusted-main+source-identity+profile-instance+contracts+inventories|validated-identities|2' \
+    'profile_rule=blocked-instance-validates-and-stops-before-any-effect,ready-instance-requires-all-activation-identities-and-reviews' \
     'role_overlap_rule=at-most-one-role-container-running,controller-never-enters-build-or-reference-filesystem,build-and-reference-never-receive-controller-tree' \
     'inactive_rule=blocked-profile-means-no-container-command,no-cloud-command,no-network-command,no-credential-read' \
     'verdict_rule|reference|F-G:accepted-only-after-both-references-match-each-other-and-target-with-real-inventory-and-evidence-digests,A-E:not-required-only-from-trusted-controller-with-zero-inventory-and-evidence-digests,canonical-record-bound-to-probe+controller+source+transcript,phase-8-requires-exactly-one-verdict,retained-set-includes-verdict-and-digest' \

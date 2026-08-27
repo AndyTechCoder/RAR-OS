@@ -5,9 +5,20 @@ LANG=C
 export LC_ALL LANG
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-inputs=${1-$root/tools/rar-lab/images/image-inputs-v1.env}
+canonical=$root/tools/rar-lab/images/image-inputs-v1.env
+fixtures=$root/spec/alpha/lab/fixtures/development-image-policy
+inputs=${1-$canonical}
 mode=${2-}
+case "$inputs" in
+    "$canonical") expected_parent=$root/tools/rar-lab/images ;;
+    "$fixtures/inputs-ready.env"|"$fixtures/aliased-bases.env"|"$fixtures/populated-output.env") expected_parent=$fixtures ;;
+    *) exit 1 ;;
+esac
+[ "$(CDPATH= cd -- "$(dirname -- "$inputs")" && pwd -P)" = "$expected_parent" ] || exit 1
 [ -f "$inputs" ] && [ ! -L "$inputs" ] || exit 1
+size=$(/usr/bin/stat -f %z "$inputs" 2>/dev/null || /usr/bin/stat -c %s "$inputs")
+[ "$size" -le 32768 ] || exit 1
+/usr/bin/awk 'length($0) > 4096 { exit 1 }' "$inputs" || exit 1
 [ "$(/usr/bin/wc -l < "$inputs" | /usr/bin/tr -d ' ')" -eq 28 ] || exit 1
 if /usr/bin/grep -Ev '^(schema|state|buildkit_image|build_base|launch_base|debian_snapshot|rust_version|rust_musl_url|rust_musl_sha256|rust_none_url|rust_none_sha256|rust_uefi_url|rust_uefi_sha256|openssl_url|openssl_source_sha256|libsodium_url|libsodium_source_sha256|qemu_version|ovmf_version|source_date_epoch|build_image|launch_base_image|launch_image|compiler_sha256|linker_sha256|qemu_sha256|firmware_sha256|qmp_binary_sha256)=[A-Za-z0-9._:/@+-]+$' "$inputs" | /usr/bin/grep -q .; then exit 1; fi
 for key in schema state buildkit_image build_base launch_base debian_snapshot rust_version rust_musl_url rust_musl_sha256 rust_none_url rust_none_sha256 rust_uefi_url rust_uefi_sha256 openssl_url openssl_source_sha256 libsodium_url libsodium_source_sha256 qemu_version ovmf_version source_date_epoch build_image launch_base_image launch_image compiler_sha256 linker_sha256 qemu_sha256 firmware_sha256 qmp_binary_sha256; do

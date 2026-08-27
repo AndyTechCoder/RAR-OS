@@ -72,7 +72,7 @@ bounded helper twice and bind isolated test evidence before controller activatio
 
 `controller-helper-build-receipt-v0.fields` and
 `controller-helper-test-evidence-v0.fields` fix controller-owned receipts for
-two separately terminated build jobs and one eleven-case test job. Contextual
+two separately terminated build jobs and one thirteen-case test job. Contextual
 validators require distinct job/root nonces, non-aliased single-link output
 copies, exact runner/source/compiler/log identities, controller-observed exits,
 and canonical per-case results. They accept only files confined beneath a

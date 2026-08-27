@@ -58,6 +58,7 @@ tools/ci/check-specs.sh
     tools/ci/test-launch-handshake-policy.sh \
     tools/ci/prepare-launch-control.sh \
     tools/ci/check-workspace-budget.sh \
+    tools/ci/check-workspace-budget-values.sh \
     tools/ci/test-workspace-budget-policy.sh \
     tools/ci/verify-pinned-file.sh \
     tools/ci/test-pinned-file-policy.sh \
@@ -66,6 +67,7 @@ tools/ci/check-specs.sh
     tools/ci/test-qmp-client-source-policy.sh \
     tools/ci/check-development-image-inputs.sh \
     tools/ci/check-development-image-sources.sh \
+    tools/ci/check-containerfile-static-policy.sh \
     tools/ci/test-development-image-policy.sh \
     tools/ci/hash-source-tree.sh \
     tools/ci/run-development-probe.sh \

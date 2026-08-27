@@ -62,5 +62,8 @@ for vector in active-header-prehash.v0.hex transition-prehash.v0.hex; do
 done
 [ "$(/usr/bin/wc -c < "$tree/fixtures/recovery-header-prehash.v0.hex" | /usr/bin/tr -d ' ')" -eq 513 ] || fail 'recovery header vector length mismatch'
 /usr/bin/awk 'NR != 1 || length($0) != 512 || $0 !~ /^[0-9a-f]+$/ { bad=1 } END { exit bad ? 1 : 0 }' "$tree/fixtures/recovery-header-prehash.v0.hex" || fail 'recovery header vector grammar mismatch'
+[ "$(env LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$tree/fixtures/active-header-prehash.v0.hex" | /usr/bin/awk '{ print $1 }')" = 889f4bc32f4e4189d28f74a10638b52510dea42a6866dca7f48b5cb6bafbd0c9 ] || fail 'active header vector digest mismatch'
+[ "$(env LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$tree/fixtures/transition-prehash.v0.hex" | /usr/bin/awk '{ print $1 }')" = eff2a83c242d0ea19e82fc45b1a7f724be7d3d696ce3ae1ab8d5705360b56fd0 ] || fail 'transition header vector digest mismatch'
+[ "$(env LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$tree/fixtures/recovery-header-prehash.v0.hex" | /usr/bin/awk '{ print $1 }')" = 898d62e2f1514bec845e6d2aa8651a3cf637bdaf4e0a7200fc483cde431e16a8 ] || fail 'recovery header vector digest mismatch'
 
 printf '%s\n' 'controller handoff core source checks passed: local-execution=forbidden structural-layouts=4 contextual-policy=absent'

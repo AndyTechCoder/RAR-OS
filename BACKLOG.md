@@ -208,6 +208,11 @@ Gate 0 was approved on 2026-07-16. Every P0 item in this gate is complete as an 
 
 1. Merge the reviewed Sprint Alpha 0.1 and cloud Development Lab rebaseline.
 2. Close draft PR #5 as superseded only after the replacement is durable.
-3. Execute Milestone A in the cloud-only Development Lab.
-4. Preserve strict local Mac non-execution and non-target-build rules.
-5. Continue Milestones B–G using `SPRINT_STATUS.md` as the durable checkpoint.
+3. Record the owner's ADR 0023 and ADR 0024 choices; complete and re-review the
+   resulting boot contract and cloud-only controller/helper evidence.
+4. Make the v2 Lab profile/controller ready only with real reviewed identities,
+   then pass the local, remote, PR, and immutable-checkpoint gates.
+5. Execute Milestone A only in the certified cloud Development Lab.
+6. Record ADR 0022 and its reviewed peripheral-grant contract before Milestone E.
+7. Preserve strict local Mac non-execution and non-target-build rules throughout.
+8. Continue Milestones B–G using `SPRINT_STATUS.md` as the durable checkpoint.

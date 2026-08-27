@@ -47,7 +47,8 @@
   byte-bound with 49 positive and adversarial cases. The dependency-free host
   core now implements the manifest codec, streaming SHA-256,
   typed phase plans, and a descriptor-operation-parametric transaction policy
-  with attempt-local cleanup. It defines eleven focused tests and includes an
+  with attempt-local cleanup. It now defines thirteen focused source tests,
+  including the structural attempt-codec round trips, and includes an
   independent 256-byte golden vector. Local gates inspect but do not compile or
   execute changed Rust; isolated cloud test evidence remains blocked on a
   reviewed pinned host compiler identity. A source-only x86-64 Linux adapter
@@ -82,7 +83,7 @@
   values remain `unavailable`; 40 declarative cases and mutation tests prevent
   a ready claim before ADR 0024 acceptance and real reviewed cloud evidence.
   Strict contextual parsers now validate the future aggregate build record,
-  two distinct controller-owned build receipts, and an eleven-case test receipt
+  two distinct controller-owned build receipts, and a thirteen-case test receipt
   against their actual selected inputs. They reject aliases, hardlinks when the
   host filesystem supports exercising them, path escape, stale logs, reused
   job/root nonces, missing/duplicate cases, and self-declared results without
@@ -103,10 +104,10 @@
   steps because GitHub reported failed account payments or an exhausted Actions
   spending limit; the reviewed `rar-os-ssd` user profile still
   needs one-time owner installation/evidence in a fresh SSD-root task
-- Next durable action: complete a focused boot-detail proposal, re-review the
-  owner choices for ADRs 0022/0023, then implement the v2 controller without
-  provisioning or target execution. External Lab gates remain mandatory before
-  target work
+- Next durable action: record exact owner choices for ADRs 0023 and 0024, make
+  the boot contract and v2 controller/helper evidence genuinely ready, and pass
+  the external Lab/PR/checkpoint gates before Milestone A. ADR 0022 and its
+  reviewed peripheral-grant contract remain mandatory before Milestone E
 - Deadline: 2026-08-30 23:59 America/Los_Angeles
 - Local safety: target compilation, image creation, firmware loading, QEMU,
   emulator, VM, guest execution, macOS modification, and access outside the

@@ -17,6 +17,7 @@ RUN set -eu; \
     case "$(rustc --version)" in 'rustc 1.95.0 ('*) ;; *) exit 1 ;; esac; \
     command -v curl >/dev/null; command -v tar >/dev/null; \
     command -v make >/dev/null; command -v cc >/dev/null; command -v perl >/dev/null; \
+    install -d -m 0700 /bootstrap; \
     curl --fail --silent --show-error --location "$RUST_MUSL_URL" --output /bootstrap/rust-musl.tar.xz; \
     printf '%s  %s\n' "$RUST_MUSL_SHA256" /bootstrap/rust-musl.tar.xz | sha256sum --check --strict -; \
     curl --fail --silent --show-error --location "$RUST_NONE_URL" --output /bootstrap/rust-none.tar.xz; \

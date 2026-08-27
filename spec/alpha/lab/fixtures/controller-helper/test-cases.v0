@@ -10,3 +10,5 @@ phase-plans-bind-ordinals-and-launch-allowlist|pass
 transaction-success-hash-failure-and-cleanup-uncertainty|pass
 parses-bounded-dirents-and-rejects-malformed-records|pass
 enforces-linux-descriptor-authority-and-cleanup-invariants|pass
+active-transition-and-inventory-round-trip|pass
+golden-prehash-headers-are-exact-and-reserved-zero|pass

@@ -4,7 +4,7 @@ instance_schema=rar-alpha-development-controller-plan-v0
 phase_count=9
 actors=controller,build,reference,launch
 phase_field=ordinal,name,actor,applicability,input,output,next
-phase|1|preflight|controller|A-G|trusted-main+source-identity+blocked-profile+contracts+inventories|validated-identities|2
+phase|1|preflight|controller|A-G|trusted-main+source-identity+profile-instance+contracts+inventories|validated-identities|2
 phase|2|build-one|build|A-G|source-read-only+compiler+linker|artifact-one+transcript-one|3
 phase|3|build-two|build|A-G|fresh-source-read-only+same-compiler+same-linker|artifact-two+transcript-two|4
 phase|4|freeze|controller|A-G|two-bounded-build-outputs|frozen-artifact+frozen-transcript+digests|5
@@ -22,6 +22,7 @@ role_overlap_rule=at-most-one-role-container-running,controller-never-enters-bui
 failure_rule=stop-current-role,remove-current-role,retain-bounded-controller-log,delete-only-task-owned-ephemeral-paths,no-later-phase,no-publication,no-merge,no-signing-acceptance
 timeout_rule=per-role-1..1200-seconds,total-controller-1..3600-seconds,no-unbounded-poll
 activation_rule=controller-source-merged-main,profile-ready,all-identities-real,all-inventories-verified,two-image-reproduction-evidence,correctness-review,security-review,external-owner-authorized-cloud-run
+profile_rule=blocked-instance-validates-and-stops-before-any-effect,ready-instance-requires-all-activation-identities-and-reviews
 inactive_rule=blocked-profile-means-no-container-command,no-cloud-command,no-network-command,no-credential-read
 publication_rule=no-push,no-PR-change,no-merge,no-release,no-deployment
 target_rule=cloud-only-never-Mac,artifact-unsigned-until-Milestone-F-evidence,reference-code-never-target-linked

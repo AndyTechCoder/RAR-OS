@@ -163,6 +163,7 @@ tools/ci/wait-for-launch-release.sh
 tools/ci/test-launch-handshake-policy.sh
 tools/ci/prepare-launch-control.sh
 tools/ci/check-workspace-budget.sh
+tools/ci/check-workspace-budget-values.sh
 tools/ci/test-workspace-budget-policy.sh
 tools/ci/verify-pinned-file.sh
 tools/ci/test-pinned-file-policy.sh
@@ -171,6 +172,7 @@ tools/ci/check-qmp-client-source.sh
 tools/ci/test-qmp-client-source-policy.sh
 tools/ci/check-development-image-inputs.sh
 tools/ci/check-development-image-sources.sh
+tools/ci/check-containerfile-static-policy.sh
 tools/ci/test-development-image-policy.sh
 tools/ci/hash-source-tree.sh
 tools/ci/run-development-probe.sh
@@ -232,7 +234,7 @@ printf '%s\n' "$required_files" | while IFS= read -r file; do
     [ -s "$file" ] || fail "empty required file: $file"
 done
 
-for script in tools/ci/check-specs.sh tools/ci/check-sprint-static.sh tools/ci/check-local-sprint-preflight.sh tools/ci/check-remote-sprint-preflight.sh tools/ci/test-local-sprint-preflight-policy.sh tools/ci/check-alpha-preimplementation-contracts.sh tools/ci/test-alpha-preimplementation-contract-policy.sh tools/ci/check-development-lab-profile-v2.sh tools/ci/test-development-lab-profile-v2-policy.sh tools/ci/check-development-controller-v2.sh tools/ci/test-development-controller-v2-policy.sh tools/ci/check-controller-handoff-core.sh tools/ci/check-controller-handoff-attempt-v0.sh tools/ci/test-controller-handoff-attempt-v0-policy.sh tools/ci/check-controller-helper-inventory-v0.sh tools/ci/test-controller-helper-inventory-v0-policy.sh tools/ci/check-controller-helper-build-evidence-v0.sh tools/ci/check-controller-helper-build-receipt-v0.sh tools/ci/check-controller-helper-test-evidence-v0.sh tools/ci/test-controller-helper-evidence-v0-policy.sh tools/ci/check-reference-evidence-v0.sh tools/ci/test-reference-evidence-v0-policy.sh tools/ci/check-reference-verdict-v0.sh tools/ci/test-reference-verdict-v0-policy.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/launch-cloud-target.sh tools/ci/prepare-launch-control.sh tools/ci/wait-for-launch-release.sh tools/ci/check-workspace-budget.sh tools/ci/verify-cloud-target-tools.sh tools/ci/development-probe-status.sh tools/ci/test-development-probe-policy.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/alpha/lab/fixtures/generate.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
+for script in tools/ci/check-specs.sh tools/ci/check-sprint-static.sh tools/ci/check-local-sprint-preflight.sh tools/ci/check-remote-sprint-preflight.sh tools/ci/test-local-sprint-preflight-policy.sh tools/ci/check-alpha-preimplementation-contracts.sh tools/ci/test-alpha-preimplementation-contract-policy.sh tools/ci/check-development-lab-profile-v2.sh tools/ci/test-development-lab-profile-v2-policy.sh tools/ci/check-development-controller-v2.sh tools/ci/test-development-controller-v2-policy.sh tools/ci/check-controller-handoff-core.sh tools/ci/check-controller-handoff-attempt-v0.sh tools/ci/test-controller-handoff-attempt-v0-policy.sh tools/ci/check-controller-helper-inventory-v0.sh tools/ci/test-controller-helper-inventory-v0-policy.sh tools/ci/check-controller-helper-build-evidence-v0.sh tools/ci/check-controller-helper-build-receipt-v0.sh tools/ci/check-controller-helper-test-evidence-v0.sh tools/ci/test-controller-helper-evidence-v0-policy.sh tools/ci/check-reference-evidence-v0.sh tools/ci/test-reference-evidence-v0-policy.sh tools/ci/check-reference-verdict-v0.sh tools/ci/test-reference-verdict-v0-policy.sh tools/ci/check-containerfile-static-policy.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/launch-cloud-target.sh tools/ci/prepare-launch-control.sh tools/ci/wait-for-launch-release.sh tools/ci/check-workspace-budget.sh tools/ci/check-workspace-budget-values.sh tools/ci/verify-cloud-target-tools.sh tools/ci/development-probe-status.sh tools/ci/test-development-probe-policy.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/alpha/lab/fixtures/generate.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
     [ -x "$script" ] || fail "required script is not executable: $script"
 done
 

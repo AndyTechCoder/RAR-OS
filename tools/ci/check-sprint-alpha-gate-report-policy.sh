@@ -11,12 +11,15 @@ for required in \
     'permission_profile=manual-evidence-required' \
     'remote_workflow=external-evidence-required' \
     'pr_gate=external-evidence-required' \
-    'gui_input_authority=decision-required' \
+    'gui_input_authority=' \
     'contract_structure=' \
     'lab_contracts=' \
     'lab_profile_v2=' \
     'lab_controller_v2=' \
     'controller_helper=' \
+    'controller_readiness=' \
+    'milestone_a_readiness=' \
+    'milestone_e_readiness=' \
     'boot_contracts=' \
     'preimplementation_contracts=' \
     'reference_verdict_contract=' \
@@ -29,10 +32,22 @@ done
 for required in \
     "'source_revision=strict-preflight-required'" \
     "'checkpoint=strict-preflight-required'" \
-    "'overall=blocked'" \
+    'overall=external-evidence-required' \
+    '[ "$preimplementation_contracts" = ready ]' \
+    '[ "$adr_0024" = accepted ]' \
+    '[ "$adr_0023" = accepted ]' \
+    'spec/alpha/input/alpha-peripheral-grant-v0.fields' \
+    'tools/ci/check-alpha-gui-input-contract.sh' \
+    '[ "$adr_0022" = accepted ]' \
+    'milestone_e_readiness=external-prior-milestone-evidence-required' \
     'classify-proposed-adr.sh'; do
     /usr/bin/grep -Fq "$required" "$reporter" || exit 1
 done
+[ "$(/usr/bin/grep -Fxc 'preimplementation_contracts=blocked' "$reporter")" -eq 1 ] || exit 1
+! /usr/bin/grep -Fq '[ "$image_inputs" = ready ]' "$reporter" || exit 1
+! /usr/bin/grep -Fq '[ "$crypto_references" = ready ]' "$reporter" || exit 1
+! /usr/bin/grep -Fq '[ "$qmp_client" = ready ]' "$reporter" || exit 1
+! /usr/bin/grep -Fq '[ "$lab_profile" = ready ]' "$reporter" || exit 1
 ! /usr/bin/grep -Ei '(^|[^A-Za-z])(git|gh|curl|wget|ssh|scp|docker|podman|qemu|rustc|cargo|clang|gcc|ld|objcopy|sudo|rm|mv|cp|install)([^A-Za-z]|$)' "$reporter" >/dev/null || exit 1
 ! /usr/bin/grep -E '(^|[[:space:]])(>|>>|tee)([[:space:]]|$)' "$reporter" >/dev/null || exit 1
 printf '%s\n' 'Sprint Alpha gate reporter policy passed'

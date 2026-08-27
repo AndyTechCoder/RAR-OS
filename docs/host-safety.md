@@ -59,6 +59,10 @@ only RAR OS workspace is the exact subtree
   pushed commits are merged and the exact merge is verified remotely.
 - Scratch and artifacts may be replaced only inside their exact RAR OS
   subdirectories. No failure grants permission to broaden cleanup.
+- The production workspace-budget check is fixed to this exact subtree and to
+  the reviewed 10-GiB free, 8-GiB workspace, and 512-MiB output ceilings. It
+  rejects path arguments and environment overrides. Its numeric test helper
+  accepts values only and performs no filesystem discovery.
 - If the volume is absent, renamed, unexpectedly mounted, or the resolved path
   escapes the exact subtree, stop before any write.
 - The repository selects the `rar-os-ssd` permission profile. Codex requires its

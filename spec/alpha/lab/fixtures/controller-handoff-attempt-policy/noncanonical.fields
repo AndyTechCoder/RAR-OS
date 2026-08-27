@@ -1,0 +1,2 @@
+status=experimental-host-only
+activation_rule=source-contract-only

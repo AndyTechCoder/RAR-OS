@@ -2,24 +2,29 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-/bin/mkdir -p "$root/out"
-work=$(mktemp -d "$root/out/development-images.XXXXXX")
-trap '/bin/rm -rf "$work"' EXIT HUP INT TERM
-checker=$root/tools/ci/check-development-image-inputs.sh
+input_checker=$root/tools/ci/check-development-image-inputs.sh
+source_checker=$root/tools/ci/check-development-image-sources.sh
+container_checker=$root/tools/ci/check-containerfile-static-policy.sh
 source=$root/tools/rar-lab/images/image-inputs-v1.env
+fixtures=$root/spec/alpha/lab/fixtures/development-image-policy
 
-/bin/sh "$checker" "$source" --require-decision-blocked >/dev/null
-if /usr/bin/sed 's/^state=decision-blocked$/state=inputs-ready/' "$source" > "$work/bad" && /bin/sh "$checker" "$work/bad" >/dev/null 2>&1; then exit 1; fi
-input_build_base=$(/usr/bin/sed -n 's/^build_base=//p' "$source")
-/usr/bin/sed "s|^launch_base=.*$|launch_base=$input_build_base|" "$source" > "$work/bad"
-if /bin/sh "$checker" "$work/bad" >/dev/null 2>&1; then exit 1; fi
-/usr/bin/sed 's|^build_image=unavailable$|build_image=ghcr.io/andytechcoder/rar-os-build@sha256:2222222222222222222222222222222222222222222222222222222222222222|' "$source" > "$work/bad"
-if /bin/sh "$checker" "$work/bad" >/dev/null 2>&1; then exit 1; fi
+/bin/sh "$input_checker" "$source" --require-decision-blocked >/dev/null
+/bin/sh "$source_checker" "$root/tools/rar-lab/images" >/dev/null
 
-images=$work/images
-/bin/cp -R "$root/tools/rar-lab/images" "$images"
-find "$images" -name '._*' -type f -exec /bin/rm -f {} \;
-/usr/bin/sed 's/FROM ${BUILD_BASE}/FROM rust:latest/' "$images/build.Containerfile" > "$images/bad"
-/bin/mv "$images/bad" "$images/build.Containerfile"
-if /bin/sh "$root/tools/ci/check-development-image-sources.sh" "$images" >/dev/null 2>&1; then exit 1; fi
-printf '%s\n' 'Development image negative checks passed'
+for fixture in inputs-ready.env aliased-bases.env populated-output.env; do
+    [ -f "$fixtures/$fixture" ] && [ ! -L "$fixtures/$fixture" ] || exit 1
+    if /bin/sh "$input_checker" "$fixtures/$fixture" >/dev/null 2>&1; then
+        printf 'Development image policy failed: accepted %s\n' "$fixture" >&2
+        exit 1
+    fi
+done
+
+for fixture in download-pipe.Containerfile download-pipe-multiline.Containerfile download-pipe-wrapper.Containerfile latest.Containerfile; do
+    [ -f "$fixtures/$fixture" ] && [ ! -L "$fixtures/$fixture" ] || exit 1
+    if /bin/sh "$container_checker" "$fixtures/$fixture" >/dev/null 2>&1; then
+        printf 'Development image policy failed: accepted %s\n' "$fixture" >&2
+        exit 1
+    fi
+done
+
+printf '%s\n' 'Development image immutable-fixture checks passed'
