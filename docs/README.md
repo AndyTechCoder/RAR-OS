@@ -28,6 +28,7 @@ Status: Gate 0 approved on 2026-07-16
 - [Initial Publication Record](publication-record.md)
 - [Release 0 Task Packets](tasks/release-0.md)
 - [Sprint Alpha Vertical Implementation Packet](tasks/sprint-alpha-vertical.md)
+- [Sprint Alpha Milestone A execution map](tasks/sprint-alpha-milestone-a-execution-map.md)
 - [Initial Codex Handoff Prompt](handoff-prompt.md)
 - [V1 Alpha Codex Execution Runbook](v1-alpha-execution.md)
 - [Sprint Alpha 0.1](sprint-alpha.md)

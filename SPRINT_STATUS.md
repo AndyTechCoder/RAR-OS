@@ -98,6 +98,11 @@
   explicitly `draft-incomplete` and cannot authorize implementation until its
   five review findings are decided and fixed. Proposed ADR 0023 groups them
   into one owner choice with Alternative C recommended; no target implementation began
+- Milestone A preparation: a non-authoritative execution map now decomposes the
+  existing packet into eight ordered work packets, maps all 41 mandatory boot
+  cases, fixes one-writer paths and stop conditions, and keeps every target
+  build/boot/evidence action cloud-only. It changes no contract or readiness
+  state and does not authorize implementation
 - GUI/input architecture: proposed ADR 0022 identifies the authority missing
   from R0-002. It remains owner-decision-required, so it does not block the
   Milestone A boot foundation but must be accepted before Milestone E target
