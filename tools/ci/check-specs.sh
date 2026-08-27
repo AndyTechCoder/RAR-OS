@@ -127,6 +127,7 @@ sdk/generated/release-0/lib.rs
 tools/ci/check-specs.sh
 tools/ci/check-sprint-static.sh
 tools/ci/check-local-sprint-preflight.sh
+tools/ci/check-local-readonly.sh
 tools/ci/report-sprint-alpha-gates.sh
 tools/ci/check-sprint-alpha-gate-report-policy.sh
 tools/ci/classify-proposed-adr.sh
@@ -599,8 +600,13 @@ sha256_of() {
 
 local_lock_sha256=$(sha256_of tools/toolchain/host-tools.lock) || fail "cannot hash local tool lock"
 ci_lock_sha256=$(sha256_of tools/toolchain/host-tools.x86_64-unknown-linux-gnu-ci.lock) || fail "cannot hash CI tool lock"
+readonly_gate_sha256=$(sha256_of tools/ci/check-local-readonly.sh) || fail "cannot hash local read-only gate"
+host_policy_checker_sha256=$(sha256_of tools/ci/check-host-policy.sh) || fail "cannot hash host-policy checker"
 [ "$local_lock_sha256" = f7e9baf24aaff9eaa2a2032cf0a9919568cca817d6b5d0c7e6891bce05ec979a ] || fail "local tool lock digest changed without bootstrap authority update"
 [ "$ci_lock_sha256" = 6752b1b21ac8fa93a671ff9444173e4c3bbc4cdcbe4cf5cd39820371dc79aa24 ] || fail "CI tool lock digest changed without bootstrap authority update"
+[ "$readonly_gate_sha256" = 19286697fe69a4009e3961fb6a1efec181963e6d2f5908c6c7f62cea739c6fd6 ] || fail "local read-only gate changed without safety review"
+[ "$host_policy_checker_sha256" = c0fad5ea46ed239613bf38bfa7139024d466d0c673cc12513a31e94d833fa1a5 ] || fail "local read-only gate dependency changed without safety review"
+/bin/sh -n tools/ci/check-local-readonly.sh
 grep -qx "macos_lock_sha256=$local_lock_sha256" tools/toolchain/host-tools.manifest || fail "host tool manifest local lock digest is stale"
 grep -qx "ci_lock_sha256=$ci_lock_sha256" tools/toolchain/host-tools.manifest || fail "host tool manifest CI lock digest is stale"
 if grep -q '^  runner_evidence:$' .github/workflows/specifications.yml ||

@@ -79,6 +79,10 @@ read-only and must not approve their own implementation.
 - No-overwrite scope: moving or copying over an existing path is forbidden.
 - Duration: this remains in force after merge until explicitly lifted by the owner.
 - Future removal rule: after an explicit lift, only one exact registered worktree may be removed after clean pushed commits, exact remote merge verification, and separate review.
+- The only combined local gate approved under this directive is `/bin/sh
+  tools/ci/check-local-readonly.sh`; it creates no scratch and runs no mutation,
+  compiler, linker, image, container, emulator, or target operation. Its exact
+  wrapper and sole executable policy dependency are digest-bound in CI.
 - Run one writer at a time. Reviews are read-only. Do not create a persistent
   goal or heartbeat that retries after the task has already reported a blocker.
 - After the rebaseline, keep the end-of-week implementation in one vertical

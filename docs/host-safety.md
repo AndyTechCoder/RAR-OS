@@ -61,6 +61,10 @@ only RAR OS workspace is the exact subtree
 - Duration: this remains in force after merge until explicitly lifted by the owner.
 - Future removal rule: after an explicit lift, only one exact registered worktree may be removed after clean pushed commits, exact remote merge verification, and separate review.
 - No failure grants permission to broaden cleanup.
+- Under the current directive, the combined local gate is `/bin/sh
+  tools/ci/check-local-readonly.sh`. It performs whitespace, shell-syntax,
+  and host-policy checks without scratch or mutation. Its complete wrapper and
+  sole executable policy dependency are digest-bound in CI.
 - The production workspace-budget check is fixed to this exact subtree and to
   the reviewed 10-GiB free, 8-GiB workspace, and 512-MiB output ceilings. It
   rejects path arguments and environment overrides. Its numeric test helper
