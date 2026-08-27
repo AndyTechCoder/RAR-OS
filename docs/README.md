@@ -32,6 +32,7 @@ Status: Gate 0 approved on 2026-07-16
 - [Sprint Alpha Milestones B–G execution and evidence map](tasks/sprint-alpha-milestones-b-g-execution-map.md)
 - [Initial Codex Handoff Prompt](handoff-prompt.md)
 - [V1 Alpha Codex Execution Runbook](v1-alpha-execution.md)
+- [GitHub Actions account-unblock runbook](runbooks/github-actions-account-unblock.md)
 - [Sprint Alpha 0.1](sprint-alpha.md)
 - [Sprint Alpha Dashboard](sprint-alpha-dashboard.md)
 - [Durable Sprint Status](../SPRINT_STATUS.md)
