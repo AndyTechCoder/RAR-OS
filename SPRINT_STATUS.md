@@ -144,6 +144,10 @@
   explanatory view of honest progress, missing gates, the A–G path, when boot
   and GUI first appear, and the local no-target-execution boundary. It grants no
   authority and reports target implementation as 0 of 7 milestones
+- Predecessor handoff: draft PR #5 remains open and unmerged as the historical
+  deferred one-shot branch; its live head is not part of PR #7. It is never
+  merged into Sprint Alpha and is closed as superseded only after PR #7's exact
+  merge plus distinct real-step green `main` workflow are verified durable
 - Static enforcement: required-file, authority-status, ADR-classification, and
   exact approval-sentence checks now cover both execution maps, the owner brief,
   proposed ADRs 0025/0026, all three decision-integration gates, and all eight

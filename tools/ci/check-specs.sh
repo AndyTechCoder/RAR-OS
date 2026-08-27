@@ -311,6 +311,20 @@ grep -Fq 'No preparation task may carry unmerged state, inherited target authori
     docs/proposals/alpha-decision-integration-plan.md || fail "Alpha implementation transition permits inherited preparation state"
 grep -Fq 'starts at the exact verified `main` merge with no inherited working diff.' \
     docs/proposals/alpha-decision-integration-plan.md || fail "Alpha implementation checklist permits an inherited diff"
+grep -Fq "Only after PR #7's exact merge is verified and its distinct" \
+    docs/proposals/alpha-decision-integration-plan.md || fail "Alpha transition omits PR #5 supersession ordering"
+grep -Fq '`main` workflow executes real green steps may PR #5 be closed as superseded,' \
+    docs/proposals/alpha-decision-integration-plan.md || fail "Alpha transition closes PR #5 before distinct main evidence"
+grep -Fq 'PR #5 is never merged, rebased, or' \
+    docs/proposals/alpha-decision-integration-plan.md || fail "Alpha transition permits PR #5 integration"
+grep -Fq 'wholesale cherry-picked into the Sprint Alpha line' \
+    docs/proposals/alpha-decision-integration-plan.md || fail "Alpha transition permits wholesale PR #5 cherry-picking"
+grep -Fq 'Never merge PR #5 into the Alpha line.' BACKLOG.md || fail "Backlog permits PR #5 merge"
+grep -Fq 'Record ADR 0025 and complete the reviewed protocol/controller v2 cutover' BACKLOG.md || fail "Backlog omits ADR 0025 before Milestone B"
+grep -Fq 'before Milestone B.' BACKLOG.md || fail "Backlog does not bind ADR 0025 to pre-B"
+grep -Fq 'ADR 0023, ADR 0024, and ADR 0026 choices' BACKLOG.md || fail "Backlog omits a pre-A owner decision"
+grep -Fq 'controller/helper evidence before Milestone A.' BACKLOG.md || fail "Backlog does not bind ADR 0023/0024/0026 to pre-A"
+grep -Fq 'Record ADR 0022 and its reviewed peripheral-grant contract before Milestone E.' BACKLOG.md || fail "Backlog omits ADR 0022 before Milestone E"
 grep -qx 'Status: Non-authoritative preparation — no completion evidence exists yet' \
     docs/tasks/sprint-alpha-completion-evidence-map.md || fail "Alpha completion evidence map overstates readiness"
 grep -qx 'Status: Explanatory only — not authority or completion evidence' \

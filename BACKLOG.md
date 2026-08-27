@@ -206,13 +206,21 @@ Gate 0 was approved on 2026-07-16. Every P0 item in this gate is complete as an 
 
 ## Immediate next items
 
-1. Merge the reviewed Sprint Alpha 0.1 and cloud Development Lab rebaseline.
-2. Close draft PR #5 as superseded only after the replacement is durable.
-3. Record the owner's ADR 0023 and ADR 0024 choices; complete and re-review the
-   resulting boot contract and cloud-only controller/helper evidence.
+1. Make PR #7's required workflow execute real steps and pass; complete review,
+   merge the exact rebaseline head, verify the merge on GitHub, and require the
+   distinct `main` workflow to pass before calling the replacement durable.
+2. Only after that durability proof, close draft PR #5 as superseded while
+   preserving its history and evidence. Never merge PR #5 into the Alpha line.
+3. Record the owner's ADR 0023, ADR 0024, and ADR 0026 choices; complete and
+   re-review the resulting boot/platform contracts and cloud-only
+   controller/helper evidence before Milestone A.
 4. Make the v2 Lab profile/controller ready only with real reviewed identities,
-   then pass the local, remote, PR, and immutable-checkpoint gates.
-5. Execute Milestone A only in the certified cloud Development Lab.
-6. Record ADR 0022 and its reviewed peripheral-grant contract before Milestone E.
-7. Preserve strict local Mac non-execution and non-target-build rules throughout.
-8. Continue Milestones B–G using `SPRINT_STATUS.md` as the durable checkpoint.
+   then pass the SSD-profile, capacity, local, remote, PR, and immutable-
+   checkpoint gates.
+5. Start Milestone A only in the packet-required fresh Medium writer task and
+   execute target work only in the approved cloud Development Lab.
+6. Record ADR 0025 and complete the reviewed protocol/controller v2 cutover
+   before Milestone B.
+7. Record ADR 0022 and its reviewed peripheral-grant contract before Milestone E.
+8. Preserve strict local Mac/SSD non-execution and non-target-build rules while
+   continuing Milestones B–G through their durable checkpoints.

@@ -144,6 +144,14 @@ No preparation task may carry unmerged state, inherited target authority, or a
 stale base into Milestone A. If any precondition fails during transition, the
 implementation task is not created and this document grants no fallback path.
 
+Draft PR #5 is a non-ancestor historical branch for the deferred production-
+style one-shot approach. It remains open, draft, and unmerged while PR #7 is
+under review. Only after PR #7's exact merge is verified and its distinct
+`main` workflow executes real green steps may PR #5 be closed as superseded,
+with its history and evidence preserved. PR #5 is never merged, rebased, or
+wholesale cherry-picked into the Sprint Alpha line; any useful idea is
+reimplemented only through the active reviewed packet and owned paths.
+
 ## Final activation checklist
 
 - Exact owner choices are recorded; no explanatory document self-approves.
@@ -158,6 +166,8 @@ implementation task is not created and this document grants no fallback path.
   cross-milestone file before a writer starts.
 - The preparation task has ended and the fresh one-writer implementation task
   starts at the exact verified `main` merge with no inherited working diff.
+- Historical PR #5 is closed as superseded only after PR #7 durability proof;
+  it is never merged into the Alpha implementation line.
 - Required GitHub workflows execute real steps and pass; zero-step failures,
   missing identities, or draft/failed checks cannot become readiness.
 - No local target compilation, image creation, firmware loading, VM launch, or
