@@ -54,6 +54,17 @@ instance contains no compiler, builder, source, binary, or evidence identity and
 cannot become ready. Whichever alternative is accepted must reproduce the same
 bounded helper twice and bind isolated test evidence before controller activation.
 
+`controller-helper-build-receipt-v0.fields` and
+`controller-helper-test-evidence-v0.fields` fix controller-owned receipts for
+two separately terminated build jobs and one seven-case test job. Contextual
+validators require distinct job/root nonces, non-aliased single-link output
+copies, exact runner/source/compiler/log identities, controller-observed exits,
+and canonical per-case results. They accept only files confined beneath a
+reviewed controller-owned root after the producer has stopped; they are not an
+untrusted live-path or concurrent-mutation boundary. The checked fixtures are
+deliberately tiny synthetic text and prove only parser and policy behavior;
+they are not compiler, helper, cloud, or activation evidence.
+
 The v1 Lab, image, and crypto inventory files remain permanently blocked. The
 v2 field schemas define the replacement shape but do not contain runnable image
 digests or authorize provisioning. A candidate instance becomes `ready` only in

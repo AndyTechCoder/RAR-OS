@@ -63,7 +63,15 @@
   required builder, compiler closure, trusted source, golden vector, twice-
   reproduced binary, and isolated test-evidence identities. All activating
   values remain `unavailable`; 40 declarative cases and mutation tests prevent
-  a ready claim before ADR 0024 acceptance and real reviewed cloud evidence
+  a ready claim before ADR 0024 acceptance and real reviewed cloud evidence.
+  Strict contextual parsers now validate the future aggregate build record,
+  two distinct controller-owned build receipts, and a seven-case test receipt
+  against their actual selected inputs. They reject aliases, hardlinks when the
+  host filesystem supports exercising them, path escape, stale logs, reused
+  job/root nonces, missing/duplicate cases, and self-declared results without
+  controller context. Synthetic text fixtures and adversarial mutations pass
+  locally without compiling or running the helper; they are explicitly
+  non-activating and are not cloud evidence
 - Boot implementation state: accepted ADR 0021 selects the Alpha boot-volume,
   payload-loader, and Root-to-Recovery boundary. The candidate specification is
   explicitly `draft-incomplete` and cannot authorize implementation until its

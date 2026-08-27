@@ -1,0 +1,8 @@
+schema=rar-alpha-controller-helper-test-cases-v0
+official-short-vectors|pass
+streaming-boundaries-match-one-shot|pass
+round-trip-and-layout|pass
+matches-language-neutral-golden-vector|pass
+accepts-every-phase-role-kind-combination|pass
+rejects-noncanonical-values|pass
+rejects-mutated-wire-rules|pass

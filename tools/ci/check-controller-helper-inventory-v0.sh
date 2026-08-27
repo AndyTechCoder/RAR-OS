@@ -46,7 +46,7 @@ for required in \
     'build_rule=two-fresh-bounded-network-disabled-builds,same-reviewed-inputs,byte-identical-output' \
     'authority_rule=helper-filesystem-descriptors-only,no-process-spawn,no-network,no-container-api,no-cloud-api,no-credential,no-GitHub-write,no-target-launch' \
     'shipping_rule=host-controller-only,never-target-linked,never-target-shipped' \
-    'execution_rule=build-count-2,reproducible-yes,network-none,status-accepted' \
+    'execution_rule=build-count-2,reproducible-yes,network-none,status-accepted,controller-observed-receipts-required' \
     'failure_rule=missing,extra,duplicate,reordered,malformed,unapproved-decision,topology-mismatch,zero-digest,build-mismatch,oversize,networked,nonfresh,test-failure,or-nonzero-status-rejects'; do
     if /usr/bin/grep -Fqx -- "$required" "$contract"; then continue; fi
     /usr/bin/grep -Fqx -- "$required" "$evidence" || fail "required contract row missing: $required"
