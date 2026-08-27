@@ -122,16 +122,25 @@
   would prove real GUI continuity. The proposal records no decision and changes
   no active protocol
 - Owner decision readiness: the plain-language choice brief now explains ADR
-  0025 alongside ADRs 0022–0024 and provides one exact four-decision approval
+  0025 and ADR 0026 alongside ADRs 0022–0024 and provides one exact five-decision approval
   sentence. The brief remains non-authoritative and records no approval
 - Static enforcement: required-file, authority-status, ADR-classification, and
   exact approval-sentence checks now cover both execution maps, the owner brief,
-  and proposed ADR 0025 so preparation cannot silently become authoritative or
-  disappear
+  and proposed ADRs 0025/0026 so preparation cannot silently become
+  authoritative or disappear
 - Gate-report migration: schema v1 remains unchanged. Proposed ADR 0025 now
   requires a versioned v2 compatibility cutover exposing ADR 0025, protocol-v2,
   and fail-closed Milestone B states if the proposal is accepted; no active
   readiness or public format changed
+- Platform delivery/state gaps: the existing Alpha boot grants no runtime
+  storage authority and delivers no component/app/state bytes. Proposed ADR
+  0026 recommends a private Root-staged component bundle plus separate initial
+  system/preserved state sources in one bounded Alpha envelope. It records no
+  decision, persistence claim, device authority, or implementation readiness
+- E ownership gap: proposed ADR 0022 now explicitly requires narrow temporary
+  Recovery/Nucleus adapter ownership, separate trusted profile/controller work,
+  and full cumulative A–D revalidation instead of allowing E to edit unowned
+  boot paths implicitly
 - GUI/input architecture: proposed ADR 0022 identifies the authority missing
   from R0-002. It remains owner-decision-required, so it does not block the
   Milestone A boot foundation but must be accepted before Milestone E target
@@ -141,11 +150,12 @@
   steps because GitHub reported failed account payments or an exhausted Actions
   spending limit; the reviewed `rar-os-ssd` user profile still
   needs one-time owner installation/evidence in a fresh SSD-root task
-- Next durable action: record exact owner choices for ADRs 0023 and 0024, make
-  the boot contract and v2 controller/helper evidence genuinely ready, and pass
-  the external Lab/PR/checkpoint gates before Milestone A. ADR 0022 and its
-  reviewed peripheral-grant contract remain mandatory before Milestone E. The
-  non-authoritative plain-language choice brief is indexed at
+- Next durable action: record exact owner choices for ADRs 0023, 0024, and 0026,
+  make the boot contract and v2 controller/helper evidence genuinely ready, and
+  pass the external Lab/PR/checkpoint gates before Milestone A. ADR 0025 remains
+  mandatory before Milestone B; ADR 0022 and its reviewed peripheral-grant
+  contract remain mandatory before Milestone E. The non-authoritative
+  plain-language choice brief is indexed at
   `docs/proposals/alpha-owner-choice-brief.md`; it records no approval
 - Deadline: 2026-08-30 23:59 America/Los_Angeles
 - Local safety: target compilation, image creation, firmware loading, QEMU,

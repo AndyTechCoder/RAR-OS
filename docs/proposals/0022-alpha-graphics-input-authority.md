@@ -84,6 +84,14 @@ acceptance.
   hardware access.
 - USB/DMA complexity is avoided when the pinned platform proves a non-DMA input
   option; otherwise it remains confined to a trusted Alpha adapter.
+- The E implementation packet must grant narrowly scoped temporary ownership of
+  the exact Recovery/Nucleus Alpha-adapter files needed to produce and validate
+  the peripheral record; it does not grant the whole boot or architecture tree.
+- Any machine-profile or trusted-controller change is a separate default-branch
+  controller change, never an E source-branch edit.
+- Because E changes the private outer entry and platform profile, the E gate
+  reruns the complete cumulative A–D boot, R0, memory, isolation, and recovery
+  evidence plus fresh architecture, correctness, and security review.
 
 ## Validation
 
@@ -104,3 +112,12 @@ Alpha envelope. Services retain their surface/input interfaces while the
 platform adapter and grant disappear. No Alpha grant is accepted as a stable or
 production device authority.
 
+## Ownership and integration boundary
+
+If ADR 0026 is accepted, this peripheral grant occupies only its separately
+framed optional record in `AlphaPlatformEntryV0`; it cannot reinterpret or
+overlap the component, system-state, preserved-data, or unchanged R0 sources.
+If ADR 0026 is not accepted, ADR 0022 requires another reviewed outer-envelope
+integration decision before implementation. In either case, owner acceptance
+of this proposal alone does not modify the vertical packet or trusted
+controller ownership.

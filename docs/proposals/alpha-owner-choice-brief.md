@@ -2,7 +2,7 @@
 
 Status: Explanatory only — no decision is recorded by this document
 
-This page summarizes the four open Alpha proposals in plain language. The
+This page summarizes the five open Alpha proposals in plain language. The
 proposal files remain authoritative. Creating or reading this page does not
 accept an ADR, authorize execution, or make a blocked contract ready.
 
@@ -39,6 +39,28 @@ it is not part of RAR OS and never enters an OS image.
 These two decisions are independent: ADR 0023 defines guest boot behavior;
 ADR 0024 defines how a cloud-only host helper is produced. Both are required
 before Milestone A, but neither authorizes Mac execution or a VM launch.
+
+### ADR 0026 — How do components, apps, and recovery data reach the OS?
+
+Recommended: **Alternative C**.
+
+Root would stage one minimal Core-bootstrap image, one component bundle, and
+separate immutable initial system/preserved-data images before Nucleus starts.
+Recovery would pass exact bounded memory sources in a private Alpha envelope.
+Nucleus would only map and start the fixed Core bootstrap; Core could then load
+real isolated components without putting app or lifecycle policy inside
+Nucleus. Recovery could rebuild mutable system state from the retained
+read-only source without ambient disk access or preserved-data write authority.
+
+- Benefit: one honest delivery/state boundary supports C–F without repeatedly
+  rewriting the A boot chain.
+- Cost: the private envelope and four source formats must be fully
+  specified and reviewed before A.
+- Alpha remains memory-backed at runtime and makes no promise that changes
+  persist after VM shutdown; production storage comes later.
+
+ADR 0026 is required before the final Milestone A boot contract becomes ready.
+It authorizes no execution or production storage claim.
 
 ## Decision needed before Milestone B
 
@@ -91,7 +113,9 @@ Every existing evidence and safety gate would remain in force.
 
 When the owner is available, an unambiguous approval can be recorded as:
 
-`Approve ADR 0023 Alternative C, ADR 0024 Alternative A, ADR 0022 Alternative C, and ADR 0025 Alternative B.`
+`Approve ADR 0022 Alternative C, ADR 0023 Alternative C, ADR 0024 Alternative A, ADR 0025 Alternative B, and ADR 0026 Alternative C.`
 
-The owner may approve ADRs 0023, 0024, and 0025 first and defer ADR 0022 until
-Milestone E. Any different selection must name the ADR and alternative exactly.
+ADRs 0023, 0024, and 0026 are required before A; ADR 0025 is required before B.
+ADR 0022 may be implemented at E, but accepting it before A permits the common
+envelope and ownership consequences to be reviewed together. Any different
+selection must name the ADR and alternative exactly.

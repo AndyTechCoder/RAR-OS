@@ -46,6 +46,7 @@ docs/proposals/0022-alpha-graphics-input-authority.md
 docs/proposals/0023-alpha-boot-determinism-and-entry-state.md
 docs/proposals/0024-alpha-controller-helper-build-trust.md
 docs/proposals/0025-alpha-gui-continuity-evidence-sequencing.md
+docs/proposals/0026-alpha-platform-payload-and-state-sources.md
 spec/alpha/lab/README.md
 spec/alpha/lab/development-lab-profile-v2.fields
 spec/alpha/lab/image-inventory-v2.fields
@@ -274,11 +275,14 @@ grep -qx 'Status: Owner-approved execution contract — 2026-08-25' docs/tasks/s
 [ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
     docs/proposals/0025-alpha-gui-continuity-evidence-sequencing.md 0025 \
     docs/approval-record.md)" = owner-decision-required ] || fail "ADR 0025 decision state is inconsistent"
+[ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
+    docs/proposals/0026-alpha-platform-payload-and-state-sources.md 0026 \
+    docs/approval-record.md)" = owner-decision-required ] || fail "ADR 0026 decision state is inconsistent"
 grep -qx 'Status: Non-authoritative preparation — implementation remains blocked' \
     docs/tasks/sprint-alpha-milestone-a-execution-map.md || fail "Milestone A execution map overstates authority"
 grep -qx 'Status: Non-authoritative preparation — implementation remains sequential and gated' \
     docs/tasks/sprint-alpha-milestones-b-g-execution-map.md || fail "Milestones B-G execution map overstates authority"
-grep -Fqx '`Approve ADR 0023 Alternative C, ADR 0024 Alternative A, ADR 0022 Alternative C, and ADR 0025 Alternative B.`' \
+grep -Fqx '`Approve ADR 0022 Alternative C, ADR 0023 Alternative C, ADR 0024 Alternative A, ADR 0025 Alternative B, and ADR 0026 Alternative C.`' \
     docs/proposals/alpha-owner-choice-brief.md || fail "Alpha owner approval sentence is missing or ambiguous"
 /bin/sh tools/ci/check-alpha-preimplementation-contracts.sh >/dev/null
 [ "$(sed -n '1p' tools/sprint-alpha/x86_64-q35-v1.profile)" = 'schema=rar-development-machine-profile-v1' ] || fail "Sprint Alpha machine profile schema is invalid"
