@@ -44,15 +44,18 @@
   this checkpoint performs neither. Real immutable output identities plus a
   reviewed runnable v2 controller are still required. The controller's
   host-only stop/open/copy/recheck handoff and 256-byte durable manifest are now
-  byte-bound with 49 positive and adversarial cases; their descriptor-based
-  Linux descriptor implementation is not yet present. The dependency-free,
-  unsafe-free host core now implements the manifest codec, streaming SHA-256,
+  byte-bound with 49 positive and adversarial cases. The dependency-free host
+  core now implements the manifest codec, streaming SHA-256,
   typed phase plans, and a descriptor-operation-parametric transaction policy
-  with attempt-local cleanup. It defines nine focused tests and includes an
+  with attempt-local cleanup. It defines eleven focused tests and includes an
   independent 256-byte golden vector. Local gates inspect but do not compile or
   execute changed Rust; isolated cloud test evidence remains blocked on a
-  reviewed pinned host compiler identity. The core has no implemented Linux
-  syscall, process, network, cloud, or autonomous copy authority
+  reviewed pinned host compiler identity. A source-only x86-64 Linux adapter
+  now consumes sealed, already-open root descriptors and confines all `unsafe`
+  FFI to one documented module. It has no executable entry point, root-path
+  resolver, process, network, cloud, external/release publication, launch, or
+  autonomous root-acquisition authority. The eventual controller still requires a bounded outer
+  watchdog and persistent attempt-root recovery before activation
 - Probe dispatch state: the top-level Development Probe now validates the v2
   blocked plan and stops with status 73. The superseded v1 two-role runner also
   stops before reading cloud context or issuing any container command; no
@@ -67,7 +70,7 @@
   values remain `unavailable`; 40 declarative cases and mutation tests prevent
   a ready claim before ADR 0024 acceptance and real reviewed cloud evidence.
   Strict contextual parsers now validate the future aggregate build record,
-  two distinct controller-owned build receipts, and a nine-case test receipt
+  two distinct controller-owned build receipts, and an eleven-case test receipt
   against their actual selected inputs. They reject aliases, hardlinks when the
   host filesystem supports exercising them, path escape, stale logs, reused
   job/root nonces, missing/duplicate cases, and self-declared results without

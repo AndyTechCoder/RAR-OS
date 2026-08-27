@@ -8,3 +8,5 @@ rejects-noncanonical-values|pass
 rejects-mutated-wire-rules|pass
 phase-plans-bind-ordinals-and-launch-allowlist|pass
 transaction-success-hash-failure-and-cleanup-uncertainty|pass
+parses-bounded-dirents-and-rejects-malformed-records|pass
+enforces-linux-descriptor-authority-and-cleanup-invariants|pass

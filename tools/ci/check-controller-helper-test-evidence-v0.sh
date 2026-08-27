@@ -45,15 +45,15 @@ last=$(/usr/bin/od -An -tx1 -j $((size - 1)) -N 1 "$evidence" | /usr/bin/tr -d '
         if (value["controller_sha"] !~ /^[0-9a-f]{40}$/) reject("controller SHA invalid")
         zero=sprintf("%064d", 0)
         for (i=4; i<=10; i++) if (value[order[i]] !~ /^[0-9a-f]{64}$/ || value[order[i]] == zero) reject("identity invalid: " order[i])
-        if (value["test_count"] != "9" || value["failed_count"] != "0" || value["network"] != "none" || value["observed_exit_status"] != "0" || value["status"] != "accepted") reject("test result invalid")
+        if (value["test_count"] != "11" || value["failed_count"] != "0" || value["network"] != "none" || value["observed_exit_status"] != "0" || value["status"] != "accepted") reject("test result invalid")
         exit bad ? 1 : 0
     }
 ' "$evidence" || exit 1
 /usr/bin/awk -F '|' '
-    BEGIN { split("official-short-vectors streaming-boundaries-match-one-shot round-trip-and-layout matches-language-neutral-golden-vector accepts-every-phase-role-kind-combination rejects-noncanonical-values rejects-mutated-wire-rules phase-plans-bind-ordinals-and-launch-allowlist transaction-success-hash-failure-and-cleanup-uncertainty", expected, " ") }
+    BEGIN { split("official-short-vectors streaming-boundaries-match-one-shot round-trip-and-layout matches-language-neutral-golden-vector accepts-every-phase-role-kind-combination rejects-noncanonical-values rejects-mutated-wire-rules phase-plans-bind-ordinals-and-launch-allowlist transaction-success-hash-failure-and-cleanup-uncertainty parses-bounded-dirents-and-rejects-malformed-records enforces-linux-descriptor-authority-and-cleanup-invariants", expected, " ") }
     NR == 1 { if ($0 != "schema=rar-alpha-controller-helper-test-cases-v0") bad=1; next }
-    NR > 1 { if (NR > 10 || NF != 2 || $1 != expected[NR-1] || $2 != "pass" || ++seen[$1] != 1) bad=1; count++ }
-    END { if (count != 9) bad=1; exit bad ? 1 : 0 }
+    NR > 1 { if (NR > 12 || NF != 2 || $1 != expected[NR-1] || $2 != "pass" || ++seen[$1] != 1) bad=1; count++ }
+    END { if (count != 11) bad=1; exit bad ? 1 : 0 }
 ' "$case_results" || fail 'canonical per-case results invalid'
 field() { /usr/bin/sed -n "s/^$1=//p" "$evidence"; }
 [ "$(field controller_sha)" = "$expected_controller" ] || fail 'controller context mismatch'
@@ -65,4 +65,4 @@ check_hash golden_vector_sha256 "$golden"
 check_hash case_results_sha256 "$case_results"
 check_hash log_sha256 "$log"
 [ "$evidence_before" = "$(identity "$evidence")" ] || fail 'evidence identity changed during validation'
-printf '%s\n' 'controller helper test evidence context validated: cases=9 status=accepted'
+printf '%s\n' 'controller helper test evidence context validated: cases=11 status=accepted'

@@ -44,7 +44,7 @@ pub struct HandoffError {
 }
 
 impl HandoffError {
-    fn new(code: &'static str, stage: &'static str) -> Self { Self { code, stage } }
+    pub(crate) fn new(code: &'static str, stage: &'static str) -> Self { Self { code, stage } }
 }
 
 pub type HandoffResult<T> = Result<T, HandoffError>;
@@ -64,8 +64,11 @@ pub trait HandoffOps {
     fn root_identity(&mut self, root: &mut Self::Root) -> HandoffResult<RootIdentity>;
     fn enumerate(&mut self, root: &mut Self::Root) -> HandoffResult<Vec<String>>;
     fn open_source(&mut self, root: &mut Self::Root, basename: &str) -> HandoffResult<Self::File>;
-    fn create_destination(&mut self, root: &mut Self::Root, basename: &str) -> HandoffResult<Self::File>;
-    fn create_manifest(&mut self, root: &mut Self::Root, basename: &str) -> HandoffResult<Self::File>;
+    /// Creates with O_EXCL and returns the same open file plus its verified
+    /// identity. An implementation must remove and durably synchronize its own
+    /// new entry before returning any post-open identity error.
+    fn create_destination(&mut self, root: &mut Self::Root, basename: &str) -> HandoffResult<(Self::File, FileIdentity)>;
+    fn create_manifest(&mut self, root: &mut Self::Root, basename: &str) -> HandoffResult<(Self::File, FileIdentity)>;
     fn stat(&mut self, file: &mut Self::File) -> HandoffResult<FileIdentity>;
     fn read(&mut self, file: &mut Self::File, buffer: &mut [u8]) -> HandoffResult<usize>;
     fn write(&mut self, file: &mut Self::File, buffer: &[u8]) -> HandoffResult<usize>;
@@ -270,8 +273,7 @@ fn execute<O: HandoffOps>(ops: &mut O, plan: &PhasePlan, roots: &mut HandoffRoot
                 return Err(HandoffError::new("aggregate-maximum", "source-stat"));
             }
         }
-        let mut destination = ops.create_destination(&mut roots.destination, &output.basename)?;
-        let created_identity = ops.stat(&mut destination)?;
+        let (mut destination, created_identity) = ops.create_destination(&mut roots.destination, &output.basename)?;
         journal.push(JournalEntry::Destination { basename: output.basename.clone(), identity: created_identity });
         validate_destination(created_identity, 0, controller_uid)?;
 
@@ -344,8 +346,7 @@ fn execute<O: HandoffOps>(ops: &mut O, plan: &PhasePlan, roots: &mut HandoffRoot
     for output in &copied {
         let bytes = output.manifest.encode().map_err(|_| HandoffError::new("manifest-invalid", "publication"))?;
         let name = output.manifest.file_name().map_err(|_| HandoffError::new("manifest-name-invalid", "publication"))?;
-        let mut manifest_file = ops.create_manifest(&mut roots.manifests, &name)?;
-        let created_identity = ops.stat(&mut manifest_file)?;
+        let (mut manifest_file, created_identity) = ops.create_manifest(&mut roots.manifests, &name)?;
         journal.push(JournalEntry::Manifest { basename: name, identity: created_identity });
         validate_destination(created_identity, 0, controller_uid)?;
         write_exact(ops, &mut manifest_file, &bytes, deadline, cancellation)?;
@@ -418,6 +419,8 @@ mod tests {
         expire_on_manifest_sync: bool,
         count_only_writes: bool,
         written_bytes: u64,
+        fail_destination_initial_stat: bool,
+        fail_manifest_initial_stat: bool,
     }
 
     impl FakeBackend {
@@ -440,6 +443,7 @@ mod tests {
                 zero_write: false, sync_calls: 0,
                 monotonic_now: 1, expire_on_manifest_sync: false,
                 count_only_writes: false, written_bytes: 0,
+                fail_destination_initial_stat: false, fail_manifest_initial_stat: false,
             };
             backend.add_source(1, "rar-os-alpha.img", b"image");
             backend.add_source(2, "comparison.bin", b"comparison");
@@ -504,11 +508,11 @@ mod tests {
             }
             Ok(FakeFile { root: *root, name: basename.into(), cursor: 0, readback: false })
         }
-        fn create_destination(&mut self, root: &mut usize, basename: &str) -> HandoffResult<FakeFile> {
-            self.create_file(*root, basename)
+        fn create_destination(&mut self, root: &mut usize, basename: &str) -> HandoffResult<(FakeFile, FileIdentity)> {
+            self.create_file(*root, basename, self.fail_destination_initial_stat)
         }
-        fn create_manifest(&mut self, root: &mut usize, basename: &str) -> HandoffResult<FakeFile> {
-            self.create_file(*root, basename)
+        fn create_manifest(&mut self, root: &mut usize, basename: &str) -> HandoffResult<(FakeFile, FileIdentity)> {
+            self.create_file(*root, basename, self.fail_manifest_initial_stat)
         }
         fn stat(&mut self, file: &mut FakeFile) -> HandoffResult<FileIdentity> {
             self.roots.get(&file.root).and_then(|root| root.files.get(&file.name)).map(|data| data.identity)
@@ -578,7 +582,7 @@ mod tests {
     }
 
     impl FakeBackend {
-        fn create_file(&mut self, root: usize, basename: &str) -> HandoffResult<FakeFile> {
+        fn create_file(&mut self, root: usize, basename: &str, fail_initial_stat: bool) -> HandoffResult<(FakeFile, FileIdentity)> {
             if self.roots.get(&root).is_some_and(|value| value.files.contains_key(basename)) {
                 return Err(HandoffError::new("fake-exists", "test"));
             }
@@ -586,7 +590,11 @@ mod tests {
             let virtual_fill = self.count_only_writes.then_some(0);
             self.roots.get_mut(&root).ok_or_else(|| HandoffError::new("fake-root", "test"))?
                 .files.insert(basename.into(), FakeData { bytes: Vec::new(), identity, virtual_fill });
-            Ok(FakeFile { root, name: basename.into(), cursor: 0, readback: false })
+            if fail_initial_stat {
+                self.roots.get_mut(&root).unwrap().files.remove(basename);
+                return Err(HandoffError::new("fake-initial-stat", "test"));
+            }
+            Ok((FakeFile { root, name: basename.into(), cursor: 0, readback: false }, identity))
         }
     }
 
@@ -652,6 +660,20 @@ mod tests {
         let error = handoff_batch(&mut short_write, ProducerQuiesced::from_controller_observation(), &plan, &mut FakeBackend::roots(), deadline, &NeverCancelled).unwrap_err();
         assert_eq!(error.code, "short-write");
         assert!(short_write.roots[&3].files.is_empty());
+
+        let mut destination_stat = FakeBackend::new();
+        destination_stat.fail_destination_initial_stat = true;
+        let error = handoff_batch(&mut destination_stat, ProducerQuiesced::from_controller_observation(), &plan, &mut FakeBackend::roots(), deadline, &NeverCancelled).unwrap_err();
+        assert_eq!(error.code, "fake-initial-stat");
+        assert!(destination_stat.roots[&3].files.is_empty());
+        assert!(destination_stat.roots[&4].files.is_empty());
+
+        let mut manifest_stat = FakeBackend::new();
+        manifest_stat.fail_manifest_initial_stat = true;
+        let error = handoff_batch(&mut manifest_stat, ProducerQuiesced::from_controller_observation(), &plan, &mut FakeBackend::roots(), deadline, &NeverCancelled).unwrap_err();
+        assert_eq!(error.code, "fake-initial-stat");
+        assert!(manifest_stat.roots[&3].files.is_empty());
+        assert!(manifest_stat.roots[&4].files.is_empty());
 
         let mut aggregate = FakeBackend::new();
         aggregate.roots.get_mut(&1).unwrap().files.clear();

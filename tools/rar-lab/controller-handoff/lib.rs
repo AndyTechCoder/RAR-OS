@@ -1,6 +1,9 @@
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 
 mod contract;
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[allow(unsafe_code)]
+mod linux;
 mod manifest;
 mod sha256;
 mod transaction;
