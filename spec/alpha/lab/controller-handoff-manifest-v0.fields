@@ -30,9 +30,10 @@ wire_field|HandoffManifestV0|96|destination_inode|u64
 wire_field|HandoffManifestV0|104|basename|bytes:64
 wire_field|HandoffManifestV0|168|reserved1|bytes:88
 canonical_rule=total-bytes-256,ordinal-1..999,basename-bytes-1..64,basename-ascii-lowercase-digit-dot-hyphen,unused-basename-tail-zero,flags-zero,all-reserved-zero,no-trailing-byte
+ordinal_rule=phase-2+3-artifact-1,phase-2+3-transcript-2,phase-5-comparison-evidence-1,phase-7-one-based-position-in-controller-fixed-acceptance-plan-allowlist
 identity_rule=phase-role-output-kind-valid-combination,output-bytes-1..role-maximum,all-device-and-inode-values-nonzero
 validation_rule=parse-from-same-open-manifest-fd,match-expected-phase+role+kind+ordinal+basename+bytes+sha256+source-identity+destination-identity
 hash_rule=retained-evidence-records-sha256-of-exact-256-manifest-bytes
 durability_rule=fdatasync-manifest-then-close-then-fsync-controller-manifest-root-before-next-role
-failure_rule=malformed,mismatched,existing,short-write,sync-failure,extra-byte,or-reopen-attempt-rejects-before-next-role
+failure_rule=malformed,mismatched,wrong-ordinal,existing,short-write,sync-failure,extra-byte,or-reopen-attempt-rejects-before-next-role
 replacement_rule=host-only-experimental-evidence,not-target-format,replaceable-with-reviewed-controller-protocol

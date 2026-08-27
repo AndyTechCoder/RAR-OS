@@ -44,7 +44,7 @@
   this checkpoint performs neither. Real immutable output identities plus a
   reviewed runnable v2 controller are still required. The controller's
   host-only stop/open/copy/recheck handoff and 256-byte durable manifest are now
-  byte-bound with 46 positive and adversarial cases; their descriptor-based
+  byte-bound with 49 positive and adversarial cases; their descriptor-based
   implementation is not yet present. The dependency-free, unsafe-free host
   core now implements the manifest codec and streaming SHA-256, defines seven
   focused tests, and includes an independent 256-byte golden vector. Local gates

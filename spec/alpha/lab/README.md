@@ -46,6 +46,11 @@ rechecks the same source descriptor before publishing a manifest. Its negative
 case table makes races, aliases, wrong ownership, extra outputs, and partial
 copies fail before the next role can start. The manifest is a fixed 256-byte
 experimental host record, validated and durably synchronized before progression.
+Destination files use one read/write descriptor so the controller can seek and
+rehash the exact copied bytes without reopening a path. Output ordinals are
+fixed by output kind or the ordered launch allowlist. Failure cleanup may remove
+only identity-matched destination and manifest files created by that attempt;
+any cleanup uncertainty permanently blocks the next role.
 
 `controller-helper-inventory-v0.fields` and its build-evidence contract define
 the identities required to turn that primitive into a trusted Linux helper.

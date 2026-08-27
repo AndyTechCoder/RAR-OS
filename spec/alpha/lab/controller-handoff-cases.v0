@@ -26,6 +26,7 @@ empty-source|source-stat|reject
 oversized-source|source-stat|reject
 nonempty-destination|destination-root|reject
 existing-destination|destination-open|reject
+write-only-destination|destination-open|reject
 extra-entry-before-copy|enumeration|reject
 missing-entry-before-copy|enumeration|reject
 short-copy|copy|reject
@@ -36,6 +37,7 @@ extra-entry-after-copy|enumeration|reject
 missing-entry-after-copy|enumeration|reject
 source-root-identity-changed|enumeration|reject
 destination-hash-mismatch|destination-check|reject
+wrong-output-ordinal|manifest-validation|reject
 extra-role-output|role-output-set|reject
 missing-role-output|role-output-set|reject
 manifest-before-close|publication|reject
@@ -44,5 +46,6 @@ malformed-manifest|publication|reject
 manifest-extra-byte|publication|reject
 manifest-sync-failure|publication|reject
 manifest-directory-sync-failure|publication|reject
+cleanup-identity-mismatch|failure|reject
 manifest-on-failure|failure|reject
 next-role-after-failure|failure|reject

@@ -97,7 +97,14 @@ impl HandoffManifest {
             (5, Role::Reference, OutputKind::ComparisonEvidence) |
             (7, Role::Launch, OutputKind::LaunchEvidence));
         if !combination { return Err(ManifestError::PhaseRoleKind); }
-        if !(1..=999).contains(&self.output_ordinal) { return Err(ManifestError::Ordinal); }
+        let ordinal_valid = match (self.phase, self.role, self.output_kind) {
+            (2 | 3, Role::Build, OutputKind::Artifact) => self.output_ordinal == 1,
+            (2 | 3, Role::Build, OutputKind::Transcript) => self.output_ordinal == 2,
+            (5, Role::Reference, OutputKind::ComparisonEvidence) => self.output_ordinal == 1,
+            (7, Role::Launch, OutputKind::LaunchEvidence) => (1..=999).contains(&self.output_ordinal),
+            _ => false,
+        };
+        if !ordinal_valid { return Err(ManifestError::Ordinal); }
         let name = self.basename.as_bytes();
         if !(1..=64).contains(&name.len()) || self.basename == "." || self.basename == ".." ||
             !name.iter().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'.' | b'-')) {
@@ -159,17 +166,17 @@ mod tests {
 
     #[test]
     fn accepts_every_phase_role_kind_combination() {
-        for (phase, role, kind, name, maximum) in [
-            (2, Role::Build, OutputKind::Artifact, "rar-os-alpha.img", 67_108_864),
-            (2, Role::Build, OutputKind::Transcript, "comparison.bin", 1_048_576),
-            (3, Role::Build, OutputKind::Artifact, "rar-os-alpha.img", 67_108_864),
-            (3, Role::Build, OutputKind::Transcript, "comparison.bin", 1_048_576),
-            (5, Role::Reference, OutputKind::ComparisonEvidence, "comparison-evidence.bin", 1_048_576),
-            (7, Role::Launch, OutputKind::LaunchEvidence, "framebuffer-001.bin", 67_108_864),
+        for (phase, role, kind, ordinal, name, maximum) in [
+            (2, Role::Build, OutputKind::Artifact, 1, "rar-os-alpha.img", 67_108_864),
+            (2, Role::Build, OutputKind::Transcript, 2, "comparison.bin", 1_048_576),
+            (3, Role::Build, OutputKind::Artifact, 1, "rar-os-alpha.img", 67_108_864),
+            (3, Role::Build, OutputKind::Transcript, 2, "comparison.bin", 1_048_576),
+            (5, Role::Reference, OutputKind::ComparisonEvidence, 1, "comparison-evidence.bin", 1_048_576),
+            (7, Role::Launch, OutputKind::LaunchEvidence, 1, "framebuffer-001.bin", 67_108_864),
         ] {
             let mut value = canonical();
             value.phase = phase; value.role = role; value.output_kind = kind;
-            value.basename = name.into(); value.output_bytes = maximum;
+            value.output_ordinal = ordinal; value.basename = name.into(); value.output_bytes = maximum;
             let encoded = value.encode().unwrap();
             assert_eq!(HandoffManifest::decode(&encoded).unwrap(), value);
         }
@@ -186,6 +193,11 @@ mod tests {
         assert_eq!(value.encode(), Err(ManifestError::PhaseRoleKind));
         value = canonical(); value.source_inode = 0;
         assert_eq!(value.encode(), Err(ManifestError::Identity));
+        value = canonical(); value.output_ordinal = 2;
+        assert_eq!(value.encode(), Err(ManifestError::Ordinal));
+        value = canonical(); value.output_kind = OutputKind::Transcript;
+        value.basename = "comparison.bin".into(); value.output_bytes = 1024;
+        assert_eq!(value.encode(), Err(ManifestError::Ordinal));
     }
 
     #[test]

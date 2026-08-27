@@ -143,9 +143,9 @@ require_digest "$lab/image-inventory-v2.fields" aa4c763f78c04b904e517221677fdad2
 require_digest "$lab/crypto-reference-inventory-v2.fields" 62914ec46eb5ce005ed94b22dcbd5937aadb8424890532eca0a87e204a1635e5
 require_digest "$lab/comparison-transcript-v0.fields" 5f03fafed5eda2d373174aa0565ab08d009e07fe34e3bd7d2dc9c27c927dd9d7
 require_digest "$lab/controller-state-machine-v0.fields" 71756b7d93b0ae11a3c229fbbff15e436118a0e0d29ff4ab38bb4b5b33a03cbe
-require_digest "$lab/controller-handoff-v0.fields" e4645da70ff7153facb9d811795b6001c345357fae02e95fd75b0ca4874ef80e
-require_digest "$lab/controller-handoff-manifest-v0.fields" d36e0d6edf5bb1ad3155e205acad3b3c20a638e2debd10635f2e5f133952ee2a
-require_digest "$lab/controller-handoff-cases.v0" 652521315b2f68e92991a70fd16c9a7697b918df524664922eb477871555af3a
+require_digest "$lab/controller-handoff-v0.fields" dc589f4c57891e1292f608c5b5514a97fe25df928b69342ac8e9e1f72560852e
+require_digest "$lab/controller-handoff-manifest-v0.fields" ce13ec2588c21a8879d1eecf56ad9178d0f94806d3ffdd2d95af30ec206f9b02
+require_digest "$lab/controller-handoff-cases.v0" e23032bf96424850f6840ce6136b486c2fea433b378fd902365c47aac776d7eb
 require_digest "$lab/controller-helper-inventory-v0.fields" f8a6a19aa3d776e237f28a7513745682eb9a7bcae2be6a3ced1c510192af961c
 require_digest "$lab/controller-helper-build-evidence-v0.fields" 2d48e4575c09619286455b437b15f4adfcec9a27768382e405639be20204cbcf
 require_digest "$lab/controller-helper-build-receipt-v0.fields" 23800a09f0480211357c7c01e233fed605792d4000b93954a46b9f091de16a2f
@@ -214,15 +214,19 @@ require_line "$handoff" 'source_open_rule=openat-root-fd,O_RDONLY+O_CLOEXEC+O_NO
 require_line "$handoff" 'copy_rule=descriptor-to-descriptor,bounded-buffer,checked-byte-count,no-sparse-assumption,no-external-command,no-path-copy'
 require_line "$handoff" 'recheck_rule=fstat-same-source-fd,all-recorded-identity-fields-unchanged,EOF-exactly-after-recorded-size'
 require_line "$handoff" 'enumeration_rule=one-retained-root-fd-per-output-mount,descriptor-relative-enumeration-before-open-and-after-all-copy-rechecks,ignore-only-dot+dot-dot,root-identity-unchanged,no-path-reopen'
+require_line "$handoff" 'destination_open_rule=openat-destination-root-fd,O_RDWR+O_CREAT+O_EXCL+O_CLOEXEC+O_NOFOLLOW,mode-0600'
+require_line "$handoff" 'destination_check_rule=seek-zero+read-same-destination-fd,exact-recorded-size+EOF,sha256-equals-source-copy,fstat-same-destination-fd,regular,current-controller-owner,mode-0600,nlink-1,size-unchanged'
 require_line "$handoff" 'publication_rule=close-source+destination-fds-after-copy-recheck,create-manifest-relative-to-controller-manifest-root-fd,O_RDWR+O_CREAT+O_EXCL+O_CLOEXEC+O_NOFOLLOW,mode-0600,write-exactly-256,seek-zero,parse-exactly-256+require-EOF+fstat-same-manifest-fd,fdatasync-manifest,close-manifest-fd,fsync-manifest-root-before-next-role'
-require_line "$handoff" 'failure_rule=close-open-fds,remove-only-new-destination-created-by-this-attempt,retain-bounded-controller-error,no-manifest,no-next-role,no-publication'
+require_line "$handoff" 'failure_rule=close-open-fds,remove-only-destination+manifest-created-by-this-attempt-after-device+inode-match,fsync-each-affected-root,retain-bounded-controller-error,no-retained-manifest,no-next-role,no-publication,cleanup-uncertainty-permanently-blocks-progression'
+require_line "$handoff" 'ordinal_rule=build-artifact-1,build-transcript-2,reference-comparison-evidence-1,launch-one-based-position-in-controller-fixed-acceptance-plan-allowlist'
 [ "$(/usr/bin/grep -c '^role_output|' "$handoff")" -eq 3 ] || fail 'controller handoff role output set is incomplete'
 manifest=$lab/controller-handoff-manifest-v0.fields
 require_line "$manifest" 'manifest_bytes=256'
 require_line "$manifest" 'canonical_rule=total-bytes-256,ordinal-1..999,basename-bytes-1..64,basename-ascii-lowercase-digit-dot-hyphen,unused-basename-tail-zero,flags-zero,all-reserved-zero,no-trailing-byte'
+require_line "$manifest" 'ordinal_rule=phase-2+3-artifact-1,phase-2+3-transcript-2,phase-5-comparison-evidence-1,phase-7-one-based-position-in-controller-fixed-acceptance-plan-allowlist'
 require_line "$manifest" 'durability_rule=fdatasync-manifest-then-close-then-fsync-controller-manifest-root-before-next-role'
 [ "$(/usr/bin/grep -c '^wire_field|HandoffManifestV0|' "$manifest")" -eq 19 ] || fail 'controller handoff manifest layout is incomplete'
-validate_case_file "$lab/controller-handoff-cases.v0" 'schema=rar-alpha-controller-handoff-cases-v0' 46
+validate_case_file "$lab/controller-handoff-cases.v0" 'schema=rar-alpha-controller-handoff-cases-v0' 49
 helper_inventory=$lab/controller-helper-inventory-v0.fields
 helper_evidence=$lab/controller-helper-build-evidence-v0.fields
 helper_receipt=$lab/controller-helper-build-receipt-v0.fields

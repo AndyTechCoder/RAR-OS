@@ -9,12 +9,12 @@ source_open_rule=openat-root-fd,O_RDONLY+O_CLOEXEC+O_NOFOLLOW+O_NONBLOCK,no-path
 source_stat_rule=fstat-same-open-fd,regular-file,uid-65532,gid-65532,mode-0600,nlink-1,size-1..role-maximum,no-setuid,no-setgid,no-sticky
 source_identity_rule=record-device+inode+size+mode+uid+gid+nlink+mtime+ctime-before-copy
 destination_root_rule=controller-created-fresh-directory,not-symbolic,current-controller-owner,mode-0700,empty-before-first-copy
-destination_open_rule=openat-destination-root-fd,O_WRONLY+O_CREAT+O_EXCL+O_CLOEXEC+O_NOFOLLOW,mode-0600
+destination_open_rule=openat-destination-root-fd,O_RDWR+O_CREAT+O_EXCL+O_CLOEXEC+O_NOFOLLOW,mode-0600
 copy_rule=descriptor-to-descriptor,bounded-buffer,checked-byte-count,no-sparse-assumption,no-external-command,no-path-copy
 hash_rule=sha256-updated-from-the-exact-source-bytes-copied,lowercase-digest,copy-count-equals-source-size
 durability_rule=development-evidence-fdatasync-destination-then-fsync-destination-directory
 recheck_rule=fstat-same-source-fd,all-recorded-identity-fields-unchanged,EOF-exactly-after-recorded-size
-destination_check_rule=fstat-destination-fd,regular,current-controller-owner,mode-0600,nlink-1,size-and-sha256-equal-source-copy
+destination_check_rule=seek-zero+read-same-destination-fd,exact-recorded-size+EOF,sha256-equals-source-copy,fstat-same-destination-fd,regular,current-controller-owner,mode-0600,nlink-1,size-unchanged
 enumeration_rule=one-retained-root-fd-per-output-mount,descriptor-relative-enumeration-before-open-and-after-all-copy-rechecks,ignore-only-dot+dot-dot,root-identity-unchanged,no-path-reopen
 enumeration_set|build-artifact|exactly-rar-os-alpha.img
 enumeration_set|build-transcript|exactly-comparison.bin
@@ -22,10 +22,11 @@ enumeration_set|reference|exactly-comparison-evidence.bin
 enumeration_set|launch|exactly-current-acceptance-plan-allowlist
 publication_rule=close-source+destination-fds-after-copy-recheck,create-manifest-relative-to-controller-manifest-root-fd,O_RDWR+O_CREAT+O_EXCL+O_CLOEXEC+O_NOFOLLOW,mode-0600,write-exactly-256,seek-zero,parse-exactly-256+require-EOF+fstat-same-manifest-fd,fdatasync-manifest,close-manifest-fd,fsync-manifest-root-before-next-role
 manifest_contract=controller-handoff-manifest-v0.fields
-failure_rule=close-open-fds,remove-only-new-destination-created-by-this-attempt,retain-bounded-controller-error,no-manifest,no-next-role,no-publication
+failure_rule=close-open-fds,remove-only-destination+manifest-created-by-this-attempt-after-device+inode-match,fsync-each-affected-root,retain-bounded-controller-error,no-retained-manifest,no-next-role,no-publication,cleanup-uncertainty-permanently-blocks-progression
 role_output|build|artifact|rar-os-alpha.img|67108864
 role_output|build|transcript|comparison.bin|1048576
 role_output|reference|comparison-evidence|comparison-evidence.bin|1048576
 role_output_rule=exact-declared-set-before-and-after-copy,no-extra-entry,no-directory,no-symbolic-link,no-hardlink,no-device,no-fifo,no-socket
 launch_output_rule=separate-acceptance-plan-allowlist,same-open-copy-recheck-primitive,aggregate-maximum-67108864
+ordinal_rule=build-artifact-1,build-transcript-2,reference-comparison-evidence-1,launch-one-based-position-in-controller-fixed-acceptance-plan-allowlist
 replacement_rule=host-only-experimental-contract,replaceable-with-reviewed-certified-controller-copy-primitive,no-target-format-impact
