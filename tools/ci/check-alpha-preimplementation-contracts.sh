@@ -82,6 +82,8 @@ for file in \
     "$lab/controller-handoff-v0.fields" \
     "$lab/controller-handoff-manifest-v0.fields" \
     "$lab/controller-handoff-cases.v0" \
+    "$lab/controller-handoff-attempt-v0.fields" \
+    "$lab/controller-handoff-attempt-cases.v0" \
     "$lab/controller-helper-inventory-v0.fields" \
     "$lab/controller-helper-build-evidence-v0.fields" \
     "$lab/controller-helper-build-receipt-v0.fields" \
@@ -129,6 +131,7 @@ for fields in \
     "$lab/controller-state-machine-v0.fields" \
     "$lab/controller-handoff-v0.fields" \
     "$lab/controller-handoff-manifest-v0.fields" \
+    "$lab/controller-handoff-attempt-v0.fields" \
     "$lab/controller-helper-inventory-v0.fields" \
     "$lab/controller-helper-build-evidence-v0.fields" \
     "$lab/controller-helper-build-receipt-v0.fields" \
@@ -146,6 +149,8 @@ require_digest "$lab/controller-state-machine-v0.fields" 71756b7d93b0ae11a3c229f
 require_digest "$lab/controller-handoff-v0.fields" dc589f4c57891e1292f608c5b5514a97fe25df928b69342ac8e9e1f72560852e
 require_digest "$lab/controller-handoff-manifest-v0.fields" ce13ec2588c21a8879d1eecf56ad9178d0f94806d3ffdd2d95af30ec206f9b02
 require_digest "$lab/controller-handoff-cases.v0" e23032bf96424850f6840ce6136b486c2fea433b378fd902365c47aac776d7eb
+require_digest "$lab/controller-handoff-attempt-v0.fields" 283c9e7ae99b0383aa6c02fea5f6bda836dc840107a892278a53bfd5d83051df
+require_digest "$lab/controller-handoff-attempt-cases.v0" 69a574038d6574bae00e0be1c368bac59c3a0850d0eb5e359721950de14a72a9
 require_digest "$lab/controller-helper-inventory-v0.fields" f8a6a19aa3d776e237f28a7513745682eb9a7bcae2be6a3ced1c510192af961c
 require_digest "$lab/controller-helper-build-evidence-v0.fields" 2d48e4575c09619286455b437b15f4adfcec9a27768382e405639be20204cbcf
 require_digest "$lab/controller-helper-build-receipt-v0.fields" 23800a09f0480211357c7c01e233fed605792d4000b93954a46b9f091de16a2f
@@ -227,6 +232,14 @@ require_line "$manifest" 'ordinal_rule=phase-2+3-artifact-1,phase-2+3-transcript
 require_line "$manifest" 'durability_rule=fdatasync-manifest-then-close-then-fsync-controller-manifest-root-before-next-role'
 [ "$(/usr/bin/grep -c '^wire_field|HandoffManifestV0|' "$manifest")" -eq 19 ] || fail 'controller handoff manifest layout is incomplete'
 validate_case_file "$lab/controller-handoff-cases.v0" 'schema=rar-alpha-controller-handoff-cases-v0' 49
+attempt=$lab/controller-handoff-attempt-v0.fields
+require_line "$attempt" 'active_open_rule=O_RDWR+O_CREAT+O_EXCL+O_CLOEXEC+O_NOFOLLOW,mode-0600,one-active-attempt'
+require_line "$attempt" 'running_rule=live-nonreusable-controller-owned-process-handle-required,pid-never-authority'
+require_line "$attempt" 'commit_rule=committed-durable-before-active-removal,active-remove-after-device+inode-match+journal-root-fsync,next-phase-requires-both'
+require_line "$attempt" 'recovery_rule=source-never-deleted,inventory-durable-before-delete,remove-only-inventory-entry-after-device+inode+type+owner+mode+links+size+sha256+mtime+ctime-match,missing-means-idempotently-removed,changed-means-blocked'
+require_line "$attempt" 'activation_rule=source-contract-only,no-helper-spawn,no-process-FD-protocol,no-cloud-command,no-ready-identity,no-Mac-execution'
+validate_case_file "$lab/controller-handoff-attempt-cases.v0" 'schema=rar-alpha-controller-handoff-attempt-cases-v0' 97
+/bin/sh "$root/tools/ci/check-controller-handoff-attempt-v0.sh" "$attempt" "$lab/controller-handoff-attempt-cases.v0" >/dev/null || fail 'controller attempt recovery contract is invalid'
 helper_inventory=$lab/controller-helper-inventory-v0.fields
 helper_evidence=$lab/controller-helper-build-evidence-v0.fields
 helper_receipt=$lab/controller-helper-build-receipt-v0.fields

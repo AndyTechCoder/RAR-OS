@@ -52,6 +52,17 @@ fixed by output kind or the ordered launch allowlist. Failure cleanup may remove
 only identity-matched destination and manifest files created by that attempt;
 any cleanup uncertainty permanently blocks the next role.
 
+`controller-handoff-attempt-v0.fields` fixes the persistent outer-controller
+journal needed when the helper is terminated or the controller restarts. A
+durable exclusive active marker binds the task, controller, helper, roots,
+expected outputs, and watchdog. Fixed hash-chained transition records prevent
+missing, reordered, duplicated, or forked state. Recovery first persists a
+bounded descriptor-derived inventory, never deletes source roots, and removes
+only identity-matched entries from exclusive attempt-local destination and
+manifest roots. Durable `discarded` permits only a fresh attempt; `blocked`
+permanently prevents progression. Journal bytes contain no paths, commands,
+credentials, URLs, or cloud authority and cannot locate roots by themselves.
+
 `controller-helper-inventory-v0.fields` and its build-evidence contract define
 the identities required to turn that primitive into a trusted Linux helper.
 They are deliberately topology-neutral while ADR 0024 is undecided: the checked

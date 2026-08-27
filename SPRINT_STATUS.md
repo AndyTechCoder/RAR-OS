@@ -55,7 +55,13 @@
   FFI to one documented module. It has no executable entry point, root-path
   resolver, process, network, cloud, external/release publication, launch, or
   autonomous root-acquisition authority. The eventual controller still requires a bounded outer
-  watchdog and persistent attempt-root recovery before activation
+  watchdog and persistent attempt-root recovery before activation. The exact
+  persistent-attempt contract is now source-complete: a bounded
+  active record, hash-chained state transitions, outer watchdog states, and a
+  durable recovery inventory cover forced termination and controller restart.
+  It grants no helper spawn, process-FD protocol, path lookup, cloud command,
+  or activation authority; its 97-case adversarial table and policy validator
+  are static-only
 - Probe dispatch state: the top-level Development Probe now validates the v2
   blocked plan and stops with status 73. The superseded v1 two-role runner also
   stops before reading cloud context or issuing any container command; no

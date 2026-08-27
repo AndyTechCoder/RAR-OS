@@ -29,6 +29,8 @@ tools/ci/check-specs.sh
     tools/ci/check-development-controller-v2.sh \
     tools/ci/test-development-controller-v2-policy.sh \
     tools/ci/check-controller-handoff-core.sh \
+    tools/ci/check-controller-handoff-attempt-v0.sh \
+    tools/ci/test-controller-handoff-attempt-v0-policy.sh \
     tools/ci/check-controller-helper-inventory-v0.sh \
     tools/ci/test-controller-helper-inventory-v0-policy.sh \
     tools/ci/check-controller-helper-build-evidence-v0.sh \
@@ -89,6 +91,7 @@ tools/ci/test-development-probe-policy.sh
 /bin/sh tools/ci/test-development-lab-profile-policy.sh
 /bin/sh tools/ci/test-development-lab-profile-v2-policy.sh
 /bin/sh tools/ci/test-development-controller-v2-policy.sh
+/bin/sh tools/ci/test-controller-handoff-attempt-v0-policy.sh
 /bin/sh tools/ci/test-controller-helper-inventory-v0-policy.sh
 /bin/sh tools/ci/test-controller-helper-evidence-v0-policy.sh
 /bin/sh tools/ci/test-reference-evidence-v0-policy.sh
