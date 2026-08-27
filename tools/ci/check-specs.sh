@@ -196,9 +196,13 @@ tools/rar-lab/qmp-client/build-plan.v1
 tools/rar-lab/qmp-client/json.rs
 tools/rar-lab/qmp-client/main.rs
 tools/rar-lab/controller-handoff/README.md
+tools/rar-lab/controller-handoff/attempt.rs
 tools/rar-lab/controller-handoff/build-plan.v0
 tools/rar-lab/controller-handoff/contract.rs
+tools/rar-lab/controller-handoff/fixtures/active-header-prehash.v0.hex
 tools/rar-lab/controller-handoff/fixtures/manifest-golden.v0.hex
+tools/rar-lab/controller-handoff/fixtures/recovery-header-prehash.v0.hex
+tools/rar-lab/controller-handoff/fixtures/transition-prehash.v0.hex
 tools/rar-lab/controller-handoff/lib.rs
 tools/rar-lab/controller-handoff/linux.rs
 tools/rar-lab/controller-handoff/manifest.rs

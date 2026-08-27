@@ -149,7 +149,7 @@ require_digest "$lab/controller-state-machine-v0.fields" 71756b7d93b0ae11a3c229f
 require_digest "$lab/controller-handoff-v0.fields" dc589f4c57891e1292f608c5b5514a97fe25df928b69342ac8e9e1f72560852e
 require_digest "$lab/controller-handoff-manifest-v0.fields" ce13ec2588c21a8879d1eecf56ad9178d0f94806d3ffdd2d95af30ec206f9b02
 require_digest "$lab/controller-handoff-cases.v0" e23032bf96424850f6840ce6136b486c2fea433b378fd902365c47aac776d7eb
-require_digest "$lab/controller-handoff-attempt-v0.fields" 283c9e7ae99b0383aa6c02fea5f6bda836dc840107a892278a53bfd5d83051df
+require_digest "$lab/controller-handoff-attempt-v0.fields" e1de5fff796e6da039d7739da9771cd15c2a139bc15247a82ebe927fecfcf93b
 require_digest "$lab/controller-handoff-attempt-cases.v0" 69a574038d6574bae00e0be1c368bac59c3a0850d0eb5e359721950de14a72a9
 require_digest "$lab/controller-helper-inventory-v0.fields" f8a6a19aa3d776e237f28a7513745682eb9a7bcae2be6a3ced1c510192af961c
 require_digest "$lab/controller-helper-build-evidence-v0.fields" 2d48e4575c09619286455b437b15f4adfcec9a27768382e405639be20204cbcf

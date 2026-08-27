@@ -10,6 +10,18 @@ root path. It is not RAR OS target code, does not link into an image, and
 contains no process, container, cloud, network, external/release publication,
 or launch authority and cannot acquire filesystem roots autonomously.
 
+The side-effect-free `attempt` module implements structural encoders and decoders
+for the experimental active, transition, and recovery-inventory records. It
+checks wire sizes, field values, local canonical ordering, reserved bytes, and
+record hashes. It deliberately does not authorize a transition chain, session
+takeover, cleanup, or inventory origin: those contextual policy APIs remain
+absent until they have executable negative tests in the isolated lab. It
+performs no journal I/O,
+watchdog work, process management, descriptor transfer, root acquisition, or
+activation. The future trusted controller remains responsible for durable file
+operations and must not treat successful parsing as proof that a write reached
+stable storage.
+
 The Linux adapter is the sole module allowed to contain `unsafe` code. Its
 documented invariants bind the x86-64 syscall ABI, pointer lifetimes, descriptor
 ownership, bounded directory-record parsing, root-purpose attestation, and
@@ -26,7 +38,10 @@ owned persistent state after forced termination. Until isolated Linux tests,
 real identities, that recovery path, and independent review exist, the v2
 Development Lab remains blocked and this library cannot activate a probe.
 
-Eleven unit tests and one language-neutral golden manifest vector are present,
+Source tests contain structural round trips and three language-neutral prehash
+header skeletons for future isolated execution. The separate shell validator
+continues to bind all 97 declarative attempt cases; the Rust codec does not yet
+claim behavioral coverage of them,
 but repository gates do not compile or execute changed Rust code on the Mac.
 Test execution remains blocked until an isolated cloud host compiler identity
 and closure are reviewed and pinned.

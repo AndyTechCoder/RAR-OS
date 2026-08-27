@@ -19,7 +19,7 @@ done
 sha_file() {
     env LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$1" | /usr/bin/awk '{ print $1 }'
 }
-[ "$(sha_file "$contract")" = 283c9e7ae99b0383aa6c02fea5f6bda836dc840107a892278a53bfd5d83051df ] || fail 'contract is not the exact reviewed byte set'
+[ "$(sha_file "$contract")" = e1de5fff796e6da039d7739da9771cd15c2a139bc15247a82ebe927fecfcf93b ] || fail 'contract is not the exact reviewed byte set'
 [ "$(sha_file "$cases")" = 69a574038d6574bae00e0be1c368bac59c3a0850d0eb5e359721950de14a72a9 ] || fail 'case table is not the exact reviewed byte set'
 
 /usr/bin/awk -F '|' '
@@ -81,6 +81,7 @@ for row in \
     'active_total_rule=512+root-count*128+expected-count*256,maximum-256768,exact-EOF' \
     'path_rule=descriptor-relative-canonical-basename-only,no-stored-path,no-url,no-command,no-environment,no-credential' \
     'root_table_rule=canonical-order,source-indices-contiguous-1..N,N-in-1..2,exactly-one-destination-at-N+1,exactly-one-manifest-at-N+2,phase-role-source-count-valid' \
+    'file_type_value=1:regular,2:directory' \
     'expected_rule=canonical-unique-basenames,ordinal-1..999,maximum-role-bound,flags-zero,unused-tails-zero,table-canonical-output-order,every-source-root-index-references-declared-source' \
     'transition_chain_rule=sequence-starts-1+increments-1,previous-sha256-active-sha256-at-sequence-1,then-prior-transition-sha256,no-missing+duplicate+reorder+fork' \
     'pre_running_failure_rule=prepared->blocked-for-preauthorization-policy-only,start-authorized->blocked-for-spawn-failure-or-exited-success-or-exited-failure-or-stop-requested-or-blocked,observed-pre-running-exit-zero->exited-success,observed-pre-running-exit-nonzero->exited-failure' \

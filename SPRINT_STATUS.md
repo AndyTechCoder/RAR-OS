@@ -61,7 +61,13 @@
   durable recovery inventory cover forced termination and controller restart.
   It grants no helper spawn, process-FD protocol, path lookup, cloud command,
   or activation authority; its 97-case adversarial table and policy validator
-  are static-only
+  are static-only. A dependency-free, side-effect-free structural codec source
+  now encodes and decodes the three record families with byte bounds, reserved-
+  zero checks, local ordering, and record hashes. It intentionally contains no
+  contextual chain, session-takeover, inventory-origin, or cleanup authority;
+  those policy APIs and behavioral tests remain blocked on the reviewed
+  isolated compiler identity. It performs no journal I/O, process or watchdog
+  operation, cloud action, or activation
 - Probe dispatch state: the top-level Development Probe now validates the v2
   blocked plan and stops with status 73. The superseded v1 two-role runner also
   stops before reading cloud context or issuing any container command; no
