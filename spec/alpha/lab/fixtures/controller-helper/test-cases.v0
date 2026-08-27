@@ -6,3 +6,5 @@ matches-language-neutral-golden-vector|pass
 accepts-every-phase-role-kind-combination|pass
 rejects-noncanonical-values|pass
 rejects-mutated-wire-rules|pass
+phase-plans-bind-ordinals-and-launch-allowlist|pass
+transaction-success-hash-failure-and-cleanup-uncertainty|pass
