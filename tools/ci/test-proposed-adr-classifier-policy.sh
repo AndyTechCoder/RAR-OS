@@ -3,75 +3,56 @@ set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 checker=$root/tools/ci/classify-proposed-adr.sh
-/bin/mkdir -p "$root/out"
-work=$(mktemp -d "$root/out/proposed-adr.XXXXXX")
-trap '/bin/rm -rf "$work"' EXIT HUP INT TERM
+fixtures=$root/tools/ci/fixtures/proposed-adr-classifier
+valid=$fixtures/approval-valid.md
 
-write_record() {
-    file=$1
-    status=$2
-    decision=$3
-    {
-        printf '%s\n\n' '# ADR 9999: Test Decision'
-        printf 'Status: %s\n' "$status"
-        printf 'Decision: %s\n\n' "$decision"
-        printf '%s\n' 'Fixture body.'
-    } > "$file"
-}
-approval=$work/approval
-write_approval() {
-    date=$1
-    decision=$2
-    approver=${3-'Andy / RAR project owner'}
-    {
-        printf '%s\n' 'Architecture decision approval: approved'
-        printf 'Architecture decision approver: %s\n' "$approver"
-        printf 'Architecture decision date: %s\n' "$date"
-        printf 'ADR 9999 decision: %s\n' "$decision"
-    } > "$approval"
-}
-classify() { /bin/sh "$checker" "$1" "${2-9999}" "$approval"; }
-reject() { if classify "$1" "${2-9999}" >/dev/null 2>&1; then exit 1; fi; }
-
-write_approval 2026-08-26 'Alternative C'
-write_record "$work/proposed" 'Proposed — owner decision required' Undecided
-[ "$(classify "$work/proposed")" = owner-decision-required ]
-for choice in A B C; do
-    write_approval 2026-08-26 "Alternative $choice"
-    write_record "$work/accepted-$choice" 'Accepted — 2026-08-26' "Alternative $choice"
-    [ "$(classify "$work/accepted-$choice")" = accepted ]
+expected='accepted-a.md
+accepted-b.md
+accepted-c-leap.md
+accepted-invalid-date.md
+approval-date-mismatch.md
+approval-decision-mismatch.md
+approval-duplicate.md
+approval-missing-approval.md
+approval-missing-decision.md
+approval-owner-mismatch.md
+approval-valid.md
+duplicate-status.md
+proposed.md'
+[ -d "$fixtures" ] && [ ! -L "$fixtures" ] || exit 1
+[ "$(CDPATH= cd -- "$fixtures" && pwd -P)" = "$fixtures" ] || exit 1
+actual=$(/usr/bin/find "$fixtures" -mindepth 1 -maxdepth 1 ! -name '._*' -print | /usr/bin/sed "s|^$fixtures/||" | /usr/bin/sort)
+[ "$actual" = "$expected" ] || exit 1
+for file in "$fixtures"/*.md; do
+    [ -f "$file" ] && [ ! -L "$file" ] && [ -s "$file" ] || exit 1
+    [ "$(CDPATH= cd -- "$(dirname -- "$file")" && pwd -P)" = "$fixtures" ] || exit 1
+    size=$(/usr/bin/stat -f %z "$file" 2>/dev/null || /usr/bin/stat -c %s "$file")
+    [ "$size" -le 32768 ] || exit 1
+    /usr/bin/awk 'length($0) > 4096 { exit 1 }' "$file" || exit 1
 done
-write_approval 2026-08-26 'Alternative C'
-write_record "$work/bad-date" Accepted 'Alternative C'
-reject "$work/bad-date"
-for bad_date in abcd-ef-gh 2026-99-99 2026-02-29 2026-04-31; do
-    write_record "$work/bad-$bad_date" "Accepted — $bad_date" 'Alternative C'
-    reject "$work/bad-$bad_date"
-done
-write_record "$work/leap" 'Accepted — 2028-02-29' 'Alternative C'
-write_approval 2028-02-29 'Alternative C'
-[ "$(classify "$work/leap")" = accepted ]
-write_approval 2026-08-26 'Alternative C'
-write_record "$work/decoy" 'Proposed — owner decision required' Undecided
-printf '%s\n%s\n' 'Status: Accepted — 2026-08-26' 'Decision: Alternative C' >> "$work/decoy"
-reject "$work/decoy"
-write_record "$work/conflict" 'Accepted — 2026-08-26' 'Alternative C'
-printf '%s\n' 'Decision: Alternative A' >> "$work/conflict"
-reject "$work/conflict"
-/bin/ln -s "$work/proposed" "$work/link"
-reject "$work/link"
 
-write_record "$work/accepted" 'Accepted — 2026-08-26' 'Alternative C'
-reject "$work/accepted" 0020
-write_approval 2026-08-27 'Alternative C'
-reject "$work/accepted"
-write_approval 2026-08-26 'Alternative B'
-reject "$work/accepted"
-write_approval 2026-08-26 'Alternative C' ''
-reject "$work/accepted"
-write_approval 2026-08-26 'Alternative C' 'Different owner'
-reject "$work/accepted"
-write_approval 2026-08-26 'Alternative C'
-/usr/bin/printf '%s\n' 'Architecture decision approval: approved' >> "$approval"
-reject "$work/accepted"
-printf '%s\n' 'Proposed ADR classifier negative checks passed'
+classify() { /bin/sh "$checker" "$1" "$2" "$3"; }
+reject() { if classify "$1" "$2" "$3" >/dev/null 2>&1; then exit 1; fi; }
+
+[ "$(classify "$root/docs/adr/0020-alpha-reference-oracle-isolation.md" 0020 "$root/docs/approval-record.md")" = accepted ]
+[ "$(classify "$root/docs/adr/0021-alpha-boot-payload-boundary.md" 0021 "$root/docs/approval-record.md")" = accepted ]
+[ "$(classify "$root/docs/proposals/0022-alpha-graphics-input-authority.md" 0022 "$root/docs/approval-record.md")" = owner-decision-required ]
+[ "$(classify "$root/docs/proposals/0023-alpha-boot-determinism-and-entry-state.md" 0023 "$root/docs/approval-record.md")" = owner-decision-required ]
+[ "$(classify "$root/docs/proposals/0024-alpha-controller-helper-build-trust.md" 0024 "$root/docs/approval-record.md")" = owner-decision-required ]
+
+[ "$(classify "$fixtures/accepted-a.md" 9997 "$valid")" = accepted ]
+[ "$(classify "$fixtures/accepted-b.md" 9998 "$valid")" = accepted ]
+[ "$(classify "$fixtures/accepted-c-leap.md" 9999 "$valid")" = accepted ]
+[ "$(classify "$fixtures/proposed.md" 9994 "$valid")" = owner-decision-required ]
+
+reject "$fixtures/accepted-invalid-date.md" 9996 "$valid"
+reject "$fixtures/duplicate-status.md" 9995 "$valid"
+reject "$fixtures/accepted-a.md" 0020 "$valid"
+reject "$fixtures/accepted-a.md" 9997 "$fixtures/approval-date-mismatch.md"
+reject "$fixtures/accepted-a.md" 9997 "$fixtures/approval-decision-mismatch.md"
+reject "$fixtures/accepted-a.md" 9997 "$fixtures/approval-owner-mismatch.md"
+reject "$fixtures/accepted-a.md" 9997 "$fixtures/approval-duplicate.md"
+reject "$fixtures/accepted-a.md" 9997 "$fixtures/approval-missing-approval.md"
+reject "$fixtures/accepted-a.md" 9997 "$fixtures/approval-missing-decision.md"
+
+printf '%s\n' 'Proposed ADR classifier immutable-fixture checks passed'

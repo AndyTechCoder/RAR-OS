@@ -55,13 +55,13 @@ esac
 [ "$day_value" -ge 1 ] && [ "$day_value" -le "$maximum_day" ] || exit 1
 case "$decision" in 'Decision: Alternative '[ABC]) ;; *) exit 1 ;; esac
 
-[ "$(/usr/bin/grep -c '^Architecture decision approval:' "$approval_record")" -eq 1 ] || exit 1
-[ "$(/usr/bin/sed -n 's/^Architecture decision approval: //p' "$approval_record")" = approved ] || exit 1
-[ "$(/usr/bin/grep -c '^Architecture decision approver:' "$approval_record")" -eq 1 ] || exit 1
-approver=$(/usr/bin/sed -n 's/^Architecture decision approver: //p' "$approval_record")
+[ "$(/usr/bin/grep -c "^ADR $expected_number approval:" "$approval_record")" -eq 1 ] || exit 1
+[ "$(/usr/bin/sed -n "s/^ADR $expected_number approval: //p" "$approval_record")" = approved ] || exit 1
+[ "$(/usr/bin/grep -c "^ADR $expected_number approver:" "$approval_record")" -eq 1 ] || exit 1
+approver=$(/usr/bin/sed -n "s/^ADR $expected_number approver: //p" "$approval_record")
 [ "$approver" = "$expected_approver" ] || exit 1
-[ "$(/usr/bin/grep -c '^Architecture decision date:' "$approval_record")" -eq 1 ] || exit 1
-approved_date=$(/usr/bin/sed -n 's/^Architecture decision date: //p' "$approval_record")
+[ "$(/usr/bin/grep -c "^ADR $expected_number date:" "$approval_record")" -eq 1 ] || exit 1
+approved_date=$(/usr/bin/sed -n "s/^ADR $expected_number date: //p" "$approval_record")
 [ "$date" = "$approved_date" ] || exit 1
 [ "$(/usr/bin/grep -c "^ADR $expected_number decision:" "$approval_record")" -eq 1 ] || exit 1
 approved_decision=$(/usr/bin/sed -n "s/^ADR $expected_number decision: //p" "$approval_record")

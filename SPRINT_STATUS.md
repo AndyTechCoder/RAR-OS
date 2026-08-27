@@ -107,7 +107,9 @@
 - Next durable action: record exact owner choices for ADRs 0023 and 0024, make
   the boot contract and v2 controller/helper evidence genuinely ready, and pass
   the external Lab/PR/checkpoint gates before Milestone A. ADR 0022 and its
-  reviewed peripheral-grant contract remain mandatory before Milestone E
+  reviewed peripheral-grant contract remain mandatory before Milestone E. The
+  non-authoritative plain-language choice brief is indexed at
+  `docs/proposals/alpha-owner-choice-brief.md`; it records no approval
 - Deadline: 2026-08-30 23:59 America/Los_Angeles
 - Local safety: target compilation, image creation, firmware loading, QEMU,
   emulator, VM, guest execution, macOS modification, and access outside the

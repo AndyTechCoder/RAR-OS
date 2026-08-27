@@ -99,8 +99,11 @@ cloud role; production cloud-service wiring remains later work. ADR 0021 uses
 the authentic Alpha boot chain Root → Recovery → Nucleus with an explicitly
 replaceable FAT/ELF bootstrap boundary.
 
-Architecture decision approval: approved
-Architecture decision approver: Andy / RAR project owner
-Architecture decision date: 2026-08-26
+ADR 0020 approval: approved
+ADR 0020 approver: Andy / RAR project owner
+ADR 0020 date: 2026-08-26
 ADR 0020 decision: Alternative C
+ADR 0021 approval: approved
+ADR 0021 approver: Andy / RAR project owner
+ADR 0021 date: 2026-08-26
 ADR 0021 decision: Alternative C

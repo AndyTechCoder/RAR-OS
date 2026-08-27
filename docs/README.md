@@ -62,6 +62,7 @@ Gate 0 approval makes the indexed direction and the Release 0 task packet implem
 
 ## Open Alpha architecture decision
 
+- [Plain-language Alpha owner choice brief](proposals/alpha-owner-choice-brief.md)
 - [Proposed ADR 0022: Alpha Graphics and Input Authority](proposals/0022-alpha-graphics-input-authority.md)
 - [Proposed ADR 0023: Alpha Boot Determinism and Entry State](proposals/0023-alpha-boot-determinism-and-entry-state.md)
 - [Proposed ADR 0024: Alpha Controller Helper Build Trust](proposals/0024-alpha-controller-helper-build-trust.md)
