@@ -124,6 +124,10 @@
 - Owner decision readiness: the plain-language choice brief now explains ADR
   0025 and ADR 0026 alongside ADRs 0022–0024 and provides one exact five-decision approval
   sentence. The brief remains non-authoritative and records no approval
+- Decision integration readiness: one non-authoritative plan now sequences the
+  recommended decisions into pre-A boot/platform/controller, pre-B evidence-
+  protocol, and pre-E peripheral-authority gates. It records no approval and
+  changes no active packet, protocol, ownership, or readiness state
 - Static enforcement: required-file, authority-status, ADR-classification, and
   exact approval-sentence checks now cover both execution maps, the owner brief,
   and proposed ADRs 0025/0026 so preparation cannot silently become

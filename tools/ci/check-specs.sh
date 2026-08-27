@@ -47,6 +47,7 @@ docs/proposals/0023-alpha-boot-determinism-and-entry-state.md
 docs/proposals/0024-alpha-controller-helper-build-trust.md
 docs/proposals/0025-alpha-gui-continuity-evidence-sequencing.md
 docs/proposals/0026-alpha-platform-payload-and-state-sources.md
+docs/proposals/alpha-decision-integration-plan.md
 spec/alpha/lab/README.md
 spec/alpha/lab/development-lab-profile-v2.fields
 spec/alpha/lab/image-inventory-v2.fields
@@ -282,6 +283,8 @@ grep -qx 'Status: Non-authoritative preparation — implementation remains block
     docs/tasks/sprint-alpha-milestone-a-execution-map.md || fail "Milestone A execution map overstates authority"
 grep -qx 'Status: Non-authoritative preparation — implementation remains sequential and gated' \
     docs/tasks/sprint-alpha-milestones-b-g-execution-map.md || fail "Milestones B-G execution map overstates authority"
+grep -qx 'Status: Non-authoritative preparation — proposed decisions remain undecided' \
+    docs/proposals/alpha-decision-integration-plan.md || fail "Alpha decision integration plan overstates authority"
 grep -Fqx '`Approve ADR 0022 Alternative C, ADR 0023 Alternative C, ADR 0024 Alternative A, ADR 0025 Alternative B, and ADR 0026 Alternative C.`' \
     docs/proposals/alpha-owner-choice-brief.md || fail "Alpha owner approval sentence is missing or ambiguous"
 /bin/sh tools/ci/check-alpha-preimplementation-contracts.sh >/dev/null
