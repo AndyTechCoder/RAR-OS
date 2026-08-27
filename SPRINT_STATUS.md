@@ -103,6 +103,15 @@
   cases, fixes one-writer paths and stop conditions, and keeps every target
   build/boot/evidence action cloud-only. It changes no contract or readiness
   state and does not authorize implementation
+- Milestones B–G preparation: one non-authoritative dependency/evidence map now
+  organizes the existing sequential ownership, contract-before-code boundaries,
+  all 40 later acceptance rows, cloud-only evidence, and stop conditions. It
+  defines no interface and does not start or reorder implementation
+- Acceptance-sequence defect: the fixed Milestone C plan requires
+  `component:gui-responsive`, but A–C own no GUI/presentation implementation and
+  Milestone E is the first graphics owner. No synthetic marker or hidden pre-E
+  component is permitted; an architecture-governed continuity witness or plan
+  correction is required before C starts
 - GUI/input architecture: proposed ADR 0022 identifies the authority missing
   from R0-002. It remains owner-decision-required, so it does not block the
   Milestone A boot foundation but must be accepted before Milestone E target
