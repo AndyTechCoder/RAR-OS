@@ -21,7 +21,6 @@ jobs:
       RAR_PROBE: ${{ github.event.client_payload.probe }}
       RAR_PROBE_SOURCE_SHA: ${{ github.event.client_payload.source_sha }}
       RAR_TRUSTED_CONTROLLER_SHA: ${{ github.sha }}
-      RAR_PROBE_EVIDENCE_DIR: ${{ runner.temp }}/rar-development-probe
     steps:
       - name: Validate dispatch and attest runner
         shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
@@ -51,6 +50,8 @@ jobs:
 
       - name: Prepare bounded evidence
         shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          RAR_PROBE_EVIDENCE_DIR: ${{ runner.temp }}/rar-development-probe
         run: |
           install -d -m 700 "$RAR_PROBE_EVIDENCE_DIR"
           {
@@ -68,6 +69,7 @@ jobs:
         env:
           RAR_PROBE_CONTROLLER_ROOT: ${{ github.workspace }}/controller
           RAR_PROBE_SOURCE_ROOT: ${{ github.workspace }}/source
+          RAR_PROBE_EVIDENCE_DIR: ${{ runner.temp }}/rar-development-probe
         run: |
           set -o pipefail
           set +e
@@ -89,6 +91,8 @@ jobs:
       - name: Preserve pre-probe failure truthfully
         if: always()
         shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          RAR_PROBE_EVIDENCE_DIR: ${{ runner.temp }}/rar-development-probe
         run: |
           install -d -m 700 "$RAR_PROBE_EVIDENCE_DIR"
           if [[ ! -f "$RAR_PROBE_EVIDENCE_DIR/complete.log" ]]; then

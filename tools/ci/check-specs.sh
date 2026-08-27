@@ -636,6 +636,80 @@ grep -q '^  repository_dispatch:$' .github/workflows/development-probe.yml || fa
 if grep -q 'workflow_dispatch' .github/workflows/development-probe.yml; then
     fail "Development Probe must not execute branch-selected workflow code"
 fi
+check_development_probe_workflow() {
+awk '
+function finish_step() {
+    if (step == "Prepare bounded evidence" ||
+        step == "Run probe with complete log and real status" ||
+        step == "Preserve pre-probe failure truthfully") {
+        if (evidence_bindings != 1) exit 20
+    } else if (evidence_bindings != 0) {
+        exit 21
+    }
+    if (step == "Retain complete probe evidence") {
+        if (artifact_paths != 1) exit 22
+    } else if (artifact_paths != 0) {
+        exit 23
+    }
+}
+index($0, "${{ runner.") {
+    runner_references++
+    if (!steps_started) exit 10
+}
+$0 == "    steps:" { steps_started = 1; next }
+steps_started && /^      - name: / {
+    if (step != "") finish_step()
+    step = substr($0, 15)
+    seen[step]++
+    if (seen[step] != 1) exit 24
+    evidence_bindings = 0
+    artifact_paths = 0
+    section = ""
+    next
+}
+steps_started && /^        [A-Za-z0-9_-]+:/ {
+    section = $0
+    sub(/^        /, "", section)
+    sub(/:.*/, "", section)
+}
+$0 == "          RAR_PROBE_EVIDENCE_DIR: ${{ runner.temp }}/rar-development-probe" {
+    if (section != "env") exit 25
+    evidence_bindings++
+}
+$0 == "          path: ${{ runner.temp }}/rar-development-probe" {
+    if (section != "with") exit 26
+    artifact_paths++
+}
+END {
+    if (step != "") finish_step()
+    if (!steps_started ||
+        seen["Prepare bounded evidence"] != 1 ||
+        seen["Run probe with complete log and real status"] != 1 ||
+        seen["Preserve pre-probe failure truthfully"] != 1 ||
+        seen["Retain complete probe evidence"] != 1 ||
+        runner_references != 4) exit 30
+}
+' "$1"
+}
+check_development_probe_workflow .github/workflows/development-probe.yml || fail "Development Probe runner context or evidence-path placement is invalid"
+if sed 's/^      - name: Run probe with complete log and real status$/      - name: Prepare bounded evidence/' \
+    .github/workflows/development-probe.yml | check_development_probe_workflow -; then
+    fail "Development Probe placement checker accepts duplicate/missing consumers"
+fi
+if awk '
+$0 == "      - name: Prepare bounded evidence" { in_target = 1 }
+in_target && $0 == "        env:" { print "        run: |"; in_target = 0; next }
+{ print }
+' .github/workflows/development-probe.yml | check_development_probe_workflow -; then
+    fail "Development Probe placement checker accepts an env decoy in a run block"
+fi
+if awk '
+$0 == "      - name: Retain complete probe evidence" { in_target = 1 }
+in_target && $0 == "        with:" { print "        env:"; in_target = 0; next }
+{ print }
+' .github/workflows/development-probe.yml | check_development_probe_workflow -; then
+    fail "Development Probe placement checker accepts an artifact-path decoy outside with"
+fi
 grep -q 'path: controller' .github/workflows/development-probe.yml || fail "Development Probe omits trusted controller checkout"
 grep -q 'path: source' .github/workflows/development-probe.yml || fail "Development Probe omits isolated source checkout"
 grep -q 'controller/tools/ci/run-development-probe.sh' .github/workflows/development-probe.yml || fail "Development Probe does not use trusted controller"

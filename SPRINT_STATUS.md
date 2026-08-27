@@ -7,17 +7,16 @@
 - Worktree: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/sprint-alpha-rebaseline`
 - Branch: `codex/sprint-alpha-rebaseline`
 - Pull request: [#7](https://github.com/AndyTechCoder/RAR-OS/pull/7), draft
-- Remote PR head: `a39a805abfdbd673085a9ba50f565aee65566464`.
-  Local reviewed source/safety checkpoint:
-  `233bdd85f0d875cd4e7efb1e933798ebcb1c1111`. Subsequent local commits are
-  documentation-only status and recovery-runbook corrections. The branch is
-  intentionally unpushed while every
-  private-repository Actions job is account-blocked before runner assignment.
-  Its four source/safety commits fix branch whitespace/hash bindings, strengthen
-  no-deletion auto-review and command rules, bind the authoritative directive
-  in `AGENTS.md` and host safety, and add one digest-bound read-only local gate
-- Validation of the local successor: the worktree is clean; full-branch
-  whitespace, tracked-shell syntax, and the bound host-policy checker pass via
+- Remote PR head: `13d24bf3ca16bf5eae88279b461dc5b843b90195`.
+  One subsequent local source-only correction moves `runner.temp` out of the
+  Development Probe's job-level environment and into its three consuming steps;
+  it is intentionally unpushed while the private-repository Actions account
+  block remains. The published source/safety commits fix branch whitespace/hash
+  bindings, strengthen no-deletion auto-review and command rules, bind the
+  authoritative directive in `AGENTS.md` and host safety, add one digest-bound
+  read-only local gate, and record the bounded Actions recovery sequence
+- Validation of the local successor: full-branch whitespace, tracked-shell
+  syntax, and the bound host-policy checker pass via
   `/bin/sh tools/ci/check-local-readonly.sh`. The Alpha preimplementation
   contract structure also passed before the read-only wrapper was narrowed and
   digest-bound. No Alpha completion evidence is claimed. The mutation-capable
@@ -72,10 +71,15 @@
   those policy APIs and behavioral tests remain blocked on the reviewed
   isolated compiler identity. It performs no journal I/O, process or watchdog
   operation, cloud action, or activation
-- Probe dispatch state: the top-level Development Probe now validates the v2
-  blocked plan and stops with status 73. The superseded v1 two-role runner also
-  stops before reading cloud context or issuing any container command; no
-  default dispatch path can reach it after ADR 0020
+- Probe dispatch state: GitHub rejected published run `33092166312` before job
+  creation because the workflow referenced `runner.temp` at job-level `env`,
+  before the runner context exists. The local correction binds the path only at
+  consuming steps and adds a static regression check; it has not been published
+  or claimed as GitHub-validated. Once valid and merged to the default branch,
+  the top-level Development Probe validates the v2 blocked plan and stops with
+  status 73. The superseded v1 two-role runner also stops before reading cloud
+  context or issuing any container command; no default dispatch path can reach
+  it after ADR 0020
 - Controller-helper build trust: proposed ADR 0024 records three bounded cloud
   build choices and recommends a twice-reproduced, fully pinned compiler closure
   on the approved Linux runner for Alpha. It remains owner-decision-required;
@@ -172,7 +176,8 @@
   Milestone A boot foundation but must be accepted before Milestone E target
   graphics/input code
 - External blockers: the 2026-08-26 local preflight still reports the existing
-  internal-space safeguard; GitHub PR #7 is open/draft and the exact latest job
+  internal-space safeguard; GitHub PR #7 is open/draft and Specifications run
+  `33092173379`, job `98587610341`, for exact remote head `13d24bf3ca16bf5eae88279b461dc5b843b90195`
   has no runner and no steps. GitHub's annotation says: `The job was not started
   because recent account payments have failed or your spending limit needs to
   be increased.` The private repository cannot obtain the required real-step
