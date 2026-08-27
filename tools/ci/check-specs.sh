@@ -286,8 +286,24 @@ grep -qx 'Status: Non-authoritative preparation — implementation remains seque
     docs/tasks/sprint-alpha-milestones-b-g-execution-map.md || fail "Milestones B-G execution map overstates authority"
 grep -qx 'Status: Non-authoritative preparation — proposed decisions remain undecided' \
     docs/proposals/alpha-decision-integration-plan.md || fail "Alpha decision integration plan overstates authority"
+grep -Fqx '## Gate 1 — before Milestone A implementation' \
+    docs/proposals/alpha-decision-integration-plan.md || fail "Alpha decision Gate 1 is missing"
+grep -Fqx '## Gate 2 — before Milestone B implementation' \
+    docs/proposals/alpha-decision-integration-plan.md || fail "Alpha decision Gate 2 is missing"
+grep -Fqx '## Gate 3 — before Milestone E graphics/input implementation' \
+    docs/proposals/alpha-decision-integration-plan.md || fail "Alpha decision Gate 3 is missing"
 grep -qx 'Status: Non-authoritative preparation — no completion evidence exists yet' \
     docs/tasks/sprint-alpha-completion-evidence-map.md || fail "Alpha completion evidence map overstates readiness"
+[ "$(grep -Ec '^### [1-8]\. ' docs/tasks/sprint-alpha-completion-evidence-map.md)" -eq 8 ] || fail "Alpha completion evidence map must retain exactly eight items"
+item=1
+while [ "$item" -le 8 ]; do
+    grep -Eq "^### $item\\. " docs/tasks/sprint-alpha-completion-evidence-map.md || fail "Alpha completion evidence item $item is missing"
+    item=$((item + 1))
+done
+grep -Fq 'A guest marker is one correlated observation, never sufficient proof by' \
+    docs/tasks/sprint-alpha-completion-evidence-map.md || fail "Alpha evidence map permits marker-only completion"
+grep -Fq 'Anything less remains incomplete, regardless of the final guest marker.' \
+    docs/tasks/sprint-alpha-completion-evidence-map.md || fail "Alpha evidence closure rule is missing"
 grep -Fqx '`Approve ADR 0022 Alternative C, ADR 0023 Alternative C, ADR 0024 Alternative A, ADR 0025 Alternative B, and ADR 0026 Alternative C.`' \
     docs/proposals/alpha-owner-choice-brief.md || fail "Alpha owner approval sentence is missing or ambiguous"
 /bin/sh tools/ci/check-alpha-preimplementation-contracts.sh >/dev/null
