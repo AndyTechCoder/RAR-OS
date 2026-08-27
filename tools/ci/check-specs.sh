@@ -36,6 +36,7 @@ docs/host-safety.md
 docs/handoff-prompt.md
 docs/v1-alpha-execution.md
 docs/sprint-alpha.md
+docs/sprint-alpha-dashboard.md
 SPRINT_STATUS.md
 docs/tasks/release-0.md
 docs/tasks/sprint-alpha-vertical.md
@@ -312,6 +313,16 @@ grep -Fq 'starts at the exact verified `main` merge with no inherited working di
     docs/proposals/alpha-decision-integration-plan.md || fail "Alpha implementation checklist permits an inherited diff"
 grep -qx 'Status: Non-authoritative preparation — no completion evidence exists yet' \
     docs/tasks/sprint-alpha-completion-evidence-map.md || fail "Alpha completion evidence map overstates readiness"
+grep -qx 'Status: Explanatory only — not authority or completion evidence' \
+    docs/sprint-alpha-dashboard.md || fail "Alpha dashboard overstates authority"
+grep -Fqx -- '- Target implementation: 0 of 7 milestones (A–G).' \
+    docs/sprint-alpha-dashboard.md || fail "Alpha dashboard overstates target implementation"
+grep -Fqx -- '- Working bootable GUI: does not exist yet.' \
+    docs/sprint-alpha-dashboard.md || fail "Alpha dashboard overstates GUI readiness"
+grep -Fqx -- '- Sprint Alpha completion evidence: none.' \
+    docs/sprint-alpha-dashboard.md || fail "Alpha dashboard overstates completion evidence"
+grep -Fq 'A boot → B Nucleus → C components/IPC → D recovery → E GUI/apps → F signed updates → G retained proof' \
+    docs/sprint-alpha-dashboard.md || fail "Alpha dashboard loses the sequential execution path"
 [ "$(grep -Ec '^### [1-8]\. ' docs/tasks/sprint-alpha-completion-evidence-map.md)" -eq 8 ] || fail "Alpha completion evidence map must retain exactly eight items"
 item=1
 while [ "$item" -le 8 ]; do

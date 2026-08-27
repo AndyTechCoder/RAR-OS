@@ -140,6 +140,10 @@
   now separates guest observations from same-run build, identity, authority,
   recovery, update, capture, and documentation proof. It explicitly records
   that no implementation or completion evidence exists at this checkpoint
+- User orientation: `docs/sprint-alpha-dashboard.md` now provides one concise
+  explanatory view of honest progress, missing gates, the A–G path, when boot
+  and GUI first appear, and the local no-target-execution boundary. It grants no
+  authority and reports target implementation as 0 of 7 milestones
 - Static enforcement: required-file, authority-status, ADR-classification, and
   exact approval-sentence checks now cover both execution maps, the owner brief,
   proposed ADRs 0025/0026, all three decision-integration gates, and all eight

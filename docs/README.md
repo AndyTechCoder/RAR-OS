@@ -33,6 +33,7 @@ Status: Gate 0 approved on 2026-07-16
 - [Initial Codex Handoff Prompt](handoff-prompt.md)
 - [V1 Alpha Codex Execution Runbook](v1-alpha-execution.md)
 - [Sprint Alpha 0.1](sprint-alpha.md)
+- [Sprint Alpha Dashboard](sprint-alpha-dashboard.md)
 - [Durable Sprint Status](../SPRINT_STATUS.md)
 - [Project Backlog](../BACKLOG.md)
 
