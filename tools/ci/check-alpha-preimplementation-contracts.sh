@@ -142,8 +142,8 @@ for fields in \
 done
 
 require_digest "$lab/development-lab-profile-v2.fields" 86ca738fdfdef78b68d750375039ab316dff2976f0c1dd7f440eea59a881e06c
-require_digest "$lab/image-inventory-v2.fields" aa4c763f78c04b904e517221677fdad2e3a5a1e9b9d2d4d71dfbf26208fed9bd
-require_digest "$lab/crypto-reference-inventory-v2.fields" 62914ec46eb5ce005ed94b22dcbd5937aadb8424890532eca0a87e204a1635e5
+require_digest "$lab/image-inventory-v2.fields" 76bb90f1e61721ffe1914ef004cf7b720f8a9b525251085f1e7bb45f4c8857c2
+require_digest "$lab/crypto-reference-inventory-v2.fields" 4d70ad91c91f6b38ecf54595e623d09a397ddbf049160e4ace3a00ef29083d18
 require_digest "$lab/comparison-transcript-v0.fields" 5f03fafed5eda2d373174aa0565ab08d009e07fe34e3bd7d2dc9c27c927dd9d7
 require_digest "$lab/controller-state-machine-v0.fields" c8f0c35ed55ba2785858562f4c7fabda3c5abc16e1af76af03d44a914bc5cc99
 require_digest "$lab/controller-handoff-v0.fields" dc589f4c57891e1292f608c5b5514a97fe25df928b69342ac8e9e1f72560852e

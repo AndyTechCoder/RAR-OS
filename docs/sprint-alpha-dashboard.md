@@ -89,4 +89,3 @@ execution, broader SSD access, deletion, merge, or owner approval.
 - Authoritative task packet: `tasks/sprint-alpha-vertical.md`
 - Decision integration: `proposals/alpha-decision-integration-plan.md`
 - Completion proof map: `tasks/sprint-alpha-completion-evidence-map.md`
-

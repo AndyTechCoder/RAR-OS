@@ -168,4 +168,3 @@ all eight items to present, exact, same-run evidence; every selected observation
 in the reviewed active protocol passes in order; all required reviews/checks are
 green; the PR is conflict-free; and the exact merge is verified on GitHub.
 Anything less remains incomplete, regardless of the final guest marker.
-

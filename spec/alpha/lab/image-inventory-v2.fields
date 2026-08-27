@@ -27,4 +27,3 @@ role_presence|launch|qemu,firmware,qmp-client
 role_absence|launch|source,compiler,linker,reference,reference-harness
 validation=complete-file-inventory,no-symlinks,no-hardlink-aliases,no-unlisted-executable,no-setuid,no-setgid,no-device-node
 reproducibility=two-independent-byte-identical-oci-exports
-

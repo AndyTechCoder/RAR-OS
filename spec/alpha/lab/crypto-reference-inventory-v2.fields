@@ -26,4 +26,3 @@ ready_rule=all-source,binary,harness,schema,image-identities-pinned
 independence_rule=different-upstreams,different-licenses,no-shared-target-code
 boundary_rule=no-source,no-target-image,no-launch-authority,no-network,no-credentials
 target_rule=never-linked,never-shipped,never-runtime-loaded
-
