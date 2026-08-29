@@ -35,6 +35,7 @@ Status: Gate 0 approved on 2026-07-16
 - [GitHub Actions account-unblock runbook](runbooks/github-actions-account-unblock.md)
 - [Sprint Alpha 0.1](sprint-alpha.md)
 - [Sprint Alpha Dashboard](sprint-alpha-dashboard.md)
+- [Security Remediation Status](security-remediation-status.md)
 - [Durable Sprint Status](../SPRINT_STATUS.md)
 - [Project Backlog](../BACKLOG.md)
 
