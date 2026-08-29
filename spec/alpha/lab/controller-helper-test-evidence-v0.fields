@@ -1,0 +1,11 @@
+schema=rar-alpha-controller-helper-test-evidence-v0
+status=experimental-host-only
+encoding=ascii-key-value,LF-only,no-NUL,no-blank-line,exactly-15-lines,maximum-2048-bytes
+fields=schema,producer,controller_sha,job_nonce,runner_image_sha256,source_tree_sha256,binary_sha256,golden_vector_sha256,case_results_sha256,log_sha256,test_count,failed_count,network,observed_exit_status,status
+canonical_rule=exact-order,one-terminal-LF,no-CR,no-leading-zero-decimal,lowercase-digests,no-extra-byte
+identity_rule=controller-sha-40-lowercase-hex,job-nonce+runner+source+binary+golden+case-results+log-digests-64-lowercase-nonzero-sha256-and-match-controller-selected-inputs
+result_rule=producer-trusted-outer-controller,test-count-13,failed-count-0,network-none,observed-exit-status-0,status-accepted
+execution_rule=approved-isolated-linux-cloud-job-only,reviewed-pinned-compiler-and-binary,no-Mac-execution
+coverage_rule=thirteen-canonical-unique-case-ids+pass-results,sha256-official+streaming-boundaries,golden-encode+decode,all-valid-phase-role-kind-combinations,malformed-wire-values,phase-plan-ordinals+launch-allowlist,transaction-success+hash-failure+cleanup-uncertainty+aggregate-precheck+sync-deadline+post-create-stat-rollback,bounded-linux-dirent-parse+malformed+multi-buffer-bounds,linux-attestation+flags+types+exclusive-create+identity-cleanup+root-mutation,attempt-structural-round-trip+prehash-skeletons
+failure_rule=missing,extra,duplicate,reordered,malformed,stale-input,wrong-controller,wrong-runner,stale-log,missing-or-duplicate-case,wrong-count,failed-test,networked,nonzero-exit,or-nonaccepted-status-rejects
+replacement_rule=experimental-host-evidence,not-target-format

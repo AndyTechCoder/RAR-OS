@@ -1,0 +1,3 @@
+schema=rar-alpha-controller-handoff-attempt-cases-v0
+id|contract|expected
+next-phase-after-blocked|progression|accept

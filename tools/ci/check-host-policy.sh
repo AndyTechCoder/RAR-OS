@@ -9,6 +9,7 @@ fail() {
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 requested_config=${1:-"$root/.codex/config.toml"}
 requested_rules=${2:-"$root/.codex/rules/host-safety.rules"}
+requested_permissions=${3:-"$root/.codex/rar-os-ssd-user-fragment.toml"}
 
 resolve_repository_file() {
     path=$1
@@ -43,28 +44,37 @@ sha256_file() {
 
 config=$(resolve_repository_file "$requested_config")
 rules=$(resolve_repository_file "$requested_rules")
+permissions=$(resolve_repository_file "$requested_permissions")
 
 if [ "$config" = "$root/.codex/config.toml" ]; then
-    expected_config_sha256='b85c24b2ccfbf4c0574d94eb93b9f6d9ad4355c2ac61823e53de494f42953627'
+    expected_config_sha256='c1574e149ba223b7508945ff4e8bd8f4b66c23baaa649e47242bdf64b725c53c'
     [ "$(sha256_file "$config")" = "$expected_config_sha256" ] || fail "canonical Codex configuration integrity mismatch"
 fi
 
 if [ "$rules" = "$root/.codex/rules/host-safety.rules" ]; then
-    expected_rules_sha256='37e2d927a2708643c2d0badbf3fbcc1dde56a1f4faf89f818d1000257094ebf5'
+    expected_rules_sha256='5af4986d62154e0a3b39b5c993d841c40e65463f13a74bde3aea58c9a94d9800'
     [ "$(sha256_file "$rules")" = "$expected_rules_sha256" ] || fail "canonical host safety rules integrity mismatch"
 fi
 
-if grep -Fq "'''" "$config"; then
-    fail "multiline literal strings are not permitted in the security configuration"
+if [ "$permissions" = "$root/.codex/rar-os-ssd-user-fragment.toml" ]; then
+    expected_permissions_sha256='aecb8a4a76ffacccfca2abcb06f03856a3cba2d35a63a57bb3d7c62620612ed5'
+    [ "$(sha256_file "$permissions")" = "$expected_permissions_sha256" ] || fail "canonical Codex permission-profile fragment integrity mismatch"
 fi
 
-if grep -Eq '^[[:space:]]*\["' "$config"; then
-    fail "quoted table headers are not permitted in the security configuration"
-fi
+for policy_file in "$config" "$permissions"; do
+    if grep -Fq "'''" "$policy_file"; then
+        fail "multiline literal strings are not permitted in the security configuration"
+    fi
+
+    if grep -Eq '^[[:space:]]*\["' "$policy_file"; then
+        fail "quoted table headers are not permitted in the security configuration"
+    fi
+done
 
 toml_value() {
-    wanted_section=$1
-    wanted_key=$2
+    source_file=$1
+    wanted_section=$2
+    wanted_key=$3
 
     awk -v wanted_section="$wanted_section" -v wanted_key="$wanted_key" '
         function trim(value) {
@@ -111,35 +121,40 @@ toml_value() {
                 print trim(line)
             }
         }
-    ' "$config"
+    ' "$source_file"
 }
 
 assert_setting() {
-    section=$1
-    key=$2
-    expected=$3
-    values=$(toml_value "$section" "$key")
+    source_file=$1
+    section=$2
+    key=$3
+    expected=$4
+    values=$(toml_value "$source_file" "$section" "$key")
     count=$(printf '%s\n' "$values" | awk 'NF { count++ } END { print count + 0 }')
 
     if [ "$count" -ne 1 ]; then
-        fail "expected exactly one active [$section] $key assignment in $config"
+        fail "expected exactly one active [$section] $key assignment in $source_file"
     fi
 
     if [ "$values" != "$expected" ]; then
-        fail "unsafe [$section] $key value in $config: expected $expected"
+        fail "unsafe [$section] $key value in $source_file: expected $expected"
     fi
 }
 
-assert_setting "" "sandbox_mode" '"workspace-write"'
-assert_setting "" "approval_policy" '"on-request"'
-assert_setting "" "approvals_reviewer" '"auto_review"'
-assert_setting "" "allow_login_shell" "false"
-assert_setting "sandbox_workspace_write" "writable_roots" "[]"
-assert_setting "sandbox_workspace_write" "network_access" "false"
-assert_setting "sandbox_workspace_write" "exclude_tmpdir_env_var" "true"
-assert_setting "sandbox_workspace_write" "exclude_slash_tmp" "true"
-assert_setting "agents" "max_threads" "2"
-assert_setting "agents" "max_depth" "1"
+assert_setting "$config" "" "default_permissions" '"rar-os-ssd"'
+assert_setting "$config" "" "approval_policy" '"on-request"'
+assert_setting "$config" "" "approvals_reviewer" '"auto_review"'
+assert_setting "$config" "" "allow_login_shell" "false"
+assert_setting "$config" "features" "goals" "false"
+assert_setting "$config" "agents" "max_threads" "2"
+assert_setting "$config" "agents" "max_depth" "1"
+assert_setting "$permissions" "permissions.rar-os-ssd.filesystem" '":minimal"' '"read"'
+assert_setting "$permissions" "permissions.rar-os-ssd.filesystem" '"/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha"' '"write"'
+assert_setting "$permissions" "permissions.rar-os-ssd.network" "enabled" "false"
+
+if grep -Eq '^[[:space:]]*(sandbox_mode[[:space:]]*=|\[sandbox_workspace_write\])' "$config" "$permissions"; then
+    fail "legacy sandbox settings would override the named permission profile"
+fi
 
 auto_review_policy=$(awk '
     BEGIN {
@@ -182,11 +197,16 @@ auto_review_policy=$(awk '
 ' "$config") || fail "auto-review policy must be one closed triple-double-quoted value"
 
 required_policy_phrases='Approve when all side effects are confined to this repository
+editing or creating repository files without deleting existing content
 https://github.com/AndyTechCoder/RAR-OS
 Deny every request that could affect anything outside the repository
 direct QEMU or other target/emulator execution
+direct compiler, linker, object-copy, boot-image, firmware-image, or target
 network access to any destination other than the canonical GitHub repository
 changing .codex/config.toml
+Do not approve force-push, force-with-lease
+This denial applies regardless of executable path or indirection
+is not a filesystem-level no-unlink capability
 If command parsing, destination, path ownership, or side effects are uncertain
 deny the request. Do not convert a denial into a broader alternative.'
 
@@ -196,7 +216,7 @@ done
 
 if ! awk '
     /^[[:space:]]*($|#)/ { next }
-    $0 !~ /^prefix_rule\(pattern = \["[^"]+"\], decision = "forbidden", justification = "[^"]+"\)$/ {
+    $0 !~ /^prefix_rule\(pattern = \["[^"]+"(, "[^"]+")*\], decision = "forbidden", justification = "[^"]+"\)$/ {
         print "invalid or non-forbidden host safety rule at line " NR ": " $0 > "/dev/stderr"
         invalid = 1
     }
@@ -226,6 +246,34 @@ kextunload
 shutdown
 reboot
 pmset
+chmod
+chown
+chflags
+rm
+/bin/rm
+/usr/bin/rm
+rmdir
+/bin/rmdir
+/usr/bin/rmdir
+unlink
+/bin/unlink
+/usr/bin/unlink
+find
+/usr/bin/find
+command
+env
+cargo
+rustc
+clang
+cc
+gcc
+ld
+lld
+ld.lld
+rust-lld
+objcopy
+llvm-objcopy
+cargo-bootimage
 scutil
 dscl
 qemu-system-x86_64
@@ -253,6 +301,14 @@ printf '%s\n' "$required_forbidden_commands" | while IFS= read -r command; do
     ' "$rules"; then
         fail "missing unique forbidden prefix rule for $command"
     fi
+done
+
+for command_pair in 'git rm' 'git clean'; do
+    first=${command_pair%% *}
+    second=${command_pair#* }
+    prefix="prefix_rule(pattern = [\"$first\", \"$second\"], decision = \"forbidden\","
+    [ "$(grep -Fc -- "$prefix" "$rules")" -eq 1 ] ||
+        fail "missing unique forbidden prefix rule for $command_pair"
 done
 
 echo "host policy configuration passed"

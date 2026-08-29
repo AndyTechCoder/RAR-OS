@@ -206,8 +206,25 @@ Gate 0 was approved on 2026-07-16. Every P0 item in this gate is complete as an 
 
 ## Immediate next items
 
-1. Publish the approved Gate 0 handoff package to the canonical repository.
-2. Execute Prompt 2 for R0-000 and R0-001 without running target artifacts.
-3. Perform the independent bootstrap correctness and security review.
-4. Remediate accepted findings before R0-002 contract work.
-5. Keep the first guest boot locked until the separate Prompt 7 owner authorization.
+1. Publish and inspect the reviewed reference-evidence portability correction.
+   Run `33267767640` proved every preceding mutation suite, including QMP,
+   passes and exposed only an undeclared `/usr/bin/xxd` test dependency.
+2. Make PR #7's required workflow pass; complete review,
+   merge the exact rebaseline head, verify the merge on GitHub, and require the
+   distinct `main` workflow to pass before calling the replacement durable.
+3. Only after that durability proof, close draft PR #5 as superseded while
+   preserving its history and evidence. Never merge PR #5 into the Alpha line.
+4. Record the owner's ADR 0023, ADR 0024, and ADR 0026 choices; complete and
+   re-review the resulting boot/platform contracts and cloud-only
+   controller/helper evidence before Milestone A.
+5. Make the v2 Lab profile/controller ready only with real reviewed identities,
+   then pass the SSD-profile, capacity, local, remote, PR, and immutable-
+   checkpoint gates.
+6. Start Milestone A only in the packet-required fresh Medium writer task and
+   execute target work only in the approved cloud Development Lab.
+7. Record ADR 0025 and complete the reviewed protocol/controller v2 cutover
+   before Milestone B.
+8. Record ADR 0022 and its reviewed peripheral-grant contract before Milestone E.
+9. Preserve strict local Mac/SSD non-execution, non-target-build, and current
+   no-deletion rules while continuing Milestones B–G through their durable
+   checkpoints.

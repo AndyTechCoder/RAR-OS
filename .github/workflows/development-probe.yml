@@ -1,0 +1,115 @@
+name: Development Probe
+
+on:
+  repository_dispatch:
+    types:
+      - development-probe
+
+permissions:
+  contents: read
+
+concurrency:
+  group: development-probe
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    name: development-probe
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      RAR_PROBE: ${{ github.event.client_payload.probe }}
+      RAR_PROBE_SOURCE_SHA: ${{ github.event.client_payload.source_sha }}
+      RAR_TRUSTED_CONTROLLER_SHA: ${{ github.sha }}
+    steps:
+      - name: Validate dispatch and attest runner
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        run: |
+          [[ "$RAR_PROBE" =~ ^milestone-[a-g]$ ]]
+          [[ "$RAR_PROBE_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$RAR_TRUSTED_CONTROLLER_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${ImageOS-}" == ubuntu24 ]]
+          [[ "${RUNNER_OS-}" == Linux ]]
+          [[ "${RUNNER_ARCH-}" == X64 ]]
+
+      - name: Check out trusted default-branch controller
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          path: controller
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Check out untrusted source as read-only build input
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.client_payload.source_sha }}
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Prepare bounded evidence
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          RAR_PROBE_EVIDENCE_DIR: ${{ runner.temp }}/rar-development-probe
+        run: |
+          install -d -m 700 "$RAR_PROBE_EVIDENCE_DIR"
+          {
+            printf 'controller_sha=%s\n' "$RAR_TRUSTED_CONTROLLER_SHA"
+            printf 'source_sha=%s\n' "$RAR_PROBE_SOURCE_SHA"
+            printf 'runner_image_os=%s\n' "$ImageOS"
+            printf 'runner_image_version=%s\n' "$ImageVersion"
+            printf 'runner_os=%s\n' "$RUNNER_OS"
+            printf 'runner_arch=%s\n' "$RUNNER_ARCH"
+            printf 'probe=%s\n' "$RAR_PROBE"
+          } > "$RAR_PROBE_EVIDENCE_DIR/identity.v1"
+
+      - name: Run probe with complete log and real status
+        shell: /usr/bin/bash --noprofile --norc {0}
+        env:
+          RAR_PROBE_CONTROLLER_ROOT: ${{ github.workspace }}/controller
+          RAR_PROBE_SOURCE_ROOT: ${{ github.workspace }}/source
+          RAR_PROBE_EVIDENCE_DIR: ${{ runner.temp }}/rar-development-probe
+        run: |
+          set -o pipefail
+          set +e
+          controller/tools/ci/run-development-probe.sh "$RAR_PROBE" \
+            2>&1 | tee "$RAR_PROBE_EVIDENCE_DIR/complete.log"
+          pipe_status=("${PIPESTATUS[@]}")
+          probe_status=${pipe_status[0]}
+          log_status=${pipe_status[1]}
+          selection=$(controller/tools/ci/development-probe-status.sh "$probe_status" "$log_status")
+          status=${selection%%|*}
+          phase=${selection#*|}
+          set -e
+          printf '{"schema":"rar-development-probe-result-v1","probe":"%s","controller_sha":"%s","source_sha":"%s","probe_status":%d,"log_status":%d,"status":%d,"phase":"%s"}\n' \
+            "$RAR_PROBE" "$RAR_TRUSTED_CONTROLLER_SHA" "$RAR_PROBE_SOURCE_SHA" \
+            "$probe_status" "$log_status" "$status" "$phase" \
+            > "$RAR_PROBE_EVIDENCE_DIR/result.json"
+          exit "$status"
+
+      - name: Preserve pre-probe failure truthfully
+        if: always()
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          RAR_PROBE_EVIDENCE_DIR: ${{ runner.temp }}/rar-development-probe
+        run: |
+          install -d -m 700 "$RAR_PROBE_EVIDENCE_DIR"
+          if [[ ! -f "$RAR_PROBE_EVIDENCE_DIR/complete.log" ]]; then
+            printf '%s\n' 'probe did not start; inspect workflow steps' \
+              > "$RAR_PROBE_EVIDENCE_DIR/complete.log"
+          fi
+          if [[ ! -f "$RAR_PROBE_EVIDENCE_DIR/result.json" ]]; then
+            printf '%s\n' \
+              '{"schema":"rar-development-probe-result-v1","probe":"unverified","controller_sha":"unverified","source_sha":"unverified","status":125,"phase":"pre-probe-failure"}' \
+              > "$RAR_PROBE_EVIDENCE_DIR/result.json"
+          fi
+
+      - name: Retain complete probe evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: development-probe-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/rar-development-probe
+          if-no-files-found: error
+          retention-days: 14

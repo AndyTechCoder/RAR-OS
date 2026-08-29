@@ -1,0 +1,2 @@
+FROM rust:latest
+USER 65532:65532

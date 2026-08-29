@@ -1,0 +1,12 @@
+schema=rar-alpha-controller-helper-build-receipt-v0
+status=experimental-host-only
+encoding=ascii-key-value,LF-only,no-NUL,no-blank-line,exactly-19-lines,maximum-4096-bytes
+fields=schema,producer,controller_sha,build_ordinal,job_nonce,root_nonce,runner_image_sha256,source_tree_sha256,build_plan_sha256,compiler_closure_manifest_sha256,compiler_sha256,output_sha256,output_bytes,log_sha256,fresh_root,preexisting_output,network,observed_exit_status,status
+producer_rule=trusted-outer-controller-after-builder-termination
+identity_rule=controller-sha-40-lowercase-hex,job+root+runner+source+plan+compiler-closure+compiler+output+log-64-lowercase-nonzero-sha256
+freshness_rule=build-ordinal-1-or-2,distinct-job+root-across-pair,fresh-root-yes,preexisting-output-no
+execution_rule=network-none,observed-exit-status-0,status-accepted
+output_rule=context-bound-single-link-controller-owned-copy,bytes-1..16777216,not-aliased-with-peer-or-final
+trust_rule=receipt+log+output-are-controller-owned-immutable-copies-under-reviewed-root,no-untrusted-path-validation
+failure_rule=missing,extra,duplicate,reordered,malformed,alias,hardlink,wrong-context,stale-log,nonfresh,preexisting,networked,nonzero-exit,or-nonaccepted-status-rejects
+replacement_rule=experimental-host-evidence,not-target-format

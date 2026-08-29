@@ -1,0 +1,13 @@
+# Merge this named profile once into the owner's user-level Codex config. Do not
+# replace the file or duplicate an existing profile. The repository-local config
+# selects it only for RAR OS tasks.
+
+[permissions.rar-os-ssd]
+description = "RAR OS work confined to the dedicated SSD workspace."
+
+[permissions.rar-os-ssd.filesystem]
+":minimal" = "read"
+"/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha" = "write"
+
+[permissions.rar-os-ssd.network]
+enabled = false

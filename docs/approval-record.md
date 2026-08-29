@@ -48,3 +48,68 @@ host-safety policy were configured.
 The approval applies to the foundation, architecture, safety, process, Release 0 task packet, and initial ADR documents listed in `docs/README.md` at repository publication. Their Gate 0 status approves the documented direction and Release 0 boundaries, not unreviewed later-release interface details.
 
 ADRs 0009 and 0010 formalize the already-present approved commitments to four cumulative tiers with separate profiles and to staged self-hosting in Release 6. They do not add a tier, change a tier meaning, move a release commitment, or authorize target execution.
+
+## Sprint Alpha 0.1 rebaseline approval
+
+Status: Approved
+
+The owner explicitly approved the Sprint Alpha 0.1 roadmap overlay and the
+cloud-only Development Lab trust-boundary change on 2026-08-20. ADR 0017 records
+the decision. The approval permits automated target builds and isolated guest
+execution only in the bounded repository-approved cloud Development Lab. It
+does not permit local target compilation, linking, image creation, firmware
+loading, QEMU, emulator, VM, or guest execution on the owner's Mac.
+
+The approval preserves the long-term Releases 0–7 plan, target isolation,
+signing, rollback, recovery, and data-separation commitments. Production
+one-shot authorization, physical hardware, production cloud authority, guest
+networking, host integration, passthrough, raw devices, elevated execution,
+and unrelated external access remain unauthorized.
+
+Sprint approval: approved
+Sprint approver: Andy / RAR project owner
+Rebaseline date: 2026-08-20
+
+## End-of-week demonstrator approval
+
+Status: Approved
+
+On 2026-08-25, the owner directed the sprint to deliver a working bootable GUI
+version by the end of the week while retaining the previously approved RAR OS
+requirements and long-term expansion plan. ADR 0018 narrows Alpha completeness
+to an authentic, minimal vertical demonstration without converting experimental
+later-release prototypes into production-complete claims.
+
+The owner also clarified that GitHub is the durable source of truth; SSD
+repository/worktree data is temporary working state. The exact RAR OS subtree
+may be used, but unrelated, irreplaceable SSD data must not be read or changed.
+
+Sprint adjustment: approved
+Approver: Andy / RAR project owner
+Adjustment date: 2026-08-25
+
+On 2026-08-27, the owner clarified that internal-Mac free space is not an Alpha
+workspace precondition because task worktrees and outputs live in the dedicated
+SSD subtree. The SSD reserve, workspace/output ceilings, exact-root confinement,
+no-deletion directive, and local target non-build/non-execution rules remain
+unchanged.
+
+## Sprint Alpha architecture decisions
+
+Status: Approved
+
+On 2026-08-26, after receiving plain-language explanations, the owner approved
+Alternative C for ADR 0020 and Alternative C for ADR 0021. ADR 0020 isolates
+host-only cryptographic references from untrusted target builds in a separate
+cloud role; production cloud-service wiring remains later work. ADR 0021 uses
+the authentic Alpha boot chain Root → Recovery → Nucleus with an explicitly
+replaceable FAT/ELF bootstrap boundary.
+
+ADR 0020 approval: approved
+ADR 0020 approver: Andy / RAR project owner
+ADR 0020 date: 2026-08-26
+ADR 0020 decision: Alternative C
+ADR 0021 approval: approved
+ADR 0021 approver: Andy / RAR project owner
+ADR 0021 date: 2026-08-26
+ADR 0021 decision: Alternative C
