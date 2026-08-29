@@ -603,11 +603,26 @@ local_lock_sha256=$(sha256_of tools/toolchain/host-tools.lock) || fail "cannot h
 ci_lock_sha256=$(sha256_of tools/toolchain/host-tools.x86_64-unknown-linux-gnu-ci.lock) || fail "cannot hash CI tool lock"
 readonly_gate_sha256=$(sha256_of tools/ci/check-local-readonly.sh) || fail "cannot hash local read-only gate"
 host_policy_checker_sha256=$(sha256_of tools/ci/check-host-policy.sh) || fail "cannot hash host-policy checker"
+local_preflight_sha256=$(sha256_of tools/ci/check-local-sprint-preflight.sh) || fail "cannot hash local sprint preflight"
+local_preflight_policy_test_sha256=$(sha256_of tools/ci/test-local-sprint-preflight-policy.sh) || fail "cannot hash local sprint preflight policy test"
 [ "$local_lock_sha256" = f7e9baf24aaff9eaa2a2032cf0a9919568cca817d6b5d0c7e6891bce05ec979a ] || fail "local tool lock digest changed without bootstrap authority update"
 [ "$ci_lock_sha256" = 6752b1b21ac8fa93a671ff9444173e4c3bbc4cdcbe4cf5cd39820371dc79aa24 ] || fail "CI tool lock digest changed without bootstrap authority update"
 [ "$readonly_gate_sha256" = 19286697fe69a4009e3961fb6a1efec181963e6d2f5908c6c7f62cea739c6fd6 ] || fail "local read-only gate changed without safety review"
 [ "$host_policy_checker_sha256" = c0fad5ea46ed239613bf38bfa7139024d466d0c673cc12513a31e94d833fa1a5 ] || fail "local read-only gate dependency changed without safety review"
+[ "$local_preflight_sha256" = e1a8d0b80b253560baf392945c5a8fa3737b1461cf8126ea411872858c34772a ] || fail "local sprint preflight changed without safety review"
+[ "$local_preflight_policy_test_sha256" = ef6111c72472b76c5c9703bc5d87ad0191dc48d55cb240f9c02bef215968145f ] || fail "local sprint preflight policy test changed without safety review"
 /bin/sh -n tools/ci/check-local-readonly.sh
+grep -qx 'minimum_ssd_free_kib=10485760' tools/ci/check-local-sprint-preflight.sh || fail "local sprint preflight lost the 10-GiB SSD reserve"
+grep -Fqx 'ssd_free_kib=$(/bin/df -Pk "$safe_root" | /usr/bin/awk '\''END { print $4 }'\'')' tools/ci/check-local-sprint-preflight.sh || fail "local sprint preflight SSD capacity probe changed"
+grep -Fqx 'workspace_kib=$(/usr/bin/du -sk "$safe_root" | /usr/bin/awk '\''NR == 1 { print $1 }'\'')' tools/ci/check-local-sprint-preflight.sh || fail "local sprint preflight workspace capacity probe changed"
+[ "$(grep -c 'df' tools/ci/check-local-sprint-preflight.sh)" -eq 1 ] || fail "local sprint preflight has an unreviewed capacity probe"
+[ "$(grep -c '/usr/bin/du' tools/ci/check-local-sprint-preflight.sh)" -eq 1 ] || fail "local sprint preflight has an unreviewed workspace-size probe"
+grep -Fq 'Internal-Mac capacity is' docs/tasks/sprint-alpha-vertical.md || fail "Sprint Alpha packet omits the SSD-only capacity clarification"
+grep -Fq 'internal-Mac free space is not an Alpha' docs/approval-record.md || fail "owner SSD-only capacity clarification is not recorded"
+grep -Fq 'usable SSD reserve/headroom' AGENTS.md || fail "agent preimplementation gate omits SSD headroom"
+if grep -Fq 'internal-disk headroom' AGENTS.md; then
+    fail "agent preimplementation gate retains stale internal-Mac headroom"
+fi
 grep -qx "macos_lock_sha256=$local_lock_sha256" tools/toolchain/host-tools.manifest || fail "host tool manifest local lock digest is stale"
 grep -qx "ci_lock_sha256=$ci_lock_sha256" tools/toolchain/host-tools.manifest || fail "host tool manifest CI lock digest is stale"
 if grep -q '^  runner_evidence:$' .github/workflows/specifications.yml ||

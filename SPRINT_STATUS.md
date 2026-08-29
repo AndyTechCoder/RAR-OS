@@ -175,8 +175,9 @@
   from R0-002. It remains owner-decision-required, so it does not block the
   Milestone A boot foundation but must be accepted before Milestone E target
   graphics/input code
-- External blockers: the 2026-08-26 local preflight still reports the existing
-  internal-space safeguard; GitHub PR #7 is open/draft and Specifications run
+- External blockers: the stale internal-Mac capacity safeguard is removed
+  locally under the owner's 2026-08-27 SSD-workspace clarification; the SSD
+  reserve and exact-root budget remain unchanged. GitHub PR #7 is open/draft and Specifications run
   `33092173379`, job `98587610341`, for exact remote head `13d24bf3ca16bf5eae88279b461dc5b843b90195`
   has no runner and no steps. GitHub's annotation says: `The job was not started
   because recent account payments have failed or your spending limit needs to

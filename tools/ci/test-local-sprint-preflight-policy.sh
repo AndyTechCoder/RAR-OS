@@ -33,7 +33,6 @@ fixture=$work/check.sh
 /usr/bin/sed \
     -e "s|^safe_root=.*|safe_root='$safe'|" \
     -e "s|^canonical_https=.*|canonical_https='$remote'|" \
-    -e "s|^minimum_internal_free_kib=.*|minimum_internal_free_kib=0|" \
     -e "s|^minimum_ssd_free_kib=.*|minimum_ssd_free_kib=0|" \
     -e "s|^maximum_workspace_kib=.*|maximum_workspace_kib=1048576|" \
     "$root/tools/ci/check-local-sprint-preflight.sh" > "$fixture"

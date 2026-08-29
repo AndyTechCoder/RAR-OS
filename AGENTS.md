@@ -91,7 +91,7 @@ read-only and must not approve their own implementation.
 - Batch related fixes. Retry an ordinary failure at most twice after diagnosis.
   On the third occurrence, record one concise blocker and stop without polling.
 - Before implementation, verify the SSD mount/path, clean Git state, canonical
-  remote, pushed checkpoint, usable internal-disk headroom, and a GitHub Actions
+  remote, pushed checkpoint, usable SSD reserve/headroom, and a GitHub Actions
   run that actually starts. A check with zero steps is infrastructure-blocked.
 - The repository-selected `rar-os-ssd` permission profile must resolve from the
   separately owner-installed, reviewed user-level definition. A missing profile

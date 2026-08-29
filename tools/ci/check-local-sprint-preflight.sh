@@ -10,7 +10,6 @@ identity_file=$safe_root/.rar-os-workspace-identity
 identity_sha256=f71483fc7335d5c0949541bad24143b437c379250c70e47dbe7a0b766decd496
 canonical_https=https://github.com/AndyTechCoder/RAR-OS.git
 canonical_ssh=git@github.com:AndyTechCoder/RAR-OS.git
-minimum_internal_free_kib=10485760
 minimum_ssd_free_kib=10485760
 maximum_workspace_kib=8388608
 git_bin=/usr/bin/git
@@ -63,11 +62,6 @@ $git_bin worktree list --porcelain | /usr/bin/sed -n 's/^worktree //p' | while I
         *) fail 'a registered worktree escapes the dedicated SSD workspace' ;;
     esac
 done
-
-internal_free_kib=$(/bin/df -Pk / | /usr/bin/awk 'END { print $4 }')
-case "$internal_free_kib" in '' | *[!0-9]*) fail 'cannot determine internal free space' ;; esac
-[ "$internal_free_kib" -ge "$minimum_internal_free_kib" ] ||
-    fail 'internal disk has less than 10 GiB free; do not start unattended work'
 
 ssd_free_kib=$(/bin/df -Pk "$safe_root" | /usr/bin/awk 'END { print $4 }')
 case "$ssd_free_kib" in '' | *[!0-9]*) fail 'cannot determine SSD free space' ;; esac

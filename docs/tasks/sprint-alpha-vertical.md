@@ -36,7 +36,9 @@ Implementation does not start until all of these pass:
    that an in-subtree write succeeds and outside-subtree read/write attempts are
    denied; repository scripts cannot self-attest the active task's profile.
 2. `tools/ci/check-local-sprint-preflight.sh` passes from a clean, fully pushed
-   SSD worktree with at least 10 GiB free on the Mac's internal disk.
+   SSD worktree with at least 10 GiB free on the SSD. Internal-Mac capacity is
+   not an Alpha workspace gate because all task worktrees and outputs remain in
+   the exact dedicated SSD subtree.
 3. `tools/ci/check-remote-sprint-preflight.sh` proves the exact GitHub head,
    a successful required workflow with real steps, and an immutable checkpoint.
 4. ADR 0020 is accepted and new reviewed Development Lab, image, and crypto
@@ -194,8 +196,8 @@ remain open.
 
 Stop for a constitutional, trust-boundary, persistent-data, tier, dependency,
 public-format, native-app-model, or release-commitment change and propose an ADR.
-Also stop for missing lab pins, a zero-step Actions run, internal disk below the
-minimum, inconsistent workspace guard marker, escaped worktree, force-push requirement,
+Also stop for missing lab pins, a zero-step Actions run, SSD free space below
+the minimum, inconsistent workspace guard marker, escaped worktree, force-push requirement,
 unbounded output/runtime, unexplained reset, nondeterminism, or evidence loss.
 
 The calendar target is aggressive because no target OS implementation exists.

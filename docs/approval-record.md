@@ -88,6 +88,12 @@ Sprint adjustment: approved
 Approver: Andy / RAR project owner
 Adjustment date: 2026-08-25
 
+On 2026-08-27, the owner clarified that internal-Mac free space is not an Alpha
+workspace precondition because task worktrees and outputs live in the dedicated
+SSD subtree. The SSD reserve, workspace/output ceilings, exact-root confinement,
+no-deletion directive, and local target non-build/non-execution rules remain
+unchanged.
+
 ## Sprint Alpha architecture decisions
 
 Status: Approved
