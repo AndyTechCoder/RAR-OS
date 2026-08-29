@@ -374,14 +374,6 @@ fn split_parent(path: &str) -> (&str, &str) {
     path.rsplit_once('/').unwrap_or(("", path))
 }
 
-fn is_descendant(path: &str, parent: &str) -> bool {
-    if parent.is_empty() {
-        return !path.is_empty();
-    }
-    path.strip_prefix(parent)
-        .is_some_and(|suffix| suffix.starts_with('/'))
-}
-
 fn remove_descendants(nodes: &mut BTreeMap<String, Node>, parent: &str) {
     if parent.is_empty() {
         nodes.clear();
