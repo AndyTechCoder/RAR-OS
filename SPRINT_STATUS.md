@@ -186,9 +186,12 @@
   GitHub's annotation says: `The job was not started
   because recent account payments have failed or your spending limit needs to
   be increased.` The private repository cannot obtain the required real-step
-  gate until that account condition is fixed. The reviewed `rar-os-ssd` user
-  profile still needs one-time owner installation/evidence in a fresh SSD-root
-  task
+  gate until that account condition is fixed. A pattern-limited read on
+  2026-08-28 confirmed that the user-level Codex config exists but contains no
+  `rar-os-ssd`, `permission_profile`, or permissions-profile declaration; no
+  external file was changed. The reviewed `rar-os-ssd` profile therefore still
+  needs one-time owner-approved installation and confinement evidence in a
+  fresh SSD-root task
 - Next durable action: record exact owner choices for ADRs 0023, 0024, and 0026,
   make the boot contract and v2 controller/helper evidence genuinely ready, and
   pass the external Lab/PR/checkpoint gates before Milestone A. ADR 0025 remains
