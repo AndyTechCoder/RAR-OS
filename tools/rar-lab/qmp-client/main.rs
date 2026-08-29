@@ -103,6 +103,7 @@ fn milliseconds(text: &str, minimum: u64, maximum: u64) -> Result<Duration, Stri
 
 struct Qmp {
     stream: UnixStream,
+    deadline: Instant,
 }
 
 impl Qmp {
@@ -125,9 +126,7 @@ impl Qmp {
                 Err(_) => return Err("QMP connection timed out".into()),
             }
         };
-        stream.set_read_timeout(Some(IO_TIMEOUT)).map_err(|_| "cannot set QMP read timeout")?;
-        stream.set_write_timeout(Some(IO_TIMEOUT)).map_err(|_| "cannot set QMP write timeout")?;
-        let mut qmp = Qmp { stream };
+        let mut qmp = Qmp { stream, deadline };
         let greeting = qmp.read_message()?;
         if greeting.member("id").is_some() || greeting.member("return").is_some() || greeting.member("error").is_some() || greeting.member("event").is_some() {
             return Err("QMP greeting contains response fields".into());
@@ -154,7 +153,8 @@ impl Qmp {
             None => format!("{{\"execute\":\"{execute}\",\"id\":\"{id}\"}}\n"),
         };
         if request.len() > MAX_MESSAGE { return Err("QMP request exceeds bound".into()); }
-        self.stream.write_all(request.as_bytes()).map_err(|_| "QMP request write failed")?;
+        self.write_all(request.as_bytes())?;
+        self.stream.set_write_timeout(Some(self.remaining()?)).map_err(|_| "cannot set QMP write timeout")?;
         self.stream.flush().map_err(|_| "QMP request flush failed")?;
         for _ in 0..64 {
             let response = self.read_message()?;
@@ -178,6 +178,7 @@ impl Qmp {
         let mut byte = [0u8; 1];
         loop {
             if bytes.len() == MAX_MESSAGE { return Err("QMP message exceeds bound".into()); }
+            self.stream.set_read_timeout(Some(self.remaining()?)).map_err(|_| "cannot set QMP read timeout")?;
             let count = self.stream.read(&mut byte).map_err(|_| "QMP response read failed")?;
             if count == 0 { return Err("QMP connection closed before response".into()); }
             if byte[0] == b'\n' { break; }
@@ -185,6 +186,26 @@ impl Qmp {
         }
         if bytes.last() == Some(&b'\r') { bytes.pop(); }
         json::parse(&bytes).map_err(str::to_string)
+    }
+
+    fn remaining(&self) -> Result<Duration, String> {
+        self.deadline.checked_duration_since(Instant::now())
+            .filter(|remaining| !remaining.is_zero())
+            .ok_or_else(|| "QMP operation timed out".into())
+    }
+
+    fn write_all(&mut self, bytes: &[u8]) -> Result<(), String> {
+        let mut offset = 0usize;
+        while offset < bytes.len() {
+            self.stream.set_write_timeout(Some(self.remaining()?)).map_err(|_| "cannot set QMP write timeout")?;
+            match self.stream.write(&bytes[offset..]) {
+                Ok(0) => return Err("QMP connection closed during request".into()),
+                Ok(count) => offset += count,
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(_) => return Err("QMP request write failed".into()),
+            }
+        }
+        Ok(())
     }
 }
 
@@ -530,6 +551,17 @@ mod tests {
             qmp.command("cont", None, "continue")
         });
         assert!(flood.is_err());
+    }
+
+    #[test]
+    fn qmp_slow_drip_cannot_extend_the_cumulative_deadline() {
+        let result = with_server(|mut stream| {
+            for byte in greeting().bytes() {
+                if stream.write_all(&[byte]).is_err() { return; }
+                thread::sleep(Duration::from_millis(20));
+            }
+        }, || Qmp::connect(SOCKET, Instant::now() + IO_TIMEOUT));
+        assert!(result.is_err());
     }
 
     #[test]
