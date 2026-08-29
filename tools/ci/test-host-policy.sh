@@ -12,6 +12,9 @@ work=$(mktemp -d "$scratch/host-policy-tests.XXXXXX")
 trap '/bin/rm -rf "$work"' EXIT HUP INT TERM
 
 "$check" "$config" "$rules" "$permissions" >/dev/null
+hostile_path="$work/path-must-remain-absent"
+[ ! -e "$hostile_path" ]
+PATH=$hostile_path "$check" "$config" "$rules" "$permissions" >/dev/null
 
 sed 's/^default_permissions = /# default_permissions = /' "$config" > "$work/commented-profile.toml"
 sed 's/^enabled = false$/enabled = true/' "$permissions" > "$work/network-enabled.toml"

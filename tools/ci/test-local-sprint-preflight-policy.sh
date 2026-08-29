@@ -39,6 +39,23 @@ fixture=$work/check.sh
     "$root/tools/ci/check-local-sprint-preflight.sh" > "$fixture"
 
 (cd "$repo" && /bin/sh "$fixture" >/dev/null)
+(cd "$repo" && GIT_INDEX_FILE="$work/path-must-remain-absent" \
+    /bin/sh "$fixture" >/dev/null)
+
+linked_repo=$safe/worktrees/linked
+/bin/mkdir -p "$safe/worktrees"
+/usr/bin/git -C "$repo" worktree add -b fixture-linked "$linked_repo" main >/dev/null
+/usr/bin/git -C "$linked_repo" branch --set-upstream-to=origin/main fixture-linked >/dev/null
+(cd "$linked_repo" && /bin/sh "$fixture" >/dev/null)
+
+escaped_repo=$safe/worktrees/external-metadata
+external_git_dir=$work/external-metadata.git
+/usr/bin/git clone --branch main --separate-git-dir "$external_git_dir" \
+    "$remote" "$escaped_repo" >/dev/null 2>&1
+if (cd "$escaped_repo" && /bin/sh "$fixture" >/dev/null 2>&1); then
+    printf '%s\n' 'unsafe external Git metadata fixture unexpectedly passed' >&2
+    exit 1
+fi
 
 wrong_system=$work/check-wrong-system.sh
 /usr/bin/sed 's|^uname_system=.*|uname_system=Linux|' "$fixture" > "$wrong_system"

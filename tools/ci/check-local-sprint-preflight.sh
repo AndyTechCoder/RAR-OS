@@ -15,6 +15,7 @@ maximum_workspace_kib=8388608
 git_bin=/usr/bin/git
 uname_bin=/usr/bin/uname
 uname_system=$("$uname_bin" -s)
+invocation_dir=$(pwd -P)
 
 fail() {
     printf 'sprint preflight blocked: %s\n' "$1" >&2
@@ -31,33 +32,66 @@ identity_output=$(/usr/bin/shasum -a 256 "$identity_file") ||
 [ "${identity_output%% *}" = "$identity_sha256" ] ||
     fail 'the SSD workspace guard marker does not match'
 
-repo_root=$($git_bin rev-parse --show-toplevel 2>/dev/null) || fail 'not inside a Git worktree'
+run_git() {
+    /usr/bin/env -i \
+        GIT_CONFIG_NOSYSTEM=1 \
+        GIT_OPTIONAL_LOCKS=0 \
+        GIT_TERMINAL_PROMPT=0 \
+        HOME=/nonexistent-rar-sprint-preflight-home \
+        LANG=C \
+        LC_ALL=C \
+        PATH=/usr/bin:/bin \
+        XDG_CONFIG_HOME=/nonexistent-rar-sprint-preflight-config \
+        "$git_bin" --no-pager \
+        -c core.fsmonitor=false \
+        -c core.untrackedCache=false \
+        -C "$invocation_dir" \
+        "$@"
+}
+
+repo_root=$(run_git rev-parse --show-toplevel 2>/dev/null) || fail 'not inside a Git worktree'
 repo_root=$(CDPATH= cd -- "$repo_root" && pwd -P)
 case "$repo_root" in
     "$safe_root/repository" | "$safe_root/worktrees/"*) ;;
     *) fail 'Git worktree resolves outside the dedicated SSD workspace' ;;
 esac
 
-remote=$($git_bin remote get-url origin 2>/dev/null) || fail 'origin is missing'
+git_dir=$(run_git rev-parse --absolute-git-dir 2>/dev/null) ||
+    fail 'cannot resolve the Git metadata directory'
+git_dir=$(CDPATH= cd -- "$git_dir" && pwd -P) ||
+    fail 'Git metadata directory is unavailable'
+case "$git_dir" in
+    "$safe_root/repository/.git" | "$safe_root/repository/.git/worktrees/"*) ;;
+    *) fail 'Git metadata directory is outside the canonical SSD repository' ;;
+esac
+
+git_common_dir=$(run_git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) ||
+    fail 'cannot resolve the common Git metadata directory'
+git_common_dir=$(CDPATH= cd -- "$git_common_dir" && pwd -P) ||
+    fail 'common Git metadata directory is unavailable'
+[ "$git_common_dir" = "$safe_root/repository/.git" ] ||
+    fail 'common Git metadata directory is not the canonical SSD repository'
+
+remote=$(run_git remote get-url origin 2>/dev/null) || fail 'origin is missing'
 case "$remote" in
     "$canonical_https" | "$canonical_ssh") ;;
     *) fail 'origin is not the canonical RAR OS repository' ;;
 esac
 
-$git_bin status --porcelain | /usr/bin/grep -q . && fail 'worktree is not clean'
+run_git status --porcelain | /usr/bin/grep -q . && fail 'worktree is not clean'
 
-branch=$($git_bin symbolic-ref --quiet --short HEAD 2>/dev/null) ||
+branch=$(run_git symbolic-ref --quiet --short HEAD 2>/dev/null) ||
     fail 'detached HEAD is not an implementation checkpoint'
-upstream=$($git_bin rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null) ||
+upstream=$(run_git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null) ||
     fail 'current branch has no pushed upstream'
 case "$upstream" in origin/*) ;; *) fail 'upstream is not on canonical origin' ;; esac
-divergence=$($git_bin rev-list --left-right --count '@{upstream}...HEAD' 2>/dev/null) ||
+divergence=$(run_git rev-list --left-right --count '@{upstream}...HEAD' 2>/dev/null) ||
     fail 'cannot compare the local and upstream checkpoints'
 set -- $divergence
 [ "$#" -eq 2 ] && [ "$1" -eq 0 ] && [ "$2" -eq 0 ] ||
     fail "local branch is not identical to its fetched upstream: $divergence"
 
-$git_bin worktree list --porcelain | /usr/bin/sed -n 's/^worktree //p' | while IFS= read -r path; do
+run_git worktree list --porcelain | /usr/bin/sed -n 's/^worktree //p' | while IFS= read -r path; do
     resolved=$(CDPATH= cd -- "$path" && pwd -P) || fail 'registered worktree is unavailable'
     case "$resolved" in
         "$safe_root/repository" | "$safe_root/worktrees/"*) ;;
@@ -76,4 +110,4 @@ case "$workspace_kib" in '' | *[!0-9]*) fail 'cannot determine SSD workspace siz
     fail 'RAR OS SSD workspace exceeds the 8 GiB unattended-work ceiling'
 
 printf 'sprint local preflight passed: branch=%s head=%s\n' \
-    "$branch" "$($git_bin rev-parse HEAD)"
+    "$branch" "$(run_git rev-parse HEAD)"
