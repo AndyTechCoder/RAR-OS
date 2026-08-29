@@ -47,7 +47,8 @@ for test_name in \
     prefix_removal_preserves_lexical_neighbors \
     cumulative_entry_and_path_bounds_fail_closed \
     implicit_parent_replaces_lower_file_before_child_creation \
-    opaque_marker_materializes_implicit_parent_over_lower_file; do
+    opaque_marker_materializes_implicit_parent_over_lower_file \
+    content_hashes_bind_effective_file_bytes; do
     /usr/bin/grep -Fq "fn $test_name()" "$tree/lib.rs" || exit 1
 done
 /usr/bin/grep -Fq '#![forbid(unsafe_code)]' "$tree/lib.rs" || exit 1
