@@ -61,6 +61,7 @@ runner_tests=$(/usr/bin/sed -n 's|^/bin/sh "$root/\(tools/ci/test-[a-z0-9.-]*\.s
 [ "$(/usr/bin/grep -Fc -- '--env RAR_POLICY_MUTATION_TESTS=1 \' "$workflow")" -eq 1 ] || exit 1
 [ "$(/usr/bin/grep -Fc -- '--env RAR_EXPECTED_SOURCE_REVISION \' "$workflow")" -eq 2 ] || exit 1
 [ "$(/usr/bin/grep -Fc -- '--tmpfs "/tmp:rw,nosuid,nodev,size=128m,uid=$host_uid,gid=$host_gid,mode=1777" \' "$workflow")" -eq 2 ] || exit 1
+[ "$(/usr/bin/grep -Fc -- '--tmpfs "/build:rw,exec,nosuid,nodev,size=32m,uid=$host_uid,gid=$host_gid,mode=700" \' "$workflow")" -eq 1 ] || exit 1
 /usr/bin/awk '
     /^  validate:$/ {
         if (in_validate) bad=1

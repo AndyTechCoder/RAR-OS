@@ -10,7 +10,7 @@ scratch=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
 work=$(mktemp -d "$scratch/release-0-reference-harness.XXXXXX")
 trap '/bin/rm -rf "$work"' EXIT HUP INT TERM
 rustc=/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc
-binary=$work/reference
+binary=/build/release-0-reference-harness
 
 "$rustc" --edition 2024 -D warnings -o "$binary" "$root/spec/fixtures/release-0/reference.rs"
 
