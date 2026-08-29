@@ -14,7 +14,10 @@ roots, and binds every effective regular file to its SHA-256 content digest.
 
 The implementation uses Rust `std` only, contains no `unsafe`, and does not
 spawn a process, access a filesystem, decompress data, build an image, or execute
-target code. A trusted future caller must supply exact blob bytes by digest.
+target code. The sole public resolver uses a bounded callback-based source
+interface that supplies exact blob bytes by digest and receives the descriptor's
+exact declared size as the ceiling before each access. A trusted future layout
+adapter must enforce that ceiling before allocation or I/O.
 Unit tests compile and run only in the pinned, network-disabled cloud validation
 container with read-only source and bounded tmpfs outputs.
 

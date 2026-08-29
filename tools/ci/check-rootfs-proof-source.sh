@@ -52,6 +52,8 @@ for test_name in \
     /usr/bin/grep -Fq "fn $test_name()" "$tree/lib.rs" || exit 1
 done
 /usr/bin/grep -Fq '#![forbid(unsafe_code)]' "$tree/lib.rs" || exit 1
+/usr/bin/grep -Fq 'pub fn resolve_uncompressed_image_from_source' "$tree/oci.rs" || exit 1
+! /usr/bin/grep -Fq 'pub fn resolve_uncompressed_image<' "$tree/oci.rs" || exit 1
 for test_name in \
     parses_utf8_unicode_escapes_and_unsigned_integers \
     rejects_duplicates_invalid_numbers_and_trailing_data; do
@@ -59,6 +61,7 @@ for test_name in \
 done
 for test_name in \
     resolves_digest_bound_layers_and_configuration_in_order \
+    blob_source_receives_explicit_read_ceilings \
     rejects_tampered_blobs_before_layer_parsing \
     rejects_compression_and_diff_id_mismatch_in_inactive_subset \
     resolves_exact_manifest_through_verified_nested_index \
