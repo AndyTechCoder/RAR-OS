@@ -206,9 +206,9 @@ Gate 0 was approved on 2026-07-16. Every P0 item in this gate is complete as an 
 
 ## Immediate next items
 
-1. Publish and inspect the reviewed QMP scratch-controller fixture correction.
-   Run `33267302085` proved every preceding mutation suite passes and exposed
-   only the attempt to write QMP hash output under read-only `/workspace`.
+1. Publish and inspect the reviewed reference-evidence portability correction.
+   Run `33267767640` proved every preceding mutation suite, including QMP,
+   passes and exposed only an undeclared `/usr/bin/xxd` test dependency.
 2. Make PR #7's required workflow pass; complete review,
    merge the exact rebaseline head, verify the merge on GitHub, and require the
    distinct `main` workflow to pass before calling the replacement durable.

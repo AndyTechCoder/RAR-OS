@@ -46,7 +46,9 @@ functionality and cannot increase the implementation count.
   delimiter in the next portable-stat negative test. The delimiter-only third
   correction passed in run `33267302085`; that run then exposed the QMP contract
   fixture writing hash output beneath read-only `/workspace`. The successor uses
-  only the attested ephemeral scratch root; no green or implementation claim is
+  only the attested ephemeral scratch root and passed in run `33267767640`. That
+  run exposed the next suite's undeclared `xxd` dependency; the audited successor
+  uses already-pinned byte-output tools. No green or implementation claim is
   made yet.
 - The SSD confinement/profile proof is not recorded as passing for the future
   implementation task. SSD reserve and exact-root capacity evidence remain

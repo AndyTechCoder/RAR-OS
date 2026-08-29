@@ -34,6 +34,12 @@
   mount. The successor keeps that mount read-only and passes a controller-shaped
   copy under the already-attested ephemeral `/tmp` root to the unchanged
   contract checker.
+  Run `33267767640`, job `99140778940`, proved the QMP correction and all prior
+  suites pass, then reached the reference-evidence suite and exposed its sole
+  undeclared tool assumption: `/usr/bin/xxd` is absent from the pinned
+  container. A batch audit of every remaining suite found no other new absolute
+  tool dependency. The successor emits each mutation byte with pinned
+  `/usr/bin/printf` and `/bin/dd`, eliminating rather than adding a dependency.
   Earlier
   published
   source/safety commits fix branch whitespace/hash bindings, strengthen
@@ -236,7 +242,9 @@
   then exposed the separate invalid `sed` delimiter in the next negative test.
   The delimiter-only correction passed in exact-head run `33267302085`, which
   then exposed the distinct QMP scratch-root defect. The current successor
-  changes only that test fixture and preserves the immutable OCI/toolchain pins.
+  passed through QMP in run `33267767640`; the current reference-evidence
+  successor removes the undeclared `xxd` assumption and preserves the immutable
+  OCI/toolchain pins.
   The former zero-step account/billing blocker is cleared. A pattern-limited
   read on
   2026-08-28 confirmed that the user-level Codex config exists but contains no

@@ -32,7 +32,9 @@ mutate_byte() {
     offset=$1
     value=$2
     /bin/cp "$valid" "$candidate"
-    /usr/bin/printf '%s' "$value" | /usr/bin/xxd -r -p | /bin/dd of="$candidate" bs=1 seek="$offset" conv=notrunc 2>/dev/null
+    byte=$((0x$value))
+    octal=$(/usr/bin/printf '%03o' "$byte")
+    /usr/bin/printf '%b' "\\$octal" | /bin/dd of="$candidate" bs=1 seek="$offset" conv=notrunc 2>/dev/null
 }
 
 /bin/sh "$checker" "$valid" "$transcript" "$inventory" "$harness" >/dev/null
