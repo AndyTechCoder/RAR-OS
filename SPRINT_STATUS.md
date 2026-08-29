@@ -23,6 +23,11 @@
   instruction to figure out or skip this simple error and continue explicitly
   authorizes this bounded successor verification. Architecture, security, and
   correctness reviews are clean.
+  That successor, `d435c8dac0f86dd0f65ae1f0557d6df57e2d8cdd`, consumed run
+  `33267022811`, job `99138773215`: preflight policy tests passed, then the next
+  portable-stat negative test exposed an invalid `sed` delimiter because its
+  pattern contains shell `||`. The third and final focused correction changes
+  only that test delimiter; it does not change the portable-stat policy.
   Earlier
   published
   source/safety commits fix branch whitespace/hash bindings, strengthen
@@ -222,8 +227,10 @@
   reviewed repair fixes that fixture seam without weakening the production
   boundary. Its first exact-head run `33266499096` then failed only because the
   executable mock was denied in ephemeral `/tmp`; the no-executable successor
-  is the one remaining owner-authorized exact-head verification. The immutable
-  OCI/toolchain pins remain unchanged.
+  then exposed the separate invalid `sed` delimiter in the next negative test.
+  The delimiter-only correction is the third and final focused attempt; its
+  exact-head verification remains. The immutable OCI/toolchain pins remain
+  unchanged.
   The former zero-step account/billing blocker is cleared. A pattern-limited
   read on
   2026-08-28 confirmed that the user-level Codex config exists but contains no

@@ -206,10 +206,9 @@ Gate 0 was approved on 2026-07-16. Every P0 item in this gate is complete as an 
 
 ## Immediate next items
 
-1. Publish the independently reviewed no-executable Linux preflight-fixture
-   successor and inspect its owner-authorized exact-head workflow. Run
-   `33266499096` proved the prior executable mock was denied by ephemeral
-   `/tmp`; production remains Mac-only.
+1. Publish and inspect the third/final focused correction: use a non-conflicting
+   delimiter in the portable-stat negative test. Run `33267022811` proved the
+   preflight fixture now passes and exposed only that test-expression defect.
 2. Make PR #7's required workflow pass; complete review,
    merge the exact rebaseline head, verify the merge on GitHub, and require the
    distinct `main` workflow to pass before calling the replacement durable.

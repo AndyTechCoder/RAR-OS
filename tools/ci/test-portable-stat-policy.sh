@@ -53,7 +53,7 @@ if /usr/bin/env -u GITHUB_ACTIONS RAR_POLICY_MUTATION_TESTS=1 \
 fi
 
 reset_fixture
-/usr/bin/sed 's|/usr/bin/stat -c %s "$file" 2>/dev/null || /usr/bin/stat -f %z "$file"|/usr/bin/stat -f %z "$file" 2>/dev/null || /usr/bin/stat -c %s "$file"|' \
+/usr/bin/sed 's#/usr/bin/stat -c %s "$file" 2>/dev/null || /usr/bin/stat -f %z "$file"#/usr/bin/stat -f %z "$file" 2>/dev/null || /usr/bin/stat -c %s "$file"#' \
     "$fixture/tools/ci/check-controller-handoff-attempt-v0.sh" > "$work/bad"
 /bin/mv "$work/bad" "$fixture/tools/ci/check-controller-handoff-attempt-v0.sh"
 expect_rejected bsd-first-order
