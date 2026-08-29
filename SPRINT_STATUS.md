@@ -87,11 +87,12 @@
 - Probe dispatch state: GitHub rejected superseded run `33092166312` before job
   creation because the workflow referenced `runner.temp` at job-level `env`,
   before the runner context exists. The published correction binds the path only
-  at consuming steps and adds a static regression check. It remains unvalidated
-  until the complete Specifications repair run passes. Once valid and merged to
-  the default branch,
-  the top-level Development Probe validates the v2 blocked plan and stops with
-  status 73. The superseded v1 two-role runner also stops before reading cloud
+  at consuming steps and adds a static regression check. The correction is
+  merged and covered by the complete green exact-head and exact-merge
+  Specifications runs. The top-level Development Probe remains deliberately
+  activation-blocked: when dispatched with the blocked v2 plan it validates the
+  plan and stops with status 73 before target build, launch, or cloud-role
+  effects. The superseded v1 two-role runner also stops before reading cloud
   context or issuing any container command; no default dispatch path can reach
   it after ADR 0020
 - Controller-helper build trust: proposed ADR 0024 records three bounded cloud
