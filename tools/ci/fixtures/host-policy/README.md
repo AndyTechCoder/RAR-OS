@@ -13,7 +13,9 @@ The corpus covers commented required settings, enabled networking, conflicting
 duplicates, legacy sandbox overrides, wrong and quoted sections, TOML literal
 multiline decoys, weakened automatic-review policy, symbolic-link inputs,
 non-forbidden rules, and missing emulator, compiler, or permission-command
-rules. `test-local-sprint-preflight-policy.sh` separately proves rejection of a
-dirty worktree, wrong remote, wrong workspace guard marker, missing upstream, and
-unpushed commit. Deriving each case from the valid source keeps every failure
-isolated to the named mutation.
+rules. `test-local-sprint-preflight-policy.sh` separately proves that the primary
+repository and a genuine linked worktree pass, while a dirty worktree, wrong
+remote, wrong workspace guard marker, missing upstream, unpushed commit, or Git
+metadata directory outside the canonical SSD repository is rejected. Deriving
+each case from the valid source keeps every failure isolated to the named
+mutation.

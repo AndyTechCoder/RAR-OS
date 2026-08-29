@@ -1,12 +1,15 @@
 #!/bin/sh
 set -eu
 
+PATH=/usr/bin:/bin
+export PATH
+
 fail() {
-    echo "$1" >&2
+    printf '%s\n' "$1" >&2
     exit 1
 }
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
+root=$(CDPATH= cd -- "$(/usr/bin/dirname -- "$0")/../.." && pwd -P)
 requested_config=${1:-"$root/.codex/config.toml"}
 requested_rules=${2:-"$root/.codex/rules/host-safety.rules"}
 requested_permissions=${3:-"$root/.codex/rar-os-ssd-user-fragment.toml"}
@@ -17,8 +20,8 @@ resolve_repository_file() {
     [ -f "$path" ] || fail "missing regular policy file: $path"
     [ ! -L "$path" ] || fail "policy file must not be a symbolic link: $path"
 
-    directory=$(dirname -- "$path")
-    filename=$(basename -- "$path")
+    directory=$(/usr/bin/dirname -- "$path")
+    filename=$(/usr/bin/basename -- "$path")
     resolved_directory=$(CDPATH= cd -- "$directory" && pwd -P)
     resolved="$resolved_directory/$filename"
 
@@ -33,10 +36,10 @@ resolve_repository_file() {
 sha256_file() {
     file=$1
 
-    if command -v sha256sum >/dev/null 2>&1; then
-        LC_ALL=C sha256sum "$file" | awk '{ print $1 }'
-    elif command -v shasum >/dev/null 2>&1; then
-        LC_ALL=C shasum -a 256 "$file" | awk '{ print $1 }'
+    if [ -x /usr/bin/sha256sum ]; then
+        LC_ALL=C /usr/bin/sha256sum "$file" | /usr/bin/awk '{ print $1 }'
+    elif [ -x /usr/bin/shasum ]; then
+        LC_ALL=C /usr/bin/shasum -a 256 "$file" | /usr/bin/awk '{ print $1 }'
     else
         fail "no SHA-256 host tool is available"
     fi
@@ -62,11 +65,11 @@ if [ "$permissions" = "$root/.codex/rar-os-ssd-user-fragment.toml" ]; then
 fi
 
 for policy_file in "$config" "$permissions"; do
-    if grep -Fq "'''" "$policy_file"; then
+    if /usr/bin/grep -Fq "'''" "$policy_file"; then
         fail "multiline literal strings are not permitted in the security configuration"
     fi
 
-    if grep -Eq '^[[:space:]]*\["' "$policy_file"; then
+    if /usr/bin/grep -Eq '^[[:space:]]*\["' "$policy_file"; then
         fail "quoted table headers are not permitted in the security configuration"
     fi
 done
@@ -76,7 +79,7 @@ toml_value() {
     wanted_section=$2
     wanted_key=$3
 
-    awk -v wanted_section="$wanted_section" -v wanted_key="$wanted_key" '
+    /usr/bin/awk -v wanted_section="$wanted_section" -v wanted_key="$wanted_key" '
         function trim(value) {
             sub(/^[[:space:]]+/, "", value)
             sub(/[[:space:]]+$/, "", value)
@@ -130,7 +133,7 @@ assert_setting() {
     key=$3
     expected=$4
     values=$(toml_value "$source_file" "$section" "$key")
-    count=$(printf '%s\n' "$values" | awk 'NF { count++ } END { print count + 0 }')
+    count=$(printf '%s\n' "$values" | /usr/bin/awk 'NF { count++ } END { print count + 0 }')
 
     if [ "$count" -ne 1 ]; then
         fail "expected exactly one active [$section] $key assignment in $source_file"
@@ -152,11 +155,11 @@ assert_setting "$permissions" "permissions.rar-os-ssd.filesystem" '":minimal"' '
 assert_setting "$permissions" "permissions.rar-os-ssd.filesystem" '"/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha"' '"write"'
 assert_setting "$permissions" "permissions.rar-os-ssd.network" "enabled" "false"
 
-if grep -Eq '^[[:space:]]*(sandbox_mode[[:space:]]*=|\[sandbox_workspace_write\])' "$config" "$permissions"; then
+if /usr/bin/grep -Eq '^[[:space:]]*(sandbox_mode[[:space:]]*=|\[sandbox_workspace_write\])' "$config" "$permissions"; then
     fail "legacy sandbox settings would override the named permission profile"
 fi
 
-auto_review_policy=$(awk '
+auto_review_policy=$(/usr/bin/awk '
     BEGIN {
         section = ""
         inside = 0
@@ -211,10 +214,10 @@ If command parsing, destination, path ownership, or side effects are uncertain
 deny the request. Do not convert a denial into a broader alternative.'
 
 printf '%s\n' "$required_policy_phrases" | while IFS= read -r phrase; do
-    printf '%s\n' "$auto_review_policy" | grep -Fq "$phrase" || fail "auto-review policy is missing required deny semantics: $phrase"
+    printf '%s\n' "$auto_review_policy" | /usr/bin/grep -Fq "$phrase" || fail "auto-review policy is missing required deny semantics: $phrase"
 done
 
-if ! awk '
+if ! /usr/bin/awk '
     /^[[:space:]]*($|#)/ { next }
     $0 !~ /^prefix_rule\(pattern = \["[^"]+"(, "[^"]+")*\], decision = "forbidden", justification = "[^"]+"\)$/ {
         print "invalid or non-forbidden host safety rule at line " NR ": " $0 > "/dev/stderr"
@@ -290,7 +293,7 @@ utmctl
 prlctl'
 
 printf '%s\n' "$required_forbidden_commands" | while IFS= read -r command; do
-    if ! awk -v command="$command" '
+    if ! /usr/bin/awk -v command="$command" '
         {
             prefix = "prefix_rule(pattern = [\"" command "\"], decision = \"forbidden\","
             if (index($0, prefix) == 1) {
@@ -307,8 +310,8 @@ for command_pair in 'git rm' 'git clean'; do
     first=${command_pair%% *}
     second=${command_pair#* }
     prefix="prefix_rule(pattern = [\"$first\", \"$second\"], decision = \"forbidden\","
-    [ "$(grep -Fc -- "$prefix" "$rules")" -eq 1 ] ||
+    [ "$(/usr/bin/grep -Fc -- "$prefix" "$rules")" -eq 1 ] ||
         fail "missing unique forbidden prefix rule for $command_pair"
 done
 
-echo "host policy configuration passed"
+printf '%s\n' "host policy configuration passed"
