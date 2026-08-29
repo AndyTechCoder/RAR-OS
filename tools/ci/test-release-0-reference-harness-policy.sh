@@ -71,11 +71,11 @@ expect_rejected fifo-binary
 
 reset_fixture
 first=$(/usr/bin/sed -n '3s/.*|//p' "$work/spec/fixtures/release-0/cases.v1")
-/usr/bin/dd if=/dev/zero of="$work/spec/fixtures/release-0/bin/$first" bs=81985 count=1 2>/dev/null
+/usr/bin/awk 'BEGIN { for (i = 0; i < 81985; i++) printf "a" }' > "$work/spec/fixtures/release-0/bin/$first"
 expect_rejected oversized-binary
 
 reset_fixture
-/usr/bin/dd if=/dev/zero of="$work/spec/fixtures/release-0/cases.v1" bs=65537 count=1 2>/dev/null
+/usr/bin/awk 'BEGIN { for (i = 0; i < 65537; i++) printf "a" }' > "$work/spec/fixtures/release-0/cases.v1"
 expect_rejected oversized-text
 
 reset_fixture
