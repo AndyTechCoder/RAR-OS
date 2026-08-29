@@ -24,7 +24,7 @@ while IFS= read -r relative; do
     case "$relative" in '' | *[!A-Za-z0-9._/-]*) exit 1 ;; esac
     file=$tree/$relative
     [ -f "$file" ] && [ ! -L "$file" ] || exit 1
-    size=$(/usr/bin/stat -f %z "$file" 2>/dev/null || /usr/bin/stat -c %s "$file") || exit 1
+    size=$(/usr/bin/stat -c %s "$file" 2>/dev/null || /usr/bin/stat -f %z "$file") || exit 1
     [ "$size" -le 1048576 ] || exit 1
     if command -v sha256sum >/dev/null 2>&1; then digest=$(sha256sum "$file"); else digest=$(/usr/bin/shasum -a 256 "$file"); fi
     /usr/bin/printf '%s|%s|%s\n' "$relative" "$size" "${digest%% *}" >> "$manifest"

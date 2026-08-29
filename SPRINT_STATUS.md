@@ -13,7 +13,11 @@
   Specifications run started a real runner and entered its validation steps;
   its bounded failures exposed missing executable modes on newly added CI
   scripts. The current repair adds the one fixture generator omitted from the
-  first mode inventory. Earlier
+  first mode inventory. The final permitted run then exposed a separate
+  BSD-first `stat` portability defect. A complete source audit now reverses the
+  fallback order for every affected size, ownership, link-count, and identity
+  query and adds a static regression guard; that repair is local and unclaimed.
+  Earlier
   published
   source/safety commits fix branch whitespace/hash bindings, strengthen
   no-deletion auto-review and command rules, bind the authoritative directive
@@ -188,8 +192,15 @@
   setup, runner attestation, and both exact checkouts. The first identified
   missing executable modes on the new CI scripts; the repair run then identified
   the separately located `spec/alpha/lab/fixtures/generate.sh` omitted from the
-  first mode inventory. That final required mode is repaired before the second
-  and last permitted retry.
+  first mode inventory. That final required mode was repaired before the second
+  and last permitted retry. Run `33239093362`, job `99065200412`, for exact
+  head `19a88839cadf4e5f0cf322b77717b4f268788f35` then reached the controller
+  handoff validator and failed because BSD-first `stat -f %z` returned
+  successful filesystem text on Linux instead of a numeric byte count. The
+  same fallback order occurs in thirteen validators, so a bounded source audit
+  repairs the complete class and adds a regression check. No fourth workflow
+  attempt is authorized by the current two-retry contract; the local repair is
+  not published or claimed green.
   The former zero-step account/billing blocker is cleared. A pattern-limited
   read on
   2026-08-28 confirmed that the user-level Codex config exists but contains no

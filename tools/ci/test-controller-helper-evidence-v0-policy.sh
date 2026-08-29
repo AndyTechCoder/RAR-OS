@@ -44,7 +44,7 @@ for mutation in \
 done
 /usr/bin/awk 'NR == 5 { saved=$0; next } NR == 6 { print; print saved; next } { print }' "$build_source" > "$build_candidate"; reject_build_record reordered "$build_candidate"
 /bin/cp "$build_source" "$build_candidate"; /usr/bin/printf '%s\n' extra=value >> "$build_candidate"; reject_build_record extra "$build_candidate"
-size=$(/usr/bin/stat -f %z "$build_source" 2>/dev/null || /usr/bin/stat -c %s "$build_source")
+size=$(/usr/bin/stat -c %s "$build_source" 2>/dev/null || /usr/bin/stat -f %z "$build_source")
 /bin/dd if="$build_source" of="$build_candidate" bs=1 count=$((size - 1)) 2>/dev/null; reject_build_record missing-lf "$build_candidate"
 
 reject_build_call same-output-path "$build_source" adr-0024-alternative-a runner-closure "$controller" "$fixtures/runner-image.v0" "$fixtures/source-tree.v0" "$fixtures/build-plan.v0" "$fixtures/golden-vector.v0" "$fixtures/builder-inventory.v0" "$fixtures/compiler-closure.v0" "$fixtures/compiler.v0" "$fixtures/helper-build-1.v0" "$fixtures/helper-build-1.v0" "$fixtures/helper-final.v0" "$fixtures/build-1-receipt.v0" "$fixtures/build-2-receipt.v0" "$fixtures/build-1.log.v0" "$fixtures/build-2.log.v0" "$fixtures/test-evidence.v0" "$fixtures/test-cases.v0" "$fixtures/test.log.v0"

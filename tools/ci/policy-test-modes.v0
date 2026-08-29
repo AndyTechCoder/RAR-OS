@@ -17,6 +17,7 @@ tools/ci/test-launch-evidence-policy.sh|ephemeral
 tools/ci/test-launch-handshake-policy.sh|ephemeral
 tools/ci/test-local-sprint-preflight-policy.sh|ephemeral
 tools/ci/test-pinned-file-policy.sh|ephemeral
+tools/ci/test-portable-stat-policy.sh|ephemeral
 tools/ci/test-proposed-adr-classifier-policy.sh|immutable
 tools/ci/test-qmp-client-source-policy.sh|ephemeral
 tools/ci/test-reference-evidence-v0-policy.sh|ephemeral

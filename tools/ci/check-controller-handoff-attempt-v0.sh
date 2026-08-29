@@ -11,7 +11,7 @@ fail() { printf 'controller handoff attempt contract rejected: %s\n' "$1" >&2; e
 
 for file in "$contract" "$cases"; do
     [ -f "$file" ] && [ ! -L "$file" ] && [ -s "$file" ] || fail "missing, symbolic, or empty input: $file"
-    size=$(/usr/bin/stat -f %z "$file" 2>/dev/null || /usr/bin/stat -c %s "$file")
+    size=$(/usr/bin/stat -c %s "$file" 2>/dev/null || /usr/bin/stat -f %z "$file")
     [ "$size" -le 32768 ] || fail "input exceeds bound: $file"
     /usr/bin/od -An -tx1 "$file" | /usr/bin/grep -Eq '(^| )00( |$)|(^| )0d( |$)' && fail "input contains NUL or CR: $file"
 done

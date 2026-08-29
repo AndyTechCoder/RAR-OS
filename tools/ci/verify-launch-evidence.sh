@@ -32,7 +32,7 @@ actual=$(find "$base" -mindepth 1 -print | /usr/bin/sed "s|^$base/||" | /usr/bin
 
 serial=$base/serial.log
 [ -s "$serial" ] && [ ! -L "$serial" ] || exit 1
-serial_size=$(/usr/bin/stat -f %z "$serial" 2>/dev/null || /usr/bin/stat -c %s "$serial")
+serial_size=$(/usr/bin/stat -c %s "$serial" 2>/dev/null || /usr/bin/stat -f %z "$serial")
 [ "$serial_size" -le 8388608 ] || exit 1
 markers=$(printf '%s\n' "$selected" | /usr/bin/awk -F '|' '{ print $3 }')
 printf '%s\n' "$markers" | while IFS= read -r marker; do /usr/bin/grep -Fq -- "$marker" "$serial" || exit 1; done
@@ -69,7 +69,7 @@ printf '%s\n' "$expected" | while IFS= read -r name; do
         [ "$1" -ge 1 ] && [ "$1" -le 4096 ] && [ "$2" -ge 1 ] && [ "$2" -le 2160 ] || exit 1
         [ "$(/usr/bin/sed -n '3p' "$image")" = 255 ] || exit 1
         header_size=$(printf 'P6\n%s\n255\n' "$dimensions" | /usr/bin/wc -c | /usr/bin/tr -d ' ')
-        image_size=$(/usr/bin/stat -f %z "$image" 2>/dev/null || /usr/bin/stat -c %s "$image")
+        image_size=$(/usr/bin/stat -c %s "$image" 2>/dev/null || /usr/bin/stat -f %z "$image")
         [ "$image_size" -eq $((header_size + 3 * $1 * $2)) ] || exit 1
         ;;
     esac
@@ -88,7 +88,7 @@ esac
 
 total_bytes=0
 for name in $expected; do
-    size=$(/usr/bin/stat -f %z "$base/$name" 2>/dev/null || /usr/bin/stat -c %s "$base/$name")
+    size=$(/usr/bin/stat -c %s "$base/$name" 2>/dev/null || /usr/bin/stat -f %z "$base/$name")
     total_bytes=$((total_bytes + size))
 done
 [ "$total_bytes" -le $((limit_mib * 1024 * 1024)) ] || exit 1

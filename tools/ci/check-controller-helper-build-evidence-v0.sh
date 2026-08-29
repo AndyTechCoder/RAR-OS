@@ -22,8 +22,8 @@ safe_file() {
     parent=$(CDPATH= cd -- "$(dirname -- "$file")" && pwd -P) || fail "input parent inaccessible: $file"
     resolved=$parent/$(basename -- "$file")
     case "$resolved" in "$trusted_root"/*) ;; *) fail "input escapes trusted root: $file" ;; esac
-    links=$(/usr/bin/stat -f %l "$file" 2>/dev/null || /usr/bin/stat -c %h "$file")
-    owner=$(/usr/bin/stat -f %u "$file" 2>/dev/null || /usr/bin/stat -c %u "$file")
+    links=$(/usr/bin/stat -c %h "$file" 2>/dev/null || /usr/bin/stat -f %l "$file")
+    owner=$(/usr/bin/stat -c %u "$file" 2>/dev/null || /usr/bin/stat -f %u "$file")
     [ "$links" = 1 ] || fail "input is hardlinked: $file"
     [ "$owner" = "$(/usr/bin/id -u)" ] || fail "input is not controller-user owned: $file"
     if find "$file" -perm -022 -print | /usr/bin/grep -q .; then fail "input is group/other writable: $file"; fi
@@ -33,8 +33,8 @@ for pair in "$build_1|$build_2" "$build_1|$final_binary" "$build_2|$final_binary
     left=${pair%%|*}; right=${pair#*|}
     [ ! "$left" -ef "$right" ] || fail "aliased independent inputs: $left and $right"
 done
-size_of() { /usr/bin/stat -f %z "$1" 2>/dev/null || /usr/bin/stat -c %s "$1"; }
-identity() { /usr/bin/stat -f '%d:%i:%z:%l:%u:%m' "$1" 2>/dev/null || /usr/bin/stat -c '%d:%i:%s:%h:%u:%Y' "$1"; }
+size_of() { /usr/bin/stat -c %s "$1" 2>/dev/null || /usr/bin/stat -f %z "$1"; }
+identity() { /usr/bin/stat -c '%d:%i:%s:%h:%u:%Y' "$1" 2>/dev/null || /usr/bin/stat -f '%d:%i:%z:%l:%u:%m' "$1"; }
 sha_file() { env LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$1" | /usr/bin/awk '{ print $1 }'; }
 evidence_before=$(identity "$evidence")
 size=$(size_of "$evidence")

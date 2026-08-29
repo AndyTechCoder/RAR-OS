@@ -22,9 +22,10 @@ ulimit -f 131072
 /bin/sh "$root/tools/ci/test-launch-handshake-policy.sh"
 /bin/sh "$root/tools/ci/test-local-sprint-preflight-policy.sh"
 /bin/sh "$root/tools/ci/test-pinned-file-policy.sh"
+/bin/sh "$root/tools/ci/test-portable-stat-policy.sh"
 /bin/sh "$root/tools/ci/test-qmp-client-source-policy.sh"
 /bin/sh "$root/tools/ci/test-reference-evidence-v0-policy.sh"
 /bin/sh "$root/tools/ci/test-reference-verdict-v0-policy.sh"
 /bin/sh "$root/tools/ci/test-trusted-launcher-policy.sh"
 
-printf '%s\n' 'Ephemeral policy tests passed: executed=18 source=read-only scratch=tmpfs'
+printf '%s\n' 'Ephemeral policy tests passed: executed=19 source=read-only scratch=tmpfs'

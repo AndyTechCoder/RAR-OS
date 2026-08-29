@@ -14,7 +14,7 @@ for file in "$evidence" "$transcript" "$inventory" "$harness"; do
     [ -f "$file" ] && [ ! -L "$file" ] && [ -s "$file" ] || fail "missing, symbolic, or empty input: $file"
 done
 
-size_of() { /usr/bin/stat -f %z "$1" 2>/dev/null || /usr/bin/stat -c %s "$1"; }
+size_of() { /usr/bin/stat -c %s "$1" 2>/dev/null || /usr/bin/stat -f %z "$1"; }
 hex_at() { /usr/bin/od -An -tx1 -v -j "$2" -N "$3" "$1" | /usr/bin/tr -d ' \n'; }
 u16_at() {
     bytes=$(/usr/bin/od -An -tu1 -j "$2" -N 2 "$1"); set -- $bytes

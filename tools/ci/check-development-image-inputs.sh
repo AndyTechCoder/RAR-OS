@@ -16,7 +16,7 @@ case "$inputs" in
 esac
 [ "$(CDPATH= cd -- "$(dirname -- "$inputs")" && pwd -P)" = "$expected_parent" ] || exit 1
 [ -f "$inputs" ] && [ ! -L "$inputs" ] || exit 1
-size=$(/usr/bin/stat -f %z "$inputs" 2>/dev/null || /usr/bin/stat -c %s "$inputs")
+size=$(/usr/bin/stat -c %s "$inputs" 2>/dev/null || /usr/bin/stat -f %z "$inputs")
 [ "$size" -le 32768 ] || exit 1
 /usr/bin/awk 'length($0) > 4096 { exit 1 }' "$inputs" || exit 1
 [ "$(/usr/bin/wc -l < "$inputs" | /usr/bin/tr -d ' ')" -eq 28 ] || exit 1

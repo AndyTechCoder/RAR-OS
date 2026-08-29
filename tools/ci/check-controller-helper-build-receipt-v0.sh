@@ -15,8 +15,8 @@ safe_file() {
     parent=$(CDPATH= cd -- "$(dirname -- "$file")" && pwd -P) || fail "input parent inaccessible: $file"
     resolved=$parent/$(basename -- "$file")
     case "$resolved" in "$trusted_root"/*) ;; *) fail "input escapes trusted root: $file" ;; esac
-    links=$(/usr/bin/stat -f %l "$file" 2>/dev/null || /usr/bin/stat -c %h "$file")
-    owner=$(/usr/bin/stat -f %u "$file" 2>/dev/null || /usr/bin/stat -c %u "$file")
+    links=$(/usr/bin/stat -c %h "$file" 2>/dev/null || /usr/bin/stat -f %l "$file")
+    owner=$(/usr/bin/stat -c %u "$file" 2>/dev/null || /usr/bin/stat -f %u "$file")
     [ "$links" = 1 ] || fail "input is hardlinked: $file"
     [ "$owner" = "$(/usr/bin/id -u)" ] || fail "input is not controller-user owned: $file"
     if find "$file" -perm -022 -print | /usr/bin/grep -q .; then fail "input is group/other writable: $file"; fi
@@ -25,8 +25,8 @@ for file in "$receipt" "$runner" "$source_tree" "$build_plan" "$compiler_closure
 case "$expected_controller" in *[!0-9a-f]*|'') fail 'expected controller SHA malformed' ;; esac
 [ "${#expected_controller}" -eq 40 ] || fail 'expected controller SHA length invalid'
 case "$expected_ordinal" in 1|2) ;; *) fail 'expected ordinal invalid' ;; esac
-size_of() { /usr/bin/stat -f %z "$1" 2>/dev/null || /usr/bin/stat -c %s "$1"; }
-identity() { /usr/bin/stat -f '%d:%i:%z:%l:%u:%m' "$1" 2>/dev/null || /usr/bin/stat -c '%d:%i:%s:%h:%u:%Y' "$1"; }
+size_of() { /usr/bin/stat -c %s "$1" 2>/dev/null || /usr/bin/stat -f %z "$1"; }
+identity() { /usr/bin/stat -c '%d:%i:%s:%h:%u:%Y' "$1" 2>/dev/null || /usr/bin/stat -f '%d:%i:%z:%l:%u:%m' "$1"; }
 sha_file() { env LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$1" | /usr/bin/awk '{ print $1 }'; }
 receipt_before=$(identity "$receipt")
 size=$(size_of "$receipt")

@@ -18,7 +18,7 @@ for file in "$@"; do
     parent=$(CDPATH= cd -- "$(dirname -- "$file")" && pwd -P)
     [ "$parent" = "$expected_parent" ] || exit 1
     [ -f "$file" ] && [ ! -L "$file" ] && [ -s "$file" ] || exit 1
-    size=$(/usr/bin/stat -f %z "$file" 2>/dev/null || /usr/bin/stat -c %s "$file")
+    size=$(/usr/bin/stat -c %s "$file" 2>/dev/null || /usr/bin/stat -f %z "$file")
     [ "$size" -le 65536 ] || exit 1
     /usr/bin/awk 'length($0) > 4096 { exit 1 }' "$file" || exit 1
     /usr/bin/awk '

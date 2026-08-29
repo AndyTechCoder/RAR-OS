@@ -26,7 +26,7 @@ actual=$(/usr/bin/find "$fixtures" -mindepth 1 -maxdepth 1 ! -name '._*' -print 
 for file in "$fixtures"/*.md; do
     [ -f "$file" ] && [ ! -L "$file" ] && [ -s "$file" ] || exit 1
     [ "$(CDPATH= cd -- "$(dirname -- "$file")" && pwd -P)" = "$fixtures" ] || exit 1
-    size=$(/usr/bin/stat -f %z "$file" 2>/dev/null || /usr/bin/stat -c %s "$file")
+    size=$(/usr/bin/stat -c %s "$file" 2>/dev/null || /usr/bin/stat -f %z "$file")
     [ "$size" -le 32768 ] || exit 1
     /usr/bin/awk 'length($0) > 4096 { exit 1 }' "$file" || exit 1
 done

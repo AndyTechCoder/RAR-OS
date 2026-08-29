@@ -18,7 +18,7 @@ case "$expected_probe" in milestone-[abcdefg]) ;; *) fail 'expected probe is inv
 for file in "$verdict" "$controller" "$source" "$transcript"; do
     [ -f "$file" ] && [ ! -L "$file" ] && [ -s "$file" ] || fail "missing, symbolic, or empty context: $file"
 done
-size=$(/usr/bin/stat -f %z "$verdict" 2>/dev/null || /usr/bin/stat -c %s "$verdict")
+size=$(/usr/bin/stat -c %s "$verdict" 2>/dev/null || /usr/bin/stat -f %z "$verdict")
 [ "$size" -le 2048 ] || fail 'file exceeds bound'
 last_hex=$(/usr/bin/od -An -tx1 -j $((size - 1)) -N 1 "$verdict" | /usr/bin/tr -d ' \n')
 [ "$last_hex" = 0a ] || fail 'verdict lacks exactly one terminal LF'

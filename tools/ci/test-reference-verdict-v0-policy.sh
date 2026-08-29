@@ -58,7 +58,7 @@ expect_rejected wrong-inventory-context milestone-f "$controller" "$source" "$tr
 expect_rejected wrong-evidence-context milestone-f "$controller" "$source" "$transcript" "$inventory" "$source" "$harness"
 /usr/bin/sed 's/^controller_sha256=.*/controller_sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/' "$accepted" > "$candidate"
 expect_rejected fabricated-digest milestone-f "$controller" "$source" "$transcript" "$inventory" "$evidence" "$harness"
-size=$(/usr/bin/stat -f %z "$accepted" 2>/dev/null || /usr/bin/stat -c %s "$accepted")
+size=$(/usr/bin/stat -c %s "$accepted" 2>/dev/null || /usr/bin/stat -f %z "$accepted")
 /bin/dd if="$accepted" of="$candidate" bs=1 count=$((size - 1)) 2>/dev/null
 expect_rejected missing-terminal-lf milestone-f "$controller" "$source" "$transcript" "$inventory" "$evidence" "$harness"
 /bin/cp "$accepted" "$work/real.v0"
