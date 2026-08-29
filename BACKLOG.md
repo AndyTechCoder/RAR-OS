@@ -206,25 +206,23 @@ Gate 0 was approved on 2026-07-16. Every P0 item in this gate is complete as an 
 
 ## Immediate next items
 
-1. Publish and inspect the reviewed reference-evidence portability correction.
-   Run `33267767640` proved every preceding mutation suite, including QMP,
-   passes and exposed only an undeclared `/usr/bin/xxd` test dependency.
-2. Make PR #7's required workflow pass; complete review,
-   merge the exact rebaseline head, verify the merge on GitHub, and require the
-   distinct `main` workflow to pass before calling the replacement durable.
-3. Only after that durability proof, close draft PR #5 as superseded while
-   preserving its history and evidence. Never merge PR #5 into the Alpha line.
-4. Record the owner's ADR 0023, ADR 0024, and ADR 0026 choices; complete and
+1. `[x]` PR #7's exact head and exact merge passed complete cloud validation;
+   the rebaseline is merged and durable at `7bcf6a1e28b1c7fa886d2696fa9f1e595d87ec51`.
+2. `[x]` PR #5 is closed, unmerged, and superseded with its branch and evidence
+   preserved.
+3. `[ ]` Record the owner's ADR 0023, ADR 0024, and ADR 0026 choices; complete and
    re-review the resulting boot/platform contracts and cloud-only
    controller/helper evidence before Milestone A.
-5. Make the v2 Lab profile/controller ready only with real reviewed identities,
+4. `[ ]` Obtain the one-time user-level SSD permission-profile installation and
+   retained confinement proof without changing or deleting unrelated SSD data.
+5. `[ ]` Make the v2 Lab profile/controller ready only with real reviewed identities,
    then pass the SSD-profile, capacity, local, remote, PR, and immutable-
    checkpoint gates.
-6. Start Milestone A only in the packet-required fresh Medium writer task and
+6. `[ ]` Start Milestone A only in the packet-required fresh Medium writer task and
    execute target work only in the approved cloud Development Lab.
-7. Record ADR 0025 and complete the reviewed protocol/controller v2 cutover
+7. `[ ]` Record ADR 0025 and complete the reviewed protocol/controller v2 cutover
    before Milestone B.
-8. Record ADR 0022 and its reviewed peripheral-grant contract before Milestone E.
-9. Preserve strict local Mac/SSD non-execution, non-target-build, and current
+8. `[ ]` Record ADR 0022 and its reviewed peripheral-grant contract before Milestone E.
+9. `[ ]` Preserve strict local Mac/SSD non-execution, non-target-build, and current
    no-deletion rules while continuing Milestones B–G through their durable
    checkpoints.

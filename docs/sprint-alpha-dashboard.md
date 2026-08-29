@@ -8,8 +8,8 @@ authoritative.
 
 ## Current position
 
-- Phase: pre-Milestone A rebaseline and contract preparation.
-- Preparation orientation: approximately 95% complete.
+- Phase: rebaseline durable; remaining pre-Milestone A contracts and authority.
+- Rebaseline preparation orientation: 100% complete.
 - Target implementation: 0 of 7 milestones (A–G).
 - Working bootable GUI: does not exist yet.
 - Sprint Alpha completion evidence: none.
@@ -38,18 +38,11 @@ functionality and cannot increase the implementation count.
 - The exact Alpha boot/platform contracts are not ready.
 - The Lab/controller/helper lacks real activating identities and reviewed cloud
   build/test evidence.
-- PR #7 is still draft. Runs `33266007613` and `33266499096` passed the complete
-  primary validation phase. The latter proved that its final cloud-only test
-  could not execute a tiny mock from ephemeral `/tmp`. The independently clean
-  successor substitutes only the copied fixture's computed system value; run
-  `33267022811` proved that test now passes and exposed a conflicting `sed`
-  delimiter in the next portable-stat negative test. The delimiter-only third
-  correction passed in run `33267302085`; that run then exposed the QMP contract
-  fixture writing hash output beneath read-only `/workspace`. The successor uses
-  only the attested ephemeral scratch root and passed in run `33267767640`. That
-  run exposed the next suite's undeclared `xxd` dependency; the audited successor
-  uses already-pinned byte-output tools. No green or implementation claim is
-  made yet.
+- PR #7 is merged and durable at
+  `7bcf6a1e28b1c7fa886d2696fa9f1e595d87ec51`. Exact-head run `33268129412`
+  and distinct exact-merge `main` run `33268347971` passed complete validation
+  and mutation testing. This closes only the preparation rebaseline; it is not
+  target implementation or Sprint Alpha completion evidence.
 - The SSD confinement/profile proof is not recorded as passing for the future
   implementation task. SSD reserve and exact-root capacity evidence remain
   required; internal-Mac free space is not an Alpha workspace precondition.

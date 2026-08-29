@@ -144,11 +144,10 @@ No preparation task may carry unmerged state, inherited target authority, or a
 stale base into Milestone A. If any precondition fails during transition, the
 implementation task is not created and this document grants no fallback path.
 
-Draft PR #5 is a non-ancestor historical branch for the deferred production-
-style one-shot approach. It remains open, draft, and unmerged while PR #7 is
-under review. Only after PR #7's exact merge is verified and its distinct
-`main` workflow executes real green steps may PR #5 be closed as superseded,
-with its history and evidence preserved. PR #5 is never merged, rebased, or
+PR #5 is a non-ancestor historical branch for the deferred production-style
+one-shot approach. PR #7's exact merge and distinct green `main` workflow were
+verified on 2026-08-29, so PR #5 is now closed, unmerged, and superseded with
+its history and evidence preserved. PR #5 is never merged, rebased, or
 wholesale cherry-picked into the Sprint Alpha line; any useful idea is
 reimplemented only through the active reviewed packet and owned paths.
 
