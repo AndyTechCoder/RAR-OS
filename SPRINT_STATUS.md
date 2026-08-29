@@ -1,6 +1,6 @@
 # Sprint Alpha 0.1 Status
 
-- Date: 2026-08-27
+- Date: 2026-08-28
 - Current milestone: End-of-week rebaseline, before Milestone A target implementation
 - Objective: merge the trusted cloud Development Lab controller, then implement
   and retain the authentic A–G bootable GUI vertical slice
@@ -8,13 +8,16 @@
 - Branch: `codex/sprint-alpha-rebaseline`
 - Pull request: [#7](https://github.com/AndyTechCoder/RAR-OS/pull/7), draft
 - Remote PR head: `13d24bf3ca16bf5eae88279b461dc5b843b90195`.
-  One subsequent local source-only correction moves `runner.temp` out of the
-  Development Probe's job-level environment and into its three consuming steps;
-  it is intentionally unpushed while the private-repository Actions account
-  block remains. The published source/safety commits fix branch whitespace/hash
-  bindings, strengthen no-deletion auto-review and command rules, bind the
-  authoritative directive in `AGENTS.md` and host safety, add one digest-bound
-  read-only local gate, and record the bounded Actions recovery sequence
+  Latest reviewed behavior-bearing checkpoint:
+  `975df7400943063e669bf6b6032939ee01bcf6ce`. Its two unpublished commits
+  correct the Development Probe's runner-context
+  placement and replace the obsolete internal-Mac capacity gate with the exact
+  reviewed SSD-only reserve/budget policy. They remain intentionally unpushed
+  while the private-repository Actions account block remains. Earlier published
+  source/safety commits fix branch whitespace/hash bindings, strengthen
+  no-deletion auto-review and command rules, bind the authoritative directive
+  in `AGENTS.md` and host safety, add one digest-bound read-only local gate, and
+  record the bounded Actions recovery sequence
 - Validation of the local successor: full-branch whitespace, tracked-shell
   syntax, and the bound host-policy checker pass via
   `/bin/sh tools/ci/check-local-readonly.sh`. The Alpha preimplementation
@@ -177,9 +180,10 @@
   graphics/input code
 - External blockers: the stale internal-Mac capacity safeguard is removed
   locally under the owner's 2026-08-27 SSD-workspace clarification; the SSD
-  reserve and exact-root budget remain unchanged. GitHub PR #7 is open/draft and Specifications run
-  `33092173379`, job `98587610341`, for exact remote head `13d24bf3ca16bf5eae88279b461dc5b843b90195`
-  has no runner and no steps. GitHub's annotation says: `The job was not started
+  reserve and exact-root budget remain unchanged. GitHub PR #7 is open/draft;
+  Specifications run `33092173379`, job `98587610341`, for exact remote head
+  `13d24bf3ca16bf5eae88279b461dc5b843b90195` has no runner and no steps.
+  GitHub's annotation says: `The job was not started
   because recent account payments have failed or your spending limit needs to
   be increased.` The private repository cannot obtain the required real-step
   gate until that account condition is fixed. The reviewed `rar-os-ssd` user
