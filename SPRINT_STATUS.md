@@ -28,6 +28,12 @@
   portable-stat negative test exposed an invalid `sed` delimiter because its
   pattern contains shell `||`. The third and final focused correction changes
   only that test delimiter; it does not change the portable-stat policy.
+  Exact-head run `33267302085`, job `99139536326`, proved that correction and
+  every earlier mutation suite pass, then exposed the QMP contract fixture
+  attempting to create `/workspace/out` on the intentionally read-only source
+  mount. The successor keeps that mount read-only and passes a controller-shaped
+  copy under the already-attested ephemeral `/tmp` root to the unchanged
+  contract checker.
   Earlier
   published
   source/safety commits fix branch whitespace/hash bindings, strengthen
@@ -228,9 +234,9 @@
   boundary. Its first exact-head run `33266499096` then failed only because the
   executable mock was denied in ephemeral `/tmp`; the no-executable successor
   then exposed the separate invalid `sed` delimiter in the next negative test.
-  The delimiter-only correction is the third and final focused attempt; its
-  exact-head verification remains. The immutable OCI/toolchain pins remain
-  unchanged.
+  The delimiter-only correction passed in exact-head run `33267302085`, which
+  then exposed the distinct QMP scratch-root defect. The current successor
+  changes only that test fixture and preserves the immutable OCI/toolchain pins.
   The former zero-step account/billing blocker is cleared. A pattern-limited
   read on
   2026-08-28 confirmed that the user-level Codex config exists but contains no

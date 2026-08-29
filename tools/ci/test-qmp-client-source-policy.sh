@@ -34,10 +34,14 @@ expect_rejected symlink-source
 /bin/mv "$tree/plan" "$tree/build-plan.v1"
 expect_rejected networked-build-plan
 
-/bin/sh "$root/tools/ci/check-qmp-client-contract.sh" >/dev/null
+controller=$work/controller
+/bin/mkdir -p "$controller/tools/rar-lab"
+/bin/cp -R "$root/tools/rar-lab/qmp-client" "$controller/tools/rar-lab/qmp-client"
+contract=$root/tools/sprint-alpha/qmp-client-v1.env
+/bin/sh "$root/tools/ci/check-qmp-client-contract.sh" "$contract" "$controller" >/dev/null
 bad=$work/bad-contract.env
-/usr/bin/sed 's/^binary_sha256=unavailable$/binary_sha256=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff/' "$root/tools/sprint-alpha/qmp-client-v1.env" > "$bad"
-if /bin/sh "$root/tools/ci/check-qmp-client-contract.sh" "$bad" "$root" >/dev/null 2>&1; then exit 1; fi
-/usr/bin/sed 's/^state=source-ready$/state=ready/' "$root/tools/sprint-alpha/qmp-client-v1.env" > "$bad"
-if /bin/sh "$root/tools/ci/check-qmp-client-contract.sh" "$bad" "$root" >/dev/null 2>&1; then exit 1; fi
+/usr/bin/sed 's/^binary_sha256=unavailable$/binary_sha256=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff/' "$contract" > "$bad"
+if /bin/sh "$root/tools/ci/check-qmp-client-contract.sh" "$bad" "$controller" >/dev/null 2>&1; then exit 1; fi
+/usr/bin/sed 's/^state=source-ready$/state=ready/' "$contract" > "$bad"
+if /bin/sh "$root/tools/ci/check-qmp-client-contract.sh" "$bad" "$controller" >/dev/null 2>&1; then exit 1; fi
 printf '%s\n' 'QMP client source negative checks passed'

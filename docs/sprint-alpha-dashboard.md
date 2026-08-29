@@ -44,8 +44,10 @@ functionality and cannot increase the implementation count.
   successor substitutes only the copied fixture's computed system value; run
   `33267022811` proved that test now passes and exposed a conflicting `sed`
   delimiter in the next portable-stat negative test. The delimiter-only third
-  correction awaits exact-head verification; no green or implementation claim
-  is made yet.
+  correction passed in run `33267302085`; that run then exposed the QMP contract
+  fixture writing hash output beneath read-only `/workspace`. The successor uses
+  only the attested ephemeral scratch root; no green or implementation claim is
+  made yet.
 - The SSD confinement/profile proof is not recorded as passing for the future
   implementation task. SSD reserve and exact-root capacity evidence remain
   required; internal-Mac free space is not an Alpha workspace precondition.
