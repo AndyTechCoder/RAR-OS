@@ -69,7 +69,7 @@ where
     validate_layout(layout_document)?;
 
     let index = json::parse(index_document).map_err(Error::Json)?;
-    let mut traversal = IndexTraversal { documents: 0 };
+    let mut traversal = IndexTraversal { documents: 1 };
     let manifest_descriptor = find_manifest_descriptor(
         &index,
         expected_manifest_digest,
@@ -150,10 +150,6 @@ fn find_manifest_descriptor<'a, F>(
 where
     F: FnMut(&str) -> Option<&'a [u8]>,
 {
-    if traversal.documents >= MAX_INDEX_DOCUMENTS {
-        return Err(Error::TooManyIndexDocuments);
-    }
-    traversal.documents += 1;
     require_schema_version(&index, Error::InvalidIndex)?;
     require_optional_media_type(&index, INDEX_MEDIA_TYPE, Error::InvalidIndex)?;
     let manifests = index
@@ -177,6 +173,11 @@ where
             if depth >= MAX_INDEX_DEPTH {
                 return Err(Error::IndexNestingTooDeep);
             }
+            if traversal.documents >= MAX_INDEX_DOCUMENTS {
+                return Err(Error::TooManyIndexDocuments);
+            }
+            // Reserve the document budget before requesting or parsing bytes.
+            traversal.documents += 1;
             let child_bytes = require_verified_blob(&descriptor, json::MAX_JSON_BYTES, blob)?;
             let child = json::parse(child_bytes).map_err(Error::Json)?;
             if let Some(found) = find_manifest_descriptor(
@@ -546,15 +547,20 @@ mod tests {
         let descriptors = vec![(&*empty_digest, empty_size); MAX_INDEX_MANIFESTS];
         fixture.index = index_for_descriptors(&descriptors);
 
+        let mut blob_calls = 0usize;
         let result = resolve_uncompressed_image(
             &fixture.layout,
             &fixture.index,
             &fixture.manifest_digest,
             "amd64",
             "linux",
-            |digest| fixture.blobs.get(digest).map(Vec::as_slice),
+            |digest| {
+                blob_calls += 1;
+                fixture.blobs.get(digest).map(Vec::as_slice)
+            },
         );
         assert_eq!(result, Err(Error::TooManyIndexDocuments));
+        assert_eq!(blob_calls, MAX_INDEX_DOCUMENTS - 1);
     }
 
     fn wrap_index(blobs: &mut BTreeMap<String, Vec<u8>>, child: Vec<u8>) -> Vec<u8> {
