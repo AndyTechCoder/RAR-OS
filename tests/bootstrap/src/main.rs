@@ -1325,7 +1325,7 @@ fn class_b_host_inventory_is_complete_canonical_and_traceable() {
     assert!(input.contains(
         "oci-index-sha256-f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3"
     ));
-    assert!(input.contains("git-sha1-11bd71901bbe5b1630ceea73d27597364c9af683"));
+    assert!(input.contains("git-sha1-3d3c42e5aac5ba805825da76410c181273ba90b1"));
     assert!(input.contains("ubuntu-24.04-20260823.283.1"));
 
     let manifest = fs::read_to_string(root().join("tools/toolchain/host-tools.manifest"))
@@ -1341,6 +1341,9 @@ fn class_b_host_inventory_is_complete_canonical_and_traceable() {
     ));
     assert!(manifest.contains(
         "ci_lock_sha256=6752b1b21ac8fa93a671ff9444173e4c3bbc4cdcbe4cf5cd39820371dc79aa24\n"
+    ));
+    assert!(manifest.contains(
+        "ci_checkout=actions-checkout-v7.0.1-git-sha1-3d3c42e5aac5ba805825da76410c181273ba90b1\n"
     ));
     assert!(manifest.contains("ci_tool_root=read-only-container-filesystem\n"));
 }

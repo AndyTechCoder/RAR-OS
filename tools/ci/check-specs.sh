@@ -528,7 +528,9 @@ if find . -path ./.git -prune -o -name '._*' -prune -o -path ./out -prune -o -pa
     fail "merge-conflict marker found"
 fi
 
-grep -Eq 'uses: actions/checkout@[0-9a-f]{40}([[:space:]]|$)' .github/workflows/specifications.yml || fail "GitHub checkout action is not pinned by commit"
+checkout_use='        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1'
+[ "$(grep -Fxc "$checkout_use" .github/workflows/specifications.yml)" -eq 2 ] || fail "Specifications workflow checkout identity/count is not exact"
+[ "$(grep -Fxc "$checkout_use" .github/workflows/development-probe.yml)" -eq 2 ] || fail "Development Probe checkout identity/count is not exact"
 grep -qx 'channel = "1.95.0"' rust-toolchain.toml || fail "Rust toolchain is not pinned to 1.95.0"
 if ! grep -qx 'members = \[\]' Cargo.toml; then
     grep -qx 'alpha_workspace = true' Cargo.toml || fail 'nonempty workspace lacks the explicit Alpha marker'
@@ -586,8 +588,10 @@ grep -qx 'schema=rar-host-tool-manifest-v4' tools/toolchain/host-tools.manifest 
 grep -qx 'class_b_inventory=tools/toolchain/class-b-host-tools.v1' tools/toolchain/host-tools.manifest || fail "host tool manifest omits the Class B inventory"
 grep -Eq '^class_b_inventory_sha256=[0-9a-f]{64}$' tools/toolchain/host-tools.manifest || fail "host tool manifest omits the Class B inventory digest"
 grep -q 'f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3' "$class_b_inventory" || fail "Class B inventory omits the OCI digest"
-grep -q '11bd71901bbe5b1630ceea73d27597364c9af683' "$class_b_inventory" || fail "Class B inventory omits the checkout action commit"
+grep -q '3d3c42e5aac5ba805825da76410c181273ba90b1' "$class_b_inventory" || fail "Class B inventory omits the checkout action commit"
 grep -q 'ubuntu-24.04-20260823.283.1' "$class_b_inventory" || fail "Class B inventory omits the runner image version"
+grep -qx 'ci_checkout=actions-checkout-v7.0.1-git-sha1-3d3c42e5aac5ba805825da76410c181273ba90b1' \
+    tools/toolchain/host-tools.manifest || fail "host tool manifest checkout identity is stale"
 
 sha256_of() {
     if [ -x /usr/bin/sha256sum ]; then

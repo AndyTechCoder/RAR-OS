@@ -1,7 +1,7 @@
 schema=rar-host-tool-manifest-v4
 class_b_inventory=tools/toolchain/class-b-host-tools.v1
 class_b_inventory_schema=rar-class-b-host-tool-inventory-v1
-class_b_inventory_sha256=935e265d447768353db5bd3ca02e0c7ea7db4afc0159a52b3c267b35fd6aee3f
+class_b_inventory_sha256=3af7af68c62007e89df2e8c026be1ece06c7b39a69d676a81c4a0a42255f2d1d
 bootstrap_boundary=macos-diagnostic-closure-and-immutable-oci-ci-root
 bootstrap_shell=macos-bin-sh
 bootstrap_hasher=macos-usr-bin-shasum
@@ -28,7 +28,7 @@ ci_lock_sha256=6752b1b21ac8fa93a671ff9444173e4c3bbc4cdcbe4cf5cd39820371dc79aa24
 ci_tool_root=read-only-container-filesystem
 ci_runner_image=ubuntu-24.04-20260823.283.1
 ci_runner_status=external-attested-noncertifying
-ci_checkout=actions-checkout-v4.2.2-git-sha1-11bd71901bbe5b1630ceea73d27597364c9af683
+ci_checkout=actions-checkout-v7.0.1-git-sha1-3d3c42e5aac5ba805825da76410c181273ba90b1
 ci_linker=gcc-14
 source_identity=pinned-git-existing-clean-commit-tree-and-materialized-blob-snapshot
 clang_class=class-b-host-discovery-only
