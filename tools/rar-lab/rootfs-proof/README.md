@@ -22,8 +22,8 @@ container with read-only source and bounded tmpfs outputs.
 
 - Uncompressed OCI layer media type semantics only.
 - OCI layout version `1.0.0`, schema version 2 index/manifest documents, one
-  caller-selected exact manifest digest, standard image configuration, and up
-  to 256 ordered layers.
+  caller-selected exact manifest digest, up to 8 nested index hops and 64 total
+  index documents, standard image configuration, and up to 256 ordered layers.
 - Lowercase SHA-256 descriptor grammar, exact descriptor sizes and blob hashes,
   requested configuration architecture/OS, and uncompressed `rootfs.diff_ids`.
 - Strict duplicate-key-rejecting JSON with 1 MiB document, 32-level nesting,
@@ -45,13 +45,12 @@ container with read-only source and bounded tmpfs outputs.
 
 ## Not yet a complete image proof
 
-This slice does not access a layout directory, recursively select nested image
-indexes, decompress gzip/zstd layers, or emit/validate the accepted inventory
-evidence format. Consequently it does not resolve the full security finding,
-activate image inventory v2, make a Lab profile ready, or authorize
-provisioning, target compilation, or guest execution. Those capabilities
-require reviewed follow-up slices and any owner-governed evidence-format
-decisions identified in the remediation status.
+This slice does not access a layout directory, decompress gzip/zstd layers, or
+emit/validate the accepted inventory evidence format. Consequently it does not
+resolve the full security finding, activate image inventory v2, make a Lab
+profile ready, or authorize provisioning, target compilation, or guest
+execution. Those capabilities require reviewed follow-up slices and any
+owner-governed evidence-format decisions identified in the remediation status.
 
 Semantics are pinned to OCI Image Specification v1.1.1:
 
