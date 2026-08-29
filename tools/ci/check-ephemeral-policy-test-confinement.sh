@@ -61,6 +61,44 @@ runner_tests=$(/usr/bin/sed -n 's|^/bin/sh "$root/\(tools/ci/test-[a-z0-9.-]*\.s
 [ "$(/usr/bin/grep -Fc -- '--env RAR_POLICY_MUTATION_TESTS=1 \' "$workflow")" -eq 1 ] || exit 1
 [ "$(/usr/bin/grep -Fc -- '--env RAR_EXPECTED_SOURCE_REVISION \' "$workflow")" -eq 2 ] || exit 1
 [ "$(/usr/bin/grep -Fc -- '--tmpfs "/tmp:rw,nosuid,nodev,size=128m,uid=$host_uid,gid=$host_gid,mode=1777" \' "$workflow")" -eq 2 ] || exit 1
+/usr/bin/awk '
+    /^  validate:$/ {
+        if (in_validate) bad=1
+        in_validate=1
+        validate_jobs++
+        next
+    }
+    in_validate && /^  [A-Za-z0-9_-]+:$/ { in_validate=0 }
+    in_validate && /^    timeout-minutes:/ {
+        validate_timeouts++
+        if ($0 == "    timeout-minutes: 30") approved_timeout++
+        else bad=1
+    }
+    END {
+        if (bad || validate_jobs != 1 || validate_timeouts != 1 || approved_timeout != 1) exit 1
+    }
+' "$workflow" || exit 1
+/usr/bin/awk '
+    BEGIN { approved = "            --cpus 2 --memory 2048m --memory-swap 2048m --pids-limit 256 \\" }
+    function has_resource_option(line) {
+        return line ~ /(^|[[:space:]])(--cpus([=[:space:]])|--memory([=[:space:]])|--memory-swap([=[:space:]])|--pids-limit([=[:space:]])|-m([=[:space:]]))/
+    }
+    /^[[:space:]]*docker run / {
+        if (in_docker) bad=1
+        in_docker=1
+        vectors=0
+        docker_runs++
+    }
+    has_resource_option($0) {
+        if (in_docker && $0 == approved) vectors++
+        else bad=1
+    }
+    in_docker && $0 !~ /\\[[:space:]]*$/ {
+        if (vectors != 1) bad=1
+        in_docker=0
+    }
+    END { if (bad || in_docker || docker_runs != 2) exit 1 }
+' "$workflow" || exit 1
 [ "$(/usr/bin/grep -Fxc -- '              tools/ci/run-ephemeral-policy-tests.sh' "$workflow")" -eq 1 ] || exit 1
 
 printf '%s\n' 'Ephemeral policy-test confinement passed: ephemeral=19 immutable=6 source=read-only'

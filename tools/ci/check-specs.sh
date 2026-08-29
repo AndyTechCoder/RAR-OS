@@ -656,6 +656,23 @@ if grep -q '^  runner_evidence:$' .github/workflows/specifications.yml ||
 fi
 grep -q '^  validate:$' .github/workflows/specifications.yml || fail "same-runner CI validation job is missing"
 grep -q 'name: attest-runner-and-validate' .github/workflows/specifications.yml || fail "same-runner attestation/validation identity is missing"
+/usr/bin/awk '
+    /^  validate:$/ {
+        if (in_validate) bad=1
+        in_validate=1
+        validate_jobs++
+        next
+    }
+    in_validate && /^  [A-Za-z0-9_-]+:$/ { in_validate=0 }
+    in_validate && /^    timeout-minutes:/ {
+        validate_timeouts++
+        if ($0 == "    timeout-minutes: 30") approved_timeout++
+        else bad=1
+    }
+    END {
+        if (bad || validate_jobs != 1 || validate_timeouts != 1 || approved_timeout != 1) exit 1
+    }
+' .github/workflows/specifications.yml || fail "Specifications validate-job timeout is missing, misplaced, or ambiguous"
 grep -Fq '[ "${ImageOS-}" = ubuntu24 ]' .github/workflows/specifications.yml || fail "CI runner image OS is not attested"
 grep -Fq 'rar_ci_image_version=${ImageVersion-}' .github/workflows/specifications.yml || fail "CI runner image version is not attested"
 for runner_handoff in \
@@ -804,6 +821,27 @@ grep -q -- '--read-only' .github/workflows/specifications.yml || fail "CI contai
 grep -Fq 'host_uid=$(/usr/bin/id -u)' .github/workflows/specifications.yml || fail "CI runner UID capture is missing"
 grep -Fq 'host_gid=$(/usr/bin/id -g)' .github/workflows/specifications.yml || fail "CI runner GID capture is missing"
 grep -Fq -- '--user "$host_uid:$host_gid"' .github/workflows/specifications.yml || fail "CI container does not use the runner identity"
+/usr/bin/awk '
+    BEGIN { approved = "            --cpus 2 --memory 2048m --memory-swap 2048m --pids-limit 256 \\" }
+    function has_resource_option(line) {
+        return line ~ /(^|[[:space:]])(--cpus([=[:space:]])|--memory([=[:space:]])|--memory-swap([=[:space:]])|--pids-limit([=[:space:]])|-m([=[:space:]]))/
+    }
+    /^[[:space:]]*docker run / {
+        if (in_docker) bad=1
+        in_docker=1
+        vectors=0
+        docker_runs++
+    }
+    has_resource_option($0) {
+        if (in_docker && $0 == approved) vectors++
+        else bad=1
+    }
+    in_docker && $0 !~ /\\[[:space:]]*$/ {
+        if (vectors != 1) bad=1
+        in_docker=0
+    }
+    END { if (bad || in_docker || docker_runs != 2) exit 1 }
+' .github/workflows/specifications.yml || fail "each CI container must carry one exact, non-overridable resource vector"
 grep -Fq -- 'uid=$host_uid,gid=$host_gid,mode=1777' .github/workflows/specifications.yml || fail "CI tmpfs is not writable by the runner identity"
 grep -Fq -- '--env GITHUB_ACTIONS' .github/workflows/specifications.yml || fail "CI container does not receive the GitHub Actions boundary marker"
 grep -Fq -- '--env CI' .github/workflows/specifications.yml || fail "CI container does not receive the CI boundary marker"

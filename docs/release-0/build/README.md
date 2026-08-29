@@ -23,7 +23,7 @@ tools/rarbuild/rarbuild evidence
 
 `run`, aliases, delegation names, arbitrary commands, and argument-bearing `test` modes return 73 before root discovery or host-tool execution.
 
-Executable accepted routes run only in the official Rust 1.95.0 OCI image pinned by index digest `sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3`. CI checks out the exact PR head, mounts the container tool root read-only, verifies the reviewed hosted-runner identity, selects a whole-file-digest-bound Linux lock, runs every accepted route under a poisoned caller `PATH`, and executes generated host binaries through `/proc/self/fd`.
+Executable accepted routes run only in the official Rust 1.95.0 OCI image pinned by index digest `sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3`. CI checks out the exact PR head, mounts the container tool root read-only, verifies the reviewed hosted-runner identity, selects a whole-file-digest-bound Linux lock, runs every accepted route under a poisoned caller `PATH`, and executes generated host binaries through `/proc/self/fd`. Each container is limited to 2 CPUs, 2 GiB of memory with no additional swap, and 256 processes; the aggregate job is limited to 30 minutes.
 
 The physical Mac verifies the bounded policy records, proposed macOS roots, and both closure manifests, then returns exit 2 with `reason=local-bootstrap-execution-awaits-descriptor-bound-launcher`. macOS does not provide the required descriptor-execution primitive for generated Mach-O files, so Release 0 does not reopen a mutable generated pathname and overstate its safety. This is a deliberate fail-closed limitation, not target non-execution alone.
 
