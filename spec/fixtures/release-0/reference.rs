@@ -2,9 +2,12 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Read;
+use std::os::fd::AsRawFd;
+use std::os::unix::fs::OpenOptionsExt;
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 const BUNDLE_MAGIC: &[u8; 8] = b"R0FXBIN\0";
 const ENTRY_MAGIC: &[u8; 8] = b"RARENTRY";
@@ -17,6 +20,100 @@ const MAX_MEMORY_MAP_SOURCE_BYTES: u64 = 8_192;
 const MAX_RHD_SOURCE_BYTES: u64 = 65_536;
 const MAX_ENTROPY_SOURCE_BYTES: u64 = 64;
 const MAX_TRACE_SOURCE_BYTES: u64 = 1_048_576;
+const MAX_FIXTURE_TEXT_BYTES: u64 = 65_536;
+const MAX_FIXTURE_BINARY_BYTES: u64 = 81_984;
+const MAX_FIXTURE_TEXT_LINES: usize = 512;
+const MAX_FIXTURE_LINE_BYTES: usize = 1_024;
+const LINUX_O_NONBLOCK: i32 = 0o00004000;
+const LINUX_O_NOFOLLOW: i32 = 0o00400000;
+
+fn canonical_directory(path: &Path, label: &str) -> Result<PathBuf, String> {
+    if !path.is_absolute() {
+        return Err(format!("{label} is not absolute"));
+    }
+    let metadata = fs::symlink_metadata(path).map_err(|error| format!("{label}: {error}"))?;
+    if !metadata.file_type().is_dir() || metadata.file_type().is_symlink() {
+        return Err(format!("{label} is not a non-symbolic directory"));
+    }
+    let canonical = fs::canonicalize(path).map_err(|error| format!("{label}: {error}"))?;
+    if canonical != path {
+        return Err(format!("{label} is not canonical"));
+    }
+    Ok(canonical)
+}
+
+fn bounded_file(root: &Path, relative: &Path, maximum: u64) -> Result<Vec<u8>, String> {
+    if relative.is_absolute()
+        || relative.components().any(|part| !matches!(part, Component::Normal(_)))
+    {
+        return Err(format!("non-canonical fixture path: {}", relative.display()));
+    }
+    let lexical = root.join(relative);
+    let mut file = OpenOptions::new()
+        .read(true)
+        .custom_flags(LINUX_O_NOFOLLOW | LINUX_O_NONBLOCK)
+        .open(&lexical)
+        .map_err(|error| error.to_string())?;
+    let metadata = file.metadata().map_err(|error| error.to_string())?;
+    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+        return Err(format!("fixture is not a non-symbolic regular file: {}", lexical.display()));
+    }
+    if metadata.len() > maximum {
+        return Err(format!("fixture exceeds {maximum} bytes: {}", lexical.display()));
+    }
+    let descriptor_path = PathBuf::from(format!("/proc/self/fd/{}", file.as_raw_fd()));
+    let opened_path = fs::canonicalize(&descriptor_path).map_err(|error| error.to_string())?;
+    if opened_path != lexical || !opened_path.starts_with(root) {
+        return Err(format!("fixture escapes its canonical root: {}", lexical.display()));
+    }
+    let mut bytes = Vec::new();
+    (&mut file)
+        .take(maximum + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| error.to_string())?;
+    let final_metadata = file.metadata().map_err(|error| error.to_string())?;
+    if bytes.len() as u64 > maximum
+        || bytes.len() as u64 != metadata.len()
+        || final_metadata.len() != metadata.len()
+    {
+        return Err(format!("fixture changed or exceeded its bound: {}", lexical.display()));
+    }
+    Ok(bytes)
+}
+
+fn bounded_text(root: &Path, relative: &Path) -> Result<String, String> {
+    let bytes = bounded_file(root, relative, MAX_FIXTURE_TEXT_BYTES)?;
+    let text = String::from_utf8(bytes).map_err(|_| format!("fixture text is not UTF-8: {}", relative.display()))?;
+    let mut lines = 0usize;
+    for line in text.lines() {
+        lines += 1;
+        if lines > MAX_FIXTURE_TEXT_LINES {
+            return Err(format!("fixture text exceeds {MAX_FIXTURE_TEXT_LINES} lines: {}", relative.display()));
+        }
+        if line.len() > MAX_FIXTURE_LINE_BYTES {
+            return Err(format!("fixture line exceeds {MAX_FIXTURE_LINE_BYTES} bytes: {}", relative.display()));
+        }
+    }
+    Ok(text)
+}
+
+fn fixture_basename(value: &str) -> Result<&str, String> {
+    let stem = value.strip_suffix(".bin").ok_or_else(|| format!("fixture name lacks .bin suffix: {value}"))?;
+    if value.len() > 64 || stem.is_empty() || stem.contains('.')
+        || !stem.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-'))
+    {
+        return Err(format!("fixture name is not a canonical basename: {value}"));
+    }
+    Ok(value)
+}
+
+fn architecture_baseline(value: &str) -> Result<&'static Path, String> {
+    match value {
+        "x86_64" => Ok(Path::new("bin/valid-x86_64.bin")),
+        "aarch64" => Ok(Path::new("bin/valid-aarch64.bin")),
+        _ => Err(format!("scenario architecture is invalid: {value}")),
+    }
+}
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1587,12 +1684,14 @@ fn predicate_rows(fields: &str) -> Vec<(usize, String, String)> {
 }
 
 fn check_precedence(root: &Path) -> Result<(), String> {
-    let fields = fs::read_to_string(root.join("../../boot/handoff-v1.fields")).map_err(|error| error.to_string())?;
-    let fixture = fs::read_to_string(root.join("validation-precedence.v1")).map_err(|error| error.to_string())?;
+    let spec_candidate = root.parent().and_then(Path::parent).ok_or_else(|| "fixture root has no spec ancestor".to_string())?;
+    let spec_root = canonical_directory(spec_candidate, "spec root")?;
+    let fields = bounded_text(&spec_root, Path::new("boot/handoff-v1.fields"))?;
+    let fixture = bounded_text(root, Path::new("validation-precedence.v1"))?;
     let predicates = predicate_rows(&fields);
     if predicates.len() != 37 { return Err("canonical predicate count is not 37".into()); }
     for architecture in ["x86_64", "aarch64"] {
-      let baseline = fs::read(root.join(format!("bin/valid-{architecture}.bin"))).map_err(|error| error.to_string())?;
+      let baseline = bounded_file(root, architecture_baseline(architecture)?, MAX_FIXTURE_BINARY_BYTES)?;
       for (index, (order, predicate, expected)) in predicates.iter().enumerate() {
         let declaration = format!("single|{order}|{predicate}|{expected}");
         if !fixture.lines().any(|line| line == declaration) { return Err(format!("missing executable mutation declaration: {declaration}")); }
@@ -1623,7 +1722,7 @@ fn check_precedence(root: &Path) -> Result<(), String> {
         let columns: Vec<_> = line.split('|').collect();
         if columns.len() != 4 { return Err(format!("malformed security pair: {line}")); }
         for architecture in ["x86_64", "aarch64"] {
-            let mut bytes = fs::read(root.join(format!("bin/valid-{architecture}.bin"))).map_err(|error| error.to_string())?;
+            let mut bytes = bounded_file(root, architecture_baseline(architecture)?, MAX_FIXTURE_BINARY_BYTES)?;
             let mut behavior = Behavior::default();
             apply_mutation(&mut bytes, columns[2], &mut behavior);
             apply_mutation(&mut bytes, columns[1], &mut behavior);
@@ -1638,13 +1737,13 @@ fn check_precedence(root: &Path) -> Result<(), String> {
 }
 
 fn check_scenarios(root: &Path) -> Result<usize, String> {
-    let manifest = fs::read_to_string(root.join("conformance-scenarios.v1")).map_err(|error| error.to_string())?;
+    let manifest = bounded_text(root, Path::new("conformance-scenarios.v1"))?;
     let mut count = 0usize;
     for line in manifest.lines() {
         if line.is_empty() || line.starts_with("schema=") || line.starts_with("id|") { continue; }
         let columns: Vec<_> = line.split('|').collect();
         if !matches!(columns.len(), 7 | 8) { return Err(format!("malformed scenario row: {line}")); }
-        let mut bytes = fs::read(root.join(format!("bin/valid-{}.bin", columns[1]))).map_err(|error| error.to_string())?;
+        let mut bytes = bounded_file(root, architecture_baseline(columns[1])?, MAX_FIXTURE_BINARY_BYTES)?;
         let mut behavior = Behavior::default();
         for mutation in columns[2].split(',').filter(|mutation| *mutation != "none") {
             match mutation {
@@ -1673,15 +1772,23 @@ fn check_scenarios(root: &Path) -> Result<usize, String> {
 }
 
 fn main() {
-    let root = PathBuf::from(env::args_os().nth(1).expect("fixture root argument"));
-    let manifest = fs::read_to_string(root.join("cases.v1")).expect("read cases.v1");
+    let supplied_root = PathBuf::from(env::args_os().nth(1).expect("fixture root argument"));
+    let root = canonical_directory(&supplied_root, "fixture root").unwrap_or_else(|error| panic!("{error}"));
+    let manifest = bounded_text(&root, Path::new("cases.v1")).unwrap_or_else(|error| panic!("{error}"));
     let mut failures = 0usize;
     let mut count = 0usize;
     for line in manifest.lines() {
         if line.is_empty() || line.starts_with("schema=") || line.starts_with("id|") { continue; }
         let fields: Vec<_> = line.split('|').collect();
         if fields.len() != 3 { eprintln!("malformed manifest row: {line}"); failures += 1; continue; }
-        let bytes = fs::read(root.join("bin").join(Path::new(fields[2]))).expect("read binary fixture");
+        let basename = match fixture_basename(fields[2]) {
+            Ok(value) => value,
+            Err(error) => { eprintln!("{error}"); failures += 1; continue; }
+        };
+        let bytes = match bounded_file(&root, &Path::new("bin").join(basename), MAX_FIXTURE_BINARY_BYTES) {
+            Ok(value) => value,
+            Err(error) => { eprintln!("{error}"); failures += 1; continue; }
+        };
         match run_bytes(&bytes, Behavior::default()) {
             Ok((actual, _, effects)) => {
                 let bundle = parse_bundle(&bytes).expect("fixture bundle");
