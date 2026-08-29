@@ -206,12 +206,13 @@ Gate 0 was approved on 2026-07-16. Every P0 item in this gate is complete as an 
 
 ## Immediate next items
 
-1. Resolve the private-repository Actions account payment/spending condition
-   owner-side before any push or rerun. Then follow
-   `docs/runbooks/github-actions-account-unblock.md`: publish the complete
-   reviewed local head once and stop immediately if the job again has no runner
-   or no steps.
-2. Make PR #7's required workflow execute real steps and pass; complete review,
+1. Preserve reviewed local portability repair `eaa914a` without pushing or
+   rerunning it. Public-repository Actions now reaches real Linux validation,
+   but the original attempt plus both permitted retries are exhausted. No new
+   workflow attempt is authorized until the owner explicitly opens one bounded
+   attempt.
+2. After that later authorization, publish the complete reviewed local head
+   once. Make PR #7's required workflow pass; complete review,
    merge the exact rebaseline head, verify the merge on GitHub, and require the
    distinct `main` workflow to pass before calling the replacement durable.
 3. Only after that durability proof, close draft PR #5 as superseded while
