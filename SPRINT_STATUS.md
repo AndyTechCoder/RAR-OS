@@ -7,7 +7,7 @@
 - Worktree: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/sprint-alpha-rebaseline`
 - Branch: `codex/sprint-alpha-rebaseline`
 - Pull request: [#7](https://github.com/AndyTechCoder/RAR-OS/pull/7), draft
-- Remote PR head: `19a88839cadf4e5f0cf322b77717b4f268788f35`.
+- Remote PR head: `aa4c797f5db0b6979c24e7a2939dae6d34490a9a`.
   The previously reviewed runner-context, SSD-only capacity, status, and
   missing-profile commits are published. The first public-repository
   Specifications run started a real runner and entered its validation steps;
@@ -16,10 +16,10 @@
   first mode inventory. The final permitted run then exposed a separate
   BSD-first `stat` portability defect. A complete source audit now reverses the
   fallback order for every affected size, ownership, link-count, and identity
-  query and adds a static regression guard. Current local head `b772e98`
-  records the bounded recovery backlog, with independently reviewed portability
-  repair `eaa914a` as its parent. Both remain intentionally unpushed because
-  the packet's original run plus two retries are exhausted.
+  query and adds a static regression guard. The reviewed portability repair
+  `eaa914a`, bounded recovery backlog `b772e98`, and reconciled status
+  `aa4c797` are now published under the owner's renewed bounded-attempt
+  instruction.
   Earlier
   published
   source/safety commits fix branch whitespace/hash bindings, strengthen
@@ -204,11 +204,19 @@
   handoff validator and failed because BSD-first `stat -f %z` returned
   successful filesystem text on Linux instead of a numeric byte count. The
   same fallback order occurs in thirteen validators, so a bounded source audit
-  repairs the complete class and adds a regression check. No fourth workflow
-  attempt is authorized by the current two-retry contract; the local repair is
-  not published or claimed green. A live read-only check on 2026-08-29 confirms
-  PR #7 remains open, draft, mergeable, and `UNSTABLE`, with that run as its
-  sole required failed check at the exact remote head.
+  repairs the complete class and adds a regression check. On 2026-08-29 the
+  owner explicitly reopened one bounded repair cycle and directed the task to
+  diagnose, fix, and move on rather than stop at the simple CI error. Diagnostic
+  run `33265595655`, job
+  `99134978201`, at exact head `aa4c797f5db0b6979c24e7a2939dae6d34490a9a`
+  proved the portable-stat guard, specification suite, immutable fixtures,
+  Release 0 conformance, and generated SDK checks, then failed closed because
+  GitHub had rotated its externally attested runner from `20260714.240.1` to
+  `20260823.283.1`. The current reviewed repair refreshes only that external
+  non-certifying runner identity, runner/agent evidence, inventory digest, and
+  matching negative tests. One post-repair exact-head verification run is the
+  remaining action in this cycle; repeated partial retries are not authorized.
+  The immutable OCI/toolchain pins remain unchanged.
   The former zero-step account/billing blocker is cleared. A pattern-limited
   read on
   2026-08-28 confirmed that the user-level Codex config exists but contains no
@@ -216,7 +224,9 @@
   external file was changed. The reviewed `rar-os-ssd` profile therefore still
   needs one-time owner-approved installation and confinement evidence in a
   fresh SSD-root task
-- Next durable action: record exact owner choices for ADRs 0023, 0024, and 0026,
+- Next durable action: publish the one reviewed runner-attestation refresh and
+  require PR #7's complete exact-head workflow to pass before merge. Then
+  record exact owner choices for ADRs 0023, 0024, and 0026,
   make the boot contract and v2 controller/helper evidence genuinely ready, and
   pass the external Lab/PR/checkpoint gates before Milestone A. ADR 0025 remains
   mandatory before Milestone B; ADR 0022 and its reviewed peripheral-grant

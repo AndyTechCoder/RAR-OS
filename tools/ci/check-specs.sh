@@ -587,7 +587,7 @@ grep -qx 'class_b_inventory=tools/toolchain/class-b-host-tools.v1' tools/toolcha
 grep -Eq '^class_b_inventory_sha256=[0-9a-f]{64}$' tools/toolchain/host-tools.manifest || fail "host tool manifest omits the Class B inventory digest"
 grep -q 'f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3' "$class_b_inventory" || fail "Class B inventory omits the OCI digest"
 grep -q '11bd71901bbe5b1630ceea73d27597364c9af683' "$class_b_inventory" || fail "Class B inventory omits the checkout action commit"
-grep -q 'ubuntu-24.04-20260714.240.1' "$class_b_inventory" || fail "Class B inventory omits the runner image version"
+grep -q 'ubuntu-24.04-20260823.283.1' "$class_b_inventory" || fail "Class B inventory omits the runner image version"
 
 sha256_of() {
     if [ -x /usr/bin/sha256sum ]; then
