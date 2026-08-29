@@ -13,10 +13,16 @@
   generated SDK checks, and host/bootstrap tests. Its final cloud-only mutation
   phase exposed one test-harness defect: the Linux fixture copied the Mac-only
   local preflight without substituting its host-system probe. The current
-  bounded repair makes only that probe path injectable in the copied fixture,
+  bounded repair substitutes only the copied fixture's computed system value,
   keeps production fixed to `/usr/bin/uname` and exact `Darwin`, adds explicit
-  non-Darwin rejection, and digest/static-binds both scripts. Architecture,
-  security, and correctness reviews are clean.
+  non-Darwin rejection, and digest/static-binds both scripts. Its first version,
+  published as `17cd7c75727bcfd8b014c3ad98cdd5484781e5ce`, consumed run
+  `33266499096`, job `99137373094`: the complete primary validation passed, but
+  the final phase proved executable files are denied in the ephemeral test
+  tmpfs. The successor uses no executable mock. The owner's 2026-08-29
+  instruction to figure out or skip this simple error and continue explicitly
+  authorizes this bounded successor verification. Architecture, security, and
+  correctness reviews are clean.
   Earlier
   published
   source/safety commits fix branch whitespace/hash bindings, strengthen
@@ -214,7 +220,9 @@
   validation phase and failed only because the final Linux mutation fixture
   retained the production Mac-only `uname` result. The current independently
   reviewed repair fixes that fixture seam without weakening the production
-  boundary. One exact-head cloud verification remains. The immutable
+  boundary. Its first exact-head run `33266499096` then failed only because the
+  executable mock was denied in ephemeral `/tmp`; the no-executable successor
+  is the one remaining owner-authorized exact-head verification. The immutable
   OCI/toolchain pins remain unchanged.
   The former zero-step account/billing blocker is cleared. A pattern-limited
   read on

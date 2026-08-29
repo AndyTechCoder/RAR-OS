@@ -14,13 +14,14 @@ minimum_ssd_free_kib=10485760
 maximum_workspace_kib=8388608
 git_bin=/usr/bin/git
 uname_bin=/usr/bin/uname
+uname_system=$("$uname_bin" -s)
 
 fail() {
     printf 'sprint preflight blocked: %s\n' "$1" >&2
     exit 1
 }
 
-[ "$("$uname_bin" -s)" = Darwin ] || fail 'this check is only for the owner Mac'
+[ "$uname_system" = Darwin ] || fail 'this check is only for the owner Mac'
 [ -d "$safe_root" ] || fail 'the exact SSD workspace is not mounted'
 [ ! -L "$safe_root" ] || fail 'the SSD workspace root must not be a symbolic link'
 [ -f "$identity_file" ] && [ ! -L "$identity_file" ] ||

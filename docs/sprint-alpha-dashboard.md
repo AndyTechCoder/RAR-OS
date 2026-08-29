@@ -38,11 +38,12 @@ functionality and cannot increase the implementation count.
 - The exact Alpha boot/platform contracts are not ready.
 - The Lab/controller/helper lacks real activating identities and reviewed cloud
   build/test evidence.
-- PR #7 is still draft. Run `33266007613` at the reviewed runner-refresh head
-  passed the complete primary validation phase. Its final cloud-only mutation
-  test exposed a Linux fixture that had not substituted the production Mac-only
-  host probe. The bounded fixture repair is independently clean and awaiting one
-  exact-head workflow; no green or implementation claim is made yet.
+- PR #7 is still draft. Runs `33266007613` and `33266499096` passed the complete
+  primary validation phase. The latter proved that its final cloud-only test
+  could not execute a tiny mock from ephemeral `/tmp`. The independently clean
+  successor substitutes only the copied fixture's computed system value and is
+  awaiting the owner-authorized exact-head workflow; no green or implementation
+  claim is made yet.
 - The SSD confinement/profile proof is not recorded as passing for the future
   implementation task. SSD reserve and exact-root capacity evidence remain
   required; internal-Mac free space is not an Alpha workspace precondition.

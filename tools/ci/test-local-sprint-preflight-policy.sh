@@ -29,34 +29,19 @@ remote=$work/remote.git
     'safety_root=/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha' \
     > "$safe/.rar-os-workspace-identity"
 
-uname_darwin=$work/uname-darwin
-/usr/bin/printf '%s\n' \
-    '#!/bin/sh' \
-    '[ "$#" -eq 1 ] && [ "$1" = -s ] || exit 1' \
-    "/usr/bin/printf '%s\\n' Darwin" \
-    > "$uname_darwin"
-/bin/chmod 700 "$uname_darwin"
-
 fixture=$work/check.sh
 /usr/bin/sed \
     -e "s|^safe_root=.*|safe_root='$safe'|" \
     -e "s|^canonical_https=.*|canonical_https='$remote'|" \
     -e "s|^minimum_ssd_free_kib=.*|minimum_ssd_free_kib=0|" \
     -e "s|^maximum_workspace_kib=.*|maximum_workspace_kib=1048576|" \
-    -e "s|^uname_bin=.*|uname_bin='$uname_darwin'|" \
+    -e 's|^uname_system=.*|uname_system=Darwin|' \
     "$root/tools/ci/check-local-sprint-preflight.sh" > "$fixture"
 
 (cd "$repo" && /bin/sh "$fixture" >/dev/null)
 
-uname_linux=$work/uname-linux
-/usr/bin/printf '%s\n' \
-    '#!/bin/sh' \
-    '[ "$#" -eq 1 ] && [ "$1" = -s ] || exit 1' \
-    "/usr/bin/printf '%s\\n' Linux" \
-    > "$uname_linux"
-/bin/chmod 700 "$uname_linux"
 wrong_system=$work/check-wrong-system.sh
-/usr/bin/sed "s|^uname_bin=.*|uname_bin='$uname_linux'|" "$fixture" > "$wrong_system"
+/usr/bin/sed 's|^uname_system=.*|uname_system=Linux|' "$fixture" > "$wrong_system"
 if (cd "$repo" && /bin/sh "$wrong_system" >/dev/null 2>&1); then exit 1; fi
 
 ssd_low=$work/check-ssd-low.sh

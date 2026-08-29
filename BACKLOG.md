@@ -206,9 +206,10 @@ Gate 0 was approved on 2026-07-16. Every P0 item in this gate is complete as an 
 
 ## Immediate next items
 
-1. Publish the independently reviewed Linux preflight-fixture repair and inspect
-   its exact-head workflow. The runner-attestation and primary validation phases
-   already passed at `9e4da4c`; production remains Mac-only.
+1. Publish the independently reviewed no-executable Linux preflight-fixture
+   successor and inspect its owner-authorized exact-head workflow. Run
+   `33266499096` proved the prior executable mock was denied by ephemeral
+   `/tmp`; production remains Mac-only.
 2. Make PR #7's required workflow pass; complete review,
    merge the exact rebaseline head, verify the merge on GitHub, and require the
    distinct `main` workflow to pass before calling the replacement durable.
