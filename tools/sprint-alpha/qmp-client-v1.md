@@ -29,7 +29,9 @@ returns zero only after the requested result is observed:
   or size mismatch.
 - `quit SOCKET` sends one QMP quit command and waits for acknowledgement.
 
-Arguments, replies, allocation, output, and time are bounded. Unknown verbs,
+Arguments, replies, allocation, output, and time are bounded. Each QMP
+operation has one cumulative deadline covering readiness, negotiation, request,
+events, and reply; partial progress never restarts that deadline. Unknown verbs,
 paths outside `/tmp` and `/evidence`, unknown chords, duplicate output names,
 and non-Unix sockets fail closed. Version output is exactly
 `rar-qmp-client 1`. Replacement requires a versioned contract and new reviewed

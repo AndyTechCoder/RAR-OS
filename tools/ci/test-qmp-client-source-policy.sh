@@ -30,6 +30,10 @@ expect_rejected extra-source
 expect_rejected symlink-source
 /bin/rm -f "$tree/json.rs"
 /bin/mv "$tree/json.real" "$tree/json.rs"
+/usr/bin/sed '/^    deadline: Instant,$/d' "$tree/main.rs" > "$tree/main.rs.mutated"
+/bin/mv "$tree/main.rs.mutated" "$tree/main.rs"
+expect_rejected missing-cumulative-deadline
+/bin/cp "$root/tools/rar-lab/qmp-client/main.rs" "$tree/main.rs"
 /usr/bin/sed 's/^network=none$/network=enabled/' "$tree/build-plan.v1" > "$tree/plan"
 /bin/mv "$tree/plan" "$tree/build-plan.v1"
 expect_rejected networked-build-plan

@@ -11,6 +11,9 @@ Security properties:
   paths under `/evidence` are accepted;
 - QMP messages, nesting, members, events, serial data, trace lines, time, image
   dimensions, and output sizes are bounded;
+- one cumulative deadline covers socket readiness, greeting, capability
+  negotiation, request writes, asynchronous events, and the final reply, so a
+  slow peer cannot reset the timeout byte by byte or event by event;
 - duplicate JSON keys, unknown response IDs, errors, malformed replies,
   unexpected paths, unknown commands/chords, stale trace markers, symlinks, and
   existing capture outputs fail closed;

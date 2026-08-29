@@ -52,4 +52,7 @@ done
 /usr/bin/grep -Fq '0x7fff' "$tree/main.rs" || exit 1
 /usr/bin/grep -Fq 'fs::hard_link(&temporary, &path)' "$tree/main.rs" || exit 1
 /usr/bin/grep -Fq 'QMP success payload is not an empty object' "$tree/main.rs" || exit 1
+/usr/bin/grep -Fqx '    deadline: Instant,' "$tree/main.rs" || exit 1
+/usr/bin/grep -Fq 'checked_duration_since(Instant::now())' "$tree/main.rs" || exit 1
+/usr/bin/grep -Fq 'qmp_slow_drip_cannot_extend_the_cumulative_deadline' "$tree/main.rs" || exit 1
 printf '%s\n' 'QMP client source policy passed'
