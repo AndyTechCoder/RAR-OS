@@ -9,6 +9,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 mod json;
+#[cfg(target_os = "linux")]
+pub mod layout;
 pub mod oci;
 mod sha256;
 

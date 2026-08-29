@@ -13,11 +13,14 @@ files and ELF objects at any path, including paths outside role-specific `/opt`
 roots, and binds every effective regular file to its SHA-256 content digest.
 
 The implementation uses Rust `std` only, contains no `unsafe`, and does not
-spawn a process, access a filesystem, decompress data, build an image, or execute
-target code. The sole public resolver uses a bounded callback-based source
+spawn a process, decompress data, build an image, or execute target code. Its
+Linux cloud-only layout adapter confines filesystem reads beneath an opened,
+non-symlink root directory handle; accepts only exact regular-file paths; and
+rejects symlinks, special files, out-of-root resolution, and size changes before
+content parsing. The sole public document resolver uses a bounded source
 interface that supplies exact blob bytes by digest and receives the descriptor's
 exact declared size as the ceiling before each access. A trusted future layout
-adapter must enforce that ceiling before allocation or I/O.
+consumer must enforce that ceiling before allocation or I/O.
 Unit tests compile and run only in the pinned, network-disabled cloud validation
 container with read-only source and bounded tmpfs outputs.
 
@@ -48,8 +51,8 @@ container with read-only source and bounded tmpfs outputs.
 
 ## Not yet a complete image proof
 
-This slice does not access a layout directory, decompress gzip/zstd layers, or
-emit/validate the accepted inventory evidence format. Consequently it does not
+This slice does not decompress gzip/zstd layers or emit/validate the accepted
+inventory evidence format. Consequently it does not
 resolve the full security finding, activate image inventory v2, make a Lab
 profile ready, or authorize provisioning, target compilation, or guest
 execution. Those capabilities require reviewed follow-up slices and any
