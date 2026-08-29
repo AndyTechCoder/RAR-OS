@@ -111,9 +111,11 @@ jobs:
             --security-opt no-new-privileges --cap-drop ALL \
             --tmpfs "/tmp:rw,nosuid,nodev,size=128m,uid=$host_uid,gid=$host_gid,mode=1777" \
             --tmpfs "/build:rw,exec,nosuid,nodev,size=32m,uid=$host_uid,gid=$host_gid,mode=700" \
+            --tmpfs "/evidence:rw,nosuid,nodev,noexec,size=64m,uid=$host_uid,gid=$host_gid,mode=700" \
             --mount "type=bind,source=$GITHUB_WORKSPACE/mutation-source,target=/workspace,readonly" \
             --workdir /workspace \
             --env RAR_POLICY_MUTATION_TESTS=1 \
+            --env RAR_QMP_SOURCE_TESTS=1 \
             --env RAR_EXPECTED_SOURCE_REVISION \
             --env RAR_CI_BOOTSTRAP_IMAGE \
             --env RAR_CI_RUNNER_IMAGE_OS \
@@ -125,4 +127,5 @@ jobs:
             rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 \
             /usr/bin/dash -e -c '
               tools/ci/run-ephemeral-policy-tests.sh
+              tools/ci/run-qmp-client-unit-tests.sh
             '

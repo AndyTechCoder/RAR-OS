@@ -59,9 +59,11 @@ runner_tests=$(/usr/bin/sed -n 's|^/bin/sh "$root/\(tools/ci/test-[a-z0-9.-]*\.s
 [ "$(/usr/bin/grep -Fc -- '--mount "type=bind,source=$GITHUB_WORKSPACE/primary-source,target=/workspace" \' "$workflow")" -eq 1 ] || exit 1
 [ "$(/usr/bin/grep -Fc -- '--mount "type=bind,source=$GITHUB_WORKSPACE/mutation-source,target=/workspace,readonly" \' "$workflow")" -eq 1 ] || exit 1
 [ "$(/usr/bin/grep -Fc -- '--env RAR_POLICY_MUTATION_TESTS=1 \' "$workflow")" -eq 1 ] || exit 1
+[ "$(/usr/bin/grep -Fc -- '--env RAR_QMP_SOURCE_TESTS=1 \' "$workflow")" -eq 1 ] || exit 1
 [ "$(/usr/bin/grep -Fc -- '--env RAR_EXPECTED_SOURCE_REVISION \' "$workflow")" -eq 2 ] || exit 1
 [ "$(/usr/bin/grep -Fc -- '--tmpfs "/tmp:rw,nosuid,nodev,size=128m,uid=$host_uid,gid=$host_gid,mode=1777" \' "$workflow")" -eq 2 ] || exit 1
 [ "$(/usr/bin/grep -Fc -- '--tmpfs "/build:rw,exec,nosuid,nodev,size=32m,uid=$host_uid,gid=$host_gid,mode=700" \' "$workflow")" -eq 1 ] || exit 1
+[ "$(/usr/bin/grep -Fc -- '--tmpfs "/evidence:rw,nosuid,nodev,noexec,size=64m,uid=$host_uid,gid=$host_gid,mode=700" \' "$workflow")" -eq 1 ] || exit 1
 /usr/bin/awk '
     /^  validate:$/ {
         if (in_validate) bad=1
@@ -101,5 +103,8 @@ runner_tests=$(/usr/bin/sed -n 's|^/bin/sh "$root/\(tools/ci/test-[a-z0-9.-]*\.s
     END { if (bad || in_docker || docker_runs != 2) exit 1 }
 ' "$workflow" || exit 1
 [ "$(/usr/bin/grep -Fxc -- '              tools/ci/run-ephemeral-policy-tests.sh' "$workflow")" -eq 1 ] || exit 1
+[ "$(/usr/bin/grep -Fxc -- '              tools/ci/run-qmp-client-unit-tests.sh' "$workflow")" -eq 1 ] || exit 1
+[ "$(/usr/bin/grep -Fc 'tools/ci/run-qmp-client-unit-tests.sh' tools/ci/check-sprint-static.sh)" -eq 1 ] || exit 1
+[ "$(/usr/bin/grep -Fc 'tools/ci/run-qmp-client-unit-tests.sh' tools/ci/check-specs.sh)" -eq 2 ] || exit 1
 
 printf '%s\n' 'Ephemeral policy-test confinement passed: ephemeral=20 immutable=6 source=read-only'

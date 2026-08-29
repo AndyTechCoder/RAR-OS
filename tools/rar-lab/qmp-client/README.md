@@ -28,8 +28,11 @@ Security properties:
 
 The QMP pathname itself is protected by the launch container's private `0700`
 tmpfs and contains only trusted controller/QEMU processes; the guest and
-untrusted source phase cannot reach that namespace. Source tests use a bounded
-fake Unix QMP server to cover strict greetings, empty-object acknowledgements,
+untrusted source phase cannot reach that namespace. Source tests run only in
+the pinned, network-disabled cloud validation container with the repository
+mounted read-only and bounded `/build`, `/tmp`, and `/evidence` tmpfs mounts.
+They use a bounded fake Unix QMP server to cover strict greetings,
+empty-object acknowledgements,
 wrong IDs, malformed events, event floods, truncation, timeouts, trace
 replacement/duplicates, capture collisions, and exact PPM boundaries.
 

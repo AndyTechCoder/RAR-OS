@@ -65,6 +65,7 @@ tools/ci/check-specs.sh
     tools/ci/require-ephemeral-policy-test-root.sh \
     tools/ci/check-ephemeral-policy-test-confinement.sh \
     tools/ci/run-ephemeral-policy-tests.sh \
+    tools/ci/run-qmp-client-unit-tests.sh \
     tools/ci/test-workspace-budget-policy.sh \
     tools/ci/verify-pinned-file.sh \
     tools/ci/test-pinned-file-policy.sh \
