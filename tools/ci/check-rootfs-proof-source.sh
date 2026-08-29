@@ -52,6 +52,8 @@ for test_name in \
     /usr/bin/grep -Fq "fn $test_name()" "$tree/lib.rs" || exit 1
 done
 /usr/bin/grep -Fq '#![forbid(unsafe_code)]' "$tree/lib.rs" || exit 1
+/usr/bin/grep -Fq 'pub fn resolve_uncompressed_image_from_source' "$tree/oci.rs" || exit 1
+! /usr/bin/grep -Fq 'pub fn resolve_uncompressed_image<' "$tree/oci.rs" || exit 1
 for test_name in \
     parses_utf8_unicode_escapes_and_unsigned_integers \
     rejects_duplicates_invalid_numbers_and_trailing_data; do

@@ -96,7 +96,8 @@ where
 /// `blob` must return the complete bytes for the requested lowercase SHA-256
 /// digest. This function never accesses a filesystem, network, process, image
 /// builder, or emulator.
-pub fn resolve_uncompressed_image<'a, F>(
+#[cfg(test)]
+fn resolve_uncompressed_image<'a, F>(
     layout_document: &[u8],
     index_document: &[u8],
     expected_manifest_digest: &str,
@@ -358,7 +359,7 @@ where
     if descriptor.size > maximum_bytes {
         return Err(Error::BlobTooLarge);
     }
-    source.with_blob(&descriptor.digest, maximum_bytes, |bytes| {
+    source.with_blob(&descriptor.digest, descriptor.size, |bytes| {
         if bytes.len() != descriptor.size {
             return Err(Error::BlobSizeMismatch);
         }
@@ -426,7 +427,7 @@ mod tests {
 
     struct RecordingSource<'a> {
         blobs: &'a BTreeMap<String, Vec<u8>>,
-        maximums: Vec<usize>,
+        accesses: Vec<(String, usize)>,
     }
 
     impl BlobSource for RecordingSource<'_> {
@@ -439,7 +440,7 @@ mod tests {
         where
             C: FnOnce(&[u8]) -> Result<T, Error>,
         {
-            self.maximums.push(maximum_bytes);
+            self.accesses.push((digest.to_owned(), maximum_bytes));
             let bytes = self.blobs.get(digest).ok_or(Error::MissingBlob)?;
             if bytes.len() > maximum_bytes {
                 return Err(Error::BlobTooLarge);
@@ -519,7 +520,7 @@ mod tests {
         let fixture = fixture(UNCOMPRESSED_LAYER_MEDIA_TYPE, false);
         let mut source = RecordingSource {
             blobs: &fixture.blobs,
-            maximums: Vec::new(),
+            accesses: Vec::new(),
         };
         resolve_uncompressed_image_from_source(
             &fixture.layout,
@@ -531,15 +532,10 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(
-            source.maximums,
-            vec![
-                json::MAX_JSON_BYTES,
-                json::MAX_JSON_BYTES,
-                MAX_LAYER_BYTES,
-                MAX_LAYER_BYTES,
-            ]
-        );
+        assert_eq!(source.accesses.len(), 4);
+        for (digest, maximum_bytes) in &source.accesses {
+            assert_eq!(*maximum_bytes, fixture.blobs[digest].len());
+        }
     }
 
     #[test]
