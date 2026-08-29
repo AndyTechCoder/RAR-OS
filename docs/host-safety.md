@@ -143,7 +143,9 @@ authorize execution on this Mac or constitute production certification.
    only approved policy-test scratch path. Docker may expose isolated writable
    pseudo-filesystems such as `/dev`; they are not host-backed, are not accepted
    by the guard, and policy-test work paths cannot target them. Incomplete
-   Linux/CI evidence fails closed.
+   Linux/CI evidence fails closed. Each Specifications container is limited to
+   2 CPUs, 2 GiB of memory with no additional swap, and 256 processes; the
+   aggregate validation job is limited to 30 minutes.
 3. **Cloud Development Lab:** bounded automated target builds and isolated guest
    execution under ADR 0017.
 4. **Future local launcher certification:** unsafe VM configurations are
