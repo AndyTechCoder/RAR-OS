@@ -49,6 +49,48 @@ pub enum Error {
     HashFailure,
 }
 
+/// Supplies one content-addressed blob to a bounded consumer.
+///
+/// Implementations that allocate or read external storage must enforce
+/// `maximum_bytes` before allocation/read and must not invoke `consume` with
+/// more bytes than that ceiling. The resolver independently verifies the
+/// descriptor size and SHA-256 digest before its own consumer processes bytes.
+pub trait BlobSource {
+    fn with_blob<T, C>(
+        &mut self,
+        digest: &str,
+        maximum_bytes: usize,
+        consume: C,
+    ) -> Result<T, Error>
+    where
+        C: FnOnce(&[u8]) -> Result<T, Error>;
+}
+
+struct BorrowedBlobSource<F> {
+    blob: F,
+}
+
+impl<'a, F> BlobSource for BorrowedBlobSource<F>
+where
+    F: FnMut(&str) -> Option<&'a [u8]>,
+{
+    fn with_blob<T, C>(
+        &mut self,
+        digest: &str,
+        maximum_bytes: usize,
+        consume: C,
+    ) -> Result<T, Error>
+    where
+        C: FnOnce(&[u8]) -> Result<T, Error>,
+    {
+        let bytes = (self.blob)(digest).ok_or(Error::MissingBlob)?;
+        if bytes.len() > maximum_bytes {
+            return Err(Error::BlobTooLarge);
+        }
+        consume(bytes)
+    }
+}
+
 /// Resolves one exact manifest from caller-supplied, content-addressed blobs.
 ///
 /// `blob` must return the complete bytes for the requested lowercase SHA-256
@@ -60,10 +102,33 @@ pub fn resolve_uncompressed_image<'a, F>(
     expected_manifest_digest: &str,
     expected_architecture: &str,
     expected_os: &str,
-    mut blob: F,
+    blob: F,
 ) -> Result<EffectiveRootfs, Error>
 where
     F: FnMut(&str) -> Option<&'a [u8]>,
+{
+    let mut source = BorrowedBlobSource { blob };
+    resolve_uncompressed_image_from_source(
+        layout_document,
+        index_document,
+        expected_manifest_digest,
+        expected_architecture,
+        expected_os,
+        &mut source,
+    )
+}
+
+/// Resolves one exact manifest through a source that receives every read bound.
+pub fn resolve_uncompressed_image_from_source<S>(
+    layout_document: &[u8],
+    index_document: &[u8],
+    expected_manifest_digest: &str,
+    expected_architecture: &str,
+    expected_os: &str,
+    source: &mut S,
+) -> Result<EffectiveRootfs, Error>
+where
+    S: BlobSource,
 {
     validate_digest(expected_manifest_digest)?;
     validate_layout(layout_document)?;
@@ -75,15 +140,15 @@ where
         expected_manifest_digest,
         0,
         &mut traversal,
-        &mut blob,
+        source,
     )?
     .ok_or(Error::ManifestNotFound)?;
-    let manifest_bytes = require_verified_blob(
+    let manifest = with_verified_blob(
         &manifest_descriptor,
         json::MAX_JSON_BYTES,
-        &mut blob,
+        source,
+        |bytes| json::parse(bytes).map_err(Error::Json),
     )?;
-    let manifest = json::parse(manifest_bytes).map_err(Error::Json)?;
     require_schema_version(&manifest, Error::InvalidManifest)?;
     require_optional_media_type(&manifest, MANIFEST_MEDIA_TYPE, Error::InvalidManifest)?;
 
@@ -113,12 +178,12 @@ where
         layer_descriptors.push(descriptor);
     }
 
-    let config_bytes = require_verified_blob(
+    let configuration = with_verified_blob(
         &config_descriptor,
         json::MAX_JSON_BYTES,
-        &mut blob,
+        source,
+        |bytes| json::parse(bytes).map_err(Error::Json),
     )?;
-    let configuration = json::parse(config_bytes).map_err(Error::Json)?;
     validate_configuration(
         &configuration,
         expected_architecture,
@@ -128,10 +193,11 @@ where
 
     let mut rootfs = EffectiveRootfs::default();
     for descriptor in &layer_descriptors {
-        let bytes = require_verified_blob(descriptor, MAX_LAYER_BYTES, &mut blob)?;
-        rootfs
-            .apply_uncompressed_ustar_layer(bytes)
-            .map_err(Error::Layer)?;
+        with_verified_blob(descriptor, MAX_LAYER_BYTES, source, |bytes| {
+            rootfs
+                .apply_uncompressed_ustar_layer(bytes)
+                .map_err(Error::Layer)
+        })?;
     }
     Ok(rootfs)
 }
@@ -140,15 +206,15 @@ struct IndexTraversal {
     documents: usize,
 }
 
-fn find_manifest_descriptor<'a, F>(
+fn find_manifest_descriptor<S>(
     index: &Value,
     expected_manifest_digest: &str,
     depth: usize,
     traversal: &mut IndexTraversal,
-    blob: &mut F,
+    source: &mut S,
 ) -> Result<Option<Descriptor>, Error>
 where
-    F: FnMut(&str) -> Option<&'a [u8]>,
+    S: BlobSource,
 {
     require_schema_version(&index, Error::InvalidIndex)?;
     require_optional_media_type(&index, INDEX_MEDIA_TYPE, Error::InvalidIndex)?;
@@ -178,14 +244,18 @@ where
             }
             // Reserve the document budget before requesting or parsing bytes.
             traversal.documents += 1;
-            let child_bytes = require_verified_blob(&descriptor, json::MAX_JSON_BYTES, blob)?;
-            let child = json::parse(child_bytes).map_err(Error::Json)?;
+            let child = with_verified_blob(
+                &descriptor,
+                json::MAX_JSON_BYTES,
+                source,
+                |bytes| json::parse(bytes).map_err(Error::Json),
+            )?;
             if let Some(found) = find_manifest_descriptor(
                 &child,
                 expected_manifest_digest,
                 depth + 1,
                 traversal,
-                blob,
+                source,
             )? {
                 record_selection(&mut selected, found)?;
             }
@@ -275,26 +345,29 @@ fn validate_digest(digest: &str) -> Result<(), Error> {
     Ok(())
 }
 
-fn require_verified_blob<'a, F>(
+fn with_verified_blob<S, T, C>(
     descriptor: &Descriptor,
     maximum_bytes: usize,
-    blob: &mut F,
-) -> Result<&'a [u8], Error>
+    source: &mut S,
+    consume: C,
+) -> Result<T, Error>
 where
-    F: FnMut(&str) -> Option<&'a [u8]>,
+    S: BlobSource,
+    C: FnOnce(&[u8]) -> Result<T, Error>,
 {
     if descriptor.size > maximum_bytes {
         return Err(Error::BlobTooLarge);
     }
-    let bytes = blob(&descriptor.digest).ok_or(Error::MissingBlob)?;
-    if bytes.len() != descriptor.size {
-        return Err(Error::BlobSizeMismatch);
-    }
-    let actual = sha256::digest_string(bytes).map_err(|_| Error::HashFailure)?;
-    if actual != descriptor.digest {
-        return Err(Error::BlobDigestMismatch);
-    }
-    Ok(bytes)
+    source.with_blob(&descriptor.digest, maximum_bytes, |bytes| {
+        if bytes.len() != descriptor.size {
+            return Err(Error::BlobSizeMismatch);
+        }
+        let actual = sha256::digest_string(bytes).map_err(|_| Error::HashFailure)?;
+        if actual != descriptor.digest {
+            return Err(Error::BlobDigestMismatch);
+        }
+        consume(bytes)
+    })
 }
 
 fn validate_configuration(
@@ -349,6 +422,30 @@ mod tests {
         manifest_digest: String,
         blobs: BTreeMap<String, Vec<u8>>,
         first_layer_digest: String,
+    }
+
+    struct RecordingSource<'a> {
+        blobs: &'a BTreeMap<String, Vec<u8>>,
+        maximums: Vec<usize>,
+    }
+
+    impl BlobSource for RecordingSource<'_> {
+        fn with_blob<T, C>(
+            &mut self,
+            digest: &str,
+            maximum_bytes: usize,
+            consume: C,
+        ) -> Result<T, Error>
+        where
+            C: FnOnce(&[u8]) -> Result<T, Error>,
+        {
+            self.maximums.push(maximum_bytes);
+            let bytes = self.blobs.get(digest).ok_or(Error::MissingBlob)?;
+            if bytes.len() > maximum_bytes {
+                return Err(Error::BlobTooLarge);
+            }
+            consume(bytes)
+        }
     }
 
     fn fixture(layer_media_type: &str, mismatched_diff_id: bool) -> Fixture {
@@ -415,6 +512,34 @@ mod tests {
         assert!(rootfs.get("bin/old").is_none());
         assert!(rootfs.get("bin/new").is_some());
         assert!(rootfs.get("usr/lib/object.so").unwrap().is_elf);
+    }
+
+    #[test]
+    fn blob_source_receives_explicit_read_ceilings() {
+        let fixture = fixture(UNCOMPRESSED_LAYER_MEDIA_TYPE, false);
+        let mut source = RecordingSource {
+            blobs: &fixture.blobs,
+            maximums: Vec::new(),
+        };
+        resolve_uncompressed_image_from_source(
+            &fixture.layout,
+            &fixture.index,
+            &fixture.manifest_digest,
+            "amd64",
+            "linux",
+            &mut source,
+        )
+        .unwrap();
+
+        assert_eq!(
+            source.maximums,
+            vec![
+                json::MAX_JSON_BYTES,
+                json::MAX_JSON_BYTES,
+                MAX_LAYER_BYTES,
+                MAX_LAYER_BYTES,
+            ]
+        );
     }
 
     #[test]

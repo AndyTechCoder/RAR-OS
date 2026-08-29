@@ -59,6 +59,7 @@ for test_name in \
 done
 for test_name in \
     resolves_digest_bound_layers_and_configuration_in_order \
+    blob_source_receives_explicit_read_ceilings \
     rejects_tampered_blobs_before_layer_parsing \
     rejects_compression_and_diff_id_mismatch_in_inactive_subset \
     resolves_exact_manifest_through_verified_nested_index \
