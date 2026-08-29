@@ -7,12 +7,13 @@
 - Worktree: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/sprint-alpha-rebaseline`
 - Branch: `codex/sprint-alpha-rebaseline`
 - Pull request: [#7](https://github.com/AndyTechCoder/RAR-OS/pull/7), draft
-- Remote PR head: `0ea327912a4a7e5cafc9ea5a07206be3fe51adca`.
+- Remote PR head: `8fb412ba8195fa0c90cf580868712875c762c606`.
   The previously reviewed runner-context, SSD-only capacity, status, and
   missing-profile commits are published. The first public-repository
   Specifications run started a real runner and entered its validation steps;
-  its one bounded failure exposed missing executable modes on newly added CI
-  scripts. The current repair changes only those required modes. Earlier
+  its bounded failures exposed missing executable modes on newly added CI
+  scripts. The current repair adds the one fixture generator omitted from the
+  first mode inventory. Earlier
   published
   source/safety commits fix branch whitespace/hash bindings, strengthen
   no-deletion auto-review and command rules, bind the authoritative directive
@@ -182,12 +183,13 @@
 - External blockers: the stale internal-Mac capacity safeguard is removed
   locally under the owner's 2026-08-27 SSD-workspace clarification; the SSD
   reserve and exact-root budget remain unchanged. The repository is now public
-  and Actions is enabled. Specifications run `33238786347`, job `99064390254`,
-  for exact remote head `0ea327912a4a7e5cafc9ea5a07206be3fe51adca`
-  started a real `ubuntu-24.04` runner and completed setup, runner attestation,
-  and both exact checkouts. It then failed once because
-  `tools/ci/check-alpha-preimplementation-contracts.sh` was not executable; the
-  complete required-script set is repaired together before the single retry.
+  and Actions is enabled. Specifications runs `33238786347`/`99064390254` and
+  `33238991555`/`99064932344` started real `ubuntu-24.04` runners and completed
+  setup, runner attestation, and both exact checkouts. The first identified
+  missing executable modes on the new CI scripts; the repair run then identified
+  the separately located `spec/alpha/lab/fixtures/generate.sh` omitted from the
+  first mode inventory. That final required mode is repaired before the second
+  and last permitted retry.
   The former zero-step account/billing blocker is cleared. A pattern-limited
   read on
   2026-08-28 confirmed that the user-level Codex config exists but contains no
