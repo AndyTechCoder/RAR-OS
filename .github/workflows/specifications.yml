@@ -116,6 +116,7 @@ jobs:
             --workdir /workspace \
             --env RAR_POLICY_MUTATION_TESTS=1 \
             --env RAR_QMP_SOURCE_TESTS=1 \
+            --env RAR_ROOTFS_PROOF_SOURCE_TESTS=1 \
             --env RAR_EXPECTED_SOURCE_REVISION \
             --env RAR_CI_BOOTSTRAP_IMAGE \
             --env RAR_CI_RUNNER_IMAGE_OS \
@@ -128,4 +129,5 @@ jobs:
             /usr/bin/dash -e -c '
               tools/ci/run-ephemeral-policy-tests.sh
               tools/ci/run-qmp-client-unit-tests.sh
+              tools/ci/run-rootfs-proof-unit-tests.sh
             '
