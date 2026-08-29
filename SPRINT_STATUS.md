@@ -5,49 +5,31 @@
 - Objective: merge the trusted cloud Development Lab controller, then implement
   and retain the authentic A–G bootable GUI vertical slice
 - Worktree: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/sprint-alpha-rebaseline`
-- Branch: `codex/sprint-alpha-rebaseline`
-- Pull request: [#7](https://github.com/AndyTechCoder/RAR-OS/pull/7), draft
+- Branch: `codex/sprint-alpha-rebaseline-closure` (documentation checkpoint
+  based on verified `main`; the merged source branch remains preserved)
+- Pull request: [#7](https://github.com/AndyTechCoder/RAR-OS/pull/7), merged
+  at `7bcf6a1e28b1c7fa886d2696fa9f1e595d87ec51`
+- Durability proof: exact-head `1f409393995c8e558d71eed34e3641daf2f21f3c`
+  passed run `33268129412`; the distinct exact-merge `main` run `33268347971`,
+  job `99142287272`, passed complete validation and mutation testing
 - Published runner-attestation checkpoint: `9e4da4ca0b23a4392fa4d3318c11808e6f8bd307`.
   Run `33266007613` at that exact head passed runner attestation, portable-stat
   enforcement, specifications, immutable fixtures, Release 0 conformance,
   generated SDK checks, and host/bootstrap tests. Its final cloud-only mutation
-  phase exposed one test-harness defect: the Linux fixture copied the Mac-only
-  local preflight without substituting its host-system probe. The current
-  bounded repair substitutes only the copied fixture's computed system value,
-  keeps production fixed to `/usr/bin/uname` and exact `Darwin`, adds explicit
-  non-Darwin rejection, and digest/static-binds both scripts. Its first version,
-  published as `17cd7c75727bcfd8b014c3ad98cdd5484781e5ce`, consumed run
-  `33266499096`, job `99137373094`: the complete primary validation passed, but
-  the final phase proved executable files are denied in the ephemeral test
-  tmpfs. The successor uses no executable mock. The owner's 2026-08-29
-  instruction to figure out or skip this simple error and continue explicitly
-  authorizes this bounded successor verification. Architecture, security, and
-  correctness reviews are clean.
-  That successor, `d435c8dac0f86dd0f65ae1f0557d6df57e2d8cdd`, consumed run
-  `33267022811`, job `99138773215`: preflight policy tests passed, then the next
-  portable-stat negative test exposed an invalid `sed` delimiter because its
-  pattern contains shell `||`. The third and final focused correction changes
-  only that test delimiter; it does not change the portable-stat policy.
-  Exact-head run `33267302085`, job `99139536326`, proved that correction and
-  every earlier mutation suite pass, then exposed the QMP contract fixture
-  attempting to create `/workspace/out` on the intentionally read-only source
-  mount. The successor keeps that mount read-only and passes a controller-shaped
-  copy under the already-attested ephemeral `/tmp` root to the unchanged
-  contract checker.
-  Run `33267767640`, job `99140778940`, proved the QMP correction and all prior
-  suites pass, then reached the reference-evidence suite and exposed its sole
-  undeclared tool assumption: `/usr/bin/xxd` is absent from the pinned
-  container. A batch audit of every remaining suite found no other new absolute
-  tool dependency. The successor emits each mutation byte with pinned
-  `/usr/bin/printf` and `/bin/dd`, eliminating rather than adding a dependency.
-  Earlier
-  published
-  source/safety commits fix branch whitespace/hash bindings, strengthen
+  phase exposed a sequence of bounded test-harness portability defects. The
+  reviewed repairs preserved the production Darwin boundary, kept source
+  read-only, moved fixture output to attested ephemeral scratch, and replaced
+  the undeclared `xxd` assumption with already-pinned byte-output tools. Runs
+  `33266499096`, `33267022811`, `33267302085`, and `33267767640` isolated those
+  defects in sequence; exact-head run `33268129412` proved the complete repaired
+  suite, and exact-merge `main` run `33268347971` independently proved the merged
+  result. Earlier published source/safety commits fix branch whitespace/hash
+  bindings, strengthen
   no-deletion auto-review and command rules, bind the authoritative directive
   in `AGENTS.md` and host safety, add one digest-bound read-only local gate, and
   record the bounded Actions recovery sequence
-- Validation of the local successor: full-branch whitespace, tracked-shell
-  syntax, and the bound host-policy checker pass via
+- Local source-only validation: full-branch whitespace, tracked-shell syntax,
+  and the bound host-policy checker pass via
   `/bin/sh tools/ci/check-local-readonly.sh`. The Alpha preimplementation
   contract structure also passed before the read-only wrapper was narrowed and
   digest-bound. No Alpha completion evidence is claimed. The mutation-capable
@@ -183,10 +165,9 @@
   explanatory view of honest progress, missing gates, the A–G path, when boot
   and GUI first appear, and the local no-target-execution boundary. It grants no
   authority and reports target implementation as 0 of 7 milestones
-- Predecessor handoff: draft PR #5 remains open and unmerged as the historical
-  deferred one-shot branch; its live head is not part of PR #7. It is never
-  merged into Sprint Alpha and is closed as superseded only after PR #7's exact
-  merge plus distinct real-step green `main` workflow are verified durable
+- Predecessor handoff: PR #5 is closed, unmerged, and superseded. Its historical
+  branch and evidence remain preserved; its live head is not part of PR #7 or
+  Sprint Alpha
 - Static enforcement: required-file, authority-status, ADR-classification, and
   exact approval-sentence checks now cover both execution maps, the owner brief,
   proposed ADRs 0025/0026, all three decision-integration gates, and all eight
@@ -235,16 +216,17 @@
   `20260823.283.1`. The reviewed runner refresh was published as `9e4da4c`;
   run `33266007613`, job `99136083575`, then passed the complete primary
   validation phase and failed only because the final Linux mutation fixture
-  retained the production Mac-only `uname` result. The current independently
-  reviewed repair fixes that fixture seam without weakening the production
-  boundary. Its first exact-head run `33266499096` then failed only because the
+  retained the production Mac-only `uname` result. The independently reviewed
+  repair fixed that fixture seam without weakening the production boundary.
+  Its first exact-head run `33266499096` then failed only because the
   executable mock was denied in ephemeral `/tmp`; the no-executable successor
   then exposed the separate invalid `sed` delimiter in the next negative test.
   The delimiter-only correction passed in exact-head run `33267302085`, which
-  then exposed the distinct QMP scratch-root defect. The current successor
-  passed through QMP in run `33267767640`; the current reference-evidence
-  successor removes the undeclared `xxd` assumption and preserves the immutable
-  OCI/toolchain pins.
+  then exposed the distinct QMP scratch-root defect. Its successor passed
+  through QMP in run `33267767640`; the merged reference-evidence successor
+  removed the undeclared `xxd` assumption and preserved the immutable
+  OCI/toolchain pins. Exact-head run `33268129412` and exact-merge `main` run
+  `33268347971` then passed the complete validation and mutation suites.
   The former zero-step account/billing blocker is cleared. A pattern-limited
   read on
   2026-08-28 confirmed that the user-level Codex config exists but contains no
@@ -252,9 +234,7 @@
   external file was changed. The reviewed `rar-os-ssd` profile therefore still
   needs one-time owner-approved installation and confinement evidence in a
   fresh SSD-root task
-- Next durable action: publish the reviewed preflight-fixture repair and require
-  PR #7's complete exact-head workflow to pass before merge. Then
-  record exact owner choices for ADRs 0023, 0024, and 0026,
+- Next durable action: record exact owner choices for ADRs 0023, 0024, and 0026,
   make the boot contract and v2 controller/helper evidence genuinely ready, and
   pass the external Lab/PR/checkpoint gates before Milestone A. ADR 0025 remains
   mandatory before Milestone B; ADR 0022 and its reviewed peripheral-grant
