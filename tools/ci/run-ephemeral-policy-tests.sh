@@ -26,6 +26,7 @@ ulimit -f 131072
 /bin/sh "$root/tools/ci/test-qmp-client-source-policy.sh"
 /bin/sh "$root/tools/ci/test-reference-evidence-v0-policy.sh"
 /bin/sh "$root/tools/ci/test-reference-verdict-v0-policy.sh"
+/bin/sh "$root/tools/ci/test-release-0-reference-harness-policy.sh"
 /bin/sh "$root/tools/ci/test-trusted-launcher-policy.sh"
 
-printf '%s\n' 'Ephemeral policy tests passed: executed=19 source=read-only scratch=tmpfs'
+printf '%s\n' 'Ephemeral policy tests passed: executed=20 source=read-only scratch=tmpfs'
