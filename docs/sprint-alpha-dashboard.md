@@ -9,7 +9,7 @@ authoritative.
 ## Current position
 
 - Phase: pre-Milestone A rebaseline and contract preparation.
-- Preparation orientation: approximately 94% complete.
+- Preparation orientation: approximately 95% complete.
 - Target implementation: 0 of 7 milestones (A–G).
 - Working bootable GUI: does not exist yet.
 - Sprint Alpha completion evidence: none.
@@ -38,10 +38,14 @@ functionality and cannot increase the implementation count.
 - The exact Alpha boot/platform contracts are not ready.
 - The Lab/controller/helper lacks real activating identities and reviewed cloud
   build/test evidence.
-- PR #7 is still draft and its required GitHub workflow fails before executing
-  any step. A zero-step failure is not a repository test result.
-- The SSD confinement proof and required internal-disk headroom precondition
-  are not recorded as passing for the future implementation task.
+- PR #7 is still draft. Its required workflow now reaches a real Linux runner
+  and validation step, where the final permitted attempt exposed a portable
+  `stat` fallback defect. The complete reviewed repair is local and unpushed;
+  the current retry contract permits no fourth attempt without later owner
+  intervention.
+- The SSD confinement/profile proof is not recorded as passing for the future
+  implementation task. SSD reserve and exact-root capacity evidence remain
+  required; internal-Mac free space is not an Alpha workspace precondition.
 
 ## Gates before code starts
 
@@ -62,6 +66,8 @@ Milestone A target files may be created only after all of these are true:
 
 ADR 0025 and the reviewed evidence-protocol cutover are additionally required
 before B. ADR 0022 and the reviewed peripheral contract are required before E.
+Delegation of safe operational choices does not replace the exact owner ADR
+approval required by the authoritative packet.
 
 ## Execution path
 

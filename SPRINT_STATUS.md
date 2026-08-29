@@ -1,13 +1,13 @@
 # Sprint Alpha 0.1 Status
 
-- Date: 2026-08-28
+- Date: 2026-08-29
 - Current milestone: End-of-week rebaseline, before Milestone A target implementation
 - Objective: merge the trusted cloud Development Lab controller, then implement
   and retain the authentic A–G bootable GUI vertical slice
 - Worktree: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/sprint-alpha-rebaseline`
 - Branch: `codex/sprint-alpha-rebaseline`
 - Pull request: [#7](https://github.com/AndyTechCoder/RAR-OS/pull/7), draft
-- Remote PR head: `8fb412ba8195fa0c90cf580868712875c762c606`.
+- Remote PR head: `19a88839cadf4e5f0cf322b77717b4f268788f35`.
   The previously reviewed runner-context, SSD-only capacity, status, and
   missing-profile commits are published. The first public-repository
   Specifications run started a real runner and entered its validation steps;
@@ -16,7 +16,10 @@
   first mode inventory. The final permitted run then exposed a separate
   BSD-first `stat` portability defect. A complete source audit now reverses the
   fallback order for every affected size, ownership, link-count, and identity
-  query and adds a static regression guard; that repair is local and unclaimed.
+  query and adds a static regression guard. Current local head `b772e98`
+  records the bounded recovery backlog, with independently reviewed portability
+  repair `eaa914a` as its parent. Both remain intentionally unpushed because
+  the packet's original run plus two retries are exhausted.
   Earlier
   published
   source/safety commits fix branch whitespace/hash bindings, strengthen
@@ -139,7 +142,10 @@
   no active protocol
 - Owner decision readiness: the plain-language choice brief now explains ADR
   0025 and ADR 0026 alongside ADRs 0022–0024 and provides one exact five-decision approval
-  sentence. The brief remains non-authoritative and records no approval
+  sentence. The brief remains non-authoritative and records no approval. The
+  owner's delegation of safe operational choices while unavailable does not
+  replace the exact architecture-decision approval required by the packet;
+  ADRs 0022–0026 and every dependent gate therefore remain unchanged
 - Decision integration readiness: one non-authoritative plan now sequences the
   recommended decisions into pre-A boot/platform/controller, pre-B evidence-
   protocol, and pre-E peripheral-authority gates. It records no approval and
@@ -200,7 +206,9 @@
   same fallback order occurs in thirteen validators, so a bounded source audit
   repairs the complete class and adds a regression check. No fourth workflow
   attempt is authorized by the current two-retry contract; the local repair is
-  not published or claimed green.
+  not published or claimed green. A live read-only check on 2026-08-29 confirms
+  PR #7 remains open, draft, mergeable, and `UNSTABLE`, with that run as its
+  sole required failed check at the exact remote head.
   The former zero-step account/billing blocker is cleared. A pattern-limited
   read on
   2026-08-28 confirmed that the user-level Codex config exists but contains no
