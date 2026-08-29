@@ -6,6 +6,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+mod json;
+pub mod oci;
+mod sha256;
+
 pub const BLOCK_BYTES: usize = 512;
 pub const MAX_LAYER_BYTES: usize = 1_073_741_824;
 pub const MAX_LAYER_ENTRIES: usize = 65_536;

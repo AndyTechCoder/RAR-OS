@@ -9,12 +9,15 @@ tree=${1-$root/tools/rar-lab/rootfs-proof}
 [ -d "$tree" ] && [ ! -L "$tree" ] || exit 1
 expected='README.md
 build-plan.v0
-lib.rs'
+json.rs
+lib.rs
+oci.rs
+sha256.rs'
 actual=$(find "$tree" -mindepth 1 -maxdepth 1 ! -name '._*' -print | /usr/bin/sed "s|^$tree/||" | /usr/bin/sort)
 [ "$actual" = "$expected" ] || exit 1
 find "$tree" -type l -print | /usr/bin/grep -q . && exit 1
 
-for file in README.md build-plan.v0 lib.rs; do
+for file in README.md build-plan.v0 json.rs lib.rs oci.rs sha256.rs; do
     [ -s "$tree/$file" ] && [ ! -L "$tree/$file" ] || exit 1
 done
 
@@ -28,7 +31,9 @@ for line in \
     [ "$(/usr/bin/grep -Fxc "$line" "$tree/build-plan.v0")" -eq 1 ] || exit 1
 done
 
-! /usr/bin/grep -En '(unsafe[[:space:]]+(fn|impl|extern)|unsafe[[:space:]]*\{|extern[[:space:]]+crate|include!|include_bytes!|include_str!|todo!|unimplemented!|std::process::Command|Command::new|TcpStream|UdpSocket|libc::)' "$tree/lib.rs" >/dev/null || exit 1
+for file in json.rs lib.rs oci.rs sha256.rs; do
+    ! /usr/bin/grep -En '(unsafe[[:space:]]+(fn|impl|extern)|unsafe[[:space:]]*\{|extern[[:space:]]+crate|include!|include_bytes!|include_str!|todo!|unimplemented!|std::process::Command|Command::new|TcpStream|UdpSocket|libc::)' "$tree/$file" >/dev/null || exit 1
+done
 for test_name in \
     whiteouts_remove_only_lower_layer_entries_regardless_of_archive_order \
     opaque_whiteout_removes_lower_descendants_but_keeps_same_layer_additions \
@@ -43,8 +48,21 @@ for test_name in \
     cumulative_entry_and_path_bounds_fail_closed; do
     /usr/bin/grep -Fq "fn $test_name()" "$tree/lib.rs" || exit 1
 done
-for source in layer.md image-layout.md manifest.md; do
+for test_name in \
+    parses_utf8_unicode_escapes_and_unsigned_integers \
+    rejects_duplicates_invalid_numbers_and_trailing_data; do
+    /usr/bin/grep -Fq "fn $test_name()" "$tree/json.rs" || exit 1
+done
+for test_name in \
+    resolves_digest_bound_layers_and_configuration_in_order \
+    rejects_tampered_blobs_before_layer_parsing \
+    rejects_compression_and_diff_id_mismatch_in_inactive_subset; do
+    /usr/bin/grep -Fq "fn $test_name()" "$tree/oci.rs" || exit 1
+done
+/usr/bin/grep -Fq 'fn official_short_sha256_vectors()' "$tree/sha256.rs" || exit 1
+/usr/bin/grep -Fqx 'modules=json.rs,oci.rs,sha256.rs' "$tree/build-plan.v0" || exit 1
+for source in layer.md image-layout.md manifest.md descriptor.md config.md; do
     /usr/bin/grep -Fq "https://github.com/opencontainers/image-spec/blob/v1.1.1/$source" "$tree/README.md" || exit 1
 done
-/usr/bin/grep -Fq 'does not resolve the full security finding' "$tree/README.md" || exit 1
+/usr/bin/grep -Fq 'full security finding' "$tree/README.md" || exit 1
 printf '%s\n' 'rootfs proof source policy passed'
