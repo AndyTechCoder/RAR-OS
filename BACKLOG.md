@@ -209,7 +209,7 @@ Gate 0 was approved on 2026-07-16. Every P0 item in this gate is complete as an 
 1. `[x]` PR #7's exact head and exact merge passed complete cloud validation;
    the rebaseline is merged and durable at `7bcf6a1e28b1c7fa886d2696fa9f1e595d87ec51`.
 2. `[x]` PR #5 is closed, unmerged, and superseded with its branch and evidence
-   preserved.
+   preserved. Never merge PR #5 into the Alpha line.
 3. `[ ]` Record the owner's ADR 0023, ADR 0024, and ADR 0026 choices; complete and
    re-review the resulting boot/platform contracts and cloud-only
    controller/helper evidence before Milestone A.

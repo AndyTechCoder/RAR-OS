@@ -326,10 +326,10 @@ grep -Fq 'No preparation task may carry unmerged state, inherited target authori
     docs/proposals/alpha-decision-integration-plan.md || fail "Alpha implementation transition permits inherited preparation state"
 grep -Fq 'starts at the exact verified `main` merge with no inherited working diff.' \
     docs/proposals/alpha-decision-integration-plan.md || fail "Alpha implementation checklist permits an inherited diff"
-grep -Fq "Only after PR #7's exact merge is verified and its distinct" \
-    docs/proposals/alpha-decision-integration-plan.md || fail "Alpha transition omits PR #5 supersession ordering"
-grep -Fq '`main` workflow executes real green steps may PR #5 be closed as superseded,' \
-    docs/proposals/alpha-decision-integration-plan.md || fail "Alpha transition closes PR #5 before distinct main evidence"
+grep -Fq "PR #7's exact merge and distinct green \`main\` workflow were" \
+    docs/proposals/alpha-decision-integration-plan.md || fail "Alpha transition omits completed PR #5 supersession ordering"
+grep -Fq 'so PR #5 is now closed, unmerged, and superseded with' \
+    docs/proposals/alpha-decision-integration-plan.md || fail "Alpha transition omits the verified PR #5 outcome"
 grep -Fq 'PR #5 is never merged, rebased, or' \
     docs/proposals/alpha-decision-integration-plan.md || fail "Alpha transition permits PR #5 integration"
 grep -Fq 'wholesale cherry-picked into the Sprint Alpha line' \
