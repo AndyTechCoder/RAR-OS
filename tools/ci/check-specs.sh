@@ -36,6 +36,7 @@ docs/host-safety.md
 docs/handoff-prompt.md
 docs/v1-alpha-execution.md
 docs/runbooks/github-actions-account-unblock.md
+docs/security-remediation-status.md
 docs/sprint-alpha.md
 docs/sprint-alpha-dashboard.md
 SPRINT_STATUS.md
