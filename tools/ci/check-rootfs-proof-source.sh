@@ -60,7 +60,11 @@ done
 for test_name in \
     resolves_digest_bound_layers_and_configuration_in_order \
     rejects_tampered_blobs_before_layer_parsing \
-    rejects_compression_and_diff_id_mismatch_in_inactive_subset; do
+    rejects_compression_and_diff_id_mismatch_in_inactive_subset \
+    resolves_exact_manifest_through_verified_nested_index \
+    rejects_tampered_nested_index_before_parsing \
+    rejects_ambiguous_and_overdeep_nested_indexes \
+    rejects_index_document_budget_exhaustion; do
     /usr/bin/grep -Fq "fn $test_name()" "$tree/oci.rs" || exit 1
 done
 /usr/bin/grep -Fq 'fn official_short_sha256_vectors()' "$tree/sha256.rs" || exit 1

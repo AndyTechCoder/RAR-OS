@@ -10,6 +10,8 @@ const MANIFEST_MEDIA_TYPE: &str = "application/vnd.oci.image.manifest.v1+json";
 const CONFIG_MEDIA_TYPE: &str = "application/vnd.oci.image.config.v1+json";
 const UNCOMPRESSED_LAYER_MEDIA_TYPE: &str = "application/vnd.oci.image.layer.v1.tar";
 const MAX_INDEX_MANIFESTS: usize = 64;
+const MAX_INDEX_DOCUMENTS: usize = 64;
+const MAX_INDEX_DEPTH: usize = 8;
 const MAX_MANIFEST_LAYERS: usize = 256;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -34,6 +36,8 @@ pub enum Error {
     UnsupportedConfigurationMediaType,
     UnsupportedLayerMediaType,
     TooManyIndexEntries,
+    TooManyIndexDocuments,
+    IndexNestingTooDeep,
     TooManyLayers,
     MissingBlob,
     BlobTooLarge,
@@ -65,30 +69,15 @@ where
     validate_layout(layout_document)?;
 
     let index = json::parse(index_document).map_err(Error::Json)?;
-    require_schema_version(&index, Error::InvalidIndex)?;
-    require_optional_media_type(&index, INDEX_MEDIA_TYPE, Error::InvalidIndex)?;
-    let manifests = index
-        .member("manifests")
-        .and_then(Value::array)
-        .ok_or(Error::InvalidIndex)?;
-    if manifests.len() > MAX_INDEX_MANIFESTS {
-        return Err(Error::TooManyIndexEntries);
-    }
-
-    let mut selected = None;
-    for value in manifests {
-        let descriptor = parse_descriptor(value)?;
-        if descriptor.digest == expected_manifest_digest {
-            if selected.is_some() {
-                return Err(Error::AmbiguousManifest);
-            }
-            if descriptor.media_type != MANIFEST_MEDIA_TYPE {
-                return Err(Error::UnsupportedManifestMediaType);
-            }
-            selected = Some(descriptor);
-        }
-    }
-    let manifest_descriptor = selected.ok_or(Error::ManifestNotFound)?;
+    let mut traversal = IndexTraversal { documents: 0 };
+    let manifest_descriptor = find_manifest_descriptor(
+        &index,
+        expected_manifest_digest,
+        0,
+        &mut traversal,
+        &mut blob,
+    )?
+    .ok_or(Error::ManifestNotFound)?;
     let manifest_bytes = require_verified_blob(
         &manifest_descriptor,
         json::MAX_JSON_BYTES,
@@ -145,6 +134,74 @@ where
             .map_err(Error::Layer)?;
     }
     Ok(rootfs)
+}
+
+struct IndexTraversal {
+    documents: usize,
+}
+
+fn find_manifest_descriptor<'a, F>(
+    index: &Value,
+    expected_manifest_digest: &str,
+    depth: usize,
+    traversal: &mut IndexTraversal,
+    blob: &mut F,
+) -> Result<Option<Descriptor>, Error>
+where
+    F: FnMut(&str) -> Option<&'a [u8]>,
+{
+    if traversal.documents >= MAX_INDEX_DOCUMENTS {
+        return Err(Error::TooManyIndexDocuments);
+    }
+    traversal.documents += 1;
+    require_schema_version(&index, Error::InvalidIndex)?;
+    require_optional_media_type(&index, INDEX_MEDIA_TYPE, Error::InvalidIndex)?;
+    let manifests = index
+        .member("manifests")
+        .and_then(Value::array)
+        .ok_or(Error::InvalidIndex)?;
+    if manifests.len() > MAX_INDEX_MANIFESTS {
+        return Err(Error::TooManyIndexEntries);
+    }
+
+    let mut selected = None;
+    for value in manifests {
+        let descriptor = parse_descriptor(value)?;
+        if descriptor.digest == expected_manifest_digest {
+            if descriptor.media_type != MANIFEST_MEDIA_TYPE {
+                return Err(Error::UnsupportedManifestMediaType);
+            }
+            record_selection(&mut selected, descriptor.clone())?;
+        }
+        if descriptor.media_type == INDEX_MEDIA_TYPE {
+            if depth >= MAX_INDEX_DEPTH {
+                return Err(Error::IndexNestingTooDeep);
+            }
+            let child_bytes = require_verified_blob(&descriptor, json::MAX_JSON_BYTES, blob)?;
+            let child = json::parse(child_bytes).map_err(Error::Json)?;
+            if let Some(found) = find_manifest_descriptor(
+                &child,
+                expected_manifest_digest,
+                depth + 1,
+                traversal,
+                blob,
+            )? {
+                record_selection(&mut selected, found)?;
+            }
+        }
+    }
+    Ok(selected)
+}
+
+fn record_selection(
+    selected: &mut Option<Descriptor>,
+    candidate: Descriptor,
+) -> Result<(), Error> {
+    if selected.is_some() {
+        return Err(Error::AmbiguousManifest);
+    }
+    *selected = Some(candidate);
+    Ok(())
 }
 
 fn validate_layout(document: &[u8]) -> Result<(), Error> {
@@ -400,6 +457,127 @@ mod tests {
             |digest| mismatch.blobs.get(digest).map(Vec::as_slice),
         );
         assert_eq!(result, Err(Error::DiffIdMismatch));
+    }
+
+    #[test]
+    fn resolves_exact_manifest_through_verified_nested_index() {
+        let mut fixture = fixture(UNCOMPRESSED_LAYER_MEDIA_TYPE, false);
+        let child = fixture.index.clone();
+        fixture.index = wrap_index(&mut fixture.blobs, child);
+        let rootfs = resolve_uncompressed_image(
+            &fixture.layout,
+            &fixture.index,
+            &fixture.manifest_digest,
+            "amd64",
+            "linux",
+            |digest| fixture.blobs.get(digest).map(Vec::as_slice),
+        )
+        .unwrap();
+        assert!(rootfs.get("bin/new").is_some());
+    }
+
+    #[test]
+    fn rejects_tampered_nested_index_before_parsing() {
+        let mut fixture = fixture(UNCOMPRESSED_LAYER_MEDIA_TYPE, false);
+        let child = fixture.index.clone();
+        let child_digest = sha256::digest_string(&child).unwrap();
+        fixture.blobs.insert(child_digest.clone(), child);
+        fixture.index = index_for_descriptors(&[(&child_digest, fixture.blobs[&child_digest].len())]);
+        fixture.blobs.get_mut(&child_digest).unwrap()[0] ^= 1;
+
+        let result = resolve_uncompressed_image(
+            &fixture.layout,
+            &fixture.index,
+            &fixture.manifest_digest,
+            "amd64",
+            "linux",
+            |digest| fixture.blobs.get(digest).map(Vec::as_slice),
+        );
+        assert_eq!(result, Err(Error::BlobDigestMismatch));
+    }
+
+    #[test]
+    fn rejects_ambiguous_and_overdeep_nested_indexes() {
+        let mut ambiguous = fixture(UNCOMPRESSED_LAYER_MEDIA_TYPE, false);
+        let child = ambiguous.index.clone();
+        let child_digest = sha256::digest_string(&child).unwrap();
+        ambiguous.blobs.insert(child_digest.clone(), child);
+        let child_size = ambiguous.blobs[&child_digest].len();
+        ambiguous.index = index_for_descriptors(&[
+            (&child_digest, child_size),
+            (&child_digest, child_size),
+        ]);
+        let result = resolve_uncompressed_image(
+            &ambiguous.layout,
+            &ambiguous.index,
+            &ambiguous.manifest_digest,
+            "amd64",
+            "linux",
+            |digest| ambiguous.blobs.get(digest).map(Vec::as_slice),
+        );
+        assert_eq!(result, Err(Error::AmbiguousManifest));
+
+        let mut deep = fixture(UNCOMPRESSED_LAYER_MEDIA_TYPE, false);
+        for _ in 0..=MAX_INDEX_DEPTH {
+            let child = deep.index;
+            deep.index = wrap_index(&mut deep.blobs, child);
+        }
+        let result = resolve_uncompressed_image(
+            &deep.layout,
+            &deep.index,
+            &deep.manifest_digest,
+            "amd64",
+            "linux",
+            |digest| deep.blobs.get(digest).map(Vec::as_slice),
+        );
+        assert_eq!(result, Err(Error::IndexNestingTooDeep));
+    }
+
+    #[test]
+    fn rejects_index_document_budget_exhaustion() {
+        let mut fixture = fixture(UNCOMPRESSED_LAYER_MEDIA_TYPE, false);
+        let empty = format!(
+            "{{\"schemaVersion\":2,\"mediaType\":\"{INDEX_MEDIA_TYPE}\",\"manifests\":[]}}"
+        )
+        .into_bytes();
+        let empty_digest = sha256::digest_string(&empty).unwrap();
+        let empty_size = empty.len();
+        fixture.blobs.insert(empty_digest.clone(), empty);
+        let descriptors = vec![(&*empty_digest, empty_size); MAX_INDEX_MANIFESTS];
+        fixture.index = index_for_descriptors(&descriptors);
+
+        let result = resolve_uncompressed_image(
+            &fixture.layout,
+            &fixture.index,
+            &fixture.manifest_digest,
+            "amd64",
+            "linux",
+            |digest| fixture.blobs.get(digest).map(Vec::as_slice),
+        );
+        assert_eq!(result, Err(Error::TooManyIndexDocuments));
+    }
+
+    fn wrap_index(blobs: &mut BTreeMap<String, Vec<u8>>, child: Vec<u8>) -> Vec<u8> {
+        let child_digest = sha256::digest_string(&child).unwrap();
+        let child_size = child.len();
+        blobs.insert(child_digest.clone(), child);
+        index_for_descriptors(&[(&child_digest, child_size)])
+    }
+
+    fn index_for_descriptors(descriptors: &[(&str, usize)]) -> Vec<u8> {
+        let descriptors = descriptors
+            .iter()
+            .map(|(digest, size)| {
+                format!(
+                    "{{\"mediaType\":\"{INDEX_MEDIA_TYPE}\",\"digest\":\"{digest}\",\"size\":{size}}}"
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        format!(
+            "{{\"schemaVersion\":2,\"mediaType\":\"{INDEX_MEDIA_TYPE}\",\"manifests\":[{descriptors}]}}"
+        )
+        .into_bytes()
     }
 
     fn archive(entries: &[(&str, u8, u32, &[u8])]) -> Vec<u8> {
