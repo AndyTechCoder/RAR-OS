@@ -10,7 +10,7 @@ the requested platform and ordered uncompressed `diff_ids`; parses bounded
 POSIX ustar layer bytes; applies OCI whiteout and opaque-whiteout semantics; and
 exposes every effective regular file or directory. It identifies executable-mode
 files and ELF objects at any path, including paths outside role-specific `/opt`
-roots.
+roots, and binds every effective regular file to its SHA-256 content digest.
 
 The implementation uses Rust `std` only, contains no `unsafe`, and does not
 spawn a process, access a filesystem, decompress data, build an image, or execute
@@ -37,6 +37,8 @@ container with read-only source and bounded tmpfs outputs.
   same-layer additions, independent of archive order.
 - Materialization of omitted parent directories, including safe lower-layer
   file-to-directory transitions required by child paths and whiteout markers.
+- SHA-256 content digests for every effective regular file, with directories
+  represented without a content digest.
 - Rejection of links, devices, FIFOs, extensions, setuid/setgid modes,
   malformed numbers, truncation, duplicate paths/markers, and nonzero trailing
   data.
@@ -44,12 +46,12 @@ container with read-only source and bounded tmpfs outputs.
 ## Not yet a complete image proof
 
 This slice does not access a layout directory, recursively select nested image
-indexes, decompress gzip/zstd layers, hash each effective file, or emit/validate
-the accepted inventory evidence format. Consequently it does not resolve the
-full security finding, activate image inventory v2, make a Lab profile ready,
-or authorize provisioning, target compilation, or guest execution. Those
-capabilities require reviewed follow-up slices and any owner-governed
-evidence-format decisions identified in the remediation status.
+indexes, decompress gzip/zstd layers, or emit/validate the accepted inventory
+evidence format. Consequently it does not resolve the full security finding,
+activate image inventory v2, make a Lab profile ready, or authorize
+provisioning, target compilation, or guest execution. Those capabilities
+require reviewed follow-up slices and any owner-governed evidence-format
+decisions identified in the remediation status.
 
 Semantics are pinned to OCI Image Specification v1.1.1:
 

@@ -30,8 +30,9 @@ The experimental RAR-owned resolver in `../rootfs-proof/` now provides bounded
 OCI layout/index/manifest/config parsing, exact SHA-256 descriptor verification,
 and ordered uncompressed-ustar resolution with OCI whiteout semantics. It
 remains non-activating: a trusted filesystem adapter, nested-index traversal,
-compression, per-file content hashing, and evidence emission are still required
-before an inventory can prove a complete image filesystem.
+compression, and evidence emission are still required before an inventory can
+prove a complete image filesystem. The resolver now retains exact SHA-256
+content digests for every effective regular file.
 Candidate provisioning remains deliberately absent until that schema and its
 real identities pass independent review. The future provisioner must use a pinned isolated builder, a bounded fresh
 context, two independent OCI exports, byte/digest comparison, complete

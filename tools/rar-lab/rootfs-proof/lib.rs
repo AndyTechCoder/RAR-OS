@@ -34,6 +34,7 @@ pub struct Node {
     pub mode: u32,
     pub bytes: u64,
     pub is_elf: bool,
+    pub content_digest: Option<String>,
 }
 
 impl Node {
@@ -84,6 +85,7 @@ impl EffectiveRootfs {
                         mode: 0o755,
                         bytes: 0,
                         is_elf: false,
+                        content_digest: None,
                     },
                 );
             }
@@ -147,6 +149,7 @@ pub enum Error {
     DuplicatePath,
     DuplicateWhiteout,
     ParentIsNotDirectory,
+    ContentHashFailure,
 }
 
 #[derive(Debug, Default)]
@@ -295,6 +298,11 @@ fn parse_layer(archive: &[u8]) -> Result<Layer, Error> {
             mode,
             bytes: size,
             is_elf,
+            content_digest: if kind == NodeKind::File {
+                Some(sha256::digest_string(data).map_err(|_| Error::ContentHashFailure)?)
+            } else {
+                None
+            },
         };
         if layer.additions.insert(path, node).is_some() {
             return Err(Error::DuplicatePath);
@@ -624,6 +632,20 @@ mod tests {
     }
 
     #[test]
+    fn content_hashes_bind_effective_file_bytes() {
+        let mut rootfs = EffectiveRootfs::default();
+        rootfs
+            .apply_uncompressed_ustar_layer(&archive(&[file("a/b", 0o644, b"abc")]))
+            .unwrap();
+
+        assert_eq!(rootfs.get("a").unwrap().content_digest, None);
+        assert_eq!(
+            rootfs.get("a/b").unwrap().content_digest.as_deref(),
+            Some("sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+        );
+    }
+
+    #[test]
     fn traversal_absolute_and_noncanonical_paths_fail_closed() {
         for path in ["../escape", "/absolute", "a//b", "a/./b", "a/../b"] {
             let result = EffectiveRootfs::default()
@@ -713,6 +735,7 @@ mod tests {
                     mode: 0o644,
                     bytes: 1,
                     is_elf: false,
+                    content_digest: None,
                 },
             ),
             (
@@ -723,6 +746,7 @@ mod tests {
                     mode: 0o644,
                     bytes: 1,
                     is_elf: false,
+                    content_digest: None,
                 },
             ),
         ]);
