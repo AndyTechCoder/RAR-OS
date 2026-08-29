@@ -13,13 +13,14 @@ canonical_ssh=git@github.com:AndyTechCoder/RAR-OS.git
 minimum_ssd_free_kib=10485760
 maximum_workspace_kib=8388608
 git_bin=/usr/bin/git
+uname_bin=/usr/bin/uname
 
 fail() {
     printf 'sprint preflight blocked: %s\n' "$1" >&2
     exit 1
 }
 
-[ "$(/usr/bin/uname -s)" = Darwin ] || fail 'this check is only for the owner Mac'
+[ "$("$uname_bin" -s)" = Darwin ] || fail 'this check is only for the owner Mac'
 [ -d "$safe_root" ] || fail 'the exact SSD workspace is not mounted'
 [ ! -L "$safe_root" ] || fail 'the SSD workspace root must not be a symbolic link'
 [ -f "$identity_file" ] && [ ! -L "$identity_file" ] ||

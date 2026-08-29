@@ -206,10 +206,9 @@ Gate 0 was approved on 2026-07-16. Every P0 item in this gate is complete as an 
 
 ## Immediate next items
 
-1. Complete the owner-reopened bounded repair cycle: publish the reviewed
-   `20260823.283.1` external runner-attestation refresh once and inspect its
-   single post-repair exact-head workflow without polling or repeated partial
-   fixes.
+1. Publish the independently reviewed Linux preflight-fixture repair and inspect
+   its exact-head workflow. The runner-attestation and primary validation phases
+   already passed at `9e4da4c`; production remains Mac-only.
 2. Make PR #7's required workflow pass; complete review,
    merge the exact rebaseline head, verify the merge on GitHub, and require the
    distinct `main` workflow to pass before calling the replacement durable.

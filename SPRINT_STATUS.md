@@ -7,19 +7,16 @@
 - Worktree: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/sprint-alpha-rebaseline`
 - Branch: `codex/sprint-alpha-rebaseline`
 - Pull request: [#7](https://github.com/AndyTechCoder/RAR-OS/pull/7), draft
-- Remote PR head: `aa4c797f5db0b6979c24e7a2939dae6d34490a9a`.
-  The previously reviewed runner-context, SSD-only capacity, status, and
-  missing-profile commits are published. The first public-repository
-  Specifications run started a real runner and entered its validation steps;
-  its bounded failures exposed missing executable modes on newly added CI
-  scripts. The current repair adds the one fixture generator omitted from the
-  first mode inventory. The final permitted run then exposed a separate
-  BSD-first `stat` portability defect. A complete source audit now reverses the
-  fallback order for every affected size, ownership, link-count, and identity
-  query and adds a static regression guard. The reviewed portability repair
-  `eaa914a`, bounded recovery backlog `b772e98`, and reconciled status
-  `aa4c797` are now published under the owner's renewed bounded-attempt
-  instruction.
+- Published runner-attestation checkpoint: `9e4da4ca0b23a4392fa4d3318c11808e6f8bd307`.
+  Run `33266007613` at that exact head passed runner attestation, portable-stat
+  enforcement, specifications, immutable fixtures, Release 0 conformance,
+  generated SDK checks, and host/bootstrap tests. Its final cloud-only mutation
+  phase exposed one test-harness defect: the Linux fixture copied the Mac-only
+  local preflight without substituting its host-system probe. The current
+  bounded repair makes only that probe path injectable in the copied fixture,
+  keeps production fixed to `/usr/bin/uname` and exact `Darwin`, adds explicit
+  non-Darwin rejection, and digest/static-binds both scripts. Architecture,
+  security, and correctness reviews are clean.
   Earlier
   published
   source/safety commits fix branch whitespace/hash bindings, strengthen
@@ -212,11 +209,13 @@
   proved the portable-stat guard, specification suite, immutable fixtures,
   Release 0 conformance, and generated SDK checks, then failed closed because
   GitHub had rotated its externally attested runner from `20260714.240.1` to
-  `20260823.283.1`. The current reviewed repair refreshes only that external
-  non-certifying runner identity, runner/agent evidence, inventory digest, and
-  matching negative tests. One post-repair exact-head verification run is the
-  remaining action in this cycle; repeated partial retries are not authorized.
-  The immutable OCI/toolchain pins remain unchanged.
+  `20260823.283.1`. The reviewed runner refresh was published as `9e4da4c`;
+  run `33266007613`, job `99136083575`, then passed the complete primary
+  validation phase and failed only because the final Linux mutation fixture
+  retained the production Mac-only `uname` result. The current independently
+  reviewed repair fixes that fixture seam without weakening the production
+  boundary. One exact-head cloud verification remains. The immutable
+  OCI/toolchain pins remain unchanged.
   The former zero-step account/billing blocker is cleared. A pattern-limited
   read on
   2026-08-28 confirmed that the user-level Codex config exists but contains no
@@ -224,8 +223,8 @@
   external file was changed. The reviewed `rar-os-ssd` profile therefore still
   needs one-time owner-approved installation and confinement evidence in a
   fresh SSD-root task
-- Next durable action: publish the one reviewed runner-attestation refresh and
-  require PR #7's complete exact-head workflow to pass before merge. Then
+- Next durable action: publish the reviewed preflight-fixture repair and require
+  PR #7's complete exact-head workflow to pass before merge. Then
   record exact owner choices for ADRs 0023, 0024, and 0026,
   make the boot contract and v2 controller/helper evidence genuinely ready, and
   pass the external Lab/PR/checkpoint gates before Milestone A. ADR 0025 remains

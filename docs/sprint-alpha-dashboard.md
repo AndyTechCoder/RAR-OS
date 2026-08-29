@@ -38,11 +38,11 @@ functionality and cannot increase the implementation count.
 - The exact Alpha boot/platform contracts are not ready.
 - The Lab/controller/helper lacks real activating identities and reviewed cloud
   build/test evidence.
-- PR #7 is still draft. The published portable-`stat` repair passed its real
-  Linux validation in diagnostic run `33265595655`, which then failed closed
-  on GitHub's rotated `20260823.283.1` hosted-runner identity. The owner reopened
-  one bounded repair cycle; the reviewed identity refresh is awaiting its single
-  post-repair exact-head verification run and is not yet claimed green.
+- PR #7 is still draft. Run `33266007613` at the reviewed runner-refresh head
+  passed the complete primary validation phase. Its final cloud-only mutation
+  test exposed a Linux fixture that had not substituted the production Mac-only
+  host probe. The bounded fixture repair is independently clean and awaiting one
+  exact-head workflow; no green or implementation claim is made yet.
 - The SSD confinement/profile proof is not recorded as passing for the future
   implementation task. SSD reserve and exact-root capacity evidence remain
   required; internal-Mac free space is not an Alpha workspace precondition.

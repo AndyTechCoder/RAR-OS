@@ -613,9 +613,11 @@ local_preflight_policy_test_sha256=$(sha256_of tools/ci/test-local-sprint-prefli
 [ "$ci_lock_sha256" = 6752b1b21ac8fa93a671ff9444173e4c3bbc4cdcbe4cf5cd39820371dc79aa24 ] || fail "CI tool lock digest changed without bootstrap authority update"
 [ "$readonly_gate_sha256" = 19286697fe69a4009e3961fb6a1efec181963e6d2f5908c6c7f62cea739c6fd6 ] || fail "local read-only gate changed without safety review"
 [ "$host_policy_checker_sha256" = c0fad5ea46ed239613bf38bfa7139024d466d0c673cc12513a31e94d833fa1a5 ] || fail "local read-only gate dependency changed without safety review"
-[ "$local_preflight_sha256" = e1a8d0b80b253560baf392945c5a8fa3737b1461cf8126ea411872858c34772a ] || fail "local sprint preflight changed without safety review"
-[ "$local_preflight_policy_test_sha256" = ef6111c72472b76c5c9703bc5d87ad0191dc48d55cb240f9c02bef215968145f ] || fail "local sprint preflight policy test changed without safety review"
+[ "$local_preflight_sha256" = 4181802a895d9ddae12b72041f34d2e1d1212b97846a6e6c592666d3a5a6f859 ] || fail "local sprint preflight changed without safety review"
+[ "$local_preflight_policy_test_sha256" = ed8109659236e7ba06d001929825cbb16f36ff7a373066a11a6f58e805c79ff6 ] || fail "local sprint preflight policy test changed without safety review"
 /bin/sh -n tools/ci/check-local-readonly.sh
+grep -qx 'uname_bin=/usr/bin/uname' tools/ci/check-local-sprint-preflight.sh || fail "local sprint preflight lost its absolute host-system probe"
+grep -Fqx '[ "$("$uname_bin" -s)" = Darwin ] || fail '\''this check is only for the owner Mac'\''' tools/ci/check-local-sprint-preflight.sh || fail "local sprint preflight lost its Mac-only boundary"
 grep -qx 'minimum_ssd_free_kib=10485760' tools/ci/check-local-sprint-preflight.sh || fail "local sprint preflight lost the 10-GiB SSD reserve"
 grep -Fqx 'ssd_free_kib=$(/bin/df -Pk "$safe_root" | /usr/bin/awk '\''END { print $4 }'\'')' tools/ci/check-local-sprint-preflight.sh || fail "local sprint preflight SSD capacity probe changed"
 grep -Fqx 'workspace_kib=$(/usr/bin/du -sk "$safe_root" | /usr/bin/awk '\''NR == 1 { print $1 }'\'')' tools/ci/check-local-sprint-preflight.sh || fail "local sprint preflight workspace capacity probe changed"
