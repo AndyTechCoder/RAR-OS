@@ -1,7 +1,5 @@
 //! Pure, non-activating OCI image-document and descriptor resolver.
 
-use std::collections::BTreeMap;
-
 use super::json::{self, Value};
 use super::sha256;
 use super::{EffectiveRootfs, Error as LayerError, MAX_LAYER_BYTES};
@@ -285,6 +283,7 @@ fn validate_configuration(
 mod tests {
     use super::*;
     use crate::BLOCK_BYTES;
+    use std::collections::BTreeMap;
 
     struct Fixture {
         layout: Vec<u8>,

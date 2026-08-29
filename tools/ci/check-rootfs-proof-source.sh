@@ -45,9 +45,12 @@ for test_name in \
 done
 for test_name in \
     prefix_removal_preserves_lexical_neighbors \
-    cumulative_entry_and_path_bounds_fail_closed; do
+    cumulative_entry_and_path_bounds_fail_closed \
+    implicit_parent_replaces_lower_file_before_child_creation \
+    opaque_marker_materializes_implicit_parent_over_lower_file; do
     /usr/bin/grep -Fq "fn $test_name()" "$tree/lib.rs" || exit 1
 done
+/usr/bin/grep -Fq '#![forbid(unsafe_code)]' "$tree/lib.rs" || exit 1
 for test_name in \
     parses_utf8_unicode_escapes_and_unsigned_integers \
     rejects_duplicates_invalid_numbers_and_trailing_data; do

@@ -4,6 +4,8 @@
 //! POSIX ustar layers. It does not activate a Development Lab profile and it is
 //! not linked into RAR OS.
 
+#![forbid(unsafe_code)]
+
 use std::collections::{BTreeMap, BTreeSet};
 
 mod json;
@@ -72,6 +74,26 @@ impl EffectiveRootfs {
             remove_path_and_descendants(&mut candidate, target);
         }
 
+        for path in &layer.implicit_directories {
+            if candidate.get(path).is_none_or(|node| node.kind != NodeKind::Directory) {
+                candidate.insert(
+                    path.clone(),
+                    Node {
+                        path: path.clone(),
+                        kind: NodeKind::Directory,
+                        mode: 0o755,
+                        bytes: 0,
+                        is_elf: false,
+                    },
+                );
+            }
+        }
+        validate_effective_bounds(
+            &candidate,
+            MAX_EFFECTIVE_ENTRIES,
+            MAX_EFFECTIVE_PATH_BYTES,
+        )?;
+
         for node in layer.additions.values() {
             for ancestor in ancestors(&node.path) {
                 if let Some(existing) = candidate.get(ancestor) {
@@ -130,6 +152,7 @@ pub enum Error {
 #[derive(Debug, Default)]
 struct Layer {
     additions: BTreeMap<String, Node>,
+    implicit_directories: BTreeSet<String>,
     whiteouts: BTreeSet<String>,
     opaque_directories: BTreeSet<String>,
 }
@@ -146,6 +169,7 @@ fn parse_layer(archive: &[u8]) -> Result<Layer, Error> {
     let mut offset = 0usize;
     let mut entry_count = 0usize;
     let mut layer_path_bytes = 0usize;
+    let mut implicit_path_bytes = 0usize;
     let mut found_end = false;
 
     while offset < archive.len() {
@@ -227,6 +251,19 @@ fn parse_layer(archive: &[u8]) -> Result<Layer, Error> {
         }
 
         let (parent, basename) = split_parent(&path);
+        for ancestor in ancestors(&path) {
+            if layer.implicit_directories.insert(ancestor.to_owned()) {
+                implicit_path_bytes = implicit_path_bytes
+                    .checked_add(ancestor.len())
+                    .ok_or(Error::EffectivePathsTooLarge)?;
+                if layer.implicit_directories.len() > MAX_EFFECTIVE_ENTRIES {
+                    return Err(Error::TooManyEffectiveEntries);
+                }
+                if implicit_path_bytes > MAX_EFFECTIVE_PATH_BYTES {
+                    return Err(Error::EffectivePathsTooLarge);
+                }
+            }
+        }
         if basename == ".wh..wh..opq" {
             validate_whiteout(kind, size)?;
             if !layer.opaque_directories.insert(parent.to_owned()) {
@@ -266,6 +303,14 @@ fn parse_layer(archive: &[u8]) -> Result<Layer, Error> {
 
     if !found_end {
         return Err(Error::MissingEndMarker);
+    }
+    if layer.implicit_directories.iter().any(|path| {
+        layer
+            .additions
+            .get(path)
+            .is_some_and(|node| node.kind != NodeKind::Directory)
+    }) {
+        return Err(Error::ParentIsNotDirectory);
     }
     Ok(layer)
 }
@@ -522,6 +567,39 @@ mod tests {
         assert!(rootfs.get("bin/old").is_none());
         assert!(rootfs.get("bin/new").is_some());
         assert!(rootfs.get("outside").is_some());
+    }
+
+    #[test]
+    fn implicit_parent_replaces_lower_file_before_child_creation() {
+        let mut rootfs = EffectiveRootfs::default();
+        rootfs
+            .apply_uncompressed_ustar_layer(&archive(&[file("a", 0o755, b"lower")]))
+            .unwrap();
+        rootfs
+            .apply_uncompressed_ustar_layer(&archive(&[file("a/b", 0o644, b"child")]))
+            .unwrap();
+
+        assert_eq!(rootfs.get("a").unwrap().kind, NodeKind::Directory);
+        assert!(rootfs.get("a/b").is_some());
+        assert!(rootfs.executable_or_loadable_nodes().next().is_none());
+    }
+
+    #[test]
+    fn opaque_marker_materializes_implicit_parent_over_lower_file() {
+        let mut rootfs = EffectiveRootfs::default();
+        rootfs
+            .apply_uncompressed_ustar_layer(&archive(&[file("a", 0o755, b"lower")]))
+            .unwrap();
+        rootfs
+            .apply_uncompressed_ustar_layer(&archive(&[
+                file("a/.wh..wh..opq", 0, b""),
+                file("a/new", 0o644, b"new"),
+            ]))
+            .unwrap();
+
+        assert_eq!(rootfs.get("a").unwrap().kind, NodeKind::Directory);
+        assert!(rootfs.get("a/new").is_some());
+        assert!(rootfs.executable_or_loadable_nodes().next().is_none());
     }
 
     #[test]

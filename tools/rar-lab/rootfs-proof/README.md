@@ -35,6 +35,8 @@ container with read-only source and bounded tmpfs outputs.
   at most 262,144 effective entries and 64 MiB of effective path text.
 - OCI `.wh.<name>` and `.wh..wh..opq` processing against lower layers before
   same-layer additions, independent of archive order.
+- Materialization of omitted parent directories, including safe lower-layer
+  file-to-directory transitions required by child paths and whiteout markers.
 - Rejection of links, devices, FIFOs, extensions, setuid/setgid modes,
   malformed numbers, truncation, duplicate paths/markers, and nonzero trailing
   data.
