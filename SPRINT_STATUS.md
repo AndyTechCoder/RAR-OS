@@ -2,17 +2,17 @@
 
 - Date: 2026-08-30
 - Current milestone: boot/platform and accepted-evidence post-approval packets
-  merged; their owner decisions and remaining pre-Milestone A controller/SSD
-  authority remain blocked
+  plus inactive compiler-closure observation source merged; owner decisions and
+  remaining pre-Milestone A controller/SSD authority remain blocked
 - Objective: record the exact boot/platform owner choices, finish their reviewed
   contracts and controller/SSD gates before Milestone A, and separately finish
   acceptance-v2 publication/controller closure before Milestone B
 - Status source: verified GitHub `main` at
-  `514d5e72a162dc99794a3f1eee864c0a22f00738`
-- Active status worktree: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/alpha-status-post-boot-packet`
-- Active status branch: `codex/alpha-status-post-boot-packet`
-- Latest exact-main validation: Specifications run `33306580918`, job
-  `99244092691`, passed runner attestation, trusted-controller authority binding,
+  `65ae7aedd11298c8f15ed96cd94166e2afa03e2a`
+- Active status worktree: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/alpha-status-after-closure`
+- Active status branch: `codex/alpha-status-after-closure`
+- Latest exact-main validation: Specifications run `33308569835`, job
+  `99249383222`, passed runner attestation, trusted-controller authority binding,
   full pinned read-only-container validation, and all external mutation tests
 - Bootstrap pull request: [#13](https://github.com/AndyTechCoder/RAR-OS/pull/13),
   merged at `abd75bfccf4fcd2f197871225d1a78233c0d87dc`; exact post-merge trusted-
@@ -50,6 +50,9 @@
   each passed architecture, correctness, and security review. The boot/platform
   integration packet also passed clean architecture, correctness, and security
   re-review after its lifecycle and identity gates were made non-circular.
+  The inactive compiler-closure observer source passed clean architecture,
+  correctness, and security re-review after exact output, grammar, topology,
+  generator, resource-bound, and trust-boundary remediation.
   These are source-only preparation reviews, not target implementation or
   completion proof
 - Target functionality: 0%; no RAR OS target implementation has started, built,
@@ -117,7 +120,14 @@
 - Controller-helper build trust: accepted ADR 0024 Alternative A selects two
   builds from a fully pinned compiler closure on the approved Linux runner for
   Alpha. Real compiler/helper identities and reviewed evidence remain absent;
-  no helper compilation, cloud provisioning, or execution is authorized
+  no helper compilation, cloud provisioning, or execution is authorized.
+  PR #57 merged a byte-pinned, inactive source observer and exact candidate
+  output contract at `65ae7aedd11298c8f15ed96cd94166e2afa03e2a`;
+  exact-main run `33308569835` passed. The observer is not wired or executed,
+  the CI closure lock remains `none`, the helper inventory remains blocked, and
+  any future candidate remains untrusted until its tools, complete file set,
+  exact-set verifier, retained bytes, and runtime fault/confinement evidence
+  receive separate review
 - Controller-helper inventory: an option-neutral blocked instance now binds the
   required builder, compiler closure, trusted source, golden vector, twice-
   reproduced binary, and isolated test-evidence identities. All activating
@@ -179,7 +189,9 @@
   #53; exact-main Specifications runs `33304849966` and `33305373626` passed.
   The separate boot/platform integration packet merged in PR #55 at
   `514d5e72a162dc99794a3f1eee864c0a22f00738`; exact-main run `33306580918`
-  passed
+  passed. PR #56 rebaselined the status records, and PR #57 then merged the
+  inactive compiler-closure observer source; exact-main run `33308569835`
+  passed without activating it
 - Owner decisions: ADRs 0022 C, 0023 C, 0024 A, 0025 B, and 0026 C are recorded
   as accepted on 2026-08-29. Acceptance alone leaves every dependent contract,
   identity, evidence, controller, and readiness gate closed
