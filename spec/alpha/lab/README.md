@@ -169,6 +169,12 @@ checked unbounded arithmetic. The slice fails closed on decoding, bounds, target
 postcondition errors. It defines no filesystem-structural operation, repair,
 fixture, controller, runtime result, or execution authority.
 
+`controller-helper-closure-verifier-basic-filesystem-semantics-v0` adds exact
+create, remove, same-device fresh-inode replacement, and owner-execute mode
+semantics for ten more templates. It pins ownership and metadata capture while
+deferring symlink, hardlink, raw-name, mount, tree, manifest-specific, and
+repair behavior. It remains source-only and cannot create or mutate a fixture.
+
 `controller-helper-build-receipt-v0.fields` and
 `controller-helper-test-evidence-v0.fields` fix controller-owned receipts for
 two separately terminated build jobs and one thirteen-case test job. Contextual
