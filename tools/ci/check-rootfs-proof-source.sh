@@ -45,13 +45,15 @@ for test_name in \
     rejects_truncation_trailing_data_and_too_many_blocks \
     covers_fcs_widths_zero_dictionary_ids_and_runtime_output_limit \
     decodes_literal_only_compressed_blocks_and_size_formats \
-    rejects_malformed_or_sequence_bearing_compressed_blocks \
+    rejects_malformed_compressed_blocks \
     decodes_rfc_8878_direct_huffman_single_stream_vector \
     decodes_direct_huffman_four_stream_size_formats \
     decodes_fse_compressed_huffman_weights \
     rejects_invalid_or_unsupported_huffman_literals \
     parses_bounded_sequence_counts_and_tables \
-    rejects_invalid_sequence_headers_and_tables; do
+    rejects_invalid_sequence_headers_and_tables \
+    decodes_rle_and_fse_sequences_across_blocks \
+    enforces_sequence_stream_match_and_length_bounds; do
     /usr/bin/grep -Fq "fn $test_name()" "$tree/zstd.rs" || exit 1
 done
 for test_name in \

@@ -1,10 +1,11 @@
 //! Bounded, dependency-free RFC 8878 frame decoder foundation.
 //!
-//! This decoder accepts raw and RLE blocks plus zero-sequence compressed blocks
-//! containing raw, RLE, or direct- or FSE-weight one- or four-stream Huffman
-//! literals.
+//! This decoder accepts raw and RLE blocks plus compressed blocks containing
+//! raw, RLE, or direct- or FSE-weight one- or four-stream Huffman literals and
+//! bounded FSE sequences.
 //! Sequence headers and their predefined, RLE, FSE-compressed, or repeated
-//! tables are parsed and bounded, but sequence execution is not yet enabled.
+//! tables are parsed and bounded, then decoded against bounded literal and
+//! match-copy output.
 //! Dictionaries, checksums, skippable frames, and concatenated frames fail with
 //! explicit errors.
 
@@ -36,9 +37,10 @@ pub enum Error {
     InvalidFseStream,
     InvalidSequenceHeader,
     InvalidSequenceTable,
+    InvalidSequenceStream,
+    InvalidMatch,
     UnsupportedLiteralsFormat,
     UnsupportedLiteralsCompression,
-    UnsupportedSequences,
     TrailingBlockData,
     OutputTooLarge,
     ContentSizeMismatch,
@@ -47,10 +49,10 @@ pub enum Error {
 
 /// Decodes exactly one dictionary-free, checksum-free Zstandard frame.
 ///
-/// Raw/RLE blocks and zero-sequence compressed blocks with raw, RLE, or
-/// one- or four-stream Huffman literals using direct or FSE-compressed weights
-/// are supported. Other features fail closed with a distinct error, and no
-/// partial output is returned.
+/// Raw/RLE blocks and compressed blocks with raw, RLE, or one- or four-stream
+/// Huffman literals using direct or FSE-compressed weights are supported,
+/// including bounded literal/match sequences. Other features fail closed with
+/// a distinct error, and no partial output is returned.
 pub fn decode_zstd(input: &[u8], maximum_output_bytes: usize) -> Result<Vec<u8>, Error> {
     if input.len() > MAX_INPUT_BYTES {
         return Err(Error::InputTooLarge);
@@ -130,11 +132,13 @@ pub fn decode_zstd(input: &[u8], maximum_output_bytes: usize) -> Result<Vec<u8>,
         return Err(Error::UnsupportedChecksum);
     }
 
-    let block_maximum = window_size
-        .or(content_size)
-        .unwrap_or(MAX_BLOCK_BYTES)
-        .min(MAX_BLOCK_BYTES);
+    let window_limit = window_size.or(content_size).unwrap_or(MAX_BLOCK_BYTES);
+    if window_limit > MAX_WINDOW_BYTES {
+        return Err(Error::WindowTooLarge);
+    }
+    let block_maximum = window_limit.min(MAX_BLOCK_BYTES);
     let mut output = Vec::new();
+    let mut sequence_state = SequenceState::new();
     let mut block_count = 0usize;
     loop {
         block_count = block_count.checked_add(1).ok_or(Error::TooManyBlocks)?;
@@ -163,10 +167,12 @@ pub fn decode_zstd(input: &[u8], maximum_output_bytes: usize) -> Result<Vec<u8>,
             }
             2 => {
                 let block = reader.take(block_size)?;
-                decode_literal_only_compressed_block(
+                decode_compressed_block(
                     block,
                     &mut output,
+                    &mut sequence_state,
                     block_maximum,
+                    window_limit,
                     maximum_output_bytes,
                 )?;
             }
@@ -186,10 +192,12 @@ pub fn decode_zstd(input: &[u8], maximum_output_bytes: usize) -> Result<Vec<u8>,
     Ok(output)
 }
 
-fn decode_literal_only_compressed_block(
+fn decode_compressed_block(
     block: &[u8],
     output: &mut Vec<u8>,
+    sequence_state: &mut SequenceState,
     block_maximum: usize,
+    window_limit: usize,
     maximum_output_bytes: usize,
 ) -> Result<(), Error> {
     let mut reader = Reader::new(block);
@@ -275,14 +283,33 @@ fn decode_literal_only_compressed_block(
         return Err(Error::InvalidLiteralsSection);
     }
 
-    let (number_of_sequences, _) = parse_sequence_tables(&mut reader, None)?;
-    if number_of_sequences != 0 {
-        return Err(Error::UnsupportedSequences);
+    let (number_of_sequences, tables) =
+        parse_sequence_tables(&mut reader, sequence_state.tables.as_ref())?;
+    if number_of_sequences == 0 {
+        if reader.remaining() != 0 {
+            return Err(Error::TrailingBlockData);
+        }
+        return extend_bounded(output, &literals, maximum_output_bytes);
     }
-    if reader.remaining() != 0 {
-        return Err(Error::TrailingBlockData);
-    }
-    extend_bounded(output, &literals, maximum_output_bytes)
+    let tables = tables.ok_or(Error::InvalidSequenceTable)?;
+    let block_output_limit = output
+        .len()
+        .checked_add(block_maximum)
+        .ok_or(Error::OutputTooLarge)?
+        .min(maximum_output_bytes);
+    decode_sequences(
+        reader.rest(),
+        number_of_sequences,
+        &tables,
+        &literals,
+        output,
+        &mut sequence_state.repeated_offsets,
+        window_limit,
+        block_output_limit,
+    )?;
+    reader.take(reader.remaining())?;
+    sequence_state.tables = Some(tables);
+    Ok(())
 }
 
 fn decode_direct_huffman_literals(
@@ -658,6 +685,235 @@ fn parse_sequence_table(
     }
 }
 
+struct SequenceState {
+    tables: Option<SequenceTables>,
+    repeated_offsets: [usize; 3],
+}
+
+impl SequenceState {
+    fn new() -> Self {
+        Self {
+            tables: None,
+            repeated_offsets: [1, 4, 8],
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn decode_sequences(
+    stream: &[u8],
+    number_of_sequences: usize,
+    tables: &SequenceTables,
+    literals: &[u8],
+    output: &mut Vec<u8>,
+    repeated_offsets: &mut [usize; 3],
+    window_limit: usize,
+    maximum_output_bytes: usize,
+) -> Result<(), Error> {
+    let mut bits = PaddedReverseBits::new(stream).map_err(|_| Error::InvalidSequenceStream)?;
+    let mut literal_state = bits.read_exact(tables.literal_lengths.accuracy_log)?;
+    let mut offset_state = bits.read_exact(tables.offsets.accuracy_log)?;
+    let mut match_state = bits.read_exact(tables.match_lengths.accuracy_log)?;
+    let mut literal_cursor = 0usize;
+
+    for sequence_index in 0..number_of_sequences {
+        let literal_code = fse_symbol(&tables.literal_lengths, literal_state)?;
+        let offset_code = fse_symbol(&tables.offsets, offset_state)?;
+        let match_code = fse_symbol(&tables.match_lengths, match_state)?;
+        let (literal_base, literal_bits) = literal_length_code(literal_code)?;
+        let (match_base, match_bits) = match_length_code(match_code)?;
+
+        let offset_base = 1usize
+            .checked_shl(u32::from(offset_code))
+            .ok_or(Error::InvalidSequenceStream)?;
+        let offset_value = offset_base
+            .checked_add(bits.read_exact(offset_code)?)
+            .ok_or(Error::InvalidSequenceStream)?;
+        let match_length = match_base
+            .checked_add(bits.read_exact(match_bits)?)
+            .ok_or(Error::InvalidSequenceStream)?;
+        let literal_length = literal_base
+            .checked_add(bits.read_exact(literal_bits)?)
+            .ok_or(Error::InvalidSequenceStream)?;
+
+        let literal_end = literal_cursor
+            .checked_add(literal_length)
+            .ok_or(Error::InvalidSequenceStream)?;
+        let literal_bytes = literals
+            .get(literal_cursor..literal_end)
+            .ok_or(Error::InvalidSequenceStream)?;
+        extend_bounded(output, literal_bytes, maximum_output_bytes)?;
+        literal_cursor = literal_end;
+
+        let offset = resolve_offset(offset_value, literal_length, repeated_offsets)?;
+        copy_match_bounded(
+            output,
+            offset,
+            match_length,
+            window_limit,
+            maximum_output_bytes,
+        )?;
+
+        if sequence_index + 1 != number_of_sequences {
+            update_fse_state_exact(&tables.literal_lengths, &mut bits, &mut literal_state)?;
+            update_fse_state_exact(&tables.match_lengths, &mut bits, &mut match_state)?;
+            update_fse_state_exact(&tables.offsets, &mut bits, &mut offset_state)?;
+        }
+    }
+    if bits.remaining != 0 {
+        return Err(Error::InvalidSequenceStream);
+    }
+    extend_bounded(output, &literals[literal_cursor..], maximum_output_bytes)
+}
+
+fn fse_symbol(table: &FseTable, state: usize) -> Result<u8, Error> {
+    table
+        .symbols
+        .get(state)
+        .copied()
+        .ok_or(Error::InvalidSequenceStream)
+}
+
+fn update_fse_state_exact(
+    table: &FseTable,
+    bits: &mut PaddedReverseBits<'_>,
+    state: &mut usize,
+) -> Result<(), Error> {
+    let count = *table
+        .bit_counts
+        .get(*state)
+        .ok_or(Error::InvalidSequenceStream)?;
+    let base = usize::from(
+        *table
+            .bases
+            .get(*state)
+            .ok_or(Error::InvalidSequenceStream)?,
+    );
+    *state = base
+        .checked_add(bits.read_exact(count)?)
+        .ok_or(Error::InvalidSequenceStream)?;
+    if *state >= table.symbols.len() {
+        return Err(Error::InvalidSequenceStream);
+    }
+    Ok(())
+}
+
+fn literal_length_code(code: u8) -> Result<(usize, u8), Error> {
+    let result = match code {
+        0..=15 => (usize::from(code), 0),
+        16 => (16, 1),
+        17 => (18, 1),
+        18 => (20, 1),
+        19 => (22, 1),
+        20 => (24, 2),
+        21 => (28, 2),
+        22 => (32, 3),
+        23 => (40, 3),
+        24 => (48, 4),
+        25 => (64, 6),
+        26 => (128, 7),
+        27 => (256, 8),
+        28 => (512, 9),
+        29 => (1024, 10),
+        30 => (2048, 11),
+        31 => (4096, 12),
+        32 => (8192, 13),
+        33 => (16_384, 14),
+        34 => (32_768, 15),
+        35 => (65_536, 16),
+        _ => return Err(Error::InvalidSequenceStream),
+    };
+    Ok(result)
+}
+
+fn match_length_code(code: u8) -> Result<(usize, u8), Error> {
+    let result = match code {
+        0..=31 => (usize::from(code) + 3, 0),
+        32 => (35, 1),
+        33 => (37, 1),
+        34 => (39, 1),
+        35 => (41, 1),
+        36 => (43, 2),
+        37 => (47, 2),
+        38 => (51, 3),
+        39 => (59, 3),
+        40 => (67, 4),
+        41 => (83, 4),
+        42 => (99, 5),
+        43 => (131, 7),
+        44 => (259, 8),
+        45 => (515, 9),
+        46 => (1027, 10),
+        47 => (2051, 11),
+        48 => (4099, 12),
+        49 => (8195, 13),
+        50 => (16_387, 14),
+        51 => (32_771, 15),
+        52 => (65_539, 16),
+        _ => return Err(Error::InvalidSequenceStream),
+    };
+    Ok(result)
+}
+
+fn resolve_offset(
+    offset_value: usize,
+    literal_length: usize,
+    repeated: &mut [usize; 3],
+) -> Result<usize, Error> {
+    if offset_value > 3 {
+        let offset = offset_value - 3;
+        *repeated = [offset, repeated[0], repeated[1]];
+        return Ok(offset);
+    }
+    match (offset_value, literal_length == 0) {
+        (1, false) => Ok(repeated[0]),
+        (2, false) | (1, true) => {
+            let offset = repeated[1];
+            *repeated = [offset, repeated[0], repeated[2]];
+            Ok(offset)
+        }
+        (3, false) | (2, true) => {
+            let offset = repeated[2];
+            *repeated = [offset, repeated[0], repeated[1]];
+            Ok(offset)
+        }
+        (3, true) => {
+            let offset = repeated[0].checked_sub(1).ok_or(Error::InvalidMatch)?;
+            if offset == 0 {
+                return Err(Error::InvalidMatch);
+            }
+            *repeated = [offset, repeated[0], repeated[1]];
+            Ok(offset)
+        }
+        _ => Err(Error::InvalidMatch),
+    }
+}
+
+fn copy_match_bounded(
+    output: &mut Vec<u8>,
+    offset: usize,
+    length: usize,
+    window_limit: usize,
+    maximum_output_bytes: usize,
+) -> Result<(), Error> {
+    if offset == 0 || offset > window_limit || offset > output.len() {
+        return Err(Error::InvalidMatch);
+    }
+    let final_length = output
+        .len()
+        .checked_add(length)
+        .ok_or(Error::OutputTooLarge)?;
+    if final_length > maximum_output_bytes {
+        return Err(Error::OutputTooLarge);
+    }
+    while output.len() < final_length {
+        let source = output.len() - offset;
+        let byte = *output.get(source).ok_or(Error::InvalidMatch)?;
+        output.push(byte);
+    }
+    Ok(())
+}
+
 fn build_fse_table(frequencies: &[i16], accuracy_log: u8) -> Result<FseTable, Error> {
     let size = 1usize << accuracy_log;
     let mask = size - 1;
@@ -872,6 +1128,13 @@ impl<'a> PaddedReverseBits<'a> {
             self.remaining -= 1;
         }
         Ok(value)
+    }
+
+    fn read_exact(&mut self, count: u8) -> Result<usize, Error> {
+        if self.remaining < isize::from(count) {
+            return Err(Error::InvalidSequenceStream);
+        }
+        self.read(count).map_err(|_| Error::InvalidSequenceStream)
     }
 }
 
@@ -1180,9 +1443,9 @@ mod tests {
     }
 
     #[test]
-    fn rejects_malformed_or_sequence_bearing_compressed_blocks() {
-        let sequence = compressed_frame(&[0x08, b'x', 1, 0, 1]);
-        assert_eq!(decode_zstd(&sequence, 1), Err(Error::UnsupportedSequences));
+    fn rejects_malformed_compressed_blocks() {
+        let missing_modes = compressed_frame(&[0x08, b'x', 1]);
+        assert_eq!(decode_zstd(&missing_modes, 1), Err(Error::Truncated));
 
         let trailing = compressed_frame(&[0x08, b'x', 0, 0]);
         assert_eq!(decode_zstd(&trailing, 1), Err(Error::TrailingBlockData));
@@ -1203,6 +1466,96 @@ mod tests {
         assert_eq!(
             decode_zstd(&treeless, 2),
             Err(Error::UnsupportedLiteralsCompression)
+        );
+    }
+
+    #[test]
+    fn decodes_rle_and_fse_sequences_across_blocks() {
+        let rle_sequence = compressed_frame(&[
+            0x18, b'a', b'b', b'c', // three raw literals
+            1, 0x54, 3, 0, 0, // one RLE-table sequence: LL=3, OF=0, ML=0
+            1, // reverse-bitstream marker, with no useful bits
+        ]);
+        assert_eq!(decode_zstd(&rle_sequence, 6).unwrap(), b"abcccc");
+
+        let mut repeated = MAGIC.to_vec();
+        repeated.extend_from_slice(&[0x00, 0x18]);
+        append_block(&mut repeated, false, 0, 4, b"abcd");
+        append_block(&mut repeated, false, 2, 7, &[0, 1, 0x54, 0, 0, 0, 1]);
+        append_block(&mut repeated, true, 2, 4, &[0, 1, 0xfc, 1]);
+        assert_eq!(decode_zstd(&repeated, 10).unwrap(), b"abcdabcccc");
+
+        // Each compressed table has Accuracy_Log=5 and normalized
+        // frequencies [16,16]. State zero selects code zero in all tables.
+        let mut compressed = MAGIC.to_vec();
+        compressed.extend_from_slice(&[0x00, 0x18]);
+        append_block(&mut compressed, false, 0, 4, b"abcd");
+        let sequence = [0, 1, 0xa8, 0x10, 0x3f, 0x10, 0x3f, 0x10, 0x3f, 0x00, 0x80];
+        append_block(&mut compressed, true, 2, sequence.len(), &sequence);
+        assert_eq!(decode_zstd(&compressed, 7).unwrap(), b"abcdabc");
+
+        let mut updated = MAGIC.to_vec();
+        updated.extend_from_slice(&[0x00, 0x18]);
+        append_block(&mut updated, false, 0, 4, b"abcd");
+        let two_sequences = [
+            0, 2, 0xa8, 0x10, 0x3f, 0x10, 0x3f, 0x10, 0x3f, 0, 0, 4,
+        ];
+        append_block(&mut updated, true, 2, two_sequences.len(), &two_sequences);
+        assert_eq!(decode_zstd(&updated, 10).unwrap(), b"abcdabcccc");
+
+        let mut direct_offset = MAGIC.to_vec();
+        direct_offset.extend_from_slice(&[0x00, 0x18]);
+        append_block(&mut direct_offset, false, 0, 4, b"abcd");
+        let direct = [0x08, b'x', 1, 0x54, 1, 2, 0, 4];
+        append_block(&mut direct_offset, true, 2, direct.len(), &direct);
+        assert_eq!(decode_zstd(&direct_offset, 8).unwrap(), b"abcdxxxx");
+    }
+
+    #[test]
+    fn enforces_sequence_stream_match_and_length_bounds() {
+        assert_eq!(literal_length_code(35).unwrap(), (65_536, 16));
+        assert_eq!(match_length_code(52).unwrap(), (65_539, 16));
+        assert_eq!(literal_length_code(36), Err(Error::InvalidSequenceStream));
+        assert_eq!(match_length_code(53), Err(Error::InvalidSequenceStream));
+
+        let no_history = compressed_frame(&[0, 1, 0x54, 0, 0, 0, 1]);
+        assert_eq!(decode_zstd(&no_history, 3), Err(Error::InvalidMatch));
+
+        let missing_literals = compressed_frame(&[0, 1, 0x54, 1, 0, 0, 1]);
+        assert_eq!(
+            decode_zstd(&missing_literals, 4),
+            Err(Error::InvalidSequenceStream)
+        );
+
+        let missing_offset_bits = compressed_frame(&[0, 1, 0x54, 0, 2, 0, 1]);
+        assert_eq!(
+            decode_zstd(&missing_offset_bits, 4),
+            Err(Error::InvalidSequenceStream)
+        );
+
+        let mut trailing_bits = MAGIC.to_vec();
+        trailing_bits.extend_from_slice(&[0x00, 0x18]);
+        append_block(&mut trailing_bits, false, 0, 4, b"abcd");
+        append_block(&mut trailing_bits, true, 2, 7, &[0, 1, 0x54, 0, 0, 0, 3]);
+        assert_eq!(
+            decode_zstd(&trailing_bits, 7),
+            Err(Error::InvalidSequenceStream)
+        );
+
+        let mut oversized_block = MAGIC.to_vec();
+        oversized_block.extend_from_slice(&[0x00, 0x18]);
+        append_block(&mut oversized_block, false, 0, 4, b"abcd");
+        let many_matches = [0, 0x80, 250, 0x54, 0, 0, 31, 1];
+        append_block(
+            &mut oversized_block,
+            true,
+            2,
+            many_matches.len(),
+            &many_matches,
+        );
+        assert_eq!(
+            decode_zstd(&oversized_block, 10_000),
+            Err(Error::OutputTooLarge)
         );
     }
 
