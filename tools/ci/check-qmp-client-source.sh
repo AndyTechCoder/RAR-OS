@@ -39,7 +39,7 @@ done
 
 for source in "$tree/main.rs" "$tree/json.rs"; do
     [ -s "$source" ] && [ ! -L "$source" ] || exit 1
-    ! /usr/bin/grep -En '(unsafe[[:space:]]+(fn|impl|extern)|unsafe[[:space:]]*\{|extern[[:space:]]+crate|include!|include_bytes!|include_str!|todo!|unimplemented!|std::process::Command|Command::new|TcpStream|UdpSocket|libc::)' "$source" >/dev/null || exit 1
+    ! /usr/bin/grep -En '(unsafe[[:space:]]+(fn|impl|extern)|unsafe[[:space:]]*\{|extern[[:space:]]+crate|#\[[[:space:]]*path[[:space:]]*=|include!|include_bytes!|include_str!|todo!|unimplemented!|std::process::Command|Command::new|TcpStream|UdpSocket|libc::)' "$source" >/dev/null || exit 1
 done
 /usr/bin/grep -Fqx 'const SOCKET: &str = "/tmp/rar-qmp.sock";' "$tree/main.rs" || exit 1
 /usr/bin/grep -Fqx 'const SERIAL: &str = "/evidence/serial.log";' "$tree/main.rs" || exit 1
