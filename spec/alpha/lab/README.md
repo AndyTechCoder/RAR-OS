@@ -89,6 +89,14 @@ receipt cannot update a lock, inventory, controller, profile, gate, build, or
 readiness state; provenance, licenses, acquisition, tool pins, retained bytes,
 and runtime evidence still require separate review.
 
+`controller-helper-closure-verifier-test-plan-v0.fields` records an initial,
+explicitly incomplete controller-owned validation, mutation, and confinement
+design. It contains no harness or execution authority. Exact error/precedence
+coverage, injected runtime faults, canonical evidence/verdict schemas, fixtures,
+controller source, and wiring remain required separate reviews. Static checks
+bind only these draft bytes and confirm that no directly named future harness or
+plan reference is wired; they do not claim transitive workflow-call proof.
+
 `controller-helper-build-receipt-v0.fields` and
 `controller-helper-test-evidence-v0.fields` fix controller-owned receipts for
 two separately terminated build jobs and one thirteen-case test job. Contextual
