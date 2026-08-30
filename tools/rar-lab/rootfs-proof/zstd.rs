@@ -308,6 +308,47 @@ mod tests {
         assert_eq!(decode_zstd(&many, 0), Err(Error::TooManyBlocks));
     }
 
+    #[test]
+    fn covers_fcs_widths_zero_dictionary_ids_and_runtime_output_limit() {
+        for (descriptor, encoded_size) in [
+            (0x60, 44u64),
+            (0xa0, 300u64),
+            (0xe0, 300u64),
+        ] {
+            let fcs_bytes = match descriptor >> 6 {
+                1 => 2,
+                2 => 4,
+                3 => 8,
+                _ => unreachable!(),
+            };
+            let mut frame = MAGIC.to_vec();
+            frame.push(descriptor);
+            frame.extend_from_slice(&encoded_size.to_le_bytes()[..fcs_bytes]);
+            let payload = vec![b'x'; 300];
+            append_block(&mut frame, true, 0, payload.len(), &payload);
+            assert_eq!(decode_zstd(&frame, 300).unwrap(), payload);
+        }
+
+        for (descriptor, dictionary_bytes) in [(0x01, 1), (0x02, 2), (0x03, 4)] {
+            let mut frame = MAGIC.to_vec();
+            frame.extend_from_slice(&[descriptor, 0x00]);
+            frame.resize(frame.len() + dictionary_bytes, 0);
+            append_block(&mut frame, true, 0, 3, b"abc");
+            assert_eq!(decode_zstd(&frame, 3).unwrap(), b"abc");
+        }
+
+        let mismatch = single_segment_frame(&[(true, 0, b"abc")], 4);
+        assert_eq!(decode_zstd(&mismatch, 4), Err(Error::ContentSizeMismatch));
+
+        let mut unbounded_by_fcs = MAGIC.to_vec();
+        unbounded_by_fcs.extend_from_slice(&[0x00, 0x00]);
+        append_block(&mut unbounded_by_fcs, true, 1, 5, b"x");
+        assert_eq!(
+            decode_zstd(&unbounded_by_fcs, 4),
+            Err(Error::OutputTooLarge)
+        );
+    }
+
     fn single_segment_frame(blocks: &[(bool, u32, &[u8])], content_size: u8) -> Vec<u8> {
         let mut frame = MAGIC.to_vec();
         frame.extend_from_slice(&[0x20, content_size]);
