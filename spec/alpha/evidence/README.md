@@ -51,6 +51,12 @@ No final/temporary naming, commit, cleanup, retry, or uncertain-state behavior
 is authoritative until that proposal is accepted and integrated through a
 reviewed contract change.
 
+The controller-handoff host library includes only a side-effect-free codec for
+the already-reviewed 20-line record plus a language-neutral golden fixture.
+The codec cannot publish a record, choose a filename, access a filesystem,
+recover a transaction, or activate a probe. Its presence does not implement or
+prejudge ADR 0030.
+
 This protocol is acceptance evidence, not a stable target ABI. Changing it
 requires an ADR-governed trusted-controller review before implementation code
 may rely on the replacement.

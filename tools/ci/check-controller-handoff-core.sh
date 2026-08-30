@@ -11,10 +11,13 @@ fail() { printf 'controller handoff core rejected: %s\n' "$1" >&2; exit 1; }
 
 [ -d "$tree" ] && [ ! -L "$tree" ] || fail 'source tree is missing or symbolic'
 expected='README.md
+accepted_evidence.rs
 attempt.rs
 build-plan.v0
 contract.rs
 fixtures
+fixtures/accepted-evidence-golden-f.v0
+fixtures/accepted-evidence-golden.v0
 fixtures/active-header-prehash.v0.hex
 fixtures/manifest-golden.v0.hex
 fixtures/recovery-header-prehash.v0.hex
@@ -27,18 +30,18 @@ transaction.rs'
 actual=$(find "$tree" -mindepth 1 ! -name '._*' -print | /usr/bin/sed "s|^$tree/||" | /usr/bin/sort)
 [ "$actual" = "$expected" ] || fail 'source tree allowlist mismatch'
 find "$tree" -type l -print | /usr/bin/grep -q . && fail 'source tree contains a symbolic link'
-for file in README.md attempt.rs build-plan.v0 contract.rs lib.rs linux.rs manifest.rs sha256.rs transaction.rs fixtures/active-header-prehash.v0.hex fixtures/manifest-golden.v0.hex fixtures/recovery-header-prehash.v0.hex fixtures/transition-prehash.v0.hex; do
+for file in README.md accepted_evidence.rs attempt.rs build-plan.v0 contract.rs lib.rs linux.rs manifest.rs sha256.rs transaction.rs fixtures/accepted-evidence-golden-f.v0 fixtures/accepted-evidence-golden.v0 fixtures/active-header-prehash.v0.hex fixtures/manifest-golden.v0.hex fixtures/recovery-header-prehash.v0.hex fixtures/transition-prehash.v0.hex; do
     [ -f "$tree/$file" ] && [ ! -L "$tree/$file" ] && [ -s "$tree/$file" ] || fail "missing, symbolic, or empty source file: $file"
 done
 
 /usr/bin/grep -qx 'schema=rar-controller-handoff-build-plan-v0' "$plan" || fail 'build-plan schema mismatch'
 /usr/bin/grep -qx 'rustc_channel=1.95.0' "$plan" || fail 'compiler channel mismatch'
 /usr/bin/grep -qx 'rustc_identity=unavailable' "$plan" || fail 'unreviewed compiler identity became active'
-/usr/bin/grep -qx 'source_modules=attempt.rs,contract.rs,linux.rs,manifest.rs,sha256.rs,transaction.rs' "$plan" || fail 'source module set mismatch'
+/usr/bin/grep -qx 'source_modules=accepted_evidence.rs,attempt.rs,contract.rs,linux.rs,manifest.rs,sha256.rs,transaction.rs' "$plan" || fail 'source module set mismatch'
 /usr/bin/grep -qx 'dependency_count=0' "$plan" || fail 'dependency count mismatch'
 /usr/bin/grep -qx 'target_linked=false' "$plan" || fail 'target boundary mismatch'
 /usr/bin/grep -qx 'test_execution=blocked-pending-reviewed-isolated-cloud-host-tool-identity' "$plan" || fail 'test execution state mismatch'
-/usr/bin/grep -qx 'status=linux-adapter+attempt-codec-source-only-no-executable' "$plan" || fail 'authority state mismatch'
+/usr/bin/grep -qx 'status=linux-adapter+attempt-codec+accepted-evidence-codec-source-only-no-executable' "$plan" || fail 'authority state mismatch'
 /usr/bin/grep -qx '#!\[deny(unsafe_code)\]' "$tree/lib.rs" || fail 'crate unsafe-code denial is absent'
 unsafe_files=$(/usr/bin/grep -El 'unsafe \{|unsafe extern' "$tree"/*.rs | /usr/bin/sed "s|^$tree/||" | /usr/bin/sort)
 [ "$unsafe_files" = linux.rs ] || fail 'unsafe operations escaped the sole Linux adapter boundary'
@@ -48,6 +51,13 @@ unsafe_files=$(/usr/bin/grep -El 'unsafe \{|unsafe extern' "$tree"/*.rs | /usr/b
 /usr/bin/grep -Fq 'pub(crate) fn from_verified_owned_fd' "$tree/linux.rs" || fail 'root descriptor adoption is not crate-confined'
 ! /usr/bin/grep -Eq 'pub fn .*([Pp]ath|[Ff]lag|[Rr]aw)' "$tree/linux.rs" || fail 'adapter exposes path, flag, or raw descriptor authority'
 ! /usr/bin/grep -Eq 'use std::(fs|process|net|env)|std::(fs|process|net|env)::|Command::|TcpStream|UdpSocket|openat\(|unlinkat\(' "$tree/attempt.rs" || fail 'attempt codec acquired host authority'
+codec_sha=$(env LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$tree/accepted_evidence.rs" | /usr/bin/awk '{ print $1 }')
+[ "$codec_sha" = bb683bd6ed012ee0800e120b2c9bdfe12cbb7d101aaf4f17aa361338a9fca445 ] || fail 'accepted-evidence codec escaped its positive byte allowlist'
+! /usr/bin/grep -Eq 'use std::(fs|process|net|env)|std::(fs|process|net|env)::|Command::|TcpStream|UdpSocket|openat\(|unlinkat\(|renameat2\(' "$tree/accepted_evidence.rs" || fail 'accepted-evidence codec acquired host authority'
+! /usr/bin/grep -Eq 'fn main\(|pub fn .*([Pp]ath|[Ff]lag|[Rr]aw)|ACCEPTED_EVIDENCE_BASENAME|temporary_basename' "$tree/accepted_evidence.rs" || fail 'accepted-evidence codec acquired executable or unapproved naming authority'
+/usr/bin/grep -Fq 'pub const ACCEPTED_EVIDENCE_MAXIMUM_BYTES: usize = 4096;' "$tree/accepted_evidence.rs" || fail 'accepted-evidence byte bound mismatch'
+/usr/bin/grep -Fq 'AcceptedEvidenceError::new("record-digest-zero")' "$tree/accepted_evidence.rs" || fail 'accepted-evidence record digest nonzero rule is absent'
+/usr/bin/grep -Fq 'It has no filesystem, publication, cleanup, retry, recovery, or controller' "$tree/accepted_evidence.rs" || fail 'accepted-evidence non-authority boundary is missing'
 /usr/bin/grep -Fq 'pub const ACTIVE_HEADER_BYTES: usize = 512;' "$tree/attempt.rs" || fail 'active header bound mismatch'
 /usr/bin/grep -Fq 'pub const TRANSITION_BYTES: usize = 512;' "$tree/attempt.rs" || fail 'transition bound mismatch'
 /usr/bin/grep -Fq 'pub const RECOVERY_HEADER_BYTES: usize = 256;' "$tree/attempt.rs" || fail 'recovery header bound mismatch'
@@ -66,4 +76,15 @@ done
 [ "$(env LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$tree/fixtures/transition-prehash.v0.hex" | /usr/bin/awk '{ print $1 }')" = eff2a83c242d0ea19e82fc45b1a7f724be7d3d696ce3ae1ab8d5705360b56fd0 ] || fail 'transition header vector digest mismatch'
 [ "$(env LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$tree/fixtures/recovery-header-prehash.v0.hex" | /usr/bin/awk '{ print $1 }')" = 898d62e2f1514bec845e6d2aa8651a3cf637bdaf4e0a7200fc483cde431e16a8 ] || fail 'recovery header vector digest mismatch'
 
-printf '%s\n' 'controller handoff core source checks passed: local-execution=forbidden structural-layouts=4 contextual-policy=absent'
+accepted=$tree/fixtures/accepted-evidence-golden.v0
+[ "$(/usr/bin/wc -c < "$accepted" | /usr/bin/tr -d ' ')" -eq 1524 ] || fail 'accepted-evidence golden length mismatch'
+[ "$(/usr/bin/wc -l < "$accepted" | /usr/bin/tr -d ' ')" -eq 20 ] || fail 'accepted-evidence golden line count mismatch'
+[ "$(env LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$accepted" | /usr/bin/awk '{ print $1 }')" = 460214fba429e11d0d9a54e07e0765f2206213baad24259cd039791ede226131 ] || fail 'accepted-evidence golden digest mismatch'
+/usr/bin/grep -qx 'record_sha256=2af43351c6e514755f5913df853c7ab72ee66471c8197523458ba0d73d31463f' "$accepted" || fail 'accepted-evidence preimage digest mismatch'
+accepted_reference=$tree/fixtures/accepted-evidence-golden-f.v0
+[ "$(/usr/bin/wc -c < "$accepted_reference" | /usr/bin/tr -d ' ')" -eq 1524 ] || fail 'accepted-evidence reference golden length mismatch'
+[ "$(/usr/bin/wc -l < "$accepted_reference" | /usr/bin/tr -d ' ')" -eq 20 ] || fail 'accepted-evidence reference golden line count mismatch'
+[ "$(env LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$accepted_reference" | /usr/bin/awk '{ print $1 }')" = 699c335a9bff3abd7929661c93fff45571ccb373d99504e7c2bfbd887e79e4fc ] || fail 'accepted-evidence reference golden digest mismatch'
+/usr/bin/grep -qx 'record_sha256=c3be14c96a0c6099b172f5123a0899008f6b9a9229d7518e1e7e4fdd72175f60' "$accepted_reference" || fail 'accepted-evidence reference preimage digest mismatch'
+
+printf '%s\n' 'controller handoff core source checks passed: local-execution=forbidden structural-layouts=5 contextual-policy=absent evidence-codec=inactive'

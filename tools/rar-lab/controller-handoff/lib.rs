@@ -1,6 +1,7 @@
 #![deny(unsafe_code)]
 
 mod attempt;
+mod accepted_evidence;
 mod contract;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[allow(unsafe_code)]
@@ -10,6 +11,11 @@ mod sha256;
 mod transaction;
 
 pub use contract::{Cancellation, Deadline, DeclaredOutput, PhasePlan, PlanError, ProducerQuiesced, SourceMountKind};
+pub use accepted_evidence::{
+    ACCEPTANCE_PROTOCOL_SHA256, ACCEPTED_EVIDENCE_MAXIMUM_BYTES,
+    AcceptedEvidenceBindings, AcceptedEvidenceError, AcceptedEvidenceRecord,
+    Milestone,
+};
 pub use attempt::{
     ACTIVE_HEADER_BYTES, ACTIVE_MAXIMUM_BYTES, AttemptActive, AttemptCause,
     AttemptError, AttemptExpected, AttemptRoot, AttemptState, AttemptTransition,
