@@ -11,7 +11,7 @@ fail() {
 
 [ -f "$plan" ] && [ ! -L "$plan" ] || fail 'test plan is unavailable'
 plan_sha=$(env -u LC_CTYPE LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$plan" | /usr/bin/awk '{ print $1 }')
-[ "$plan_sha" = 6cd6c1824bc5a5bc8be7c398d4d36fec23019ac4c40b48376090de698c495ebe ] || fail 'test-plan bytes escaped review'
+[ "$plan_sha" = df3578fd0206604b38bebb4a119d09ff708e5c0dc8e3098f051c2ed7c78d02be ] || fail 'test-plan bytes escaped review'
 
 for required in \
     'status=experimental-incomplete-source-only' \
@@ -24,9 +24,11 @@ for required in \
     'success_oracle=exit-0+empty-stderr+exact-canonical-31-line-receipt+all-false-fields+not-ready-status+no-other-output' \
     'acceptance_rule=blocked;this-incomplete-plan-cannot-produce-an-acceptance-verdict' \
     'validation_catalog=controller-helper-closure-verifier-validation-v0.fields+controller-helper-closure-verifier-errors-v0+controller-helper-closure-verifier-precedence-v0,inactive-source-only' \
+    'input_domain=controller-helper-closure-verifier-input-domain-v0.fields,inactive-source-only,no-fixtures+cases+controller+execution-authority' \
+    'coverage_gap=explicit-field+value-case-instance-catalog+constructible-dual-invalid-oracles+injected-runtime-command+read+write+close+tool-output+resource-exhaustion-fault-catalog-are-not-yet-specified' \
     'precedence_status=source-order-only;constructible-dual-invalid-case+oracle-catalog-absent,not-runtime-tested,not-acceptance-evidence' \
     'evidence_status=absent,separate-versioned-canonical-case-evidence+normalized-verdict-contract+fixtures-required-before-controller-implementation' \
-    'activation_rule=exact-reviewed-validation-catalog+separate-complete-explicit-case+constructible-runtime-precedence+input-domain+fault-contract,evidence+normalized-verdict-contract+fixtures,controller-source,fixture-image,tool-pins,subject-pins,workflow-wiring,and-exact-main-validation-required-before-first-run' \
+    'activation_rule=exact-reviewed-validation-catalog+input-domain+separate-complete-explicit-case+constructible-runtime-precedence+fault-contract,evidence+normalized-verdict-contract+fixtures,controller-source,fixture-image,tool-pins,subject-pins,workflow-wiring,and-exact-main-validation-required-before-first-run' \
     'local_rule=plan-check-is-text+hash+limited-direct-nonwiring-only;never-run-verifier,test-controller,container,compiler,helper,target,VM,or-emulator-on-Mac'; do
     grep -Fqx "$required" "$plan" || fail "required invariant is missing: $required"
 done

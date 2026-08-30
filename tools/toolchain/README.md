@@ -40,6 +40,13 @@ inactive byte-pinned validation, occurrence-qualified error-template, and
 class-located source-order catalogs. Their 32-stage adjacent prefix is derived
 from the declared control-flow order, but it is not an executable dual-invalid
 oracle or fixture-reachability claim. The constructible runtime precedence and
-diagnostic input domains, runtime fault injection, explicit field/value case
-instances, canonical evidence, and normalized verdicts remain absent and
-continue to block controller implementation or wiring.
+runtime fault injection, explicit field/value case instances, canonical
+evidence, and normalized verdicts remain absent and continue to block
+controller implementation or wiring. The diagnostic input domain is fixed by
+the separate inactive contract described next.
+
+The separate inactive input-domain contract now fixes the controller-owned
+environment, mount, file, token, mutation-target, and isolation domains without
+creating fixtures or execution authority. Explicit field/value cases,
+constructible dual-invalid oracles, injected faults, evidence/verdicts,
+controller source, and workflow wiring remain blocked.
