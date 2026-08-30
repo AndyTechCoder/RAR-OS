@@ -24,8 +24,8 @@ actual=$(/usr/bin/printf '%s\n' tools/ci/test-*.sh | /usr/bin/sort)
 [ "$declared" = "$actual" ] || exit 1
 ephemeral=$(/usr/bin/awk -F '|' '$2 == "ephemeral" { print $1 }' "$manifest")
 immutable=$(/usr/bin/awk -F '|' '$2 == "immutable" { print $1 }' "$manifest")
-[ "$(/usr/bin/printf '%s\n' "$ephemeral" | /usr/bin/awk 'NF { count++ } END { print count + 0 }')" -eq 20 ] || exit 1
-[ "$(/usr/bin/printf '%s\n' "$immutable" | /usr/bin/awk 'NF { count++ } END { print count + 0 }')" -eq 6 ] || exit 1
+[ "$(/usr/bin/printf '%s\n' "$ephemeral" | /usr/bin/awk 'NF { count++ } END { print count + 0 }')" -eq 21 ] || exit 1
+[ "$(/usr/bin/printf '%s\n' "$immutable" | /usr/bin/awk 'NF { count++ } END { print count + 0 }')" -eq 5 ] || exit 1
 
 printf '%s\n' "$ephemeral" | while IFS= read -r test; do
     [ -f "$test" ] && [ ! -L "$test" ] && [ -s "$test" ] || exit 1
@@ -107,4 +107,4 @@ runner_tests=$(/usr/bin/sed -n 's|^/bin/sh "$root/\(tools/ci/test-[a-z0-9.-]*\.s
 [ "$(/usr/bin/grep -Fc 'tools/ci/run-qmp-client-unit-tests.sh' tools/ci/check-sprint-static.sh)" -eq 1 ] || exit 1
 [ "$(/usr/bin/grep -Fc 'tools/ci/run-qmp-client-unit-tests.sh' tools/ci/check-specs.sh)" -eq 2 ] || exit 1
 
-printf '%s\n' 'Ephemeral policy-test confinement passed: ephemeral=20 immutable=6 source=read-only'
+printf '%s\n' 'Ephemeral policy-test confinement passed: ephemeral=21 immutable=5 source=read-only'
