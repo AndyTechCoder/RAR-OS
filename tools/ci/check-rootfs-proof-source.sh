@@ -61,6 +61,7 @@ done
 for test_name in \
     decodes_stored_fixed_and_dynamic_blocks \
     decodes_matches_extra_bits_and_many_empty_fixed_blocks \
+    enforces_deflate_block_work_limit \
     accepts_optional_headers_and_rejects_every_truncation \
     enforces_output_crc_size_and_single_member_bounds \
     rejects_bad_headers_stored_lengths_and_huffman_trees; do
@@ -109,6 +110,7 @@ for test_name in \
     rejects_tampered_blobs_before_layer_parsing \
     resolves_gzip_zstd_and_rejects_unknown_compression_and_diff_id_mismatch \
     resolves_mixed_compression_and_maps_verified_zstd_failures \
+    maps_verified_gzip_block_limit_failures \
     aggregate_layer_budgets_accept_exact_limits_and_reject_one_more \
     resolves_exact_manifest_through_verified_nested_index \
     rejects_tampered_nested_index_before_parsing \

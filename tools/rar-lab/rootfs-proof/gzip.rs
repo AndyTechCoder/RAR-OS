@@ -4,6 +4,7 @@ use super::MAX_LAYER_BYTES;
 
 const MAX_GZIP_INPUT_BYTES: usize = MAX_LAYER_BYTES;
 const MAX_GZIP_HEADER_BYTES: usize = 1_048_576;
+pub(crate) const MAX_DEFLATE_BLOCKS: usize = 8_192;
 const MAX_BITS: usize = 15;
 const NO_CHILD: usize = usize::MAX;
 
@@ -18,6 +19,7 @@ pub enum Error {
     HeaderTooLarge,
     HeaderChecksumMismatch,
     InvalidBlockType,
+    TooManyBlocks,
     InvalidStoredLength,
     InvalidHuffmanTree,
     InvalidCode,
@@ -134,7 +136,14 @@ fn decode_deflate(input: &[u8], maximum_output_bytes: usize) -> Result<Vec<u8>, 
     let mut bits = BitReader::new(input);
     let mut output = Vec::new();
     let fixed = fixed_trees()?;
+    let mut block_count = 0usize;
     loop {
+        block_count = block_count
+            .checked_add(1)
+            .ok_or(Error::TooManyBlocks)?;
+        if block_count > MAX_DEFLATE_BLOCKS {
+            return Err(Error::TooManyBlocks);
+        }
         let final_block = bits.read_bits(1)? != 0;
         match bits.read_bits(2)? {
             0 => decode_stored_block(&mut bits, &mut output, maximum_output_bytes)?,
@@ -566,6 +575,25 @@ mod tests {
     }
 
     #[test]
+    fn enforces_deflate_block_work_limit() {
+        for deflate in [
+            many_empty_fixed_blocks(MAX_DEFLATE_BLOCKS),
+            many_empty_stored_blocks(MAX_DEFLATE_BLOCKS),
+        ] {
+            let member = gzip_member(&deflate, b"");
+            assert_eq!(decode_gzip(&member, 0).unwrap(), b"");
+        }
+
+        for deflate in [
+            many_empty_fixed_blocks(MAX_DEFLATE_BLOCKS + 1),
+            many_empty_stored_blocks(MAX_DEFLATE_BLOCKS + 1),
+        ] {
+            let member = gzip_member(&deflate, b"");
+            assert_eq!(decode_gzip(&member, 0), Err(Error::TooManyBlocks));
+        }
+    }
+
+    #[test]
     fn accepts_optional_headers_and_rejects_every_truncation() {
         let deflate = stored_deflate(b"header");
         let mut member = optional_header_member(&deflate, b"header");
@@ -695,6 +723,16 @@ mod tests {
             writer.write_huffman(end, length);
         }
         writer.finish()
+    }
+
+    fn many_empty_stored_blocks(count: usize) -> Vec<u8> {
+        let mut output = Vec::with_capacity(count * 5);
+        for block in 0..count {
+            output.push(u8::from(block + 1 == count));
+            output.extend_from_slice(&0u16.to_le_bytes());
+            output.extend_from_slice(&u16::MAX.to_le_bytes());
+        }
+        output
     }
 
     fn fixed_literal_code(symbol: usize) -> (u16, u8) {

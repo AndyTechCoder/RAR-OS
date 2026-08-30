@@ -767,6 +767,22 @@ mod tests {
     }
 
     #[test]
+    fn maps_verified_gzip_block_limit_failures() {
+        let mut fixture = fixture(GZIP_LAYER_MEDIA_TYPE, false);
+        let replacement = gzip_empty_stored_blocks(gzip::MAX_DEFLATE_BLOCKS + 1);
+        rebind_first_layer_blob(&mut fixture, replacement);
+        let result = resolve_uncompressed_image(
+            &fixture.layout,
+            &fixture.index,
+            &fixture.manifest_digest,
+            "amd64",
+            "linux",
+            |digest| fixture.blobs.get(digest).map(Vec::as_slice),
+        );
+        assert_eq!(result, Err(Error::Gzip(gzip::Error::TooManyBlocks)));
+    }
+
+    #[test]
     fn aggregate_layer_budgets_accept_exact_limits_and_reject_one_more() {
         let exact = vec![
             synthetic_layer(
@@ -980,6 +996,18 @@ mod tests {
         output.extend_from_slice(bytes);
         output.extend_from_slice(&test_crc32(bytes).to_le_bytes());
         output.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        output
+    }
+
+    fn gzip_empty_stored_blocks(block_count: usize) -> Vec<u8> {
+        let mut output = vec![0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 255];
+        for block in 0..block_count {
+            output.push(u8::from(block + 1 == block_count));
+            output.extend_from_slice(&0u16.to_le_bytes());
+            output.extend_from_slice(&u16::MAX.to_le_bytes());
+        }
+        output.extend_from_slice(&0u32.to_le_bytes());
+        output.extend_from_slice(&0u32.to_le_bytes());
         output
     }
 
