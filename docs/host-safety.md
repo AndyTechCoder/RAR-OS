@@ -145,7 +145,11 @@ authorize execution on this Mac or constitute production certification.
    by the guard, and policy-test work paths cannot target them. Incomplete
    Linux/CI evidence fails closed. Each Specifications container is limited to
    2 CPUs, 2 GiB of memory with no additional swap, and 256 processes; the
-   aggregate validation job is limited to 30 minutes.
+   aggregate validation job is limited to 30 minutes. Pull-request orchestration
+   is loaded from the trusted base and checks out the proposal only as untrusted
+   input. Proposal validators execute only when the complete executable
+   authority closure is byte-identical to the trusted controller; controller
+   changes remain data-only until the resulting `main` commit validates itself.
 3. **Cloud Development Lab:** bounded automated target builds and isolated guest
    execution under ADR 0017.
 4. **Future local launcher certification:** unsafe VM configurations are

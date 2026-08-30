@@ -127,6 +127,7 @@ sdk/generated/release-0/generate.sh
 sdk/generated/release-0/check.sh
 sdk/generated/release-0/lib.rs
 tools/ci/check-specs.sh
+tools/ci/check-specifications-authority.sh
 tools/ci/check-sprint-static.sh
 tools/ci/check-local-sprint-preflight.sh
 tools/ci/check-local-readonly.sh
@@ -158,6 +159,7 @@ tools/ci/test-reference-evidence-v0-policy.sh
 tools/ci/check-reference-verdict-v0.sh
 tools/ci/test-reference-verdict-v0-policy.sh
 tools/ci/test-release-0-reference-harness-policy.sh
+tools/ci/test-specifications-authority-policy.sh
 tools/ci/check-portable-stat-policy.sh
 tools/ci/test-portable-stat-policy.sh
 tools/ci/verify-remote-checkpoint.sh
@@ -258,7 +260,7 @@ printf '%s\n' "$required_files" | while IFS= read -r file; do
     [ -s "$file" ] || fail "empty required file: $file"
 done
 
-for script in tools/ci/check-specs.sh tools/ci/check-sprint-static.sh tools/ci/check-local-sprint-preflight.sh tools/ci/check-remote-sprint-preflight.sh tools/ci/test-local-sprint-preflight-policy.sh tools/ci/check-alpha-preimplementation-contracts.sh tools/ci/test-alpha-preimplementation-contract-policy.sh tools/ci/check-development-lab-profile-v2.sh tools/ci/test-development-lab-profile-v2-policy.sh tools/ci/check-development-controller-v2.sh tools/ci/test-development-controller-v2-policy.sh tools/ci/check-controller-handoff-core.sh tools/ci/check-controller-handoff-attempt-v0.sh tools/ci/test-controller-handoff-attempt-v0-policy.sh tools/ci/check-controller-helper-inventory-v0.sh tools/ci/test-controller-helper-inventory-v0-policy.sh tools/ci/check-controller-helper-build-evidence-v0.sh tools/ci/check-controller-helper-build-receipt-v0.sh tools/ci/check-controller-helper-test-evidence-v0.sh tools/ci/test-controller-helper-evidence-v0-policy.sh tools/ci/check-reference-evidence-v0.sh tools/ci/test-reference-evidence-v0-policy.sh tools/ci/check-reference-verdict-v0.sh tools/ci/test-reference-verdict-v0-policy.sh tools/ci/test-release-0-reference-harness-policy.sh tools/ci/check-portable-stat-policy.sh tools/ci/test-portable-stat-policy.sh tools/ci/check-containerfile-static-policy.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/launch-cloud-target.sh tools/ci/prepare-launch-control.sh tools/ci/wait-for-launch-release.sh tools/ci/check-workspace-budget.sh tools/ci/check-workspace-budget-values.sh tools/ci/require-ephemeral-policy-test-root.sh tools/ci/check-ephemeral-policy-test-confinement.sh tools/ci/run-ephemeral-policy-tests.sh tools/ci/run-qmp-client-unit-tests.sh tools/ci/run-rootfs-proof-unit-tests.sh tools/ci/check-rootfs-proof-source.sh tools/ci/verify-cloud-target-tools.sh tools/ci/development-probe-status.sh tools/ci/test-development-probe-policy.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/alpha/lab/fixtures/generate.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
+for script in tools/ci/check-specs.sh tools/ci/check-specifications-authority.sh tools/ci/test-specifications-authority-policy.sh tools/ci/check-sprint-static.sh tools/ci/check-local-sprint-preflight.sh tools/ci/check-remote-sprint-preflight.sh tools/ci/test-local-sprint-preflight-policy.sh tools/ci/check-alpha-preimplementation-contracts.sh tools/ci/test-alpha-preimplementation-contract-policy.sh tools/ci/check-development-lab-profile-v2.sh tools/ci/test-development-lab-profile-v2-policy.sh tools/ci/check-development-controller-v2.sh tools/ci/test-development-controller-v2-policy.sh tools/ci/check-controller-handoff-core.sh tools/ci/check-controller-handoff-attempt-v0.sh tools/ci/test-controller-handoff-attempt-v0-policy.sh tools/ci/check-controller-helper-inventory-v0.sh tools/ci/test-controller-helper-inventory-v0-policy.sh tools/ci/check-controller-helper-build-evidence-v0.sh tools/ci/check-controller-helper-build-receipt-v0.sh tools/ci/check-controller-helper-test-evidence-v0.sh tools/ci/test-controller-helper-evidence-v0-policy.sh tools/ci/check-reference-evidence-v0.sh tools/ci/test-reference-evidence-v0-policy.sh tools/ci/check-reference-verdict-v0.sh tools/ci/test-reference-verdict-v0-policy.sh tools/ci/test-release-0-reference-harness-policy.sh tools/ci/check-portable-stat-policy.sh tools/ci/test-portable-stat-policy.sh tools/ci/check-containerfile-static-policy.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/launch-cloud-target.sh tools/ci/prepare-launch-control.sh tools/ci/wait-for-launch-release.sh tools/ci/check-workspace-budget.sh tools/ci/check-workspace-budget-values.sh tools/ci/require-ephemeral-policy-test-root.sh tools/ci/check-ephemeral-policy-test-confinement.sh tools/ci/run-ephemeral-policy-tests.sh tools/ci/run-qmp-client-unit-tests.sh tools/ci/run-rootfs-proof-unit-tests.sh tools/ci/check-rootfs-proof-source.sh tools/ci/verify-cloud-target-tools.sh tools/ci/development-probe-status.sh tools/ci/test-development-probe-policy.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/alpha/lab/fixtures/generate.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
     [ -x "$script" ] || fail "required script is not executable: $script"
 done
 
@@ -537,7 +539,7 @@ if find . -path ./.git -prune -o -name '._*' -prune -o -path ./out -prune -o -pa
 fi
 
 checkout_use='        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1'
-[ "$(grep -Fxc "$checkout_use" .github/workflows/specifications.yml)" -eq 2 ] || fail "Specifications workflow checkout identity/count is not exact"
+[ "$(grep -Fxc "$checkout_use" .github/workflows/specifications.yml)" -eq 3 ] || fail "Specifications workflow checkout identity/count is not exact"
 [ "$(grep -Fxc "$checkout_use" .github/workflows/development-probe.yml)" -eq 2 ] || fail "Development Probe checkout identity/count is not exact"
 grep -qx 'channel = "1.95.0"' rust-toolchain.toml || fail "Rust toolchain is not pinned to 1.95.0"
 if ! grep -qx 'members = \[\]' Cargo.toml; then
@@ -695,9 +697,36 @@ grep -q 'docker run --rm --read-only' .github/workflows/specifications.yml || fa
 grep -q -- '--network none' .github/workflows/specifications.yml || fail "CI container network is not disabled"
 grep -q '^concurrency:$' .github/workflows/specifications.yml || fail "required CI concurrency control is missing"
 grep -q 'cancel-in-progress: true' .github/workflows/specifications.yml || fail "obsolete required CI runs are not cancelled"
+grep -qx '  pull_request_target:' .github/workflows/specifications.yml || fail "Specifications PR controller is not loaded from the trusted base"
+if grep -qx '  pull_request:' .github/workflows/specifications.yml; then
+    fail "Specifications workflow permits proposal-controlled PR execution"
+fi
 if grep -q 'workflow_dispatch' .github/workflows/specifications.yml; then
     fail "Specifications workflow must not execute branch-selected workflow code"
 fi
+grep -Fqx "run-name: Specifications source \${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}" .github/workflows/specifications.yml || fail "Specifications run identity is not bound to the exact source SHA"
+grep -Fqx "      RAR_TRUSTED_CONTROLLER_SHA: \${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.sha || github.sha }}" .github/workflows/specifications.yml || fail "Specifications controller SHA is not exact"
+grep -Fqx "      RAR_EXPECTED_SOURCE_REVISION: \${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}" .github/workflows/specifications.yml || fail "Specifications source SHA is not exact"
+grep -Fqx "      RAR_EXPECTED_SOURCE_REPOSITORY: \${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || github.repository }}" .github/workflows/specifications.yml || fail "Specifications source repository is not exact"
+grep -Fqx '          [ "$RAR_EXPECTED_SOURCE_REPOSITORY" = "$RAR_CANONICAL_REPOSITORY" ]' .github/workflows/specifications.yml || fail "Specifications workflow accepts non-canonical PR repositories"
+[ "$(grep -Fxc '          path: controller' .github/workflows/specifications.yml)" -eq 1 ] || fail "Specifications trusted controller checkout is missing or ambiguous"
+[ "$(grep -Fxc '          path: primary-source' .github/workflows/specifications.yml)" -eq 1 ] || fail "Specifications primary source checkout is missing or ambiguous"
+[ "$(grep -Fxc '          path: mutation-source' .github/workflows/specifications.yml)" -eq 1 ] || fail "Specifications mutation source checkout is missing or ambiguous"
+[ "$(grep -Fxc "        if: steps.authority.outputs.execution == 'full'" .github/workflows/specifications.yml)" -eq 2 ] || fail "Specifications executable phases are not authority-gated"
+grep -Fq 'controller/tools/ci/check-specifications-authority.sh' .github/workflows/specifications.yml || fail "Specifications workflow does not invoke the trusted authority checker"
+grep -Fqx '        GIT_CONFIG_NOSYSTEM=1 \' tools/ci/check-specifications-authority.sh || fail "Specifications authority checker permits system Git configuration"
+grep -Fqx '        GIT_OPTIONAL_LOCKS=0 \' tools/ci/check-specifications-authority.sh || fail "Specifications authority checker permits optional Git writes"
+grep -Fq 'ls-files -s -- "$@"' tools/ci/check-specifications-authority.sh || fail "Specifications authority checker does not compare tracked object identities"
+grep -Fqx '    tools \' tools/ci/check-specifications-authority.sh || fail "Specifications authority closure omits repository tools"
+grep -Fqx '    tests \' tools/ci/check-specifications-authority.sh || fail "Specifications authority closure omits executable test harnesses"
+grep -Fq "\$1 !~ /^100(644|755)\$/" tools/ci/check-specifications-authority.sh || fail "Specifications authority checker permits symlink or submodule authority"
+grep -Fqx "    /usr/bin/printf '%s\\n' 'execution=full' >> \"\$output\"" tools/ci/check-specifications-authority.sh || fail "Specifications authority checker cannot enable exact-closure execution"
+grep -Fqx "    /usr/bin/printf '%s\\n' 'execution=deferred' >> \"\$output\"" tools/ci/check-specifications-authority.sh || fail "Specifications authority checker cannot defer controller changes"
+grep -Fq 'run_event=push' tools/ci/check-remote-sprint-preflight.sh || fail "remote preflight does not prefer resulting-main validation"
+grep -Fq 'Bind executable validation authority to trusted controller' tools/ci/check-remote-sprint-preflight.sh || fail "remote preflight omits authority-step evidence"
+grep -Fq 'Validate in pinned read-only container on attested runner' tools/ci/check-remote-sprint-preflight.sh || fail "remote preflight omits full validation evidence"
+grep -Fq 'Run mutation policy tests with read-only source' tools/ci/check-remote-sprint-preflight.sh || fail "remote preflight omits mutation validation evidence"
+grep -Fq "required workflow was deferred, skipped, duplicated, or incomplete" tools/ci/check-remote-sprint-preflight.sh || fail "remote preflight does not reject deferred validation"
 grep -q '^  repository_dispatch:$' .github/workflows/development-probe.yml || fail "Development Probe is not default-branch dispatched"
 if grep -q 'workflow_dispatch' .github/workflows/development-probe.yml; then
     fail "Development Probe must not execute branch-selected workflow code"

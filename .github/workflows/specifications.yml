@@ -1,7 +1,13 @@
 name: Specifications
 
+run-name: Specifications source ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+
 on:
-  pull_request:
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+      - reopened
   push:
     branches:
       - main
@@ -19,7 +25,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
-      RAR_EXPECTED_SOURCE_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      RAR_TRUSTED_CONTROLLER_SHA: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.sha || github.sha }}
+      RAR_EXPECTED_SOURCE_REVISION: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+      RAR_EXPECTED_SOURCE_REPOSITORY: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || github.repository }}
+      RAR_CANONICAL_REPOSITORY: ${{ github.repository }}
       RAR_CI_BOOTSTRAP_IMAGE: sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
     steps:
       - name: Verify CI runner evidence boundary
@@ -41,16 +50,31 @@ jobs:
           done
           [ "${RUNNER_OS-}" = Linux ]
           [ "${RUNNER_ARCH-}" = X64 ]
+          for revision in "$RAR_TRUSTED_CONTROLLER_SHA" "$RAR_EXPECTED_SOURCE_REVISION"; do
+            [ "${#revision}" -eq 40 ]
+            case "$revision" in *[!0-9a-f]*) exit 1 ;; esac
+          done
+          [ "$RAR_EXPECTED_SOURCE_REPOSITORY" = "$RAR_CANONICAL_REPOSITORY" ]
           printf '%s\n' \
             "RAR_CI_RUNNER_IMAGE_OS=$ImageOS" \
             "RAR_CI_RUNNER_IMAGE_VERSION=$ImageVersion" \
             "RAR_CI_RUNNER_OS=$RUNNER_OS" \
             "RAR_CI_RUNNER_ARCH=$RUNNER_ARCH" >> "$GITHUB_ENV"
 
+      - name: Check out trusted base-revision controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ env.RAR_TRUSTED_CONTROLLER_SHA }}
+          fetch-depth: 1
+          persist-credentials: false
+          path: controller
+
       - name: Check out exact source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          repository: ${{ env.RAR_EXPECTED_SOURCE_REPOSITORY }}
+          ref: ${{ env.RAR_EXPECTED_SOURCE_REVISION }}
           fetch-depth: 1
           persist-credentials: false
           path: primary-source
@@ -58,12 +82,23 @@ jobs:
       - name: Check out independent mutation-test source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          repository: ${{ env.RAR_EXPECTED_SOURCE_REPOSITORY }}
+          ref: ${{ env.RAR_EXPECTED_SOURCE_REVISION }}
           fetch-depth: 1
           persist-credentials: false
           path: mutation-source
 
+      - name: Bind executable validation authority to trusted controller
+        id: authority
+        shell: /usr/bin/dash -e {0}
+        run: |
+          controller/tools/ci/check-specifications-authority.sh \
+            "$GITHUB_WORKSPACE/controller" \
+            "$GITHUB_WORKSPACE/primary-source" \
+            "$GITHUB_OUTPUT"
+
       - name: Validate in pinned read-only container on attested runner
+        if: steps.authority.outputs.execution == 'full'
         shell: /usr/bin/dash -e {0}
         run: |
           host_uid=$(/usr/bin/id -u)
@@ -101,6 +136,7 @@ jobs:
             '
 
       - name: Run mutation policy tests with read-only source
+        if: steps.authority.outputs.execution == 'full'
         shell: /usr/bin/dash -e {0}
         run: |
           host_uid=$(/usr/bin/id -u)
