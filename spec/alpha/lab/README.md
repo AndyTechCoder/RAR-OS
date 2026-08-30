@@ -78,6 +78,17 @@ only permitted future output is a candidate closure manifest plus an
 `observed-not-reviewed-not-ready` receipt; both still require exact-set review
 and pinning before any helper build or test can be considered.
 
+`controller-helper-closure-verification-v0.fields` defines the separate
+source-only exact-set verifier required after observation. It has no candidate
+manifest, reviewed verifier-tool pin file, runtime evidence, or execution
+authority and is not wired to automation. Its staged source requires exact
+read-only candidate inputs, independently regenerates the complete closure
+twice, rejects topology aliases and mutation, and can emit only
+`candidate-exact-set-verified-not-reviewed-not-ready`. Even that future
+receipt cannot update a lock, inventory, controller, profile, gate, build, or
+readiness state; provenance, licenses, acquisition, tool pins, retained bytes,
+and runtime evidence still require separate review.
+
 `controller-helper-build-receipt-v0.fields` and
 `controller-helper-test-evidence-v0.fields` fix controller-owned receipts for
 two separately terminated build jobs and one thirteen-case test job. Contextual
