@@ -219,6 +219,52 @@ mod tests {
     }
 
     #[test]
+    fn resolves_zstd_oci_layout_through_confined_reader() {
+        let root = fixture_root("zstd-oci");
+        let layer_bytes = archive("opt/rar-lab/qemu", 0o755, b"bounded-qemu");
+        let diff_id = sha256::digest_string(&layer_bytes).unwrap();
+        let layer = zstd_raw_frame(&layer_bytes);
+        let layer_digest = sha256::digest_string(&layer).unwrap();
+
+        let configuration = format!(
+            r#"{{"architecture":"amd64","os":"linux","rootfs":{{"type":"layers","diff_ids":["{diff_id}"]}}}}"#
+        )
+        .into_bytes();
+        let configuration_digest = sha256::digest_string(&configuration).unwrap();
+        let manifest = format!(
+            r#"{{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{{"mediaType":"application/vnd.oci.image.config.v1+json","digest":"{configuration_digest}","size":{}}},"layers":[{{"mediaType":"application/vnd.oci.image.layer.v1.tar+zstd","digest":"{layer_digest}","size":{}}}]}}"#,
+            configuration.len(),
+            layer.len()
+        )
+        .into_bytes();
+        let manifest_digest = sha256::digest_string(&manifest).unwrap();
+        let index = format!(
+            r#"{{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"{manifest_digest}","size":{}}}]}}"#,
+            manifest.len()
+        );
+
+        fs::write(
+            root.join("oci-layout"),
+            br#"{"imageLayoutVersion":"1.0.0"}"#,
+        )
+        .unwrap();
+        fs::write(root.join("index.json"), index).unwrap();
+        write_blob(&root, &configuration_digest, &configuration);
+        write_blob(&root, &manifest_digest, &manifest);
+        write_blob(&root, &layer_digest, &layer);
+
+        let rootfs =
+            resolve_uncompressed_layout(&root, &manifest_digest, "amd64", "linux").unwrap();
+        let qemu = rootfs.get("opt/rar-lab/qemu").unwrap();
+        assert!(qemu.is_executable_or_loadable());
+        assert_eq!(qemu.bytes, 12);
+        assert_eq!(
+            qemu.content_digest.as_deref(),
+            Some(sha256::digest_string(b"bounded-qemu").unwrap().as_str())
+        );
+    }
+
+    #[test]
     fn rejects_symlinked_blob_and_symlinked_root() {
         let root = fixture_root("symlink-blob");
         let bytes = b"outside";
@@ -327,5 +373,49 @@ mod tests {
         root.join("blobs")
             .join("sha256")
             .join(digest.strip_prefix("sha256:").unwrap())
+    }
+
+    fn archive(path: &str, mode: u32, data: &[u8]) -> Vec<u8> {
+        const BLOCK_BYTES: usize = 512;
+        let mut header = [0u8; BLOCK_BYTES];
+        header[..path.len()].copy_from_slice(path.as_bytes());
+        write_octal(&mut header[100..108], u64::from(mode));
+        write_octal(&mut header[108..116], 0);
+        write_octal(&mut header[116..124], 0);
+        write_octal(&mut header[124..136], data.len() as u64);
+        write_octal(&mut header[136..148], 0);
+        header[148..156].fill(b' ');
+        header[156] = b'0';
+        header[257..263].copy_from_slice(b"ustar\0");
+        header[263..265].copy_from_slice(b"00");
+        let checksum: u64 = header.iter().map(|byte| u64::from(*byte)).sum();
+        let checksum = format!("{checksum:06o}");
+        header[148..154].copy_from_slice(checksum.as_bytes());
+        header[154] = 0;
+        header[155] = b' ';
+
+        let mut output = header.to_vec();
+        output.extend_from_slice(data);
+        let padding = (BLOCK_BYTES - data.len() % BLOCK_BYTES) % BLOCK_BYTES;
+        output.resize(output.len() + padding + 2 * BLOCK_BYTES, 0);
+        output
+    }
+
+    fn write_octal(field: &mut [u8], value: u64) {
+        field.fill(b'0');
+        field[field.len() - 1] = 0;
+        let encoded = format!("{value:o}");
+        let start = field.len() - 1 - encoded.len();
+        field[start..start + encoded.len()].copy_from_slice(encoded.as_bytes());
+    }
+
+    fn zstd_raw_frame(bytes: &[u8]) -> Vec<u8> {
+        assert!((256..=65_791).contains(&bytes.len()));
+        let mut output = vec![0x28, 0xb5, 0x2f, 0xfd, 0x60];
+        output.extend_from_slice(&((bytes.len() - 256) as u16).to_le_bytes());
+        let header = ((bytes.len() as u32) << 3) | 1;
+        output.extend_from_slice(&header.to_le_bytes()[..3]);
+        output.extend_from_slice(bytes);
+        output
     }
 }

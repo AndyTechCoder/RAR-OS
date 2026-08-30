@@ -88,6 +88,7 @@ done
 ! /usr/bin/grep -Fq 'pub fn resolve_uncompressed_image<' "$tree/oci.rs" || exit 1
 for test_name in \
     reads_exact_regular_blob_through_root_handle \
+    resolves_zstd_oci_layout_through_confined_reader \
     rejects_symlinked_blob_and_symlinked_root \
     rejects_intermediate_escape_and_size_mismatch_before_read \
     exact_reader_never_requests_bytes_beyond_ceiling \
