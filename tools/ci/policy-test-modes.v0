@@ -25,6 +25,7 @@ tools/ci/test-reference-evidence-v0-policy.sh|ephemeral
 tools/ci/test-reference-verdict-v0-policy.sh|ephemeral
 tools/ci/test-release-0-reference-harness-policy.sh|ephemeral
 tools/ci/test-specifications-authority-policy.sh|ephemeral
+tools/ci/test-sprint-alpha-gate-report-v2-policy.sh|ephemeral
 tools/ci/test-remote-checkpoint-policy.sh|immutable
 tools/ci/test-trusted-launcher-policy.sh|ephemeral
 tools/ci/test-workspace-budget-policy.sh|immutable
