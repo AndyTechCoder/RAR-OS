@@ -121,10 +121,6 @@ reset_fixture
 adr=$fixture/docs/adr/0026-alpha-platform-payload-and-state-sources.md
 /usr/bin/sed 's/Status: Accepted — 2026-08-29/Status: Proposed/' "$adr" > "$work/bad"
 /bin/mv "$work/bad" "$adr"
-if report | /usr/bin/grep -Fqx 'adr_0026=accepted'; then
-    printf '%s\n' 'unaccepted ADR 0026 unexpectedly satisfied gate report v2' >&2
-    exit 1
-fi
-require_row 'milestone_a_readiness=blocked'
+expect_rejected inconsistent-adr-0026-approval
 
 printf '%s\n' 'Sprint Alpha gate report v2 negative checks passed'
