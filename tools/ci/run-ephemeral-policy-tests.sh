@@ -14,6 +14,7 @@ ulimit -f 131072
 /bin/sh "$root/tools/ci/test-controller-helper-evidence-v0-policy.sh"
 /bin/sh "$root/tools/ci/test-controller-helper-inventory-v0-policy.sh"
 /bin/sh "$root/tools/ci/test-development-controller-v2-policy.sh"
+/bin/sh "$root/tools/ci/test-development-image-policy.sh"
 /bin/sh "$root/tools/ci/test-development-lab-profile-policy.sh"
 /bin/sh "$root/tools/ci/test-development-lab-profile-v2-policy.sh"
 /bin/sh "$root/tools/ci/test-frozen-artifact-policy.sh"
@@ -29,4 +30,4 @@ ulimit -f 131072
 /bin/sh "$root/tools/ci/test-release-0-reference-harness-policy.sh"
 /bin/sh "$root/tools/ci/test-trusted-launcher-policy.sh"
 
-printf '%s\n' 'Ephemeral policy tests passed: executed=20 source=read-only scratch=tmpfs'
+printf '%s\n' 'Ephemeral policy tests passed: executed=21 source=read-only scratch=tmpfs'

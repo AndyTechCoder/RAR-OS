@@ -59,9 +59,23 @@ COPY --chown=65532:65532 tools/rar-lab/qmp-client/build-plan.v1 /controller/tool
 COPY --chown=65532:65532 tools/rar-lab/qmp-client/json.rs /controller/tools/rar-lab/qmp-client/json.rs
 COPY --chown=65532:65532 tools/rar-lab/qmp-client/main.rs /controller/tools/rar-lab/qmp-client/main.rs
 COPY --from=qmp-builder /build/rar-qmp-client /opt/rar-lab/bin/rar-qmp-client'
-actual_copy_instructions=$(/usr/bin/grep -Ei '^[[:space:]]*((COPY|ADD)([[:space:]]|$)|ONBUILD[[:space:]]+(COPY|ADD)([[:space:]]|$))' "$launch")
+! /usr/bin/grep -Eiq '^[[:space:]]*#[[:space:]]*escape=' "$launch" || exit 1
+logical_instructions=$(/usr/bin/awk '
+    {
+        line=$0
+        if (line ~ /\\[[:space:]]*$/) {
+            sub(/\\[[:space:]]*$/, "", line)
+            logical=logical line
+            next
+        }
+        print logical line
+        logical=""
+    }
+    END { if (logical != "") exit 1 }
+' "$launch") || exit 1
+actual_copy_instructions=$(/usr/bin/printf '%s\n' "$logical_instructions" | /usr/bin/grep -Ei '^[[:space:]]*((COPY|ADD)([[:space:]]|$)|ONBUILD[[:space:]]+(COPY|ADD)([[:space:]]|$))')
 [ "$actual_copy_instructions" = "$expected_copy_instructions" ] || exit 1
-if /usr/bin/grep -Ev '^[[:space:]]*(#|$)' "$launch" | /usr/bin/grep -Fq -- '--mount'; then exit 1; fi
+if /usr/bin/printf '%s\n' "$logical_instructions" | /usr/bin/grep -Eiq '^[[:space:]]*RUN[[:space:]]+--'; then exit 1; fi
 
 /bin/sh "$root/tools/ci/check-development-image-inputs.sh" "$images/image-inputs-v1.env" >/dev/null
 printf '%s\n' 'Development image source policy passed'

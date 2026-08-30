@@ -100,7 +100,6 @@ tools/ci/test-development-probe-policy.sh
 /bin/sh tools/ci/test-controller-handoff-attempt-v0-policy.sh
 /bin/sh tools/ci/test-remote-checkpoint-policy.sh
 /bin/sh tools/ci/test-workspace-budget-policy.sh
-/bin/sh tools/ci/test-development-image-policy.sh
 printf '%s\n' 'mutation policy evidence: external read-only-source CI step required'
 
 [ "$budget_check" = false ] || /bin/sh tools/ci/check-workspace-budget.sh >/dev/null
