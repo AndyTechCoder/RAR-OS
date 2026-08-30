@@ -243,6 +243,11 @@ fn decode_literal_only_compressed_block(
                 .map_err(|_| Error::InvalidLiteralsSection)?;
             let compressed_size = usize::try_from((header >> (4 + field_bits)) & field_mask)
                 .map_err(|_| Error::InvalidLiteralsSection)?;
+            // Verified RFC 8878 Errata 7297 makes 6 the minimum for both
+            // fields in every four-stream compressed-literals format.
+            if size_format != 0 && (regenerated_size < 6 || compressed_size < 6) {
+                return Err(Error::InvalidLiteralsSection);
+            }
             if regenerated_size > block_maximum || compressed_size > block_maximum {
                 return Err(Error::InvalidLiteralsSection);
             }
@@ -376,11 +381,6 @@ fn decode_direct_huffman_literals(
     if !four_streams {
         let stream = reader.take(reader.remaining())?;
         return decode_huffman_stream(&table, maximum_bits as u8, stream, regenerated_size);
-    }
-    // Verified RFC 8878 Errata 7297 makes 6 the minimum regenerated size for
-    // every four-stream format, avoiding an underflowing fourth partition.
-    if regenerated_size < 6 {
-        return Err(Error::InvalidLiteralsSection);
     }
     let first_size = usize::try_from(read_little_endian(&mut reader, 2)?)
         .map_err(|_| Error::InvalidHuffmanStream)?;
@@ -812,6 +812,12 @@ mod tests {
         let undersized_four_stream = compressed_frame(&[0x46, 0, 0]);
         assert_eq!(
             decode_zstd(&undersized_four_stream, 4),
+            Err(Error::InvalidLiteralsSection)
+        );
+
+        let undersized_four_stream_content = compressed_frame(&[0x86, 0, 0]);
+        assert_eq!(
+            decode_zstd(&undersized_four_stream_content, 8),
             Err(Error::InvalidLiteralsSection)
         );
 
