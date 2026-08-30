@@ -12,8 +12,8 @@ authoritative.
   publication/recovery is a separate pre-Milestone B gate.
 - Preparation is tracked by the discrete authoritative gates below, not a
   percentage. Overall readiness remains blocked.
-- Exact verified main: `514d5e72a162dc99794a3f1eee864c0a22f00738`;
-  Specifications run `33306580918` passed full validation and mutation tests.
+- Exact verified main: `65ae7aedd11298c8f15ed96cd94166e2afa03e2a`;
+  Specifications run `33308569835` passed full validation and mutation tests.
 - Target implementation: 0 of 7 milestones (A–G).
 - Working bootable GUI: does not exist yet.
 - Sprint Alpha completion evidence: none.
@@ -43,6 +43,10 @@ and cannot increase the implementation count.
 - Their byte-pinned integration packet is merged through PR #55 and separates
   decision, contract, source, pre-build, and post-build launch gates. It grants
   no implementation or execution authority before those gates pass.
+- PR #57 adds a byte-pinned, inactive source observer for a future candidate
+  Linux compiler-closure manifest. It is not wired to automation, cannot
+  compile or execute the helper or target, and leaves every lock, inventory,
+  controller, and readiness field blocked.
 - The dependency-free accepted-evidence record codec, distinct A/F fixtures,
   static byte boundary, and non-authoritative post-approval work packet are
   merged, independently reviewed, and exact-main validated. They contain no
@@ -68,7 +72,9 @@ and cannot increase the implementation count.
   component bundle, initial system source, initial preserved source, and
   fixture manifest as missing; Milestones A and B remain blocked.
 - The Lab/controller/helper lacks real activating identities and reviewed cloud
-  build/test evidence.
+  build/test evidence. The inactive observer has not run; no candidate compiler
+  closure exists, and its tools, complete set, verifier, and retained output
+  still require separate review before any helper build or test.
 - PR #13 is merged at `abd75bfccf4fcd2f197871225d1a78233c0d87dc`;
   exact post-merge trusted-controller run `33294557261` passed. This closes only
   the controller bootstrap, not target implementation or Sprint completion.
