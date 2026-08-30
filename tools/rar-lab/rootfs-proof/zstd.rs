@@ -1,9 +1,10 @@
 //! Bounded, dependency-free RFC 8878 frame decoder foundation.
 //!
 //! This decoder accepts raw and RLE blocks plus zero-sequence compressed blocks
-//! containing raw, RLE, or direct-weight one- or four-stream Huffman literals.
-//! Dictionaries, checksums, sequence FSE, skippable frames, and concatenated frames fail
-//! with explicit errors.
+//! containing raw, RLE, or direct- or FSE-weight one- or four-stream Huffman
+//! literals.
+//! Dictionaries, checksums, sequence FSE, skippable frames, and concatenated
+//! frames fail with explicit errors.
 
 use super::MAX_LAYER_BYTES;
 
@@ -43,8 +44,9 @@ pub enum Error {
 /// Decodes exactly one dictionary-free, checksum-free Zstandard frame.
 ///
 /// Raw/RLE blocks and zero-sequence compressed blocks with raw, RLE, or
-/// direct-weight one- or four-stream Huffman literals are supported. Other features
-/// fail closed with a distinct error, and no partial output is returned.
+/// one- or four-stream Huffman literals using direct or FSE-compressed weights
+/// are supported. Other features fail closed with a distinct error, and no
+/// partial output is returned.
 pub fn decode_zstd(input: &[u8], maximum_output_bytes: usize) -> Result<Vec<u8>, Error> {
     if input.len() > MAX_INPUT_BYTES {
         return Err(Error::InputTooLarge);
@@ -244,9 +246,12 @@ fn decode_literal_only_compressed_block(
                 .map_err(|_| Error::InvalidLiteralsSection)?;
             let compressed_size = usize::try_from((header >> (4 + field_bits)) & field_mask)
                 .map_err(|_| Error::InvalidLiteralsSection)?;
-            // Verified RFC 8878 Errata 7297 makes 6 the minimum for both
-            // fields in every four-stream compressed-literals format.
-            if size_format != 0 && (regenerated_size < 6 || compressed_size < 6) {
+            // Verified RFC 8878 Errata 7297 makes 6 the minimum regenerated
+            // size in four-stream mode. The current format also requires four
+            // one-byte streams in addition to the six-byte jump table.
+            if (size_format == 0 && compressed_size == 0)
+                || (size_format != 0 && (regenerated_size < 6 || compressed_size < 10))
+            {
                 return Err(Error::InvalidLiteralsSection);
             }
             if regenerated_size > block_maximum || compressed_size > block_maximum {
@@ -434,7 +439,7 @@ struct FseTable {
 fn decode_fse_weights(description: &[u8]) -> Result<Vec<u8>, Error> {
     let mut header = ForwardBits::new(description);
     let accuracy_log = u8::try_from(header.read(4)? + 5).map_err(|_| Error::InvalidFseTable)?;
-    if accuracy_log > 7 {
+    if accuracy_log > 6 {
         return Err(Error::InvalidFseTable);
     }
     let mut remaining = 1i32 << accuracy_log;
@@ -488,7 +493,10 @@ fn decode_fse_weights(description: &[u8]) -> Result<Vec<u8>, Error> {
         }
     }
     let stream_offset = header.align_to_byte()?;
-    if frequencies.len() >= 256 || stream_offset >= description.len() {
+    if frequencies.len() >= 256
+        || frequencies.iter().filter(|frequency| **frequency != 0).count() < 2
+        || stream_offset >= description.len()
+    {
         return Err(Error::InvalidFseTable);
     }
     let table = build_fse_table(&frequencies, accuracy_log)?;
@@ -573,6 +581,12 @@ fn build_fse_table(frequencies: &[i16], accuracy_log: u8) -> Result<FseTable, Er
 
 fn decode_fse_interleaved2(table: &FseTable, stream: &[u8]) -> Result<Vec<u8>, Error> {
     let mut bits = PaddedReverseBits::new(stream)?;
+    let initial_bits = isize::from(table.accuracy_log)
+        .checked_mul(2)
+        .ok_or(Error::InvalidFseStream)?;
+    if bits.remaining < initial_bits {
+        return Err(Error::InvalidFseStream);
+    }
     let mut first = bits.read(table.accuracy_log)?;
     let mut second = bits.read(table.accuracy_log)?;
     let mut output = Vec::new();
@@ -1112,6 +1126,28 @@ mod tests {
             decode_direct_huffman_literals(&excessive_accuracy, 0, false),
             Err(Error::InvalidFseTable)
         );
+        let weight_accuracy_seven = [0x02, 0x02, 0x01];
+        assert_eq!(
+            decode_direct_huffman_literals(&weight_accuracy_seven, 0, false),
+            Err(Error::InvalidFseTable)
+        );
+
+        let one_probability = [0x03, 0xf0, 0x03, 0x01];
+        assert_eq!(
+            decode_direct_huffman_literals(&one_probability, 0, false),
+            Err(Error::InvalidFseTable)
+        );
+
+        let absent_initial_states = [0x03, 0x10, 0x3f, 0x01];
+        assert_eq!(
+            decode_direct_huffman_literals(&absent_initial_states, 0, false),
+            Err(Error::InvalidFseStream)
+        );
+        let truncated_second_state = [0x03, 0x10, 0x3f, 0x20];
+        assert_eq!(
+            decode_direct_huffman_literals(&truncated_second_state, 0, false),
+            Err(Error::InvalidFseStream)
+        );
 
         let zero_marker = [0x03, 0x10, 0x3f, 0x00];
         assert_eq!(
@@ -1134,6 +1170,14 @@ mod tests {
         let undersized_four_stream_content = compressed_frame(&[0x86, 0, 0]);
         assert_eq!(
             decode_zstd(&undersized_four_stream_content, 8),
+            Err(Error::InvalidLiteralsSection)
+        );
+
+        let missing_four_stream_markers = compressed_frame(&[
+            0x86, 0x80, 0x01, 0, 0, 0, 0, 0, 0,
+        ]);
+        assert_eq!(
+            decode_zstd(&missing_four_stream_markers, 8),
             Err(Error::InvalidLiteralsSection)
         );
 
