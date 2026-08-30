@@ -59,7 +59,7 @@ COPY --chown=65532:65532 tools/rar-lab/qmp-client/build-plan.v1 /controller/tool
 COPY --chown=65532:65532 tools/rar-lab/qmp-client/json.rs /controller/tools/rar-lab/qmp-client/json.rs
 COPY --chown=65532:65532 tools/rar-lab/qmp-client/main.rs /controller/tools/rar-lab/qmp-client/main.rs
 COPY --from=qmp-builder /build/rar-qmp-client /opt/rar-lab/bin/rar-qmp-client'
-! /usr/bin/grep -Eiq '^[[:space:]]*#[[:space:]]*escape[[:space:]]*=' "$launch" || exit 1
+! /usr/bin/grep -Eiq '^[[:space:]]*#[[:space:]]*[a-z][a-z0-9_-]*[[:space:]]*=' "$launch" || exit 1
 logical_instructions=$(/usr/bin/awk '
     {
         line=$0
