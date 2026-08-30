@@ -10,6 +10,7 @@ tree=${1-$root/tools/rar-lab/rootfs-proof}
 expected='README.md
 build-plan.v0
 json.rs
+layout.rs
 lib.rs
 oci.rs
 sha256.rs'
@@ -17,7 +18,7 @@ actual=$(find "$tree" -mindepth 1 -maxdepth 1 ! -name '._*' -print | /usr/bin/se
 [ "$actual" = "$expected" ] || exit 1
 find "$tree" -type l -print | /usr/bin/grep -q . && exit 1
 
-for file in README.md build-plan.v0 json.rs lib.rs oci.rs sha256.rs; do
+for file in README.md build-plan.v0 json.rs layout.rs lib.rs oci.rs sha256.rs; do
     [ -s "$tree/$file" ] && [ ! -L "$tree/$file" ] || exit 1
 done
 
@@ -31,7 +32,7 @@ for line in \
     [ "$(/usr/bin/grep -Fxc "$line" "$tree/build-plan.v0")" -eq 1 ] || exit 1
 done
 
-for file in json.rs lib.rs oci.rs sha256.rs; do
+for file in json.rs layout.rs lib.rs oci.rs sha256.rs; do
     ! /usr/bin/grep -En '(unsafe[[:space:]]+(fn|impl|extern)|unsafe[[:space:]]*\{|extern[[:space:]]+crate|include!|include_bytes!|include_str!|todo!|unimplemented!|std::process::Command|Command::new|TcpStream|UdpSocket|libc::)' "$tree/$file" >/dev/null || exit 1
 done
 for test_name in \
@@ -55,6 +56,17 @@ done
 /usr/bin/grep -Fq 'pub fn resolve_uncompressed_image_from_source' "$tree/oci.rs" || exit 1
 ! /usr/bin/grep -Fq 'pub fn resolve_uncompressed_image<' "$tree/oci.rs" || exit 1
 for test_name in \
+    reads_exact_regular_blob_through_root_handle \
+    rejects_symlinked_blob_and_symlinked_root \
+    rejects_intermediate_escape_and_size_mismatch_before_read \
+    exact_reader_never_requests_bytes_beyond_ceiling \
+    rejects_special_file_after_path_only_inspection; do
+    /usr/bin/grep -Fq "fn $test_name()" "$tree/layout.rs" || exit 1
+done
+/usr/bin/grep -Fq 'custom_flags(O_PATH | O_NOFOLLOW | O_NONBLOCK)' "$tree/layout.rs" || exit 1
+/usr/bin/grep -Fq 'read_exact(&mut bytes)' "$tree/layout.rs" || exit 1
+! /usr/bin/grep -Fq '.take(' "$tree/layout.rs" || exit 1
+for test_name in \
     parses_utf8_unicode_escapes_and_unsigned_integers \
     rejects_duplicates_invalid_numbers_and_trailing_data; do
     /usr/bin/grep -Fq "fn $test_name()" "$tree/json.rs" || exit 1
@@ -71,7 +83,7 @@ for test_name in \
     /usr/bin/grep -Fq "fn $test_name()" "$tree/oci.rs" || exit 1
 done
 /usr/bin/grep -Fq 'fn official_short_sha256_vectors()' "$tree/sha256.rs" || exit 1
-/usr/bin/grep -Fqx 'modules=json.rs,oci.rs,sha256.rs' "$tree/build-plan.v0" || exit 1
+/usr/bin/grep -Fqx 'modules=json.rs,layout.rs,oci.rs,sha256.rs' "$tree/build-plan.v0" || exit 1
 for source in layer.md image-layout.md manifest.md descriptor.md config.md; do
     /usr/bin/grep -Fq "https://github.com/opencontainers/image-spec/blob/v1.1.1/$source" "$tree/README.md" || exit 1
 done
