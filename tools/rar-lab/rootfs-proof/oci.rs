@@ -1,5 +1,6 @@
 //! Pure, non-activating OCI image-document and descriptor resolver.
 
+use super::gzip;
 use super::json::{self, Value};
 use super::sha256;
 use super::{EffectiveRootfs, Error as LayerError, MAX_LAYER_BYTES};
@@ -9,6 +10,8 @@ const INDEX_MEDIA_TYPE: &str = "application/vnd.oci.image.index.v1+json";
 const MANIFEST_MEDIA_TYPE: &str = "application/vnd.oci.image.manifest.v1+json";
 const CONFIG_MEDIA_TYPE: &str = "application/vnd.oci.image.config.v1+json";
 const UNCOMPRESSED_LAYER_MEDIA_TYPE: &str = "application/vnd.oci.image.layer.v1.tar";
+const GZIP_LAYER_MEDIA_TYPE: &str = "application/vnd.oci.image.layer.v1.tar+gzip";
+const MAX_COMPRESSED_LAYER_BYTES: usize = 268_435_456;
 const MAX_INDEX_MANIFESTS: usize = 64;
 const MAX_INDEX_DOCUMENTS: usize = 64;
 const MAX_INDEX_DEPTH: usize = 8;
@@ -19,6 +22,18 @@ struct Descriptor {
     media_type: String,
     digest: String,
     size: usize,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LayerEncoding {
+    Uncompressed,
+    Gzip,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct LayerDescriptor {
+    descriptor: Descriptor,
+    encoding: LayerEncoding,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -45,6 +60,7 @@ pub enum Error {
     BlobDigestMismatch,
     PlatformMismatch,
     DiffIdMismatch,
+    Gzip(gzip::Error),
     Layer(LayerError),
     HashFailure,
 }
@@ -170,13 +186,18 @@ where
     let mut layer_descriptors = Vec::with_capacity(layer_values.len());
     for value in layer_values {
         let descriptor = parse_descriptor(value)?;
-        if descriptor.media_type != UNCOMPRESSED_LAYER_MEDIA_TYPE {
-            return Err(Error::UnsupportedLayerMediaType);
-        }
-        if descriptor.size > MAX_LAYER_BYTES {
+        let (encoding, maximum_size) = match descriptor.media_type.as_str() {
+            UNCOMPRESSED_LAYER_MEDIA_TYPE => (LayerEncoding::Uncompressed, MAX_LAYER_BYTES),
+            GZIP_LAYER_MEDIA_TYPE => (LayerEncoding::Gzip, MAX_COMPRESSED_LAYER_BYTES),
+            _ => return Err(Error::UnsupportedLayerMediaType),
+        };
+        if descriptor.size > maximum_size {
             return Err(Error::BlobTooLarge);
         }
-        layer_descriptors.push(descriptor);
+        layer_descriptors.push(LayerDescriptor {
+            descriptor,
+            encoding,
+        });
     }
 
     let configuration = with_verified_blob(
@@ -185,7 +206,7 @@ where
         source,
         |bytes| json::parse(bytes).map_err(Error::Json),
     )?;
-    validate_configuration(
+    let diff_ids = validate_configuration(
         &configuration,
         expected_architecture,
         expected_os,
@@ -193,10 +214,27 @@ where
     )?;
 
     let mut rootfs = EffectiveRootfs::default();
-    for descriptor in &layer_descriptors {
-        with_verified_blob(descriptor, MAX_LAYER_BYTES, source, |bytes| {
+    for (layer, diff_id) in layer_descriptors.iter().zip(&diff_ids) {
+        let maximum_size = match layer.encoding {
+            LayerEncoding::Uncompressed => MAX_LAYER_BYTES,
+            LayerEncoding::Gzip => MAX_COMPRESSED_LAYER_BYTES,
+        };
+        with_verified_blob(&layer.descriptor, maximum_size, source, |bytes| {
+            let decoded;
+            let layer_bytes = match layer.encoding {
+                LayerEncoding::Uncompressed => bytes,
+                LayerEncoding::Gzip => {
+                    decoded = gzip::decode_gzip(bytes, MAX_LAYER_BYTES).map_err(Error::Gzip)?;
+                    &decoded
+                }
+            };
+            let actual_diff_id =
+                sha256::digest_string(layer_bytes).map_err(|_| Error::HashFailure)?;
+            if &actual_diff_id != diff_id {
+                return Err(Error::DiffIdMismatch);
+            }
             rootfs
-                .apply_uncompressed_ustar_layer(bytes)
+                .apply_uncompressed_ustar_layer(layer_bytes)
                 .map_err(Error::Layer)
         })?;
     }
@@ -375,8 +413,8 @@ fn validate_configuration(
     configuration: &Value,
     expected_architecture: &str,
     expected_os: &str,
-    layers: &[Descriptor],
-) -> Result<(), Error> {
+    layers: &[LayerDescriptor],
+) -> Result<Vec<String>, Error> {
     if expected_architecture.is_empty() || expected_os.is_empty() {
         return Err(Error::PlatformMismatch);
     }
@@ -401,14 +439,13 @@ fn validate_configuration(
     if diff_ids.len() != layers.len() {
         return Err(Error::DiffIdMismatch);
     }
-    for (value, layer) in diff_ids.iter().zip(layers) {
+    let mut validated = Vec::with_capacity(diff_ids.len());
+    for value in diff_ids {
         let digest = value.string().ok_or(Error::InvalidConfiguration)?;
         validate_digest(digest)?;
-        if digest != layer.digest {
-            return Err(Error::DiffIdMismatch);
-        }
+        validated.push(digest.to_owned());
     }
-    Ok(())
+    Ok(validated)
 }
 
 #[cfg(test)]
@@ -450,24 +487,34 @@ mod tests {
     }
 
     fn fixture(layer_media_type: &str, mismatched_diff_id: bool) -> Fixture {
-        let first_layer = archive(&[
+        let first_layer_bytes = archive(&[
             ("bin/", b'5', 0o755, b""),
             ("bin/old", b'0', 0o755, b"old"),
             ("usr/lib/object.so", b'0', 0o644, b"\x7fELFobject"),
         ]);
-        let second_layer = archive(&[
+        let second_layer_bytes = archive(&[
             ("bin/.wh.old", b'0', 0, b""),
             ("bin/new", b'0', 0o755, b"new"),
         ]);
+        let first_diff_id = sha256::digest_string(&first_layer_bytes).unwrap();
+        let second_diff_id = sha256::digest_string(&second_layer_bytes).unwrap();
+        let (first_layer, second_layer) = if layer_media_type == GZIP_LAYER_MEDIA_TYPE {
+            (
+                gzip_stored_member(&first_layer_bytes),
+                gzip_stored_member(&second_layer_bytes),
+            )
+        } else {
+            (first_layer_bytes, second_layer_bytes)
+        };
         let first_layer_digest = sha256::digest_string(&first_layer).unwrap();
         let second_layer_digest = sha256::digest_string(&second_layer).unwrap();
         let first_diff_id = if mismatched_diff_id {
             "sha256:0000000000000000000000000000000000000000000000000000000000000000"
         } else {
-            &first_layer_digest
+            &first_diff_id
         };
         let configuration = format!(
-            "{{\"architecture\":\"amd64\",\"os\":\"linux\",\"rootfs\":{{\"type\":\"layers\",\"diff_ids\":[\"{first_diff_id}\",\"{second_layer_digest}\"]}}}}"
+            "{{\"architecture\":\"amd64\",\"os\":\"linux\",\"rootfs\":{{\"type\":\"layers\",\"diff_ids\":[\"{first_diff_id}\",\"{second_diff_id}\"]}}}}"
         )
         .into_bytes();
         let config_digest = sha256::digest_string(&configuration).unwrap();
@@ -557,19 +604,32 @@ mod tests {
     }
 
     #[test]
-    fn rejects_compression_and_diff_id_mismatch_in_inactive_subset() {
-        let compressed = fixture("application/vnd.oci.image.layer.v1.tar+gzip", false);
-        let result = resolve_uncompressed_image(
+    fn resolves_gzip_and_rejects_unknown_compression_and_diff_id_mismatch() {
+        let compressed = fixture(GZIP_LAYER_MEDIA_TYPE, false);
+        let rootfs = resolve_uncompressed_image(
             &compressed.layout,
             &compressed.index,
             &compressed.manifest_digest,
             "amd64",
             "linux",
             |digest| compressed.blobs.get(digest).map(Vec::as_slice),
+        )
+        .unwrap();
+        assert!(rootfs.get("bin/old").is_none());
+        assert!(rootfs.get("bin/new").is_some());
+
+        let unsupported = fixture("application/vnd.oci.image.layer.v1.tar+zstd", false);
+        let result = resolve_uncompressed_image(
+            &unsupported.layout,
+            &unsupported.index,
+            &unsupported.manifest_digest,
+            "amd64",
+            "linux",
+            |digest| unsupported.blobs.get(digest).map(Vec::as_slice),
         );
         assert_eq!(result, Err(Error::UnsupportedLayerMediaType));
 
-        let mismatch = fixture(UNCOMPRESSED_LAYER_MEDIA_TYPE, true);
+        let mismatch = fixture(GZIP_LAYER_MEDIA_TYPE, true);
         let result = resolve_uncompressed_image(
             &mismatch.layout,
             &mismatch.index,
@@ -733,6 +793,30 @@ mod tests {
         }
         output.resize(output.len() + 2 * BLOCK_BYTES, 0);
         output
+    }
+
+    fn gzip_stored_member(bytes: &[u8]) -> Vec<u8> {
+        assert!(bytes.len() <= usize::from(u16::MAX));
+        let length = bytes.len() as u16;
+        let mut output = vec![0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 255, 1];
+        output.extend_from_slice(&length.to_le_bytes());
+        output.extend_from_slice(&(!length).to_le_bytes());
+        output.extend_from_slice(bytes);
+        output.extend_from_slice(&test_crc32(bytes).to_le_bytes());
+        output.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        output
+    }
+
+    fn test_crc32(bytes: &[u8]) -> u32 {
+        let mut crc = u32::MAX;
+        for byte in bytes {
+            crc ^= u32::from(*byte);
+            for _ in 0..8 {
+                let mask = 0u32.wrapping_sub(crc & 1);
+                crc = (crc >> 1) ^ (0xedb88320 & mask);
+            }
+        }
+        !crc
     }
 
     fn write_octal(field: &mut [u8], value: u64) {

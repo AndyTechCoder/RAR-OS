@@ -26,15 +26,19 @@ consumer must enforce that ceiling before allocation or I/O.
 Unit tests compile and run only in the pinned, network-disabled cloud validation
 container with read-only source and bounded tmpfs outputs.
 
-A separate, not-yet-wired RAR-owned decoder implements one bounded gzip member,
-including stored, fixed-Huffman, and dynamic-Huffman DEFLATE blocks, header
-bounds, exact end-of-stream handling, CRC-32, and uncompressed-size checks. It
-is based directly on [RFC 1951](https://www.rfc-editor.org/rfc/rfc1951) and
+A RAR-owned decoder implements one bounded gzip member, including stored,
+fixed-Huffman, and dynamic-Huffman DEFLATE blocks, header bounds, exact
+end-of-stream handling, CRC-32, and uncompressed-size checks. The OCI resolver
+accepts the standard gzip layer media type only after verifying the compressed
+descriptor digest, and separately verifies the decoded bytes against the image
+configuration's uncompressed `diff_id` before applying the layer. It is based
+directly on [RFC 1951](https://www.rfc-editor.org/rfc/rfc1951) and
 [RFC 1952](https://www.rfc-editor.org/rfc/rfc1952), not third-party code.
 
 ## Accepted subset
 
-- Uncompressed OCI layer media type semantics only.
+- Uncompressed and single-member gzip OCI layer media types; compressed blobs
+  are limited to 256 MiB and decoded layers to 1 GiB.
 - OCI layout version `1.0.0`, schema version 2 index/manifest documents, one
   caller-selected exact manifest digest, up to 8 nested index hops and 64 total
   index documents, standard image configuration, and up to 256 ordered layers.
@@ -59,8 +63,7 @@ is based directly on [RFC 1951](https://www.rfc-editor.org/rfc/rfc1951) and
 
 ## Not yet a complete image proof
 
-The gzip decoder is not yet connected to accepted OCI layer media types, and
-this slice does not decode zstd layers or emit/validate the accepted inventory
+This slice does not decode zstd layers or emit/validate the accepted inventory
 evidence format. Consequently it does not
 resolve the full security finding, activate image inventory v2, make a Lab
 profile ready, or authorize provisioning, target compilation, or guest
