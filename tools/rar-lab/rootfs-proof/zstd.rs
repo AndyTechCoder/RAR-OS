@@ -1,7 +1,7 @@
 //! Bounded, dependency-free RFC 8878 frame decoder foundation.
 //!
 //! This decoder accepts raw and RLE blocks plus zero-sequence compressed blocks
-//! containing raw, RLE, or direct-weight single-stream Huffman literals.
+//! containing raw, RLE, or direct-weight one- or four-stream Huffman literals.
 //! Dictionaries, checksums, FSE, skippable frames, and concatenated frames fail
 //! with explicit errors.
 
@@ -42,7 +42,7 @@ pub enum Error {
 /// Decodes exactly one dictionary-free, checksum-free Zstandard frame.
 ///
 /// Raw/RLE blocks and zero-sequence compressed blocks with raw, RLE, or
-/// direct-weight single-stream Huffman literals are supported. Other features
+/// direct-weight one- or four-stream Huffman literals are supported. Other features
 /// fail closed with a distinct error, and no partial output is returned.
 pub fn decode_zstd(input: &[u8], maximum_output_bytes: usize) -> Result<Vec<u8>, Error> {
     if input.len() > MAX_INPUT_BYTES {
@@ -222,22 +222,39 @@ fn decode_literal_only_compressed_block(
             (regenerated_size, literals)
         }
         2 => {
-            if size_format != 0 {
-                return Err(Error::UnsupportedLiteralsFormat);
+            let header_bytes = match size_format {
+                0 | 1 => 3,
+                2 => 4,
+                3 => 5,
+                _ => unreachable!(),
+            };
+            let mut header = u64::from(first);
+            for index in 1..header_bytes {
+                header |= u64::from(reader.byte()?) << (index * 8);
             }
-            let second = reader.byte()?;
-            let third = reader.byte()?;
-            let header = u32::from(first)
-                | (u32::from(second) << 8)
-                | (u32::from(third) << 16);
-            let regenerated_size = ((header >> 4) & 0x03ff) as usize;
-            let compressed_size = ((header >> 14) & 0x03ff) as usize;
+            let field_bits = match size_format {
+                0 | 1 => 10,
+                2 => 14,
+                3 => 18,
+                _ => unreachable!(),
+            };
+            let field_mask = (1u64 << field_bits) - 1;
+            let regenerated_size = usize::try_from((header >> 4) & field_mask)
+                .map_err(|_| Error::InvalidLiteralsSection)?;
+            let compressed_size = usize::try_from((header >> (4 + field_bits)) & field_mask)
+                .map_err(|_| Error::InvalidLiteralsSection)?;
+            // Verified RFC 8878 Errata 7297 makes 6 the minimum for both
+            // fields in every four-stream compressed-literals format.
+            if size_format != 0 && (regenerated_size < 6 || compressed_size < 6) {
+                return Err(Error::InvalidLiteralsSection);
+            }
             if regenerated_size > block_maximum || compressed_size > block_maximum {
                 return Err(Error::InvalidLiteralsSection);
             }
             let literals = decode_direct_huffman_literals(
                 reader.take(compressed_size)?,
                 regenerated_size,
+                size_format != 0,
             )?;
             (regenerated_size, literals)
         }
@@ -260,6 +277,7 @@ fn decode_literal_only_compressed_block(
 fn decode_direct_huffman_literals(
     content: &[u8],
     regenerated_size: usize,
+    four_streams: bool,
 ) -> Result<Vec<u8>, Error> {
     let mut reader = Reader::new(content);
     let header = reader.byte()?;
@@ -360,11 +378,58 @@ fn decode_direct_huffman_literals(
         return Err(Error::InvalidHuffmanTree);
     }
 
-    let stream = reader.take(reader.remaining())?;
+    if !four_streams {
+        let stream = reader.take(reader.remaining())?;
+        return decode_huffman_stream(&table, maximum_bits as u8, stream, regenerated_size);
+    }
+    let first_size = usize::try_from(read_little_endian(&mut reader, 2)?)
+        .map_err(|_| Error::InvalidHuffmanStream)?;
+    let second_size = usize::try_from(read_little_endian(&mut reader, 2)?)
+        .map_err(|_| Error::InvalidHuffmanStream)?;
+    let third_size = usize::try_from(read_little_endian(&mut reader, 2)?)
+        .map_err(|_| Error::InvalidHuffmanStream)?;
+    let declared = first_size
+        .checked_add(second_size)
+        .and_then(|size| size.checked_add(third_size))
+        .ok_or(Error::InvalidHuffmanStream)?;
+    if declared > reader.remaining() {
+        return Err(Error::InvalidHuffmanStream);
+    }
+    let fourth_size = reader.remaining() - declared;
+    let streams = [
+        reader.take(first_size)?,
+        reader.take(second_size)?,
+        reader.take(third_size)?,
+        reader.take(fourth_size)?,
+    ];
+    let stream_output_size = regenerated_size.div_ceil(4);
+    let fourth_output_size = regenerated_size
+        .checked_sub(stream_output_size * 3)
+        .ok_or(Error::InvalidLiteralsSection)?;
+    let output_sizes = [
+        stream_output_size,
+        stream_output_size,
+        stream_output_size,
+        fourth_output_size,
+    ];
+    let mut output = Vec::with_capacity(regenerated_size);
+    for (stream, output_size) in streams.into_iter().zip(output_sizes) {
+        let decoded = decode_huffman_stream(&table, maximum_bits as u8, stream, output_size)?;
+        output.extend_from_slice(&decoded);
+    }
+    Ok(output)
+}
+
+fn decode_huffman_stream(
+    table: &[Option<HuffmanEntry>],
+    maximum_bits: u8,
+    stream: &[u8],
+    regenerated_size: usize,
+) -> Result<Vec<u8>, Error> {
     let mut bits = ReverseBits::new(stream)?;
     let mut output = Vec::with_capacity(regenerated_size);
     for _ in 0..regenerated_size {
-        let entry = table[bits.peek_padded(maximum_bits as u8)?];
+        let entry = table[bits.peek_padded(maximum_bits)?];
         let entry = entry.ok_or(Error::InvalidHuffmanStream)?;
         if usize::from(entry.length) > bits.remaining {
             return Err(Error::InvalidHuffmanStream);
@@ -690,9 +755,43 @@ mod tests {
         let frame = compressed_frame(&literals);
         assert_eq!(decode_zstd(&frame, 4).unwrap(), [0, 1, 4, 5]);
         assert_eq!(
-            decode_direct_huffman_literals(&[0x84, 0x43, 0x20, 0x10, 0x03], 1)
+            decode_direct_huffman_literals(&[0x84, 0x43, 0x20, 0x10, 0x03], 1, false)
                 .unwrap(),
             [0]
+        );
+    }
+
+    #[test]
+    fn decodes_direct_huffman_four_stream_size_formats() {
+        let compressed_content = [
+            0x80, 0x10, // two one-bit symbols
+            0x01, 0x00, 0x01, 0x00, 0x01, 0x00, // jump table
+            0x05, 0x05, 0x05, 0x05, // four streams, each decoding [0, 1]
+        ];
+        for header in [
+            &[0x86, 0x00, 0x03][..],
+            &[0x8a, 0x00, 0x30, 0x00][..],
+            &[0x8e, 0x00, 0x00, 0x03, 0x00][..],
+        ] {
+            let mut literals = header.to_vec();
+            literals.extend_from_slice(&compressed_content);
+            literals.push(0);
+            assert_eq!(
+                decode_zstd(&compressed_frame(&literals), 8).unwrap(),
+                [0, 1, 0, 1, 0, 1, 0, 1]
+            );
+        }
+
+        let mut uneven = vec![0x76, 0x00, 0x03];
+        uneven.extend_from_slice(&[
+            0x80, 0x10, // two one-bit symbols
+            0x01, 0x00, 0x01, 0x00, 0x01, 0x00, // jump table
+            0x05, 0x05, 0x05, 0x03, // [0,1], [0,1], [0,1], [1]
+            0,
+        ]);
+        assert_eq!(
+            decode_zstd(&compressed_frame(&uneven), 7).unwrap(),
+            [0, 1, 0, 1, 0, 1, 1]
         );
     }
 
@@ -710,10 +809,42 @@ mod tests {
             Err(Error::UnsupportedLiteralsCompression)
         );
 
-        let four_stream = compressed_frame(&[0x46, 0, 0]);
+        let undersized_four_stream = compressed_frame(&[0x46, 0, 0]);
         assert_eq!(
-            decode_zstd(&four_stream, 1),
-            Err(Error::UnsupportedLiteralsFormat)
+            decode_zstd(&undersized_four_stream, 4),
+            Err(Error::InvalidLiteralsSection)
+        );
+
+        let undersized_four_stream_content = compressed_frame(&[0x86, 0, 0]);
+        assert_eq!(
+            decode_zstd(&undersized_four_stream_content, 8),
+            Err(Error::InvalidLiteralsSection)
+        );
+
+        let jump_sum_exceeds_streams = compressed_frame(&[
+            0x86, 0x00, 0x03, 0x80, 0x10, 0x02, 0x00, 0x02, 0x00, 0x02, 0x00,
+            0x05, 0x05, 0x05, 0x05,
+        ]);
+        assert_eq!(
+            decode_zstd(&jump_sum_exceeds_streams, 8),
+            Err(Error::InvalidHuffmanStream)
+        );
+
+        let empty_required_stream = compressed_frame(&[
+            0x86, 0xc0, 0x02, 0x80, 0x10, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
+            0x05, 0x05, 0x05,
+        ]);
+        assert_eq!(
+            decode_zstd(&empty_required_stream, 8),
+            Err(Error::InvalidHuffmanStream)
+        );
+
+        let truncated_jump_table = compressed_frame(&[
+            0x86, 0xc0, 0x01, 0x80, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ]);
+        assert_eq!(
+            decode_zstd(&truncated_jump_table, 8),
+            Err(Error::Truncated)
         );
 
         let bad_padding = compressed_frame(&[
