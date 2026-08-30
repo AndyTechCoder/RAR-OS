@@ -158,6 +158,17 @@ not decode or apply a mutation. Exact targets, preconditions, postconditions,
 deterministic derivations, resource feasibility, repair independence, and the
 base fixture remain separate blocking semantics work.
 
+`controller-helper-closure-verifier-scalar-semantics-v0` defines raw-byte,
+line, UID, offset, and deterministic alternate-digest behavior for nine
+complete families plus the existing-target `hex` and decimal-literal UID
+subdomains, covering 72 templates. Link count and the two absent-file creation
+cases are explicitly deferred because they require filesystem-structural
+semantics. UID mutation is narrowed to the exact 1000-to-1001 fixture change;
+manifest byte and entry increments use explicit mathematical ranges and
+checked unbounded arithmetic. The slice fails closed on decoding, bounds, target type, and
+postcondition errors. It defines no filesystem-structural operation, repair,
+fixture, controller, runtime result, or execution authority.
+
 `controller-helper-build-receipt-v0.fields` and
 `controller-helper-test-evidence-v0.fields` fix controller-owned receipts for
 two separately terminated build jobs and one thirteen-case test job. Contextual
