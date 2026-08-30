@@ -12,8 +12,8 @@ authoritative.
   publication/recovery is a separate pre-Milestone B gate.
 - Preparation is tracked by the discrete authoritative gates below, not a
   percentage. Overall readiness remains blocked.
-- Exact verified main: `aa5aab5fb8c60aa162985de7f6791b0a5d349731`;
-  Specifications run `33305373626` passed full validation and mutation tests.
+- Exact verified main: `514d5e72a162dc99794a3f1eee864c0a22f00738`;
+  Specifications run `33306580918` passed full validation and mutation tests.
 - Target implementation: 0 of 7 milestones (A–G).
 - Working bootable GUI: does not exist yet.
 - Sprint Alpha completion evidence: none.
@@ -40,6 +40,9 @@ and cannot increase the implementation count.
   publication/recovery choice while granting no authority until owner approval.
 - Proposals 0027–0029 are explicit, non-authoritative B/A/B recommendations;
   their exact owner decision remains required before boot-contract integration.
+- Their byte-pinned integration packet is merged through PR #55 and separates
+  decision, contract, source, pre-build, and post-build launch gates. It grants
+  no implementation or execution authority before those gates pass.
 - The dependency-free accepted-evidence record codec, distinct A/F fixtures,
   static byte boundary, and non-authoritative post-approval work packet are
   merged, independently reviewed, and exact-main validated. They contain no
@@ -53,7 +56,9 @@ and cannot increase the implementation count.
   signed update path, target image, or retained target evidence exists.
 - ADRs 0022–0026 are accepted, but none of their dependent contracts or
   controller changes is ready merely from acceptance.
-- The exact Alpha boot/platform contracts are not ready.
+- The exact Alpha boot/platform contracts are not ready. Their implementation
+  cannot begin until the exact proposed ADR 0027 B / 0028 A / 0029 B owner
+  choice is recorded through the normal accepted-ADR process.
 - The phase-8 accepted-evidence writer is not ready. Only its pure record codec
   is merged; the preserved publication scaffold remains unmerged, and naming,
   journal, cleanup, recovery, retry, semantic-verification, and activation
@@ -74,7 +79,8 @@ and cannot increase the implementation count.
 
 Milestone A target files may be created only after all of these are true:
 
-1. The selected ADR 0023/0026 contracts are implemented, reviewed, and ready.
+1. ADRs 0027–0029 are explicitly accepted, and the selected ADR 0023/0026/0027–
+   0029 contracts are implemented, reviewed, exact-main validated, and ready.
 2. The reviewed Lab profile, controller, compiler/helper identities, twice-
    reproduced helper evidence, and immutable cloud inputs are genuinely ready.
 3. PR #7 and every required real-step workflow are green, reviewed, merged to

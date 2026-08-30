@@ -1,18 +1,18 @@
 # Sprint Alpha 0.1 Status
 
 - Date: 2026-08-30
-- Current milestone: acceptance-v2 record codec and post-approval publication
-  packet merged; remaining pre-Milestone A boot/controller authority and
-  phase-8 publication/recovery decisions remain blocked
-- Objective: finish the reviewed boot/platform/controller/SSD gates before
-  Milestone A; separately finish acceptance-v2 publication and controller
-  closure before Milestone B
+- Current milestone: boot/platform and accepted-evidence post-approval packets
+  merged; their owner decisions and remaining pre-Milestone A controller/SSD
+  authority remain blocked
+- Objective: record the exact boot/platform owner choices, finish their reviewed
+  contracts and controller/SSD gates before Milestone A, and separately finish
+  acceptance-v2 publication/controller closure before Milestone B
 - Status source: verified GitHub `main` at
-  `aa5aab5fb8c60aa162985de7f6791b0a5d349731`
-- Active status worktree: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/alpha-status-post-codec`
-- Active status branch: `codex/alpha-status-post-codec`
-- Latest exact-main validation: Specifications run `33305373626`, job
-  `99240870980`, passed runner attestation, trusted-controller authority binding,
+  `514d5e72a162dc99794a3f1eee864c0a22f00738`
+- Active status worktree: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/alpha-status-post-boot-packet`
+- Active status branch: `codex/alpha-status-post-boot-packet`
+- Latest exact-main validation: Specifications run `33306580918`, job
+  `99244092691`, passed runner attestation, trusted-controller authority binding,
   full pinned read-only-container validation, and all external mutation tests
 - Bootstrap pull request: [#13](https://github.com/AndyTechCoder/RAR-OS/pull/13),
   merged at `abd75bfccf4fcd2f197871225d1a78233c0d87dc`; exact post-merge trusted-
@@ -47,8 +47,11 @@
   immutable-source, and ownership remediation. Consolidated correctness review
   is clean for the decision-integration and completion-evidence maps. The
   accepted-evidence codec and its post-approval publication/recovery task packet
-  each passed architecture, correctness, and security review. These are source-
-  only preparation reviews, not target implementation or completion proof
+  each passed architecture, correctness, and security review. The boot/platform
+  integration packet also passed clean architecture, correctness, and security
+  re-review after its lifecycle and identity gates were made non-circular.
+  These are source-only preparation reviews, not target implementation or
+  completion proof
 - Target functionality: 0%; no RAR OS target implementation has started, built,
   booted, or run
 - Preparation is tracked by the discrete authoritative gates below, not a
@@ -140,7 +143,11 @@
   existing packet into eight ordered work packets, maps all 41 mandatory boot
   cases, fixes one-writer paths and stop conditions, and keeps every target
   build/boot/evidence action cloud-only. It changes no contract or readiness
-  state and does not authorize implementation
+  state and does not authorize implementation. PR #55 adds a byte-pinned,
+  non-authoritative integration packet for proposed ADRs 0027–0029. It separates
+  owner decision, contract, cumulative source-start, source-only merge,
+  pre-build, and post-build launch/acceptance gates; exact-main run `33306580918`
+  passed. The proposals remain undecided and no target source is authorized
 - Milestones B–G preparation: one non-authoritative dependency/evidence map now
   organizes the existing sequential ownership, contract-before-code boundaries,
   all 40 later acceptance rows, cloud-only evidence, and stop conditions. It
@@ -169,7 +176,10 @@
   owner-decision-required B/A/B recommendations in PR #42; their merge grants
   no implementation authority. The independent record codec merged in PR #52,
   and the byte-pinned non-authoritative post-approval work packet merged in PR
-  #53; exact-main Specifications runs `33304849966` and `33305373626` passed
+  #53; exact-main Specifications runs `33304849966` and `33305373626` passed.
+  The separate boot/platform integration packet merged in PR #55 at
+  `514d5e72a162dc99794a3f1eee864c0a22f00738`; exact-main run `33306580918`
+  passed
 - Owner decisions: ADRs 0022 C, 0023 C, 0024 A, 0025 B, and 0026 C are recorded
   as accepted on 2026-08-29. Acceptance alone leaves every dependent contract,
   identity, evidence, controller, and readiness gate closed
@@ -198,8 +208,8 @@
   canonical ADRs 0022–0026, all three decision-integration gates, and all eight
   completion-proof items. Proposals 0027–0030 remain machine-classified as
   owner-decision-required, and the complete accepted-evidence publication task
-  packet is byte-pinned so preparation cannot silently become authoritative,
-  incomplete, or disappear
+  packet plus boot/platform integration packet are byte-pinned so preparation
+  cannot silently become authoritative, incomplete, or disappear
 - Gate-report migration: schema v1 remains unchanged. The versioned v2 reporter
   is merged, reviewed, and exact-main validated. It exposes ADR 0025,
   acceptance-v2, proposed-decision, private-platform, and fail-closed Milestone
@@ -262,8 +272,9 @@
   needs one-time owner-approved installation and confinement evidence in a
   fresh SSD-root task. The profile is now installed without replacing existing
   settings; effective confinement evidence remains a fresh-task pre-A gate
-- Next durable actions: resolve the remaining boot/platform findings through
-  owner-approved ADRs; proposals 0027–0029 remain undecided and non-authoritative.
+- Next durable actions: record the exact informed ADR 0027 B / 0028 A / 0029 B
+  owner choice, then execute the reviewed P0 boot/platform contract packet;
+  those proposals remain undecided and non-authoritative until then.
   Separately obtain the exact owner choice for proposed ADR 0030, then integrate
   its reviewed contract through the merged task packet before Milestone B. The
   pure accepted-evidence record codec is already merged; publication, recovery,
