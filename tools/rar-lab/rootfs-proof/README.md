@@ -49,15 +49,16 @@ preserves sequence tables and repeat offsets across compressed blocks. It
 verifies the standard lower-32-bit XXH64 frame content checksum using
 dependency-free RAR-owned code, and rejects dictionaries, skippable frames,
 concatenated frames, malformed checksums, and trailing bytes with explicit
-errors.
-It is not connected to OCI layer acceptance until complete compressed-block
-support and its focused tests are ready.
+errors. The OCI resolver accepts the standard zstd layer media type only after
+verifying the compressed descriptor digest, and separately verifies decoded
+bytes against the image configuration's uncompressed `diff_id` before
+applying the layer.
 
 ## Accepted subset
 
-- Uncompressed and single-member gzip OCI layer media types; all gzip blobs in
-  one image are limited to 256 MiB total, and all decoded/uncompressed layer
-  bytes in that image are limited to 1 GiB total.
+- Uncompressed, single-member gzip, and single-frame zstd OCI layer media
+  types; all compressed blobs in one image share a 256 MiB aggregate limit,
+  and all decoded/uncompressed layer bytes share a 1 GiB aggregate limit.
 - OCI layout version `1.0.0`, schema version 2 index/manifest documents, one
   caller-selected exact manifest digest, up to 8 nested index hops and 64 total
   index documents, standard image configuration, and up to 256 ordered layers.
@@ -82,12 +83,12 @@ support and its focused tests are ready.
 
 ## Not yet a complete image proof
 
-This slice does not yet accept zstd OCI layers or emit/validate the accepted
-inventory evidence format. Consequently it does not
-resolve the full security finding, activate image inventory v2, make a Lab
-profile ready, or authorize provisioning, target compilation, or guest
-execution. Those capabilities require reviewed follow-up slices and any
-owner-governed evidence-format decisions identified in the remediation status.
+This slice does not yet emit or validate the accepted inventory evidence
+format. Consequently it does not resolve the full security finding, activate
+image inventory v2, make a Lab profile ready, or authorize provisioning, target
+compilation, or guest execution. Those capabilities require reviewed follow-up
+slices and any owner-governed evidence-format decisions identified in the
+remediation status.
 
 Semantics are pinned to OCI Image Specification v1.1.1:
 

@@ -3,6 +3,7 @@
 use super::gzip;
 use super::json::{self, Value};
 use super::sha256;
+use super::zstd;
 use super::{EffectiveRootfs, Error as LayerError, MAX_LAYER_BYTES};
 
 const LAYOUT_VERSION: &str = "1.0.0";
@@ -11,6 +12,7 @@ const MANIFEST_MEDIA_TYPE: &str = "application/vnd.oci.image.manifest.v1+json";
 const CONFIG_MEDIA_TYPE: &str = "application/vnd.oci.image.config.v1+json";
 const UNCOMPRESSED_LAYER_MEDIA_TYPE: &str = "application/vnd.oci.image.layer.v1.tar";
 const GZIP_LAYER_MEDIA_TYPE: &str = "application/vnd.oci.image.layer.v1.tar+gzip";
+const ZSTD_LAYER_MEDIA_TYPE: &str = "application/vnd.oci.image.layer.v1.tar+zstd";
 const MAX_TOTAL_COMPRESSED_LAYER_BYTES: usize = 268_435_456;
 const MAX_TOTAL_UNCOMPRESSED_LAYER_BYTES: usize = MAX_LAYER_BYTES;
 const MAX_INDEX_MANIFESTS: usize = 64;
@@ -29,6 +31,7 @@ struct Descriptor {
 enum LayerEncoding {
     Uncompressed,
     Gzip,
+    Zstd,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -48,7 +51,7 @@ impl LayerBudgets {
         for layer in layers {
             let total = match layer.encoding {
                 LayerEncoding::Uncompressed => &mut uncompressed_bytes,
-                LayerEncoding::Gzip => &mut compressed_bytes,
+                LayerEncoding::Gzip | LayerEncoding::Zstd => &mut compressed_bytes,
             };
             *total = total
                 .checked_add(layer.descriptor.size)
@@ -99,6 +102,7 @@ pub enum Error {
     PlatformMismatch,
     DiffIdMismatch,
     Gzip(gzip::Error),
+    Zstd(zstd::Error),
     Layer(LayerError),
     HashFailure,
 }
@@ -227,6 +231,7 @@ where
         let (encoding, maximum_size) = match descriptor.media_type.as_str() {
             UNCOMPRESSED_LAYER_MEDIA_TYPE => (LayerEncoding::Uncompressed, MAX_LAYER_BYTES),
             GZIP_LAYER_MEDIA_TYPE => (LayerEncoding::Gzip, MAX_TOTAL_COMPRESSED_LAYER_BYTES),
+            ZSTD_LAYER_MEDIA_TYPE => (LayerEncoding::Zstd, MAX_TOTAL_COMPRESSED_LAYER_BYTES),
             _ => return Err(Error::UnsupportedLayerMediaType),
         };
         if descriptor.size > maximum_size {
@@ -256,7 +261,7 @@ where
     for (layer, diff_id) in layer_descriptors.iter().zip(&diff_ids) {
         let maximum_size = match layer.encoding {
             LayerEncoding::Uncompressed => MAX_LAYER_BYTES,
-            LayerEncoding::Gzip => MAX_TOTAL_COMPRESSED_LAYER_BYTES,
+            LayerEncoding::Gzip | LayerEncoding::Zstd => MAX_TOTAL_COMPRESSED_LAYER_BYTES,
         };
         with_verified_blob(&layer.descriptor, maximum_size, source, |bytes| {
             let decoded;
@@ -268,6 +273,15 @@ where
                         layer_budgets.remaining_uncompressed_bytes,
                     )
                     .map_err(Error::Gzip)?;
+                    layer_budgets.consume_decoded(decoded.len())?;
+                    &decoded
+                }
+                LayerEncoding::Zstd => {
+                    decoded = zstd::decode_zstd(
+                        bytes,
+                        layer_budgets.remaining_uncompressed_bytes,
+                    )
+                    .map_err(Error::Zstd)?;
                     layer_budgets.consume_decoded(decoded.len())?;
                     &decoded
                 }
@@ -542,13 +556,16 @@ mod tests {
         ]);
         let first_diff_id = sha256::digest_string(&first_layer_bytes).unwrap();
         let second_diff_id = sha256::digest_string(&second_layer_bytes).unwrap();
-        let (first_layer, second_layer) = if layer_media_type == GZIP_LAYER_MEDIA_TYPE {
-            (
+        let (first_layer, second_layer) = match layer_media_type {
+            GZIP_LAYER_MEDIA_TYPE => (
                 gzip_stored_member(&first_layer_bytes),
                 gzip_stored_member(&second_layer_bytes),
-            )
-        } else {
-            (first_layer_bytes, second_layer_bytes)
+            ),
+            ZSTD_LAYER_MEDIA_TYPE => (
+                zstd_raw_frame(&first_layer_bytes),
+                zstd_raw_frame(&second_layer_bytes),
+            ),
+            _ => (first_layer_bytes, second_layer_bytes),
         };
         let first_layer_digest = sha256::digest_string(&first_layer).unwrap();
         let second_layer_digest = sha256::digest_string(&second_layer).unwrap();
@@ -631,38 +648,42 @@ mod tests {
 
     #[test]
     fn rejects_tampered_blobs_before_layer_parsing() {
-        let mut fixture = fixture(UNCOMPRESSED_LAYER_MEDIA_TYPE, false);
-        fixture
-            .blobs
-            .get_mut(&fixture.first_layer_digest)
-            .unwrap()[0] ^= 1;
-        let result = resolve_uncompressed_image(
-            &fixture.layout,
-            &fixture.index,
-            &fixture.manifest_digest,
-            "amd64",
-            "linux",
-            |digest| fixture.blobs.get(digest).map(Vec::as_slice),
-        );
-        assert_eq!(result, Err(Error::BlobDigestMismatch));
+        for media_type in [UNCOMPRESSED_LAYER_MEDIA_TYPE, ZSTD_LAYER_MEDIA_TYPE] {
+            let mut fixture = fixture(media_type, false);
+            fixture
+                .blobs
+                .get_mut(&fixture.first_layer_digest)
+                .unwrap()[0] ^= 1;
+            let result = resolve_uncompressed_image(
+                &fixture.layout,
+                &fixture.index,
+                &fixture.manifest_digest,
+                "amd64",
+                "linux",
+                |digest| fixture.blobs.get(digest).map(Vec::as_slice),
+            );
+            assert_eq!(result, Err(Error::BlobDigestMismatch));
+        }
     }
 
     #[test]
-    fn resolves_gzip_and_rejects_unknown_compression_and_diff_id_mismatch() {
-        let compressed = fixture(GZIP_LAYER_MEDIA_TYPE, false);
-        let rootfs = resolve_uncompressed_image(
-            &compressed.layout,
-            &compressed.index,
-            &compressed.manifest_digest,
-            "amd64",
-            "linux",
-            |digest| compressed.blobs.get(digest).map(Vec::as_slice),
-        )
-        .unwrap();
-        assert!(rootfs.get("bin/old").is_none());
-        assert!(rootfs.get("bin/new").is_some());
+    fn resolves_gzip_zstd_and_rejects_unknown_compression_and_diff_id_mismatch() {
+        for media_type in [GZIP_LAYER_MEDIA_TYPE, ZSTD_LAYER_MEDIA_TYPE] {
+            let compressed = fixture(media_type, false);
+            let rootfs = resolve_uncompressed_image(
+                &compressed.layout,
+                &compressed.index,
+                &compressed.manifest_digest,
+                "amd64",
+                "linux",
+                |digest| compressed.blobs.get(digest).map(Vec::as_slice),
+            )
+            .unwrap();
+            assert!(rootfs.get("bin/old").is_none());
+            assert!(rootfs.get("bin/new").is_some());
+        }
 
-        let unsupported = fixture("application/vnd.oci.image.layer.v1.tar+zstd", false);
+        let unsupported = fixture("application/vnd.oci.image.layer.v1.tar+bzip2", false);
         let result = resolve_uncompressed_image(
             &unsupported.layout,
             &unsupported.index,
@@ -673,7 +694,7 @@ mod tests {
         );
         assert_eq!(result, Err(Error::UnsupportedLayerMediaType));
 
-        let mismatch = fixture(GZIP_LAYER_MEDIA_TYPE, true);
+        let mismatch = fixture(ZSTD_LAYER_MEDIA_TYPE, true);
         let result = resolve_uncompressed_image(
             &mismatch.layout,
             &mismatch.index,
@@ -693,7 +714,7 @@ mod tests {
                 MAX_TOTAL_COMPRESSED_LAYER_BYTES / 2,
             ),
             synthetic_layer(
-                LayerEncoding::Gzip,
+                LayerEncoding::Zstd,
                 MAX_TOTAL_COMPRESSED_LAYER_BYTES / 2,
             ),
             synthetic_layer(
@@ -711,7 +732,7 @@ mod tests {
 
         let compressed_over = vec![
             synthetic_layer(LayerEncoding::Gzip, MAX_TOTAL_COMPRESSED_LAYER_BYTES),
-            synthetic_layer(LayerEncoding::Gzip, 1),
+            synthetic_layer(LayerEncoding::Zstd, 1),
         ];
         assert!(matches!(
             LayerBudgets::reserve(&compressed_over),
@@ -899,6 +920,22 @@ mod tests {
         output.extend_from_slice(bytes);
         output.extend_from_slice(&test_crc32(bytes).to_le_bytes());
         output.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        output
+    }
+
+    fn zstd_raw_frame(bytes: &[u8]) -> Vec<u8> {
+        assert!(bytes.len() <= 65_791);
+        let mut output = vec![0x28, 0xb5, 0x2f, 0xfd];
+        if bytes.len() < 256 {
+            output.push(0x20);
+            output.push(bytes.len() as u8);
+        } else {
+            output.push(0x60);
+            output.extend_from_slice(&((bytes.len() - 256) as u16).to_le_bytes());
+        }
+        let header = ((bytes.len() as u32) << 3) | 1;
+        output.extend_from_slice(&header.to_le_bytes()[..3]);
+        output.extend_from_slice(bytes);
         output
     }
 
