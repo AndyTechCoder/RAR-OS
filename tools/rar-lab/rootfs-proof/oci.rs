@@ -545,6 +545,18 @@ mod tests {
     }
 
     fn fixture(layer_media_type: &str, mismatched_diff_id: bool) -> Fixture {
+        fixture_with_media_types(
+            layer_media_type,
+            layer_media_type,
+            mismatched_diff_id,
+        )
+    }
+
+    fn fixture_with_media_types(
+        first_media_type: &str,
+        second_media_type: &str,
+        mismatched_diff_id: bool,
+    ) -> Fixture {
         let first_layer_bytes = archive(&[
             ("bin/", b'5', 0o755, b""),
             ("bin/old", b'0', 0o755, b"old"),
@@ -556,17 +568,13 @@ mod tests {
         ]);
         let first_diff_id = sha256::digest_string(&first_layer_bytes).unwrap();
         let second_diff_id = sha256::digest_string(&second_layer_bytes).unwrap();
-        let (first_layer, second_layer) = match layer_media_type {
-            GZIP_LAYER_MEDIA_TYPE => (
-                gzip_stored_member(&first_layer_bytes),
-                gzip_stored_member(&second_layer_bytes),
-            ),
-            ZSTD_LAYER_MEDIA_TYPE => (
-                zstd_raw_frame(&first_layer_bytes),
-                zstd_raw_frame(&second_layer_bytes),
-            ),
-            _ => (first_layer_bytes, second_layer_bytes),
+        let encode = |media_type, bytes: &[u8]| match media_type {
+            GZIP_LAYER_MEDIA_TYPE => gzip_stored_member(bytes),
+            ZSTD_LAYER_MEDIA_TYPE => zstd_raw_frame(bytes),
+            _ => bytes.to_vec(),
         };
+        let first_layer = encode(first_media_type, &first_layer_bytes);
+        let second_layer = encode(second_media_type, &second_layer_bytes);
         let first_layer_digest = sha256::digest_string(&first_layer).unwrap();
         let second_layer_digest = sha256::digest_string(&second_layer).unwrap();
         let first_diff_id = if mismatched_diff_id {
@@ -580,7 +588,7 @@ mod tests {
         .into_bytes();
         let config_digest = sha256::digest_string(&configuration).unwrap();
         let manifest = format!(
-            "{{\"schemaVersion\":2,\"mediaType\":\"{MANIFEST_MEDIA_TYPE}\",\"config\":{{\"mediaType\":\"{CONFIG_MEDIA_TYPE}\",\"digest\":\"{config_digest}\",\"size\":{}}},\"layers\":[{{\"mediaType\":\"{layer_media_type}\",\"digest\":\"{first_layer_digest}\",\"size\":{}}},{{\"mediaType\":\"{layer_media_type}\",\"digest\":\"{second_layer_digest}\",\"size\":{}}}]}}",
+            "{{\"schemaVersion\":2,\"mediaType\":\"{MANIFEST_MEDIA_TYPE}\",\"config\":{{\"mediaType\":\"{CONFIG_MEDIA_TYPE}\",\"digest\":\"{config_digest}\",\"size\":{}}},\"layers\":[{{\"mediaType\":\"{first_media_type}\",\"digest\":\"{first_layer_digest}\",\"size\":{}}},{{\"mediaType\":\"{second_media_type}\",\"digest\":\"{second_layer_digest}\",\"size\":{}}}]}}",
             configuration.len(),
             first_layer.len(),
             second_layer.len()
@@ -604,6 +612,27 @@ mod tests {
             blobs,
             first_layer_digest,
         }
+    }
+
+    fn rebind_first_layer_blob(fixture: &mut Fixture, replacement: Vec<u8>) {
+        let old_layer_digest = fixture.first_layer_digest.clone();
+        let new_layer_digest = sha256::digest_string(&replacement).unwrap();
+        let old_manifest_digest = fixture.manifest_digest.clone();
+        let manifest = String::from_utf8(fixture.blobs[&old_manifest_digest].clone()).unwrap();
+        let manifest = manifest
+            .replace(&old_layer_digest, &new_layer_digest)
+            .into_bytes();
+        let new_manifest_digest = sha256::digest_string(&manifest).unwrap();
+        let index = String::from_utf8(fixture.index.clone()).unwrap();
+        fixture.index = index
+            .replace(&old_manifest_digest, &new_manifest_digest)
+            .into_bytes();
+        fixture.blobs.insert(new_layer_digest.clone(), replacement);
+        fixture
+            .blobs
+            .insert(new_manifest_digest.clone(), manifest);
+        fixture.first_layer_digest = new_layer_digest;
+        fixture.manifest_digest = new_manifest_digest;
     }
 
     #[test]
@@ -704,6 +733,37 @@ mod tests {
             |digest| mismatch.blobs.get(digest).map(Vec::as_slice),
         );
         assert_eq!(result, Err(Error::DiffIdMismatch));
+    }
+
+    #[test]
+    fn resolves_mixed_compression_and_maps_verified_zstd_failures() {
+        let mixed =
+            fixture_with_media_types(GZIP_LAYER_MEDIA_TYPE, ZSTD_LAYER_MEDIA_TYPE, false);
+        let rootfs = resolve_uncompressed_image(
+            &mixed.layout,
+            &mixed.index,
+            &mixed.manifest_digest,
+            "amd64",
+            "linux",
+            |digest| mixed.blobs.get(digest).map(Vec::as_slice),
+        )
+        .unwrap();
+        assert!(rootfs.get("bin/old").is_none());
+        assert!(rootfs.get("bin/new").is_some());
+
+        let mut malformed = fixture(ZSTD_LAYER_MEDIA_TYPE, false);
+        let mut replacement = malformed.blobs[&malformed.first_layer_digest].clone();
+        replacement[0] ^= 1;
+        rebind_first_layer_blob(&mut malformed, replacement);
+        let result = resolve_uncompressed_image(
+            &malformed.layout,
+            &malformed.index,
+            &malformed.manifest_digest,
+            "amd64",
+            "linux",
+            |digest| malformed.blobs.get(digest).map(Vec::as_slice),
+        );
+        assert_eq!(result, Err(Error::Zstd(zstd::Error::InvalidMagic)));
     }
 
     #[test]
