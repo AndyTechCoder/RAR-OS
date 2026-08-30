@@ -45,7 +45,9 @@ for test_name in \
     rejects_truncation_trailing_data_and_too_many_blocks \
     covers_fcs_widths_zero_dictionary_ids_and_runtime_output_limit \
     decodes_literal_only_compressed_blocks_and_size_formats \
-    rejects_malformed_or_sequence_bearing_compressed_blocks; do
+    rejects_malformed_or_sequence_bearing_compressed_blocks \
+    decodes_rfc_8878_direct_huffman_single_stream_vector \
+    rejects_invalid_or_unsupported_huffman_literals; do
     /usr/bin/grep -Fq "fn $test_name()" "$tree/zstd.rs" || exit 1
 done
 for test_name in \
