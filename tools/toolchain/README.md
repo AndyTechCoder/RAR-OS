@@ -21,3 +21,9 @@ not wired to a workflow and carry no execution authority. A future explicitly
 authorized cloud observation may emit only a candidate manifest and a
 not-ready receipt; the lock cannot change until the observer tools, complete
 file set, and verifier are independently reviewed and pinned.
+
+The exact-set verifier is also present only as byte-pinned inactive source. It
+is not invoked by local checks or workflows and has no reviewed runtime tool-pin
+instance or candidate input. A later controller-bound review must supply and
+pin those bytes before runtime testing; a mechanically matching candidate
+remains non-reviewed and non-ready and cannot activate the CI lock or helper.
