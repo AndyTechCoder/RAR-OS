@@ -616,16 +616,32 @@ mod tests {
 
     fn rebind_first_layer_blob(fixture: &mut Fixture, replacement: Vec<u8>) {
         let old_layer_digest = fixture.first_layer_digest.clone();
+        let old_layer_size = fixture.blobs[&old_layer_digest].len();
         let new_layer_digest = sha256::digest_string(&replacement).unwrap();
         let old_manifest_digest = fixture.manifest_digest.clone();
+        let old_manifest_size = fixture.blobs[&old_manifest_digest].len();
         let manifest = String::from_utf8(fixture.blobs[&old_manifest_digest].clone()).unwrap();
+        let old_layer_descriptor =
+            format!("\"digest\":\"{old_layer_digest}\",\"size\":{old_layer_size}");
+        let new_layer_descriptor = format!(
+            "\"digest\":\"{new_layer_digest}\",\"size\":{}",
+            replacement.len()
+        );
+        assert!(manifest.contains(&old_layer_descriptor));
         let manifest = manifest
-            .replace(&old_layer_digest, &new_layer_digest)
+            .replacen(&old_layer_descriptor, &new_layer_descriptor, 1)
             .into_bytes();
         let new_manifest_digest = sha256::digest_string(&manifest).unwrap();
         let index = String::from_utf8(fixture.index.clone()).unwrap();
+        let old_manifest_descriptor =
+            format!("\"digest\":\"{old_manifest_digest}\",\"size\":{old_manifest_size}");
+        let new_manifest_descriptor = format!(
+            "\"digest\":\"{new_manifest_digest}\",\"size\":{}",
+            manifest.len()
+        );
+        assert!(index.contains(&old_manifest_descriptor));
         fixture.index = index
-            .replace(&old_manifest_digest, &new_manifest_digest)
+            .replacen(&old_manifest_descriptor, &new_manifest_descriptor, 1)
             .into_bytes();
         fixture.blobs.insert(new_layer_digest.clone(), replacement);
         fixture
