@@ -14,16 +14,17 @@ and rollback. A host mock, Linux-hosted UI, or unbooted image is not acceptance.
 ## Approved specifications
 
 - Constitution, from-scratch policy, architecture, security/recovery, formats,
-  host safety, ADRs 0001–0021, and `release-0.md`.
+  host safety, ADRs 0001–0026, and `release-0.md`.
 - R0-002 boot and hardware contracts under `spec/boot/`, `spec/hardware/`, and
   `sdk/generated/release-0/` are authoritative and read-only dependencies unless
   an ADR-governed correction is independently approved.
 - New Alpha-only contracts use an explicit experimental version under
   `spec/alpha/`; they are not stable RAR ABI, RID, package, storage, or update
   promises.
-- The trusted cumulative A–G observation sequence is fixed by
-  `../../spec/alpha/evidence/acceptance-v1.plan`; implementation cannot replace
-  a required guest result with a generic ready marker.
+- Milestone A may use historical `../../spec/alpha/evidence/acceptance-v1.plan`
+  only before the reviewed ADR 0025 cutover. After cutover, every new A–G probe
+  binds the exact reviewed v2 plan and rejects v1; implementation can never
+  replace a required guest result with a generic ready marker.
 
 ## Preconditions
 
@@ -48,12 +49,21 @@ Implementation does not start until all of these pass:
    machine profile, QMP client, and reference executables. The ready controller
    must be merged to `main` before a source-branch Development Probe can run.
 5. PR #7 is green, independently reviewed, merged, and verified on GitHub.
-6. ADR 0021 and ADR 0023 are accepted, and the resulting Alpha boot contract is
-   marked `ready` after fresh architecture, correctness, and security review,
-   before Milestone A target files or image recipes are created.
+6. ADRs 0021, 0023, and 0026 are accepted, and the resulting Alpha boot,
+   private platform-envelope, fixed Core-bootstrap, and immutable-source
+   contracts are marked `ready` after fresh architecture, correctness, and
+   security review, before Milestone A target files or image recipes are created.
 7. ADR 0024 is accepted and real twice-reproduced helper build/test evidence,
    the ready v2 Lab profile, and the reviewed runnable v2 controller are merged
    before any source-branch Development Probe or untrusted target build runs.
+8. Historical gate-report v1 is not an active readiness source after ADRs
+   0022–0026 are recorded. Before Milestone A, a separately reviewed gate-report
+   v2 must fail closed on ADR 0026 and on each exact private-envelope,
+   Core-bootstrap, component-bundle, initial-system, and initial-preserved-data
+   contract identity/readiness state.
+9. Before Milestone B, accepted ADR 0025 is implemented through a separately
+   reviewed and merged acceptance-protocol/controller v2 cutover. Historical
+   acceptance v1 remains immutable and cannot satisfy a new A–G probe.
 
 PR #7 is also the one-time pre-A controller transition. Before any untrusted
 Alpha source is built, `main` must contain the generic A–G dispatch controller,
@@ -93,9 +103,9 @@ status files named here. Preserve unrelated files.
 
 | Milestone | Required behavior | Owned paths |
 | --- | --- | --- |
-| A | Reproducible RAR-owned image; Root → Recovery → Nucleus; R0-002 validation; structured boot trace | `Cargo.toml`, `rust-toolchain.toml`, `boot/`, `recovery/`, `nucleus/arch/x86_64/`, `tools/sprint-alpha/`, `tests/sprint-alpha/boot/`, `docs/sprint-alpha/boot/` |
+| A | Reproducible RAR-owned image; Root → Recovery → Nucleus; bounded platform-source staging and fixed Core bootstrap; R0-002 validation; structured boot trace | `Cargo.toml`, `rust-toolchain.toml`, `boot/`, `recovery/`, `nucleus/arch/x86_64/`, `tools/sprint-alpha/`, `tests/sprint-alpha/boot/`, `docs/sprint-alpha/boot/` |
 | B | Page allocator, mappings, protected address spaces, exceptions, timer, threads, scheduler | `nucleus/portable/`, `nucleus/runtime/`, `tests/sprint-alpha/nucleus/`, `docs/sprint-alpha/nucleus/` |
-| C | Rights-checked handles, bounded IPC, timeout/cancellation, isolated components, crash/restart | `spec/alpha/capability/`, `spec/alpha/ipc/`, `nucleus/capability/`, `nucleus/ipc/`, `core/registry/`, `tests/sprint-alpha/isolation/`, `docs/sprint-alpha/isolation/` |
+| C | Rights-checked handles, bounded IPC, timeout/cancellation, isolated components, fixed bundle loading, crash/restart | `spec/alpha/capability/`, `spec/alpha/ipc/`, `spec/alpha/component/`, `nucleus/capability/`, `nucleus/ipc/`, `core/loader/`, `core/registry/`, `tests/sprint-alpha/isolation/`, `docs/sprint-alpha/isolation/` |
 | D | Separate system/preserved-data regions; corruption isolation; reconstruction preserving the exact test file | `spec/alpha/state/`, `spec/alpha/recovery/`, `core/state/`, `core/recovery/`, `services/storage/`, `tests/sprint-alpha/recovery/`, `docs/sprint-alpha/recovery/` |
 | E | Framebuffer GUI; keyboard and pointer; launcher, terminal, settings, and two native demo apps | `spec/alpha/surface/`, `spec/alpha/input/`, `services/graphics/`, `services/input/`, `apps/shell/`, `apps/terminal/`, `apps/settings/`, `apps/demo/`, `tests/sprint-alpha/gui/`, `docs/sprint-alpha/gui/` |
 | F | Signed layer activation; tamper rejection; component replacement; failed-health rollback | `spec/alpha/layer/`, `spec/alpha/signing/`, `spec/alpha/update/`, `core/crypto/`, `core/package/`, `core/update/`, `tests/sprint-alpha/update/`, `docs/sprint-alpha/update/` |
@@ -120,6 +130,11 @@ No parallel writer may touch these paths.
 ## Interface rules
 
 - R0-002 input validation and failure codes are unchanged.
+- ADR 0026's private outer envelope, Core bootstrap, component bundle, initial
+  system state, and initial preserved-data sources are Alpha-only and remain
+  unusable until their reviewed byte contracts are ready. Recovery owns outer
+  validation and write revocation; later milestones receive only their narrowly
+  assigned inner parsing and destination rights.
 - Milestone C exposes only experimental capability/IPC semantics needed by the
   demonstration: opaque handles, non-increasing rights, bounded messages,
   bounded queues, timeout, cancellation, close, and peer-crash notification.

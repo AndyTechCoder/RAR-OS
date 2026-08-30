@@ -25,34 +25,31 @@ functionality and cannot increase the implementation count.
 - The cloud-only host-safety boundary and source-only SSD boundary are defined.
 - Controller, Lab, reproducibility, frozen-artifact, and evidence scaffolding
   exists in source form.
-- Proposed ADRs 0022–0026 explain the remaining boot, controller, evidence,
-  payload/state, and graphics/input decisions.
-- A five-choice owner brief, conditional integration plan, and eight-item
+- Accepted ADRs 0022–0026 select the remaining boot, controller, evidence,
+  payload/state, and graphics/input directions while activation stays gated.
+- A recorded five-choice owner brief, gated integration plan, and eight-item
   completion-proof map prevent later tasks from improvising or overclaiming.
 
 ## What is not ready
 
 - No Alpha boot, Nucleus runtime, component system, recovery service, GUI, app,
   signed update path, target image, or retained target evidence exists.
-- No proposed ADR is accepted.
+- ADRs 0022–0026 are accepted, but none of their dependent contracts or
+  controller changes is ready merely from acceptance.
 - The exact Alpha boot/platform contracts are not ready.
 - The Lab/controller/helper lacks real activating identities and reviewed cloud
   build/test evidence.
-- PR #7 is merged and durable at
-  `7bcf6a1e28b1c7fa886d2696fa9f1e595d87ec51`. Exact-head run `33268129412`
-  and distinct exact-merge `main` run `33268347971` passed complete validation
-  and mutation testing. This closes only the preparation rebaseline; it is not
-  target implementation or Sprint Alpha completion evidence.
-- The SSD confinement/profile proof is not recorded as passing for the future
-  implementation task. SSD reserve and exact-root capacity evidence remain
-  required; internal-Mac free space is not an Alpha workspace precondition.
+- PR #13 is merged at `abd75bfccf4fcd2f197871225d1a78233c0d87dc`;
+  exact post-merge trusted-controller run `33294557261` passed. This closes only
+  the controller bootstrap, not target implementation or Sprint completion.
+- The SSD profile is installed without replacing existing user settings. A
+  fresh task still must retain effective confinement evidence before A.
 
 ## Gates before code starts
 
 Milestone A target files may be created only after all of these are true:
 
-1. Exact owner decisions for ADRs 0023, 0024, and 0026 are recorded; their
-   selected contracts are implemented, reviewed, and ready.
+1. The selected ADR 0023/0026 contracts are implemented, reviewed, and ready.
 2. The reviewed Lab profile, controller, compiler/helper identities, twice-
    reproduced helper evidence, and immutable cloud inputs are genuinely ready.
 3. PR #7 and every required real-step workflow are green, reviewed, merged to
@@ -64,10 +61,8 @@ Milestone A target files may be created only after all of these are true:
    from verified `main` for one Medium-effort writer task with no persistent
    goal or inherited diff.
 
-ADR 0025 and the reviewed evidence-protocol cutover are additionally required
-before B. ADR 0022 and the reviewed peripheral contract are required before E.
-Delegation of safe operational choices does not replace the exact owner ADR
-approval required by the authoritative packet.
+The reviewed ADR 0025 evidence-protocol cutover is additionally required before
+B. The reviewed ADR 0022 peripheral contract is required before E.
 
 ## Execution path
 

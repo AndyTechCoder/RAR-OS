@@ -1,11 +1,12 @@
 # ADR 0025: Alpha Pre-GUI Evidence Input and Continuity Sequencing
 
-Status: Historical proposal — superseded on 2026-08-29
-Decision: Undecided at proposal publication
+Status: Accepted — 2026-08-29
+Decision: Alternative B
 
-Canonical decision: [ADR 0025](../adr/0025-alpha-gui-continuity-evidence-sequencing.md).
-This file is retained unchanged in substance as proposal history and is not an
-authority source.
+Approval basis: explicit owner approval of the repository's exact five-choice
+sentence on 2026-08-29. Acceptance selects the honest pre-GUI sequencing
+correction; evidence protocol v2 remains blocked until separately implemented,
+reviewed, merged, and exactly bound.
 
 ## Context
 
@@ -96,7 +97,7 @@ keeps temporal correlation to the failure without requiring GUI code at C.
 
 Version 1 remains immutable historical evidence and is not accepted for any new
 A–G probe once v2 is activated. The controller, verifier, tests, documentation,
-and profile bind the exact v2 digest before activation. This option is proposed.
+and profile bind the exact v2 digest before activation. This option is selected.
 
 ### C. Add a private pre-E test-control transport and a second E crash
 
@@ -111,19 +112,19 @@ tests, and failure surface without improving the proof over Alternative B.
 Remove the row and prove only another non-GUI peer remains responsive. This
 weakens the approved demonstration and is rejected.
 
-## Proposed direction
+## Decision
 
 Select Alternative B. It is the smallest honest correction and uses the
 controller's existing minimum-milestone semantics. The correction changes only
 three impossible pre-E input fields plus when one existing observation becomes
 mandatory. It changes no marker meaning or post-crash position.
 
-Acceptance of this ADR would authorize a separately reviewed protocol-v2
-change and corresponding trusted-controller policy/tests. It would not
+Acceptance of this ADR authorizes a separately reviewed protocol-v2 change and
+corresponding trusted-controller policy/tests. It does not
 authorize target implementation, cloud provisioning, credentials, builds, VM
 launch, Mac execution, merge, or a readiness claim.
 
-## Consequences if accepted
+## Consequences
 
 - Milestone C can finish with only C-owned isolation behavior.
 - Milestones B–D require no keyboard, pointer, or private test-control authority.
@@ -137,7 +138,7 @@ launch, Mac execution, merge, or a readiness claim.
   after cutover.
 - A later protocol correction remains a new version, never silent mutation.
 
-## Security and correctness impact
+## Security and data impact
 
 Alternative B prevents a fabricated GUI marker and preserves evidence ordering.
 It also prevents pre-E key injection from being mistaken for consumed guest
@@ -149,7 +150,7 @@ input and serial offset, rejects missing/duplicate/reordered/extra descendants,
 and captures only after both post-crash continuity observations. No new guest
 authority, data, device access, or host capability is introduced.
 
-## Validation if accepted
+## Validation
 
 - Immutable fixtures prove A–D selections exclude the E-minimum GUI row.
 - B, C, and D selections begin their new milestone rows with `none`; A retains
@@ -168,7 +169,7 @@ authority, data, device access, or host capability is introduced.
 - After activation, every new A–G probe rejects v1; v1 is retained only as
   immutable historical evidence from runs that predate the cutover.
 
-## Gate-report compatibility and migration
+## Compatibility and migration
 
 The current read-only Sprint gate report remains schema v1 and must not gain
 fields silently. If this ADR is accepted, its implementation creates gate-

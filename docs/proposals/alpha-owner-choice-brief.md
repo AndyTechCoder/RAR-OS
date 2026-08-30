@@ -1,12 +1,13 @@
 # Alpha Owner Choice Brief
 
-Status: Explanatory only — no decision is recorded by this document
+Status: Historical decision aid — canonical decisions recorded elsewhere
 
-This page summarizes the five open Alpha proposals in plain language. The
-proposal files remain authoritative. Creating or reading this page does not
-accept an ADR, authorize execution, or make a blocked contract ready.
+This page preserves the plain-language choice presented before acceptance.
+Canonical decisions are `../adr/0022-*.md` through `../adr/0026-*.md`, bound by
+`../approval-record.md`; the retained proposal files are historical only. This
+page grants no execution authority and cannot make a blocked contract ready.
 
-## Decisions needed before the bootable Alpha
+## Decisions presented before the bootable Alpha
 
 ### ADR 0023 — How exact should the temporary Alpha boot design be?
 
@@ -62,7 +63,7 @@ read-only source without ambient disk access or preserved-data write authority.
 ADR 0026 is required before the final Milestone A boot contract becomes ready.
 It authorizes no execution or production storage claim.
 
-## Decision needed before Milestone B
+## Decision presented for the pre-Milestone B gate
 
 ### ADR 0025 — How should tests work before keyboard and GUI support exist?
 
@@ -85,7 +86,7 @@ Milestone E, when a real GUI exists.
 ADR 0025 is required before Milestone B. It does not authorize target code,
 cloud execution, or input/GUI implementation.
 
-## Decision needed later, before graphics and input
+## Decision presented for the later graphics/input gate
 
 ### ADR 0022 — How should the Alpha GUI receive real device authority?
 
@@ -103,19 +104,21 @@ device access.
   Lab QEMU capability evidence.
 - This decision does not block Milestones A–D; it is required before Milestone E.
 
-## What accepting the recommended set would authorize
+## Recorded owner decision
 
-It would authorize the team to finish and independently review the matching
+The owner accepted the exact five-choice sentence below on 2026-08-29. This
+authorizes the team to finish and independently review the matching
 experimental specifications and source implementation. It would not by itself
 authorize cloud provisioning, credentials, builds, target execution, VM launch,
 Mac execution, merging, production compatibility claims, or a `ready` status.
 Every existing evidence and safety gate would remain in force.
 
-When the owner is available, an unambiguous approval can be recorded as:
+Accepted sentence:
 
 `Approve ADR 0022 Alternative C, ADR 0023 Alternative C, ADR 0024 Alternative A, ADR 0025 Alternative B, and ADR 0026 Alternative C.`
 
-ADRs 0023, 0024, and 0026 are required before A; ADR 0025 is required before B.
+The authoritative approval fields are in `../approval-record.md`. ADRs 0023,
+0024, and 0026 are required before A; ADR 0025 is required before B.
 ADR 0022 may be implemented at E, but accepting it before A permits the common
 envelope and ownership consequences to be reviewed together. Any different
 selection must name the ADR and alternative exactly.

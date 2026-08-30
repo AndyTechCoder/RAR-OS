@@ -8,13 +8,13 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 inventory=${1-$root/tools/sprint-alpha/controller-helper-v0.env}
 contract=$root/spec/alpha/lab/controller-helper-inventory-v0.fields
 evidence=$root/spec/alpha/lab/controller-helper-build-evidence-v0.fields
-proposal=$root/docs/proposals/0024-alpha-controller-helper-build-trust.md
+decision=$root/docs/adr/0024-alpha-controller-helper-build-trust.md
 fail() { printf 'controller helper inventory blocked: %s\n' "$1" >&2; exit 1; }
 
-for file in "$inventory" "$contract" "$evidence" "$proposal"; do
+for file in "$inventory" "$contract" "$evidence" "$decision"; do
     [ -f "$file" ] && [ ! -L "$file" ] && [ -s "$file" ] || fail "missing, symbolic, or empty input: $file"
 done
-[ "$(/bin/sh "$root/tools/ci/classify-proposed-adr.sh" "$proposal" 0024 "$root/docs/approval-record.md")" = owner-decision-required ] || fail 'ADR 0024 state is not the expected proposal'
+[ "$(/bin/sh "$root/tools/ci/classify-proposed-adr.sh" "$decision" 0024 "$root/docs/approval-record.md")" = accepted ] || fail 'ADR 0024 is not bound to owner approval'
 
 /usr/bin/awk -F '=' '
     BEGIN {
@@ -35,7 +35,7 @@ done
         if (value["state"] == "blocked") {
             for (i in inactive) if (value[inactive[i]] != "unavailable") reject("blocked inventory contains activating value: " inactive[i])
         } else if (value["state"] == "ready") {
-            reject("ready activation is unavailable before ADR 0024 acceptance and real reviewed evidence")
+            reject("ready activation is unavailable before real reviewed build and test evidence")
         } else reject("state is invalid")
         exit bad ? 1 : 0
     }

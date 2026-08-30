@@ -1,11 +1,12 @@
 # ADR 0024: Alpha Controller Helper Build Trust
 
-Status: Historical proposal — superseded on 2026-08-29
-Decision: Undecided at proposal publication
+Status: Accepted — 2026-08-29
+Decision: Alternative A
 
-Canonical decision: [ADR 0024](../adr/0024-alpha-controller-helper-build-trust.md).
-This file is retained unchanged in substance as proposal history and is not an
-authority source.
+Approval basis: explicit owner approval of the repository's exact five-choice
+sentence on 2026-08-29. Acceptance selects the time-bounded Alpha helper build
+trust path; it grants no compiler identity, credentials, provisioning,
+execution, readiness, or merge authority by itself.
 
 ## Context
 
@@ -61,7 +62,7 @@ copies and verifies that helper before any target role starts. This gives the
 strongest separation and clearest production migration, but requires another
 image, inventory, reproduction proof, and provisioning step before Milestone A.
 
-## Proposed direction
+## Decision
 
 Select Alternative A for the time-boxed Alpha. It preserves the accepted three
 runtime roles and can later migrate to Alternative C without changing the
@@ -71,10 +72,10 @@ both fresh builds must be byte-identical; the helper source and binary hashes
 must be retained; compilation and tests must run only in the approved isolated
 Linux cloud job; and no compiler or helper enters a RAR OS image.
 
-This proposal grants no cloud credential, provisioning, deployment, VM launch,
+This decision grants no cloud credential, provisioning, deployment, VM launch,
 Mac execution, target compilation, or merge authority.
 
-## Consequences if accepted
+## Consequences
 
 - The controller profile gains an exact Linux host compiler closure and helper
   source/binary identity, separate from the target compiler.
@@ -89,6 +90,12 @@ owner data, credentials, role outputs, or launch authority. Build directories
 are bounded and disposable. The produced helper gains only the exact filesystem
 descriptor authority specified by the handoff contract; container, network,
 cloud, GitHub publication, and target-launch authority remain outside it.
+
+Two builds from one closure prove reproducibility, not independence from a
+compromised compiler. Alpha accepts that bounded residual risk only with
+authenticated closure acquisition, a separately identified verifier, a
+source-only mount scope, and adversarial compiler/helper evidence. Production
+migration still requires the stronger isolated controller-tool path.
 
 ## Compatibility and migration
 

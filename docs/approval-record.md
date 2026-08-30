@@ -113,3 +113,44 @@ ADR 0021 approval: approved
 ADR 0021 approver: Andy / RAR project owner
 ADR 0021 date: 2026-08-26
 ADR 0021 decision: Alternative C
+
+## Sprint Alpha remaining architecture decisions
+
+Status: Approved
+
+On 2026-08-29, Codex presented the owner with the exact approval block naming
+ADR 0022 Alternative C, ADR 0023 Alternative C, ADR 0024 Alternative A, ADR
+0025 Alternative B, and ADR 0026 Alternative C. The owner replied, "If it's
+safe, I approve." The approval is recorded only for those exact alternatives
+and their documented safety limits; it grants no broader authority.
+
+The owner's safety condition becomes effective only through a merged decision
+record whose architecture, correctness, and security reviews and required
+repository checks have no blocking finding. Before that reviewed merge, this
+working record grants no authority.
+
+Acceptance authorizes the separately gated specification and implementation
+work described by each ADR. It does not make a contract ready, satisfy a
+preflight, grant credentials, authorize local target build or execution,
+provision cloud infrastructure, or establish production compatibility.
+
+ADR 0022 approval: approved
+ADR 0022 approver: Andy / RAR project owner
+ADR 0022 date: 2026-08-29
+ADR 0022 decision: Alternative C
+ADR 0023 approval: approved
+ADR 0023 approver: Andy / RAR project owner
+ADR 0023 date: 2026-08-29
+ADR 0023 decision: Alternative C
+ADR 0024 approval: approved
+ADR 0024 approver: Andy / RAR project owner
+ADR 0024 date: 2026-08-29
+ADR 0024 decision: Alternative A
+ADR 0025 approval: approved
+ADR 0025 approver: Andy / RAR project owner
+ADR 0025 date: 2026-08-29
+ADR 0025 decision: Alternative B
+ADR 0026 approval: approved
+ADR 0026 approver: Andy / RAR project owner
+ADR 0026 date: 2026-08-29
+ADR 0026 decision: Alternative C

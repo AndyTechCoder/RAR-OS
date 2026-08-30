@@ -63,8 +63,9 @@ does not activate the Lab. Activation requires a twice-reproduced cloud binary
 hash, version/license/verb checks, and equality with the binary hash in the Lab
 profile. The client is a pinned host/lab tool and never ships in RAR OS.
 
-`tools/ci/report-sprint-alpha-gates.sh` is a read-only orientation report for a
-task already rooted in the exact SSD workspace. It reports all local and
-repository decision gates at once instead of stopping at the first failure. It
-never contacts GitHub, proves the active Codex permission profile, or replaces
-the strict local/remote preflight gates; those remain separate evidence.
+`tools/ci/report-sprint-alpha-gates.sh` is the immutable historical schema-v1
+orientation reporter. After ADRs 0022–0026 were accepted it is intentionally
+inactive and must fail closed; it is not a current readiness source. A reviewed
+schema-v2 reporter covering ADR 0026 and every private platform-source contract
+is required before Milestone A. Neither reporter contacts GitHub, proves the
+active Codex permission profile, or replaces strict local/remote preflight evidence.

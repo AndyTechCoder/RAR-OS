@@ -36,11 +36,11 @@ reject() { if classify "$1" "$2" "$3" >/dev/null 2>&1; then exit 1; fi; }
 
 [ "$(classify "$root/docs/adr/0020-alpha-reference-oracle-isolation.md" 0020 "$root/docs/approval-record.md")" = accepted ]
 [ "$(classify "$root/docs/adr/0021-alpha-boot-payload-boundary.md" 0021 "$root/docs/approval-record.md")" = accepted ]
-[ "$(classify "$root/docs/proposals/0022-alpha-graphics-input-authority.md" 0022 "$root/docs/approval-record.md")" = owner-decision-required ]
-[ "$(classify "$root/docs/proposals/0023-alpha-boot-determinism-and-entry-state.md" 0023 "$root/docs/approval-record.md")" = owner-decision-required ]
-[ "$(classify "$root/docs/proposals/0024-alpha-controller-helper-build-trust.md" 0024 "$root/docs/approval-record.md")" = owner-decision-required ]
-[ "$(classify "$root/docs/proposals/0025-alpha-gui-continuity-evidence-sequencing.md" 0025 "$root/docs/approval-record.md")" = owner-decision-required ]
-[ "$(classify "$root/docs/proposals/0026-alpha-platform-payload-and-state-sources.md" 0026 "$root/docs/approval-record.md")" = owner-decision-required ]
+[ "$(classify "$root/docs/adr/0022-alpha-graphics-input-authority.md" 0022 "$root/docs/approval-record.md")" = accepted ]
+[ "$(classify "$root/docs/adr/0023-alpha-boot-determinism-and-entry-state.md" 0023 "$root/docs/approval-record.md")" = accepted ]
+[ "$(classify "$root/docs/adr/0024-alpha-controller-helper-build-trust.md" 0024 "$root/docs/approval-record.md")" = accepted ]
+[ "$(classify "$root/docs/adr/0025-alpha-gui-continuity-evidence-sequencing.md" 0025 "$root/docs/approval-record.md")" = accepted ]
+[ "$(classify "$root/docs/adr/0026-alpha-platform-payload-and-state-sources.md" 0026 "$root/docs/approval-record.md")" = accepted ]
 
 [ "$(classify "$fixtures/accepted-a.md" 9997 "$valid")" = accepted ]
 [ "$(classify "$fixtures/accepted-b.md" 9998 "$valid")" = accepted ]

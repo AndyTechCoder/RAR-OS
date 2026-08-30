@@ -1,11 +1,12 @@
 # ADR 0026: Alpha Platform Payload and State Sources
 
-Status: Historical proposal — superseded on 2026-08-29
-Decision: Undecided at proposal publication
+Status: Accepted — 2026-08-29
+Decision: Alternative C
 
-Canonical decision: [ADR 0026](../adr/0026-alpha-platform-payload-and-state-sources.md).
-This file is retained unchanged in substance as proposal history and is not an
-authority source.
+Approval basis: explicit owner approval of the repository's exact five-choice
+sentence on 2026-08-29. Acceptance selects bounded private Alpha sources; it
+does not make their formats ready, create persistence or raw-device authority,
+or authorize target implementation or execution.
 
 ## Context
 
@@ -98,9 +99,9 @@ normal writer of its runtime region, which becomes read-only to recovery during
 reconstruction. Alpha does not promise writeback to the FAT volume, persistence
 after VM shutdown, or a production filesystem.
 
-ADR 0022's optional peripheral grant, if accepted, uses a separately framed
+Accepted ADR 0022's optional peripheral grant uses a separately framed
 record in the same private envelope; it does not reinterpret component or state
-sources. This option is proposed.
+sources. This option is selected.
 
 ### D. Implement a production storage and package stack before Alpha
 
@@ -108,7 +109,7 @@ Define stable block drivers, discovery, filesystem, package, persistence, and
 update formats now. This would solve the general problem but expands the
 time-boxed Alpha into later releases and is not proposed.
 
-## Proposed direction
+## Decision
 
 Select Alternative C. It establishes one replaceable boot-to-Core delivery
 boundary early, while keeping the temporary boot volume and all later payloads
@@ -120,7 +121,7 @@ work. It does not authorize local target compilation/execution, cloud
 provisioning, credentials, VM launch, merge, production persistence, or a ready
 state.
 
-## Ownership and sequencing if accepted
+## Ownership and sequencing
 
 - Architecture/specification work owns the envelope and source contracts before
   A implementation.
@@ -142,6 +143,15 @@ The authoritative vertical task packet must record these narrow ownership
 additions in the same reviewed acceptance change; this ADR alone does not edit
 the packet.
 
+## Consequences
+
+- Milestone A stages and authenticates four fixed immutable sources without
+  implementing general storage or component policy.
+- Milestone C owns bundle loading, while Milestone D owns state-source internals
+  and reconstruction within their narrow paths.
+- The private envelope remains replaceable and conveys no raw boot-volume or
+  block-device authority.
+
 ## Security and data impact
 
 Every source has a fixed ceiling, checked range, digest, purpose, owner, and
@@ -158,7 +168,11 @@ The preserved fixture is public test data, not owner data. No owner path,
 credential, host file, shared folder, or external storage is exposed to the
 guest. The Mac remains source-only.
 
-## Validation if accepted
+The ready contract must define the exact attenuated transfer from immutable
+state sources to their owning state services. Core receives no broad state-
+source authority, and implementation may not invent an ambient handoff.
+
+## Validation
 
 - Two clean builds produce byte-identical unsigned images and source bytes.
 - A RAR-owned packer and independent read-only inspector agree on every source
@@ -180,10 +194,16 @@ guest. The Mac remains source-only.
 - Cumulative A–G probes retain exact envelope, bundle, state, artifact, and
   source identities.
 
-## Compatibility and replacement
+## Compatibility and migration
 
 `AlphaPlatformEntryV0`, the component bundle, and state images are private Alpha
 formats. They never become R0, RID, package, filesystem, or update compatibility
 promises. Later production boot discovery, component packaging, System Store,
 Data Vault, drivers, and A/B recovery replace them through new versioned
 contracts and migrations. Old Alpha bytes are rejected, never reinterpreted.
+
+## Replacement path
+
+Adopt the reviewed production package, filesystem, component, and state
+contracts through a later ADR, migrate the boot-to-Core source handoff, and
+remove the private envelope without reinterpreting its Alpha bytes.

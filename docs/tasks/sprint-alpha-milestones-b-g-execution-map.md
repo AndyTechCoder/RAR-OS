@@ -3,8 +3,9 @@
 Status: Non-authoritative preparation — implementation remains sequential and gated
 
 This map organizes requirements already approved by
-`sprint-alpha-vertical.md`, `../sprint-alpha.md`, accepted ADRs, and
-`../../spec/alpha/evidence/acceptance-v1.plan`. It defines no wire format,
+`sprint-alpha-vertical.md`, `../sprint-alpha.md`, and accepted ADRs. Historical
+`../../spec/alpha/evidence/acceptance-v1.plan` is not authority for B–G after
+the required ADR 0025 v2 cutover. This map defines no wire format,
 syscall, ABI, storage promise, device authority, package format, or stable API.
 The authoritative sources win on any disagreement.
 
@@ -35,10 +36,10 @@ acceptance rows.
   replace guest behavior.
 - A contract, trust-boundary, dependency, persistent-data, tier, native-app, or
   release-commitment change stops the writer and returns to ADR review.
-- Active acceptance v1 tries to trigger B–D with keyboard input before E owns
-  any input path. No hidden early keyboard handler or unconsumed-input marker is
-  permitted. Proposed ADR 0025 must be decided and the selected reviewed
-  protocol version bound before B begins.
+- Historical acceptance v1 tries to trigger B–D with keyboard input before E
+  owns any input path. No hidden early keyboard handler or unconsumed-input
+  marker is permitted. Accepted ADR 0025 requires the selected reviewed
+  protocol v2 to be merged and exactly bound before B begins.
 
 ## B — Nucleus memory and execution
 
@@ -72,7 +73,8 @@ artifact identities to the cumulative A evidence.
 ## C — Capabilities, IPC, and component isolation
 
 Start only from accepted checkpoint B. Own only `spec/alpha/capability/`,
-`spec/alpha/ipc/`, `nucleus/capability/`, `nucleus/ipc/`, `core/registry/`,
+`spec/alpha/ipc/`, `spec/alpha/component/`, `nucleus/capability/`,
+`nucleus/ipc/`, `core/loader/`, `core/registry/`,
 `tests/sprint-alpha/isolation/`, `docs/sprint-alpha/isolation/`, and the scoped
 status update.
 
@@ -82,7 +84,9 @@ Contract before code:
   rejection without preselecting the internal lifetime mechanism;
 - bounded messages and queues;
 - timeout, cancellation, close, and peer-crash outcomes;
-- component identity/lifecycle and restart notification needed only for Alpha.
+- component bundle parsing/loading, identity/lifecycle, and restart notification
+  needed only for Alpha, using ADR 0026's immutable bundle source without
+  reopening Milestone A boot paths.
 
 The reviewed contract must fix bounds, validation order, error outcomes,
 ownership transfer, cancellation races, queue teardown, and replacement notes
@@ -93,14 +97,12 @@ every operation, bounded copy/queue paths, deterministic cancellation and close,
 and a registry that can restart one noncritical component without transferring
 its stale authority to the replacement.
 
-Required exact observations: 12 rows—forged, stale, and over-rights handles;
+Required exact observations: 11 rows—forged, stale, and over-rights handles;
 oversized message; full queue; timeout; cancellation; closed peer; peer-crash
-notification; restart complete; GUI continuity marker; peer responsive with
-capture. The fixed `component:gui-responsive` row currently conflicts with the
-milestone order and ownership: A–C define no GUI, while graphics paths begin at
-E. This map does not invent a pre-E presentation component or permit a synthetic
-marker. Before C starts, an architecture-governed change must either authorize
-and own a real earlier continuity witness or correct the acceptance row/order.
+notification; restart complete; peer responsive with capture. Under ADR 0025
+protocol v2, C proves restart and non-GUI peer continuity; the GUI-continuity
+observation first becomes mandatory in cumulative E–G probes. No pre-E
+presentation component or synthetic marker is permitted.
 
 Checkpoint evidence adds contract fixtures, rights/queue exhaustion, race and
 fault outcomes, restart identity, unaffected-component liveness, and exact C
@@ -123,6 +125,8 @@ Contract before code:
   durability claim.
 
 Implementation separates writable system state from preserved test data,
+strictly parses ADR 0026's already outer-validated inner state sources into
+non-aliased mutable destinations without preserved-data write authority,
 verifies both before use, isolates deliberate system corruption, activates the
 minimal Recovery path, reconstructs only authorized system state, and never
 rewrites the intact preserved-data fixture. The approved promise is limited to
@@ -164,9 +168,9 @@ real native Alpha components; two demo apps exercise independent components.
 Provisional accessible primitives are required, while the final design system
 remains deferred.
 
-Required exact observations: 6 captured rows—launcher, pointer accepted,
-terminal, settings, demo 1, and demo 2. Captures must correlate with ordered
-guest trace markers after the scripted input; host-rendered UI is invalid.
+Required exact observations: 7 captured rows—GUI continuity, launcher, pointer
+accepted, terminal, settings, demo 1, and demo 2. Captures must correlate with
+ordered guest trace markers after the scripted input; host-rendered UI is invalid.
 
 Checkpoint evidence adds input transcript, device/profile identities,
 framebuffer captures, trace correlation, authority-isolation negatives,
@@ -212,8 +216,8 @@ Start only from accepted checkpoint F. Own only `spec/alpha/integration/`,
 `evidence/sprint-alpha/`, `SPRINT_STATUS.md`, and `README.md`.
 
 G adds no substitute implementation. It binds one clean exact-head run to all
-eight completion items and all 45 ordered acceptance rows (A:5, B:7, C:12,
-D:7, E:6, F:7, G:1). Two clean builds from the same locked inputs must produce
+eight completion items and all 45 ordered acceptance rows (A:5, B:7, C:11,
+D:7, E:7, F:7, G:1). Two clean builds from the same locked inputs must produce
 byte-identical unsigned target artifacts before the retained demonstration.
 
 The final captured row is `integration:completion-contract-pass`; it is valid

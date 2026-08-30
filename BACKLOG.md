@@ -210,19 +210,21 @@ Gate 0 was approved on 2026-07-16. Every P0 item in this gate is complete as an 
    the rebaseline is merged and durable at `7bcf6a1e28b1c7fa886d2696fa9f1e595d87ec51`.
 2. `[x]` PR #5 is closed, unmerged, and superseded with its branch and evidence
    preserved. Never merge PR #5 into the Alpha line.
-3. `[ ]` Record the owner's ADR 0023, ADR 0024, and ADR 0026 choices; complete and
-   re-review the resulting boot/platform contracts and cloud-only
+3. `[x]` Record the owner's ADR 0023, ADR 0024, and ADR 0026 choices.
+4. `[ ]` Complete and re-review the resulting boot/platform contracts and cloud-only
    controller/helper evidence before Milestone A.
-4. `[ ]` Obtain the one-time user-level SSD permission-profile installation and
-   retained confinement proof without changing or deleting unrelated SSD data.
-5. `[ ]` Make the v2 Lab profile/controller ready only with real reviewed identities,
+5. `[x]` Install the one-time user-level SSD permission profile without replacing
+   existing settings or changing or deleting unrelated SSD data. Retain effective
+   fresh-task confinement evidence before Milestone A.
+6. `[ ]` Make the v2 Lab profile/controller ready only with real reviewed identities,
    then pass the SSD-profile, capacity, local, remote, PR, and immutable-
    checkpoint gates.
-6. `[ ]` Start Milestone A only in the packet-required fresh Medium writer task and
+7. `[ ]` Start Milestone A only in the packet-required fresh Medium writer task and
    execute target work only in the approved cloud Development Lab.
-7. `[ ]` Record ADR 0025 and complete the reviewed protocol/controller v2 cutover
-   before Milestone B.
-8. `[ ]` Record ADR 0022 and its reviewed peripheral-grant contract before Milestone E.
-9. `[ ]` Preserve strict local Mac/SSD non-execution, non-target-build, and current
+8. `[x]` Record ADR 0025 Alternative B.
+9. `[ ]` Complete the reviewed protocol/controller v2 cutover before Milestone B.
+10. `[x]` Record ADR 0022 Alternative C.
+11. `[ ]` Complete its reviewed peripheral-grant contract before Milestone E.
+12. `[ ]` Preserve strict local Mac/SSD non-execution, non-target-build, and current
    no-deletion rules while continuing Milestones B–G through their durable
    checkpoints.

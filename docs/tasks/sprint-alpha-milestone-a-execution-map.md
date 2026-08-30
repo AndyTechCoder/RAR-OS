@@ -15,8 +15,9 @@ precondition in `sprint-alpha-vertical.md` passes. In particular:
 
 - GitHub Actions must run real steps at the exact PR head;
 - PR #7 must be green, reviewed, merged, and remotely verified;
-- ADRs 0023 and 0024 must be unambiguously accepted;
-- the Alpha boot contract must be reviewed and marked `ready`;
+- ADRs 0023, 0024, and 0026 must be unambiguously accepted;
+- the Alpha boot, private platform-envelope, fixed Core-bootstrap, and four
+  immutable-source contracts must be reviewed and marked `ready`;
 - the v2 Lab profile, controller, and helper evidence must be genuinely ready;
 - the SSD confinement profile and capacity gates must have retained evidence.
 
@@ -45,8 +46,9 @@ track.
 
 ### A0 — Reconfirm immutable inputs
 
-- Record the exact accepted boot-contract, R0 handoff, RHD, machine-profile,
-  compiler, linker, firmware, controller, and source identities.
+- Record the exact accepted boot-contract, private platform envelope and source
+  contracts, R0 handoff, RHD, machine-profile, compiler, linker, firmware,
+  controller, and source identities.
 - Confirm target-linked dependency count remains zero.
 - Confirm the clean source SHA is the SHA dispatched to the trusted controller.
 - Stop if any identity is unavailable, stale, mutable, or disagrees with its
@@ -84,12 +86,15 @@ produce no mapping, entry, or authority effect.
 
 ### A3 — Root
 
-- Enter only when firmware selects the fixed Root path. Root itself reads only
-  the fixed Recovery and Nucleus payload paths.
-- Read Recovery and Nucleus with exact size ceilings and exact-read semantics.
+- Enter only when firmware selects the fixed Root path. Root reads only the
+  fixed Recovery, Nucleus, Core-bootstrap, component-bundle, initial-system,
+  and initial-preserved-data payload paths selected by accepted ADR 0026.
+- Read all six payloads with exact size ceilings and exact-read semantics.
 - Validate and map Recovery; stage Nucleus as inert bytes and hash its exact
   file bytes with the RAR-owned SHA-256 implementation.
-- Construct the reviewed Root-to-Recovery blob, obtain the final firmware map,
+- Stage and hash the four private sources as inert bytes without parsing their
+  inner formats. Construct the reviewed Root-to-Recovery blob with all fixed
+  staged-source ranges and identities, obtain the final firmware map,
   and follow the bounded ExitBootServices retry rule without allocations after
   the final map.
 - Transfer only the reviewed registers, mappings, and ownership; never return.
@@ -107,25 +112,39 @@ negative cases.
   or unusable ownership.
 - Canonicalize memory, carve every owned/device range, and produce RHD plus the
   unchanged R0-002 sources deterministically.
+- Validate the four already staged source ranges and identities, produce the
+  reviewed private outer envelope, and create no storage or raw-device authority.
 - Complete all source writes, revoke producer and DMA writes, establish required
-  immutability, and identify Recovery as the sole producer before entry.
+  immutability, and identify Recovery as the sole envelope and R0 producer
+  before entry.
 - Verify NX/WP/control-register and timer-profile requirements exactly as fixed
   by the ready contract; never infer or silently repair missing platform state.
 
 Evidence: deterministic R0 bytes, source-ownership trace, W^X/control-state
 negative cases, and Recovery-stage rejection-with-no-entry evidence.
 
-### A5 — Nucleus x86-64 entry
+### A5 — Nucleus x86-64 entry and fixed Core bootstrap
 
-- Accept only the unchanged R0-002 x86-64 entry register/state contract.
-- Copy and validate untrusted entry bytes before constructing authority.
+- Accept only the reviewed private `AlphaPlatformEntryV0` entry state, then
+  validate its embedded unchanged R0-002 bytes before constructing authority.
+- Validate and map only `AlphaCoreBootstrapV0` through the fixed, narrowly
+  mechanical bootstrap parser. Recovery—not Nucleus—owns outer source-set
+  validation; ordinary component policy and bundle loading remain Milestone C work.
+- Construct only the reviewed minimum initial capability set: component-source
+  read authority plus the minimum Nucleus IPC/capability mechanisms. Grant no
+  state-source, preserved-data-write, device, firmware, storage, or ambient authority.
+- Start exactly one initial Core thread at the validated bootstrap entry only
+  after executable mappings are finalized and writable aliases are gone.
 - Emit the structured Milestone A trace only after R0-002 validation succeeds.
 - On malformed R0 input, create no capability, mapping, device access, thread,
   or observable success marker.
-- Halt through the reviewed bounded failure path until Milestone B introduces
-  runtime scheduling.
+- Prove wrong entry, rights, mapping order, source identity, or capability set
+  prevents Core execution and creates no partial authority.
+- After the bounded initial Core-start observation, halt through the reviewed
+  path until Milestone B introduces runtime scheduling.
 
-Evidence: valid entry trace and malformed-entry no-authority trace.
+Evidence: valid entry/Core-start trace, exact initial capability inventory, and
+malformed-entry/bootstrap no-execution/no-authority traces.
 
 ### A6 — Deterministic image tooling
 
@@ -144,8 +163,8 @@ identities. A local image or skipped comparison is failure, not evidence.
 - Dispatch only through the merged default-branch controller for `milestone-a`.
 - Launch only the digest-pinned software-emulated profile with networking,
   passthrough, sharing, credentials, and unrelated access disabled.
-- Require the observed Root → Recovery → Nucleus trace and exact final source
-  SHA/artifact/profile identities.
+- Require the observed Root → Recovery → Nucleus → initial Core thread trace,
+  exact initial capability inventory, and final source SHA/artifact/profile identities.
 - Exercise failures through immutable inputs selected by the controller; never
   let the source branch alter the trusted launcher or verdict.
 
