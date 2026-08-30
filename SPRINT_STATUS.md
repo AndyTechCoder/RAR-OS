@@ -1,13 +1,19 @@
 # Sprint Alpha 0.1 Status
 
-- Date: 2026-08-29
-- Current milestone: owner decisions recorded; pre-Milestone A contracts and
-  controller evidence remain blocked
-- Objective: durably record ADRs 0022–0026, then complete the selected pre-A
-  contracts/controller gates before authentic A–G implementation starts
-- Worktree: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/alpha-owner-decisions`
-- Branch: `codex/alpha-owner-decisions`, based on verified `main` at
-  `abd75bfccf4fcd2f197871225d1a78233c0d87dc`
+- Date: 2026-08-30
+- Current milestone: acceptance-v2 and gate-report-v2 preparation merged;
+  remaining pre-Milestone A boot/controller authority and phase-8 publication
+  recovery remain blocked
+- Objective: finish the reviewed boot/platform/controller/SSD gates before
+  Milestone A; separately finish acceptance-v2 publication and controller
+  closure before Milestone B
+- Status source: verified GitHub `main` at
+  `ef02d685a9ca12035e35944c1ac64a26bbc6fa82`
+- Active status worktree: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/alpha-status-rebaseline-ef02`
+- Active status branch: `codex/alpha-status-rebaseline-ef02`
+- Latest exact-main validation: Specifications run `33303200512`, job
+  `99235008063`, passed runner attestation, trusted-controller authority binding,
+  full pinned read-only-container validation, and all external mutation tests
 - Bootstrap pull request: [#13](https://github.com/AndyTechCoder/RAR-OS/pull/13),
   merged at `abd75bfccf4fcd2f197871225d1a78233c0d87dc`; exact post-merge trusted-
   controller run `33294557261` passed
@@ -43,8 +49,10 @@
   source-only preparation reviews, not target implementation or completion proof
 - Target functionality: 0%; no RAR OS target implementation has started, built,
   booted, or run
+- Preparation is tracked by the discrete authoritative gates below, not a
+  percentage. Overall readiness remains blocked
 - Development Lab state: the three-role v2 field schemas and transcript contract
-  are source-ready pending final re-review. Exact per-role mounts, bounded
+  are source-ready and reviewed in their inactive forms. Exact per-role mounts, bounded
   outputs, empty allowlisted environments, and no-extra-authority rules are
   bound and their policy tests pass. The exact v2 profile instance and
   single-pass validator are complete, fast, independently reviewed, and reject
@@ -59,7 +67,8 @@
   and adversarial host-only validation. The owner confirmed that cloud
   infrastructure exists, but wiring and provisioning are intentionally deferred;
   this checkpoint performs neither. Real immutable output identities plus a
-  reviewed runnable v2 controller are still required. The controller's
+  reviewed runnable v2 controller are still required, and any future activating
+  controller/profile change requires fresh independent review. The controller's
   host-only stop/open/copy/recheck handoff and 256-byte durable manifest are now
   byte-bound with 49 positive and adversarial cases. The dependency-free host
   core now implements the manifest codec, streaming SHA-256,
@@ -143,8 +152,15 @@
   auto-chains B–D through strict ordered `none` inputs, preserves the GUI-
   continuity row's exact post-crash position, and changes only its minimum from
   C to E. C would prove restart plus peer continuity; cumulative E–G probes
-  would prove real GUI continuity. Acceptance changes no active protocol;
-  separately reviewed v2 implementation and cutover remain required
+  would prove real GUI continuity. The exact v2 protocol, transcript, verifier,
+  fixture, and anti-replay contracts are merged on `main` and
+  reject historical v1 for every new A–G probe. The exact protocol, controller
+  preparation, gate-report v2, policy tests, reviews, merges, and exact-main
+  validation are complete through PRs #43–#49. The cutover is still inactive:
+  the phase-8 durable publication/recovery writer and controller/profile wiring
+  remain closed gates. Proposed ADR 0030 now documents the required persistent
+  transaction choice without selecting or authorizing it; PR #50 merged and its
+  exact-main validation passed
 - Owner decisions: ADRs 0022 C, 0023 C, 0024 A, 0025 B, and 0026 C are recorded
   as accepted on 2026-08-29. Acceptance alone leaves every dependent contract,
   identity, evidence, controller, and readiness gate closed
@@ -173,10 +189,11 @@
   canonical ADRs 0022–0026, all three decision-integration gates, and all eight
   completion-proof items so preparation cannot silently become authoritative,
   incomplete, or disappear
-- Gate-report migration: schema v1 remains unchanged. Accepted ADR 0025
-  requires a versioned v2 compatibility cutover exposing ADR 0025, protocol-v2,
-  and fail-closed Milestone B states; no active
-  readiness or public format changed
+- Gate-report migration: schema v1 remains unchanged. The versioned v2 reporter
+  is merged, reviewed, and exact-main validated. It exposes ADR 0025,
+  acceptance-v2, proposed-decision, private-platform, and fail-closed Milestone
+  A/B states while every unavailable identity remains explicitly missing or
+  blocked. It is orientation only; no active readiness or public format changed
 - Platform delivery/state gaps: the existing Alpha boot grants no runtime
   storage authority and delivers no Core/component/app/state bytes. Accepted
   ADR 0026 selects four immutable Root-staged sources—fixed Core bootstrap,
@@ -234,12 +251,16 @@
   needs one-time owner-approved installation and confinement evidence in a
   fresh SSD-root task. The profile is now installed without replacing existing
   settings; effective confinement evidence remains a fresh-task pre-A gate
-- Next durable action: make the selected boot/platform contracts and v2
-  controller/helper evidence genuinely ready, and
-  pass the external Lab/PR/checkpoint gates before Milestone A. ADR 0025 remains
-  mandatory before Milestone B; ADR 0022 and its reviewed peripheral-grant
-  contract remain mandatory before Milestone E. The canonical approval is in
-  `docs/approval-record.md`
+- Next durable actions: resolve the remaining boot/platform findings through
+  owner-approved ADRs; preserved draft PR #42 is unmerged and non-authoritative.
+  Separately obtain the exact owner choice for proposed ADR 0030, then integrate
+  its reviewed contract before Milestone B. Independently, make the v2
+  controller/helper compiler,
+  twice-reproduced helper, isolated test, and real immutable-identity evidence
+  genuinely ready and pass the external Lab/PR/checkpoint gates before
+  Milestone A. Acceptance-v2 publication remains mandatory before Milestone B;
+  ADR 0022's reviewed peripheral-grant contract remains mandatory before
+  Milestone E. Canonical accepted approvals remain in `docs/approval-record.md`
 - Deadline: 2026-08-30 23:59 America/Los_Angeles
 - Local safety: target compilation, image creation, firmware loading, QEMU,
   emulator, VM, guest execution, macOS modification, and access outside the

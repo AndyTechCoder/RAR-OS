@@ -65,7 +65,16 @@ profile. The client is a pinned host/lab tool and never ships in RAR OS.
 
 `tools/ci/report-sprint-alpha-gates.sh` is the immutable historical schema-v1
 orientation reporter. After ADRs 0022–0026 were accepted it is intentionally
-inactive and must fail closed; it is not a current readiness source. A reviewed
-schema-v2 reporter covering ADR 0026 and every private platform-source contract
-is required before Milestone A. Neither reporter contacts GitHub, proves the
-active Codex permission profile, or replaces strict local/remote preflight evidence.
+inactive and must fail closed; it is not a current readiness source.
+`tools/ci/report-sprint-alpha-gates-v2.sh` is the current source-only
+orientation reporter. Its separately pinned reporter contract records that the
+five ADR 0026 platform identities are not yet approved or available, so it
+reports each as `missing`, keeps `platform_source_set` and Milestones A/B
+blocked, and reports the reviewed acceptance-v2 preparation as
+`acceptance_protocol_v2=reviewed-implementation-required`. A later separately reviewed update must pin
+the exact approved platform paths, fixture identities, readiness states, and
+validator before any platform subject can become ready. Run
+`/bin/sh tools/ci/check-sprint-alpha-gate-report-v2-policy.sh` to validate the
+reporter and `/bin/sh tools/ci/report-sprint-alpha-gates-v2.sh` to print the
+orientation report. Neither reporter contacts GitHub, proves the active Codex
+permission profile, or replaces strict local/remote preflight evidence.

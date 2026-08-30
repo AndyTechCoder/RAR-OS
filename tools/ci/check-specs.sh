@@ -55,6 +55,7 @@ docs/proposals/0023-alpha-boot-determinism-and-entry-state.md
 docs/proposals/0024-alpha-controller-helper-build-trust.md
 docs/proposals/0025-alpha-gui-continuity-evidence-sequencing.md
 docs/proposals/0026-alpha-platform-payload-and-state-sources.md
+docs/proposals/0030-alpha-accepted-evidence-publication-recovery.md
 docs/proposals/alpha-decision-integration-plan.md
 docs/tasks/sprint-alpha-completion-evidence-map.md
 spec/alpha/lab/README.md
@@ -107,6 +108,12 @@ spec/alpha/boot/alpha-boot-v0.fields
 spec/alpha/boot/cases.v0
 spec/alpha/evidence/README.md
 spec/alpha/evidence/acceptance-v1.plan
+spec/alpha/evidence/acceptance-v2.plan
+spec/alpha/evidence/acceptance-v2.fields
+spec/alpha/evidence/acceptance-v2-cases.v0
+spec/alpha/evidence/acceptance-v2-selection-digests.v0
+spec/alpha/evidence/accepted-evidence-v0.fields
+spec/alpha/evidence/accepted-evidence-v0-cases.v0
 docs/adr/0011-release-0-reproducibility-gate-phasing.md
 docs/adr/0012-release-0-host-bootstrap-trust-and-snapshot.md
 docs/release-0/build/prompt-4-remediation.md
@@ -138,9 +145,16 @@ tools/ci/check-local-sprint-preflight.sh
 tools/ci/check-local-readonly.sh
 tools/ci/report-sprint-alpha-gates.sh
 tools/ci/check-sprint-alpha-gate-report-policy.sh
+tools/ci/contracts/sprint-alpha-gate-report-v2.fields
+tools/ci/report-sprint-alpha-gates-v2.sh
+tools/ci/check-sprint-alpha-gate-report-v2-policy.sh
+tools/ci/test-sprint-alpha-gate-report-v2-policy.sh
 tools/ci/classify-proposed-adr.sh
 tools/ci/test-proposed-adr-classifier-policy.sh
 tools/ci/check-alpha-preimplementation-contracts.sh
+tools/ci/check-acceptance-v2.sh
+tools/ci/verify-accepted-evidence-v0.sh
+tools/ci/test-accepted-evidence-v0-policy.sh
 tools/ci/test-alpha-preimplementation-contract-policy.sh
 tools/ci/check-remote-sprint-preflight.sh
 tools/ci/test-local-sprint-preflight-policy.sh
@@ -265,7 +279,7 @@ printf '%s\n' "$required_files" | while IFS= read -r file; do
     [ -s "$file" ] || fail "empty required file: $file"
 done
 
-for script in tools/ci/check-specs.sh tools/ci/check-specifications-authority.sh tools/ci/test-specifications-authority-policy.sh tools/ci/check-sprint-static.sh tools/ci/check-local-sprint-preflight.sh tools/ci/check-remote-sprint-preflight.sh tools/ci/test-local-sprint-preflight-policy.sh tools/ci/check-alpha-preimplementation-contracts.sh tools/ci/test-alpha-preimplementation-contract-policy.sh tools/ci/check-development-lab-profile-v2.sh tools/ci/test-development-lab-profile-v2-policy.sh tools/ci/check-development-controller-v2.sh tools/ci/test-development-controller-v2-policy.sh tools/ci/check-controller-handoff-core.sh tools/ci/check-controller-handoff-attempt-v0.sh tools/ci/test-controller-handoff-attempt-v0-policy.sh tools/ci/check-controller-helper-inventory-v0.sh tools/ci/test-controller-helper-inventory-v0-policy.sh tools/ci/check-controller-helper-build-evidence-v0.sh tools/ci/check-controller-helper-build-receipt-v0.sh tools/ci/check-controller-helper-test-evidence-v0.sh tools/ci/test-controller-helper-evidence-v0-policy.sh tools/ci/check-reference-evidence-v0.sh tools/ci/test-reference-evidence-v0-policy.sh tools/ci/check-reference-verdict-v0.sh tools/ci/test-reference-verdict-v0-policy.sh tools/ci/test-release-0-reference-harness-policy.sh tools/ci/check-portable-stat-policy.sh tools/ci/test-portable-stat-policy.sh tools/ci/check-containerfile-static-policy.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/launch-cloud-target.sh tools/ci/prepare-launch-control.sh tools/ci/wait-for-launch-release.sh tools/ci/check-workspace-budget.sh tools/ci/check-workspace-budget-values.sh tools/ci/require-ephemeral-policy-test-root.sh tools/ci/check-ephemeral-policy-test-confinement.sh tools/ci/run-ephemeral-policy-tests.sh tools/ci/run-qmp-client-unit-tests.sh tools/ci/run-rootfs-proof-unit-tests.sh tools/ci/check-rootfs-proof-source.sh tools/ci/verify-cloud-target-tools.sh tools/ci/development-probe-status.sh tools/ci/test-development-probe-policy.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/alpha/lab/fixtures/generate.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
+for script in tools/ci/check-specs.sh tools/ci/check-specifications-authority.sh tools/ci/test-specifications-authority-policy.sh tools/ci/check-sprint-static.sh tools/ci/check-local-sprint-preflight.sh tools/ci/check-remote-sprint-preflight.sh tools/ci/test-local-sprint-preflight-policy.sh tools/ci/check-alpha-preimplementation-contracts.sh tools/ci/check-acceptance-v2.sh tools/ci/verify-accepted-evidence-v0.sh tools/ci/test-accepted-evidence-v0-policy.sh tools/ci/test-alpha-preimplementation-contract-policy.sh tools/ci/check-development-lab-profile-v2.sh tools/ci/test-development-lab-profile-v2-policy.sh tools/ci/check-development-controller-v2.sh tools/ci/test-development-controller-v2-policy.sh tools/ci/check-controller-handoff-core.sh tools/ci/check-controller-handoff-attempt-v0.sh tools/ci/test-controller-handoff-attempt-v0-policy.sh tools/ci/check-controller-helper-inventory-v0.sh tools/ci/test-controller-helper-inventory-v0-policy.sh tools/ci/check-controller-helper-build-evidence-v0.sh tools/ci/check-controller-helper-build-receipt-v0.sh tools/ci/check-controller-helper-test-evidence-v0.sh tools/ci/test-controller-helper-evidence-v0-policy.sh tools/ci/check-reference-evidence-v0.sh tools/ci/test-reference-evidence-v0-policy.sh tools/ci/check-reference-verdict-v0.sh tools/ci/test-reference-verdict-v0-policy.sh tools/ci/test-release-0-reference-harness-policy.sh tools/ci/check-portable-stat-policy.sh tools/ci/test-portable-stat-policy.sh tools/ci/check-containerfile-static-policy.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/launch-cloud-target.sh tools/ci/prepare-launch-control.sh tools/ci/wait-for-launch-release.sh tools/ci/check-workspace-budget.sh tools/ci/check-workspace-budget-values.sh tools/ci/require-ephemeral-policy-test-root.sh tools/ci/check-ephemeral-policy-test-confinement.sh tools/ci/run-ephemeral-policy-tests.sh tools/ci/run-qmp-client-unit-tests.sh tools/ci/run-rootfs-proof-unit-tests.sh tools/ci/check-rootfs-proof-source.sh tools/ci/verify-cloud-target-tools.sh tools/ci/development-probe-status.sh tools/ci/test-development-probe-policy.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/alpha/lab/fixtures/generate.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
     [ -x "$script" ] || fail "required script is not executable: $script"
 done
 
@@ -283,6 +297,7 @@ for policy_file in AGENTS.md docs/host-safety.md; do
 done
 [ "$(sed -n '1p' spec/alpha/evidence/acceptance-v1.plan)" = schema=rar-alpha-acceptance-plan-v1 ] || fail "Alpha evidence protocol schema is invalid"
 [ "$(awk -F '|' '!/^#/ && !/^schema=/ && NF { count++; if (NF != 5 || $1 !~ /^[A-G]$/ || $2 !~ /^(none|continue|key:[a-z0-9-]+|pointer:[0-9]+,[0-9]+,[0-9]+)$/ || $3 !~ /^[a-z0-9:-]+$/ || $4 !~ /^[a-z0-9-]+$/ || $5 !~ /^[01]$/) bad=1 } END { if (bad) exit 1; print count + 0 }' spec/alpha/evidence/acceptance-v1.plan)" -eq 45 ] || fail "Alpha evidence protocol is incomplete or malformed"
+/bin/sh tools/ci/check-acceptance-v2.sh >/dev/null
 /bin/sh tools/ci/check-development-lab-profile.sh >/dev/null
 /bin/sh tools/ci/check-development-lab-profile-v2.sh >/dev/null
 /bin/sh tools/ci/check-development-controller-v2.sh >/dev/null
@@ -302,6 +317,13 @@ historical_gate_report_sha=$(env LC_ALL=C LANG=C /usr/bin/shasum -a 256 \
 if /bin/sh tools/ci/report-sprint-alpha-gates.sh >/dev/null 2>&1; then
     fail "historical gate-report v1 remains active after ADR 0022-0026 acceptance"
 fi
+/bin/sh tools/ci/check-sprint-alpha-gate-report-v2-policy.sh >/dev/null
+gate_report_v2=$(/bin/sh tools/ci/report-sprint-alpha-gates-v2.sh)
+[ "$(printf '%s\n' "$gate_report_v2" | grep -Fxc 'schema=rar-sprint-alpha-gate-report-v2')" -eq 1 ] || fail "gate-report v2 schema is unavailable"
+[ "$(printf '%s\n' "$gate_report_v2" | grep -Fxc 'adr_0026=accepted')" -eq 1 ] || fail "gate-report v2 does not classify canonical ADR 0026"
+[ "$(printf '%s\n' "$gate_report_v2" | grep -Fxc 'platform_source_set=blocked')" -eq 1 ] || fail "gate-report v2 does not fail closed on unbound platform sources"
+[ "$(printf '%s\n' "$gate_report_v2" | grep -Fxc 'acceptance_protocol_v2=reviewed-implementation-required')" -eq 1 ] || fail "gate-report v2 overstates acceptance v2 activation"
+[ "$(printf '%s\n' "$gate_report_v2" | grep -Fxc 'overall=blocked')" -eq 1 ] || fail "gate-report v2 overstates Alpha readiness"
 /bin/sh tools/ci/test-proposed-adr-classifier-policy.sh >/dev/null
 [ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
     docs/adr/0022-alpha-graphics-input-authority.md 0022 \
@@ -318,6 +340,9 @@ fi
 [ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
     docs/adr/0026-alpha-platform-payload-and-state-sources.md 0026 \
     docs/approval-record.md)" = accepted ] || fail "ADR 0026 decision state is inconsistent"
+[ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
+    docs/proposals/0030-alpha-accepted-evidence-publication-recovery.md 0030 \
+    docs/approval-record.md)" = owner-decision-required ] || fail "ADR 0030 proposal overstates authority"
 grep -qx 'Status: Non-authoritative preparation — implementation remains blocked' \
     docs/tasks/sprint-alpha-milestone-a-execution-map.md || fail "Milestone A execution map overstates authority"
 grep -qx 'Status: Non-authoritative preparation — implementation remains sequential and gated' \

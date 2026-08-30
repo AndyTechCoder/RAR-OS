@@ -3,6 +3,10 @@ status=experimental-inactive
 instance_schema=rar-alpha-development-controller-plan-v0
 phase_count=9
 actors=controller,build,reference,launch
+acceptance_protocol=spec/alpha/evidence/acceptance-v2.plan
+acceptance_protocol_sha256=ffdb07b584abc94122b14a416593916cf18df439de042c97ff83fda9e4444ccd
+accepted_evidence_contract=spec/alpha/evidence/accepted-evidence-v0.fields
+accepted_evidence_contract_sha256=73874f4e3ea10bf356641365819fcc8075cd98f53c3f3c5fa28b2868a11c1703
 phase_field=ordinal,name,actor,applicability,input,output,next
 phase|1|preflight|controller|A-G|trusted-main+source-identity+profile-instance+contracts+inventories|validated-identities|2
 phase|2|build-one|build|A-G|source-read-only+compiler+linker|artifact-one+transcript-one|3
@@ -11,8 +15,8 @@ phase|4|freeze|controller|A-G|two-bounded-build-outputs|frozen-artifact+frozen-t
 phase|5|reference|reference|F-G|frozen-transcript-read-only+two-references+harness|comparison-evidence|6
 phase|6|reference-verify|controller|F-G|frozen-transcript+comparison-evidence+reference-inventory|reference-verdict|7
 phase|7|launch|launch|A-G|frozen-artifact-read-only+machine-profile+trusted-controller|launch-evidence|8
-phase|8|evidence-verify|controller|A-G|launch-evidence+acceptance-plan+frozen-digests+role-inventories+reference-verdict|accepted-evidence-set+reference-verdict-digest|9
-phase|9|retain|controller|A-G|accepted-evidence-set+reference-verdict-digest|bounded-retained-evidence+completion-report+reference-verdict|complete
+phase|8|evidence-verify|controller|A-G|launch-evidence+acceptance-plan+frozen-digests+role-inventories+reference-verdict|accepted-evidence-record+reference-verdict-digest|9
+phase|9|retain|controller|A-G|accepted-evidence-record+reference-verdict-digest|bounded-retained-evidence+completion-report+reference-verdict|complete
 skip_rule|reference|A-E|emit-controller-owned-reference-verdict-not-required,no-reference-container-created,continue-at-phase-7
 verdict_rule|reference|F-G:accepted-only-after-both-references-match-each-other-and-target-with-real-inventory-and-evidence-digests,A-E:not-required-only-from-trusted-controller-with-zero-inventory-and-evidence-digests,canonical-record-bound-to-probe+controller+source+transcript,phase-8-requires-exactly-one-verdict,retained-set-includes-verdict-and-digest
 freshness_rule|build-one-build-two|distinct-fresh-containers,distinct-empty-output-mounts,same-source-digest,same-tool-identities
@@ -23,6 +27,8 @@ failure_rule=stop-current-role,remove-current-role,retain-bounded-controller-log
 timeout_rule=per-role-1..1200-seconds,total-controller-1..3600-seconds,no-unbounded-poll
 activation_rule=controller-source-merged-main,profile-ready,all-identities-real,all-inventories-verified,two-image-reproduction-evidence,correctness-review,security-review,external-owner-authorized-cloud-run
 profile_rule=blocked-instance-validates-and-stops-before-any-effect,ready-instance-requires-all-activation-identities-and-reviews
+acceptance_rule=controller+profile+launch+verifier+transcript-bind-exact-v2-digest,v1-or-missing+mismatched+duplicate-identity-rejects
+accepted_evidence_rule=phase-8-recomputes-and-binds-fresh-attempt+probe+controller+source+artifact+protocol+profile+tools+outputs+handoff+reference+inventories,any-replay-or-mismatch-rejects
 inactive_rule=blocked-profile-means-no-container-command,no-cloud-command,no-network-command,no-credential-read
 publication_rule=no-push,no-PR-change,no-merge,no-release,no-deployment
 target_rule=cloud-only-never-Mac,artifact-unsigned-until-Milestone-F-evidence,reference-code-never-target-linked

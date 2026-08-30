@@ -6,10 +6,18 @@ case "$probe" in milestone-a) rank=1 ;; milestone-b) rank=2 ;; milestone-c) rank
 [ -x "$client" ] || exit 1
 [ "$evidence" = /evidence ] && [ -d "$evidence" ] && [ ! -L "$evidence" ] || exit 1
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-plan=$root/spec/alpha/evidence/acceptance-v1.plan
+plan=$root/spec/alpha/evidence/acceptance-v2.plan
+protocol_sha256=ffdb07b584abc94122b14a416593916cf18df439de042c97ff83fda9e4444ccd
 [ -f "$plan" ] && [ ! -L "$plan" ] || exit 1
+if [ -x /usr/bin/sha256sum ]; then
+    actual_protocol_sha256=$(/usr/bin/sha256sum "$plan" | /usr/bin/awk '{ print $1 }')
+else
+    actual_protocol_sha256=$(/usr/bin/shasum -a 256 "$plan" | /usr/bin/awk '{ print $1 }')
+fi
+[ "$actual_protocol_sha256" = "$protocol_sha256" ] || exit 1
+[ "$(/usr/bin/sed -n '1p' "$plan")" = schema=rar-alpha-acceptance-plan-v2 ] || exit 1
 
-selected=$evidence/selected-plan.v1
+selected=$evidence/selected-plan.v2
 /usr/bin/awk -F '|' -v maximum="$rank" '
     function value(letter) { return index("ABCDEFG", letter) }
     /^#/ || /^schema=/ || !NF { next }
@@ -18,8 +26,10 @@ selected=$evidence/selected-plan.v1
 ' "$plan" > "$selected"
 [ -s "$selected" ] || exit 1
 
-transcript=$evidence/actions.v1
-/usr/bin/printf '%s\n' 'schema=rar-alpha-action-transcript-v1' > "$transcript"
+transcript=$evidence/actions.v2
+/usr/bin/printf '%s\n' \
+    'schema=rar-alpha-action-transcript-v2' \
+    "protocol_sha256=$protocol_sha256" > "$transcript"
 sequence=0
 last_offset=0
 "$client" wait-ready "$socket" 30000
@@ -54,9 +64,21 @@ while IFS='|' read -r minimum input marker label capture; do
     case "$after" in '' | *[!0-9]*) exit 1 ;; esac
     [ "$after" -gt "$before" ] || exit 1
     sequence=$((sequence + 1))
-    /usr/bin/printf '%s|%s|%s|%s|%s|%s\n' "$sequence" "$input" "$marker" "$before" "$after" "$label" >> "$transcript"
+    case "$capture" in
+        0) capture_sha256=none ;;
+        1)
+            "$client" capture "$socket" "$evidence/$label.ppm"
+            if [ -x /usr/bin/sha256sum ]; then
+                capture_sha256=$(/usr/bin/sha256sum "$evidence/$label.ppm" | /usr/bin/awk '{ print $1 }')
+            else
+                capture_sha256=$(/usr/bin/shasum -a 256 "$evidence/$label.ppm" | /usr/bin/awk '{ print $1 }')
+            fi
+            ;;
+        *) exit 1 ;;
+    esac
+    /usr/bin/printf '%s|%s|%s|%s|%s|%s|%s|%s\n' \
+        "$sequence" "$input" "$marker" "$before" "$after" "$label" "$capture" "$capture_sha256" >> "$transcript"
     last_offset=$after
-    case "$capture" in 0) ;; 1) "$client" capture "$socket" "$evidence/$label.ppm" ;; *) exit 1 ;; esac
 done < "$selected"
 
 /bin/rm -f "$selected"
