@@ -27,3 +27,10 @@ is not invoked by local checks or workflows and has no reviewed runtime tool-pin
 instance or candidate input. A later controller-bound review must supply and
 pin those bytes before runtime testing; a mechanically matching candidate
 remains non-reviewed and non-ready and cannot activate the CI lock or helper.
+
+Its inactive controller test design records an initial fail-closed risk catalog
+without adding a harness, workflow, container launch, or execution authority.
+It is intentionally incomplete and cannot produce an acceptance verdict.
+Runtime testing remains blocked on separate complete error/precedence/fault and
+evidence contracts, fixtures, a reviewed controller, fixture image, tool pins,
+exact subject pins, and a later reviewed workflow change.
