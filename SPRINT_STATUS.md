@@ -7,11 +7,14 @@
 - Objective: record the exact boot/platform owner choices, finish their reviewed
   contracts and controller/SSD gates before Milestone A, and separately finish
   acceptance-v2 publication/controller closure before Milestone B
-- Status source: verified GitHub `main` at
+- Status content baseline: verified implementation checkpoint at
   `65ae7aedd11298c8f15ed96cd94166e2afa03e2a`
-- Active status worktree: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/alpha-status-after-closure`
-- Active status branch: `codex/alpha-status-after-closure`
-- Latest exact-main validation: Specifications run `33308569835`, job
+- Status rebaseline evidence: docs-only PR #58 merged at
+  `2765128406210040bc0f16de586e9ccc8d39a452`; exact-main Specifications
+  run `33309132199`, job `99250884902`, passed
+- PR #58 status worktree (historical, preserved): `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/alpha-status-after-closure`
+- PR #58 status branch (historical, preserved): `codex/alpha-status-after-closure`
+- Latest recorded implementation validation: Specifications run `33308569835`, job
   `99249383222`, passed runner attestation, trusted-controller authority binding,
   full pinned read-only-container validation, and all external mutation tests
 - Bootstrap pull request: [#13](https://github.com/AndyTechCoder/RAR-OS/pull/13),
