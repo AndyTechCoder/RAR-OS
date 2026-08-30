@@ -12,8 +12,13 @@ authoritative.
   publication/recovery is a separate pre-Milestone B gate.
 - Preparation is tracked by the discrete authoritative gates below, not a
   percentage. Overall readiness remains blocked.
-- Exact verified main: `65ae7aedd11298c8f15ed96cd94166e2afa03e2a`;
-  Specifications run `33308569835` passed full validation and mutation tests.
+- Latest recorded implementation checkpoint:
+  `65ae7aedd11298c8f15ed96cd94166e2afa03e2a`; Specifications run
+  `33308569835` passed full validation and mutation tests.
+- Status rebaseline evidence: docs-only PR #58 merged at
+  `2765128406210040bc0f16de586e9ccc8d39a452`; exact-main Specifications
+  run `33309132199` passed. Later documentation commits do not invalidate
+  the recorded implementation checkpoint.
 - Target implementation: 0 of 7 milestones (A–G).
 - Working bootable GUI: does not exist yet.
 - Sprint Alpha completion evidence: none.
