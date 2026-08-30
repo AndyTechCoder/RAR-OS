@@ -107,6 +107,12 @@ spec/alpha/boot/alpha-boot-v0.fields
 spec/alpha/boot/cases.v0
 spec/alpha/evidence/README.md
 spec/alpha/evidence/acceptance-v1.plan
+spec/alpha/evidence/acceptance-v2.plan
+spec/alpha/evidence/acceptance-v2.fields
+spec/alpha/evidence/acceptance-v2-cases.v0
+spec/alpha/evidence/acceptance-v2-selection-digests.v0
+spec/alpha/evidence/accepted-evidence-v0.fields
+spec/alpha/evidence/accepted-evidence-v0-cases.v0
 docs/adr/0011-release-0-reproducibility-gate-phasing.md
 docs/adr/0012-release-0-host-bootstrap-trust-and-snapshot.md
 docs/release-0/build/prompt-4-remediation.md
@@ -141,6 +147,9 @@ tools/ci/check-sprint-alpha-gate-report-policy.sh
 tools/ci/classify-proposed-adr.sh
 tools/ci/test-proposed-adr-classifier-policy.sh
 tools/ci/check-alpha-preimplementation-contracts.sh
+tools/ci/check-acceptance-v2.sh
+tools/ci/verify-accepted-evidence-v0.sh
+tools/ci/test-accepted-evidence-v0-policy.sh
 tools/ci/test-alpha-preimplementation-contract-policy.sh
 tools/ci/check-remote-sprint-preflight.sh
 tools/ci/test-local-sprint-preflight-policy.sh
@@ -265,7 +274,7 @@ printf '%s\n' "$required_files" | while IFS= read -r file; do
     [ -s "$file" ] || fail "empty required file: $file"
 done
 
-for script in tools/ci/check-specs.sh tools/ci/check-specifications-authority.sh tools/ci/test-specifications-authority-policy.sh tools/ci/check-sprint-static.sh tools/ci/check-local-sprint-preflight.sh tools/ci/check-remote-sprint-preflight.sh tools/ci/test-local-sprint-preflight-policy.sh tools/ci/check-alpha-preimplementation-contracts.sh tools/ci/test-alpha-preimplementation-contract-policy.sh tools/ci/check-development-lab-profile-v2.sh tools/ci/test-development-lab-profile-v2-policy.sh tools/ci/check-development-controller-v2.sh tools/ci/test-development-controller-v2-policy.sh tools/ci/check-controller-handoff-core.sh tools/ci/check-controller-handoff-attempt-v0.sh tools/ci/test-controller-handoff-attempt-v0-policy.sh tools/ci/check-controller-helper-inventory-v0.sh tools/ci/test-controller-helper-inventory-v0-policy.sh tools/ci/check-controller-helper-build-evidence-v0.sh tools/ci/check-controller-helper-build-receipt-v0.sh tools/ci/check-controller-helper-test-evidence-v0.sh tools/ci/test-controller-helper-evidence-v0-policy.sh tools/ci/check-reference-evidence-v0.sh tools/ci/test-reference-evidence-v0-policy.sh tools/ci/check-reference-verdict-v0.sh tools/ci/test-reference-verdict-v0-policy.sh tools/ci/test-release-0-reference-harness-policy.sh tools/ci/check-portable-stat-policy.sh tools/ci/test-portable-stat-policy.sh tools/ci/check-containerfile-static-policy.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/launch-cloud-target.sh tools/ci/prepare-launch-control.sh tools/ci/wait-for-launch-release.sh tools/ci/check-workspace-budget.sh tools/ci/check-workspace-budget-values.sh tools/ci/require-ephemeral-policy-test-root.sh tools/ci/check-ephemeral-policy-test-confinement.sh tools/ci/run-ephemeral-policy-tests.sh tools/ci/run-qmp-client-unit-tests.sh tools/ci/run-rootfs-proof-unit-tests.sh tools/ci/check-rootfs-proof-source.sh tools/ci/verify-cloud-target-tools.sh tools/ci/development-probe-status.sh tools/ci/test-development-probe-policy.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/alpha/lab/fixtures/generate.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
+for script in tools/ci/check-specs.sh tools/ci/check-specifications-authority.sh tools/ci/test-specifications-authority-policy.sh tools/ci/check-sprint-static.sh tools/ci/check-local-sprint-preflight.sh tools/ci/check-remote-sprint-preflight.sh tools/ci/test-local-sprint-preflight-policy.sh tools/ci/check-alpha-preimplementation-contracts.sh tools/ci/check-acceptance-v2.sh tools/ci/verify-accepted-evidence-v0.sh tools/ci/test-accepted-evidence-v0-policy.sh tools/ci/test-alpha-preimplementation-contract-policy.sh tools/ci/check-development-lab-profile-v2.sh tools/ci/test-development-lab-profile-v2-policy.sh tools/ci/check-development-controller-v2.sh tools/ci/test-development-controller-v2-policy.sh tools/ci/check-controller-handoff-core.sh tools/ci/check-controller-handoff-attempt-v0.sh tools/ci/test-controller-handoff-attempt-v0-policy.sh tools/ci/check-controller-helper-inventory-v0.sh tools/ci/test-controller-helper-inventory-v0-policy.sh tools/ci/check-controller-helper-build-evidence-v0.sh tools/ci/check-controller-helper-build-receipt-v0.sh tools/ci/check-controller-helper-test-evidence-v0.sh tools/ci/test-controller-helper-evidence-v0-policy.sh tools/ci/check-reference-evidence-v0.sh tools/ci/test-reference-evidence-v0-policy.sh tools/ci/check-reference-verdict-v0.sh tools/ci/test-reference-verdict-v0-policy.sh tools/ci/test-release-0-reference-harness-policy.sh tools/ci/check-portable-stat-policy.sh tools/ci/test-portable-stat-policy.sh tools/ci/check-containerfile-static-policy.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/launch-cloud-target.sh tools/ci/prepare-launch-control.sh tools/ci/wait-for-launch-release.sh tools/ci/check-workspace-budget.sh tools/ci/check-workspace-budget-values.sh tools/ci/require-ephemeral-policy-test-root.sh tools/ci/check-ephemeral-policy-test-confinement.sh tools/ci/run-ephemeral-policy-tests.sh tools/ci/run-qmp-client-unit-tests.sh tools/ci/run-rootfs-proof-unit-tests.sh tools/ci/check-rootfs-proof-source.sh tools/ci/verify-cloud-target-tools.sh tools/ci/development-probe-status.sh tools/ci/test-development-probe-policy.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/alpha/lab/fixtures/generate.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
     [ -x "$script" ] || fail "required script is not executable: $script"
 done
 
@@ -283,6 +292,7 @@ for policy_file in AGENTS.md docs/host-safety.md; do
 done
 [ "$(sed -n '1p' spec/alpha/evidence/acceptance-v1.plan)" = schema=rar-alpha-acceptance-plan-v1 ] || fail "Alpha evidence protocol schema is invalid"
 [ "$(awk -F '|' '!/^#/ && !/^schema=/ && NF { count++; if (NF != 5 || $1 !~ /^[A-G]$/ || $2 !~ /^(none|continue|key:[a-z0-9-]+|pointer:[0-9]+,[0-9]+,[0-9]+)$/ || $3 !~ /^[a-z0-9:-]+$/ || $4 !~ /^[a-z0-9-]+$/ || $5 !~ /^[01]$/) bad=1 } END { if (bad) exit 1; print count + 0 }' spec/alpha/evidence/acceptance-v1.plan)" -eq 45 ] || fail "Alpha evidence protocol is incomplete or malformed"
+/bin/sh tools/ci/check-acceptance-v2.sh >/dev/null
 /bin/sh tools/ci/check-development-lab-profile.sh >/dev/null
 /bin/sh tools/ci/check-development-lab-profile-v2.sh >/dev/null
 /bin/sh tools/ci/check-development-controller-v2.sh >/dev/null

@@ -45,6 +45,12 @@ expect_rejected widened-timeout
 /usr/bin/sed 's/^transcript_mib=1$/transcript_mib=2/' "$source" > "$profile"
 expect_rejected widened-transcript
 
+/usr/bin/sed 's|^acceptance_plan_path=.*$|acceptance_plan_path=spec/alpha/evidence/acceptance-v1.plan|' "$source" > "$profile"
+expect_rejected historical-acceptance-plan
+
+/usr/bin/sed 's/^acceptance_plan_sha256=.*$/acceptance_plan_sha256=f7e66d58200272fc239283c42d16389584e5d647362e8623ac439b71d728ec1e/' "$source" > "$profile"
+expect_rejected historical-acceptance-digest
+
 /usr/bin/sed 's/^schema=.*$/schema=$(id)/' "$source" > "$profile"
 expect_rejected shell-syntax
 

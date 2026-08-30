@@ -63,6 +63,7 @@ source_status=$(git_read "$source_root" status --porcelain=v1 --untracked-files=
 set -- \
     .github/workflows/specifications.yml \
     tools \
+    spec/alpha/evidence \
     spec/alpha/lab/fixtures \
     spec/fixtures/release-0 \
     sdk/generated/release-0 \

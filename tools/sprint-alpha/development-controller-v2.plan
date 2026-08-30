@@ -2,6 +2,10 @@ schema=rar-alpha-development-controller-plan-v0
 state=blocked
 contract=spec/alpha/lab/controller-state-machine-v0.fields
 profile=tools/sprint-alpha/development-lab-v2.env
+acceptance_protocol=spec/alpha/evidence/acceptance-v2.plan
+acceptance_protocol_sha256=ffdb07b584abc94122b14a416593916cf18df439de042c97ff83fda9e4444ccd
+accepted_evidence_contract=spec/alpha/evidence/accepted-evidence-v0.fields
+accepted_evidence_contract_sha256=73874f4e3ea10bf356641365819fcc8075cd98f53c3f3c5fa28b2868a11c1703
 01|preflight|controller|A-G|validated-identities
 02|build-one|build|A-G|artifact-one+transcript-one
 03|build-two|build|A-G|artifact-two+transcript-two
@@ -9,6 +13,6 @@ profile=tools/sprint-alpha/development-lab-v2.env
 05|reference|reference|F-G|comparison-evidence
 06|reference-verify|controller|F-G|reference-verdict
 07|launch|launch|A-G|launch-evidence
-08|evidence-verify|controller|A-G|accepted-evidence-set+reference-verdict-digest
+08|evidence-verify|controller|A-G|accepted-evidence-record+reference-verdict-digest
 09|retain|controller|A-G|bounded-retained-evidence+completion-report+reference-verdict
 activation=forbidden

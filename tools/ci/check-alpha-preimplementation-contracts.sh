@@ -8,6 +8,7 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 alpha=${1-$root/spec/alpha}
 lab=$alpha/lab
 boot=$alpha/boot
+evidence=$alpha/evidence
 
 fail() {
     printf 'Alpha preimplementation contract blocked: %s\n' "$1" >&2
@@ -119,7 +120,13 @@ for file in \
     "$lab/cases.v0" \
     "$boot/README.md" \
     "$boot/alpha-boot-v0.fields" \
-    "$boot/cases.v0"; do
+    "$boot/cases.v0" \
+    "$evidence/acceptance-v2.plan" \
+    "$evidence/acceptance-v2.fields" \
+    "$evidence/acceptance-v2-cases.v0" \
+    "$evidence/acceptance-v2-selection-digests.v0" \
+    "$evidence/accepted-evidence-v0.fields" \
+    "$evidence/accepted-evidence-v0-cases.v0"; do
     require_file "$file"
 done
 
@@ -141,11 +148,11 @@ for fields in \
     validate_field_file "$fields"
 done
 
-require_digest "$lab/development-lab-profile-v2.fields" 86ca738fdfdef78b68d750375039ab316dff2976f0c1dd7f440eea59a881e06c
+require_digest "$lab/development-lab-profile-v2.fields" fa2e0335d7192ae8dd843419a92b06f868df1a1a6e5b5eef202493a7ae849fda
 require_digest "$lab/image-inventory-v2.fields" 76bb90f1e61721ffe1914ef004cf7b720f8a9b525251085f1e7bb45f4c8857c2
 require_digest "$lab/crypto-reference-inventory-v2.fields" 4d70ad91c91f6b38ecf54595e623d09a397ddbf049160e4ace3a00ef29083d18
 require_digest "$lab/comparison-transcript-v0.fields" 5f03fafed5eda2d373174aa0565ab08d009e07fe34e3bd7d2dc9c27c927dd9d7
-require_digest "$lab/controller-state-machine-v0.fields" c8f0c35ed55ba2785858562f4c7fabda3c5abc16e1af76af03d44a914bc5cc99
+require_digest "$lab/controller-state-machine-v0.fields" 57ad3d77c80318ffbbb64516866718da52fe62a6514c804d2ef6f49be33eaf1f
 require_digest "$lab/controller-handoff-v0.fields" dc589f4c57891e1292f608c5b5514a97fe25df928b69342ac8e9e1f72560852e
 require_digest "$lab/controller-handoff-manifest-v0.fields" ce13ec2588c21a8879d1eecf56ad9178d0f94806d3ffdd2d95af30ec206f9b02
 require_digest "$lab/controller-handoff-cases.v0" e23032bf96424850f6840ce6136b486c2fea433b378fd902365c47aac776d7eb
@@ -160,6 +167,13 @@ require_digest "$lab/reference-evidence-v0.fields" 2edbb270323d5fd074d3adc2929c6
 require_digest "$lab/cases.v0" 966d84739240b871d2dd22e362ce07ec0e82706cbde32dfd4e493c0bd9758342
 require_digest "$boot/alpha-boot-v0.fields" 8a97440b2366e3554cca8948c47d0df8e3146230a1d049ead48a105612623e0e
 require_digest "$boot/cases.v0" 370f829f791681cb4c1fb96dbf850f9535751a7a64295534562ea47a9f84bee3
+require_digest "$evidence/acceptance-v2.plan" ffdb07b584abc94122b14a416593916cf18df439de042c97ff83fda9e4444ccd
+require_digest "$evidence/acceptance-v2.fields" 7a4416fb7429de5244694f985c3c62deaa91d9d441f746ece4cd675367ef6e15
+require_digest "$evidence/acceptance-v2-cases.v0" e62b40fa7707a1b6540710328c0d049572c2a1f8de1d0dbc6d03c6d1dd2b62bf
+require_digest "$evidence/acceptance-v2-selection-digests.v0" 851e3c7dd14509a20f958545b8efbc63b5302251a1a16e0aca967efc815a6c3f
+require_digest "$evidence/accepted-evidence-v0.fields" 73874f4e3ea10bf356641365819fcc8075cd98f53c3f3c5fa28b2868a11c1703
+require_digest "$evidence/accepted-evidence-v0-cases.v0" a19f413b79e365c8ccbf975e5b1454f8fd3be7b02455a60e243bcf8aa2c2351f
+/bin/sh "$root/tools/ci/check-acceptance-v2.sh" >/dev/null || fail 'acceptance protocol v2 is invalid'
 
 if find "$lab" "$boot" ! -name '._*' -type l -print | /usr/bin/grep -q .; then
     fail 'contract tree contains a symbolic link'
@@ -190,7 +204,7 @@ require_line "$lab_profile" 'runtime_authority_rule|all|read-only-root,uid-65532
 require_line "$lab_profile" 'runtime_handoff_rule=controller-opens-bounded-regular-output-no-follow,checks-owner-mode-link-count-size-and-hash,copies-to-fresh-controller-owned-file,rechecks-same-descriptor,unmounts-prior-role-before-next-role'
 require_line "$lab_profile" 'identity_rule|image-digests|build,reference,launch-pairwise-distinct'
 require_line "$lab_profile" 'blocked_rule|all-activating-identities|unavailable'
-[ "$(/usr/bin/grep -c '^required_field|' "$lab_profile")" -eq 36 ] || fail 'Lab profile field set is incomplete'
+[ "$(/usr/bin/grep -c '^required_field|' "$lab_profile")" -eq 38 ] || fail 'Lab profile field set is incomplete'
 
 require_line "$image_inventory" 'schema=rar-alpha-image-inventory-schema-v2'
 require_line "$image_inventory" 'role_absence|build|reference,reference-harness,qemu,firmware,qmp-client'
