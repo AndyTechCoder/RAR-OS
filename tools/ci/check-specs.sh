@@ -247,9 +247,12 @@ tools/rar-lab/rootfs-proof/README.md
 tools/rar-lab/rootfs-proof/build-plan.v0
 tools/rar-lab/rootfs-proof/lib.rs
 tools/rar-lab/controller-handoff/README.md
+tools/rar-lab/controller-handoff/accepted_evidence.rs
 tools/rar-lab/controller-handoff/attempt.rs
 tools/rar-lab/controller-handoff/build-plan.v0
 tools/rar-lab/controller-handoff/contract.rs
+tools/rar-lab/controller-handoff/fixtures/accepted-evidence-golden-f.v0
+tools/rar-lab/controller-handoff/fixtures/accepted-evidence-golden.v0
 tools/rar-lab/controller-handoff/fixtures/active-header-prehash.v0.hex
 tools/rar-lab/controller-handoff/fixtures/manifest-golden.v0.hex
 tools/rar-lab/controller-handoff/fixtures/recovery-header-prehash.v0.hex

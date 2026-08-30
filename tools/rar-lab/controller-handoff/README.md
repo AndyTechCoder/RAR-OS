@@ -10,6 +10,17 @@ root path. It is not RAR OS target code, does not link into an image, and
 contains no process, container, cloud, network, external/release publication,
 or launch authority and cannot acquire filesystem roots autonomously.
 
+The side-effect-free `accepted_evidence` module implements the already-reviewed
+canonical 20-line `rar-alpha-accepted-evidence-v0` codec and binds a
+language-neutral golden record. It validates exact ordering, framing, lowercase
+hex, required nonzero values, the A–E/F–G reference rule, the accepted protocol
+identity, and the record preimage digest. It deliberately defines no final or
+temporary filename and has no filesystem, publication, cleanup, retry,
+recovery, controller, or activation authority. Those choices remain blocked on
+ADR 0030 and its future reviewed contract. The source checker pins the complete
+codec bytes as a positive allowlist; any source change therefore requires an
+explicitly reviewed checker transition before exact-main validation can pass.
+
 The side-effect-free `attempt` module implements structural encoders and decoders
 for the experimental active, transition, and recovery-inventory records. It
 checks wire sizes, field values, local canonical ordering, reserved bytes, and
@@ -38,8 +49,9 @@ owned persistent state after forced termination. Until isolated Linux tests,
 real identities, that recovery path, and independent review exist, the v2
 Development Lab remains blocked and this library cannot activate a probe.
 
-Source tests contain structural round trips and three language-neutral prehash
-header skeletons for future isolated execution. The separate shell validator
+Source tests contain structural round trips, one language-neutral accepted-
+evidence record, and three language-neutral prehash header skeletons for future
+isolated execution. The separate shell validator
 continues to bind all 97 declarative attempt cases; the Rust codec does not yet
 claim behavioral coverage of them,
 but repository gates do not compile or execute changed Rust code on the Mac.
