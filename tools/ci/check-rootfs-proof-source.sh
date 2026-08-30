@@ -38,6 +38,8 @@ for file in gzip.rs json.rs layout.rs lib.rs oci.rs sha256.rs; do
 done
 for test_name in \
     decodes_stored_fixed_and_dynamic_blocks \
+    decodes_matches_extra_bits_and_many_empty_fixed_blocks \
+    accepts_optional_headers_and_rejects_every_truncation \
     enforces_output_crc_size_and_single_member_bounds \
     rejects_bad_headers_stored_lengths_and_huffman_trees; do
     /usr/bin/grep -Fq "fn $test_name()" "$tree/gzip.rs" || exit 1

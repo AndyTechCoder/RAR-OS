@@ -133,18 +133,18 @@ fn require_header_offset(offset: usize, trailer_offset: usize) -> Result<(), Err
 fn decode_deflate(input: &[u8], maximum_output_bytes: usize) -> Result<Vec<u8>, Error> {
     let mut bits = BitReader::new(input);
     let mut output = Vec::new();
+    let fixed = fixed_trees()?;
     loop {
         let final_block = bits.read_bits(1)? != 0;
         match bits.read_bits(2)? {
             0 => decode_stored_block(&mut bits, &mut output, maximum_output_bytes)?,
             1 => {
-                let (literal, distance) = fixed_trees()?;
                 decode_huffman_block(
                     &mut bits,
                     &mut output,
                     maximum_output_bytes,
-                    &literal,
-                    &distance,
+                    &fixed.0,
+                    Some(&fixed.1),
                 )?;
             }
             2 => {
@@ -154,7 +154,7 @@ fn decode_deflate(input: &[u8], maximum_output_bytes: usize) -> Result<Vec<u8>, 
                     &mut output,
                     maximum_output_bytes,
                     &literal,
-                    &distance,
+                    distance.as_ref(),
                 )?;
             }
             _ => return Err(Error::InvalidBlockType),
@@ -187,7 +187,7 @@ fn decode_huffman_block(
     output: &mut Vec<u8>,
     maximum_output_bytes: usize,
     literal: &Huffman,
-    distance: &Huffman,
+    distance: Option<&Huffman>,
 ) -> Result<(), Error> {
     loop {
         let symbol = literal.decode(bits)?;
@@ -198,7 +198,7 @@ fn decode_huffman_block(
                 let index = symbol - 257;
                 let length = LENGTH_BASE[index]
                     + bits.read_bits(LENGTH_EXTRA[index])? as usize;
-                let distance_symbol = distance.decode(bits)?;
+                let distance_symbol = distance.ok_or(Error::InvalidDistance)?.decode(bits)?;
                 if distance_symbol >= DISTANCE_BASE.len() {
                     return Err(Error::InvalidDistance);
                 }
@@ -224,7 +224,7 @@ fn fixed_trees() -> Result<(Huffman, Huffman), Error> {
     ))
 }
 
-fn dynamic_trees(bits: &mut BitReader<'_>) -> Result<(Huffman, Huffman), Error> {
+fn dynamic_trees(bits: &mut BitReader<'_>) -> Result<(Huffman, Option<Huffman>), Error> {
     let literal_count = bits.read_bits(5)? as usize + 257;
     let distance_count = bits.read_bits(5)? as usize + 1;
     let code_count = bits.read_bits(4)? as usize + 4;
@@ -264,7 +264,15 @@ fn dynamic_trees(bits: &mut BitReader<'_>) -> Result<(Huffman, Huffman), Error> 
     if lengths[256] == 0 {
         return Err(Error::InvalidHuffmanTree);
     }
-    let distance = Huffman::new(&lengths[literal_count..])?;
+    let distance_lengths = &lengths[literal_count..];
+    let distance = if distance_lengths.iter().all(|length| *length == 0) {
+        if distance_count != 1 {
+            return Err(Error::InvalidHuffmanTree);
+        }
+        None
+    } else {
+        Some(Huffman::new(distance_lengths)?)
+    };
     Ok((literal, distance))
 }
 
@@ -546,6 +554,34 @@ mod tests {
     }
 
     #[test]
+    fn decodes_matches_extra_bits_and_many_empty_fixed_blocks() {
+        let matches = gzip_member(&fixed_match_deflate(), b"abcdeabcdeabcdea");
+        assert_eq!(
+            decode_gzip(&matches, 16).unwrap(),
+            b"abcdeabcdeabcdea"
+        );
+
+        let empty = gzip_member(&many_empty_fixed_blocks(512), b"");
+        assert_eq!(decode_gzip(&empty, 0).unwrap(), b"");
+    }
+
+    #[test]
+    fn accepts_optional_headers_and_rejects_every_truncation() {
+        let deflate = stored_deflate(b"header");
+        let mut member = optional_header_member(&deflate, b"header");
+        assert_eq!(decode_gzip(&member, 6).unwrap(), b"header");
+
+        let header_crc = 10 + 2 + 3 + 5 + 8;
+        member[header_crc] ^= 1;
+        assert_eq!(decode_gzip(&member, 6), Err(Error::HeaderChecksumMismatch));
+
+        let valid = gzip_member(&fixed_match_deflate(), b"abcdeabcdeabcdea");
+        for end in 0..valid.len() {
+            assert!(decode_gzip(&valid[..end], 16).is_err());
+        }
+    }
+
+    #[test]
     fn enforces_output_crc_size_and_single_member_bounds() {
         let member = gzip_member(&stored_deflate(b"bounded"), b"bounded");
         assert_eq!(decode_gzip(&member, 6), Err(Error::OutputTooLarge));
@@ -596,6 +632,20 @@ mod tests {
         gzip
     }
 
+    fn optional_header_member(deflate: &[u8], output: &[u8]) -> Vec<u8> {
+        let mut gzip = vec![0x1f, 0x8b, 8, 0x1e, 0, 0, 0, 0, 0, 255];
+        gzip.extend_from_slice(&3u16.to_le_bytes());
+        gzip.extend_from_slice(b"ext");
+        gzip.extend_from_slice(b"name\0");
+        gzip.extend_from_slice(b"comment\0");
+        let header_crc = crc32(&gzip) as u16;
+        gzip.extend_from_slice(&header_crc.to_le_bytes());
+        gzip.extend_from_slice(deflate);
+        gzip.extend_from_slice(&crc32(output).to_le_bytes());
+        gzip.extend_from_slice(&(output.len() as u32).to_le_bytes());
+        gzip
+    }
+
     fn stored_deflate(bytes: &[u8]) -> Vec<u8> {
         let length = u16::try_from(bytes.len()).unwrap();
         let mut output = vec![1];
@@ -618,6 +668,35 @@ mod tests {
         writer.finish()
     }
 
+    fn fixed_match_deflate() -> Vec<u8> {
+        let mut writer = BitWriter::default();
+        writer.write_bits(1, 1);
+        writer.write_bits(1, 2);
+        for byte in b"abcde" {
+            let (code, length) = fixed_literal_code(usize::from(*byte));
+            writer.write_huffman(code, length);
+        }
+        let (length_code, length_bits) = fixed_literal_code(265);
+        writer.write_huffman(length_code, length_bits);
+        writer.write_bits(0, 1);
+        writer.write_huffman(4, 5);
+        writer.write_bits(0, 1);
+        let (end, end_bits) = fixed_literal_code(256);
+        writer.write_huffman(end, end_bits);
+        writer.finish()
+    }
+
+    fn many_empty_fixed_blocks(count: usize) -> Vec<u8> {
+        let mut writer = BitWriter::default();
+        for block in 0..count {
+            writer.write_bits(if block + 1 == count { 1 } else { 0 }, 1);
+            writer.write_bits(1, 2);
+            let (end, length) = fixed_literal_code(256);
+            writer.write_huffman(end, length);
+        }
+        writer.finish()
+    }
+
     fn fixed_literal_code(symbol: usize) -> (u16, u8) {
         match symbol {
             0..=143 => (0x30 + symbol as u16, 8),
@@ -636,17 +715,24 @@ mod tests {
         writer.write_bits(0, 5);
         writer.write_bits(14, 4);
         for symbol in [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1] {
-            writer.write_bits(if matches!(symbol, 18 | 1) { 1 } else { 0 }, 3);
+            writer.write_bits(
+                match symbol {
+                    18 => 1,
+                    0 | 1 => 2,
+                    _ => 0,
+                },
+                3,
+            );
         }
-        writer.write_huffman(1, 1);
+        writer.write_huffman(0, 1);
         writer.write_bits(54, 7);
+        writer.write_huffman(3, 2);
         writer.write_huffman(0, 1);
-        writer.write_huffman(1, 1);
         writer.write_bits(127, 7);
-        writer.write_huffman(1, 1);
+        writer.write_huffman(0, 1);
         writer.write_bits(41, 7);
-        writer.write_huffman(0, 1);
-        writer.write_huffman(0, 1);
+        writer.write_huffman(3, 2);
+        writer.write_huffman(2, 2);
         writer.write_huffman(0, 1);
         writer.write_huffman(1, 1);
         writer.finish()
