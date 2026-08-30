@@ -38,6 +38,8 @@ tools/ci/check-specs.sh
     tools/ci/check-controller-handoff-attempt-v0.sh \
     tools/ci/test-controller-handoff-attempt-v0-policy.sh \
     tools/ci/check-controller-helper-inventory-v0.sh \
+    tools/ci/observe-controller-helper-closure.sh \
+    tools/ci/check-controller-helper-closure-observer-source.sh \
     tools/ci/test-controller-helper-inventory-v0-policy.sh \
     tools/ci/check-controller-helper-build-evidence-v0.sh \
     tools/ci/check-controller-helper-build-receipt-v0.sh \
@@ -106,6 +108,7 @@ tools/ci/test-development-probe-policy.sh
 /bin/sh tools/ci/test-proposed-adr-classifier-policy.sh
 /bin/sh tools/ci/check-alpha-preimplementation-contracts.sh
 /bin/sh tools/ci/check-acceptance-v2.sh
+/bin/sh tools/ci/check-controller-helper-closure-observer-source.sh
 /bin/sh tools/ci/test-controller-handoff-attempt-v0-policy.sh
 /bin/sh tools/ci/test-remote-checkpoint-policy.sh
 /bin/sh tools/ci/test-workspace-budget-policy.sh

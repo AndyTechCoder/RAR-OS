@@ -70,6 +70,14 @@ non-activating: it contains no compiler, builder, source, binary, or evidence
 identity and cannot become ready. The selected path must reproduce the same
 bounded helper twice and bind isolated test evidence before controller activation.
 
+`controller-helper-closure-observation-v0.fields` defines a source-only,
+inactive observer for a future separately authorized cloud run. The observer is
+not wired to automation, cannot compile or execute the helper or target, and
+cannot update any lock, inventory, profile, gate report, or readiness state. Its
+only permitted future output is a candidate closure manifest plus an
+`observed-not-reviewed-not-ready` receipt; both still require exact-set review
+and pinning before any helper build or test can be considered.
+
 `controller-helper-build-receipt-v0.fields` and
 `controller-helper-test-evidence-v0.fields` fix controller-owned receipts for
 two separately terminated build jobs and one thirteen-case test job. Contextual
