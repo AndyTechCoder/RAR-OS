@@ -128,8 +128,9 @@ behavior remain separate blocking contracts.
 class-and-occurrence-stage pairs exactly once. It separates ordinary pre-start
 fixtures, phase-synchronized controller mutations, separately reviewed injected
 faults, validation-declared source proofs, additional source-dominated guards,
-the fresh SHA-256 zero-digest residual, and two cases needing reviewed domain
-extensions: input aliasing and unrelated mount-info mutation. Lossy NUL-bearing
+the fresh SHA-256 zero-digest residual, and four occurrences needing reviewed
+domain extensions: input aliasing, unrelated mount-info mutation, and a
+cross-device mount during either closure pass. Lossy NUL-bearing
 tool-pin and observation behavior are assigned to the future fault contract
 rather than silently excluded. The catalog is not an executable case instance,
 runtime oracle, harness, result, or authority.
@@ -139,6 +140,16 @@ launch: no retained path, descriptor, backing handle, mount-namespace entry,
 `proc`/ptrace write, primary mutation, or repair may reach `/tmp` or the
 scratch subtree. Scratch syscall, tool, and output failures belong only to the
 separately reviewed fault contract.
+
+`controller-helper-closure-verifier-case-templates-v0` enumerates one structural
+base-relative primary token, phase window, repair token, and error oracle for
+each of the 125 currently constructible class-and-stage occurrences. Its base
+fixture and operator/repair semantics are intentionally absent, so the tokens
+are opaque identifiers and these are inactive templates rather than executable
+instances, fixtures, results, or acceptance evidence. A reviewed versioned
+operator/repair semantics contract, immutable base descriptor, fixture-image
+identity, controller, phase instrumentation, fault contract, evidence/verdict
+contracts, and exact-main validation remain blocking prerequisites.
 
 `controller-helper-build-receipt-v0.fields` and
 `controller-helper-test-evidence-v0.fields` fix controller-owned receipts for
