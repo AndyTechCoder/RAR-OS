@@ -1,8 +1,8 @@
 //! Bounded, dependency-free RFC 8878 frame decoder foundation.
 //!
 //! This decoder accepts raw and RLE blocks plus compressed blocks containing
-//! raw, RLE, or direct- or FSE-weight one- or four-stream Huffman literals and
-//! bounded FSE sequences.
+//! raw, RLE, or direct-, FSE-weight-, or prior-table one- or four-stream
+//! Huffman literals and bounded FSE sequences.
 //! Sequence headers and their predefined, RLE, FSE-compressed, or repeated
 //! tables are parsed and bounded, then decoded against bounded literal and
 //! match-copy output.
@@ -33,6 +33,7 @@ pub enum Error {
     InvalidLiteralsSection,
     InvalidHuffmanTree,
     InvalidHuffmanStream,
+    MissingHuffmanTree,
     InvalidFseTable,
     InvalidFseStream,
     InvalidSequenceHeader,
@@ -40,7 +41,6 @@ pub enum Error {
     InvalidSequenceStream,
     InvalidMatch,
     UnsupportedLiteralsFormat,
-    UnsupportedLiteralsCompression,
     TrailingBlockData,
     OutputTooLarge,
     ContentSizeMismatch,
@@ -204,7 +204,7 @@ fn decode_compressed_block(
     let first = reader.byte()?;
     let literals_type = first & 0x03;
     let size_format = (first >> 2) & 0x03;
-    let (regenerated_size, literals) = match literals_type {
+    let (regenerated_size, literals, huffman_table) = match literals_type {
         0 | 1 => {
             let regenerated_size = match size_format {
                 0 | 2 => usize::from(first >> 3),
@@ -234,9 +234,9 @@ fn decode_compressed_block(
                 )?,
                 _ => unreachable!(),
             }
-            (regenerated_size, literals)
+            (regenerated_size, literals, None)
         }
-        2 => {
+        2 | 3 => {
             let header_bytes = match size_format {
                 0 | 1 => 3,
                 2 => 4,
@@ -269,14 +269,24 @@ fn decode_compressed_block(
             if regenerated_size > block_maximum || compressed_size > block_maximum {
                 return Err(Error::InvalidLiteralsSection);
             }
-            let literals = decode_direct_huffman_literals(
+            let previous_table = if literals_type == 3 {
+                Some(
+                    sequence_state
+                        .huffman_table
+                        .as_ref()
+                        .ok_or(Error::MissingHuffmanTree)?,
+                )
+            } else {
+                None
+            };
+            let (literals, table) = decode_huffman_literals_with_table(
                 reader.take(compressed_size)?,
                 regenerated_size,
                 size_format != 0,
+                previous_table,
             )?;
-            (regenerated_size, literals)
+            (regenerated_size, literals, Some(table))
         }
-        3 => return Err(Error::UnsupportedLiteralsCompression),
         _ => unreachable!(),
     };
     if regenerated_size > block_maximum {
@@ -289,7 +299,11 @@ fn decode_compressed_block(
         if reader.remaining() != 0 {
             return Err(Error::TrailingBlockData);
         }
-        return extend_bounded(output, &literals, maximum_output_bytes);
+        extend_bounded(output, &literals, maximum_output_bytes)?;
+        if let Some(table) = huffman_table {
+            sequence_state.huffman_table = Some(table);
+        }
+        return Ok(());
     }
     let tables = tables.ok_or(Error::InvalidSequenceTable)?;
     let block_output_limit = output
@@ -309,6 +323,9 @@ fn decode_compressed_block(
     )?;
     reader.take(reader.remaining())?;
     sequence_state.tables = Some(tables);
+    if let Some(table) = huffman_table {
+        sequence_state.huffman_table = Some(table);
+    }
     Ok(())
 }
 
@@ -317,111 +334,131 @@ fn decode_direct_huffman_literals(
     regenerated_size: usize,
     four_streams: bool,
 ) -> Result<Vec<u8>, Error> {
-    let mut reader = Reader::new(content);
-    let header = reader.byte()?;
-    let mut weights = if header >= 128 {
-        let described_symbols = usize::from(header - 127);
-        let encoded_weight_bytes = described_symbols.div_ceil(2);
-        let encoded_weights = reader.take(encoded_weight_bytes)?;
-        let mut weights = Vec::with_capacity(described_symbols + 1);
-        for symbol in 0..described_symbols {
-            let byte = encoded_weights[symbol / 2];
-            weights.push(if symbol % 2 == 0 { byte >> 4 } else { byte & 0x0f });
-        }
-        weights
-    } else {
-        let description = reader.take(usize::from(header))?;
-        decode_fse_weights(description)?
-    };
+    Ok(decode_huffman_literals_with_table(content, regenerated_size, four_streams, None)?.0)
+}
 
-    let mut total = 0usize;
-    for weight in &weights {
-        if *weight > 11 {
+fn decode_huffman_literals_with_table(
+    content: &[u8],
+    regenerated_size: usize,
+    four_streams: bool,
+    previous: Option<&HuffmanTable>,
+) -> Result<(Vec<u8>, HuffmanTable), Error> {
+    let mut reader = Reader::new(content);
+    let table = if let Some(table) = previous {
+        table.clone()
+    } else {
+        let header = reader.byte()?;
+        let mut weights = if header >= 128 {
+            let described_symbols = usize::from(header - 127);
+            let encoded_weight_bytes = described_symbols.div_ceil(2);
+            let encoded_weights = reader.take(encoded_weight_bytes)?;
+            let mut weights = Vec::with_capacity(described_symbols + 1);
+            for symbol in 0..described_symbols {
+                let byte = encoded_weights[symbol / 2];
+                weights.push(if symbol % 2 == 0 {
+                    byte >> 4
+                } else {
+                    byte & 0x0f
+                });
+            }
+            weights
+        } else {
+            let description = reader.take(usize::from(header))?;
+            decode_fse_weights(description)?
+        };
+
+        let mut total = 0usize;
+        for weight in &weights {
+            if *weight > 11 {
+                return Err(Error::InvalidHuffmanTree);
+            }
+            if *weight != 0 {
+                total = total
+                    .checked_add(1usize << (u32::from(*weight) - 1))
+                    .ok_or(Error::InvalidHuffmanTree)?;
+            }
+        }
+        if total == 0 {
             return Err(Error::InvalidHuffmanTree);
         }
-        if *weight != 0 {
-            total = total
-                .checked_add(1usize << (u32::from(*weight) - 1))
+        let mut table_size = total
+            .checked_next_power_of_two()
+            .ok_or(Error::InvalidHuffmanTree)?;
+        if table_size == total {
+            table_size = table_size.checked_mul(2).ok_or(Error::InvalidHuffmanTree)?;
+        }
+        let inferred = table_size - total;
+        if !inferred.is_power_of_two() {
+            return Err(Error::InvalidHuffmanTree);
+        }
+        let inferred_weight = inferred.trailing_zeros() + 1;
+        let maximum_bits = table_size.trailing_zeros();
+        if maximum_bits == 0 || maximum_bits > 11 || inferred_weight > maximum_bits {
+            return Err(Error::InvalidHuffmanTree);
+        }
+        weights.push(inferred_weight as u8);
+
+        let maximum_bits = maximum_bits as usize;
+        let mut rank_count = [0usize; 12];
+        for weight in weights.iter().copied().filter(|weight| *weight != 0) {
+            let length = maximum_bits + 1 - usize::from(weight);
+            rank_count[length] = rank_count[length]
+                .checked_add(1)
                 .ok_or(Error::InvalidHuffmanTree)?;
         }
-    }
-    if total == 0 {
-        return Err(Error::InvalidHuffmanTree);
-    }
-    let mut table_size = total
-        .checked_next_power_of_two()
-        .ok_or(Error::InvalidHuffmanTree)?;
-    if table_size == total {
-        table_size = table_size.checked_mul(2).ok_or(Error::InvalidHuffmanTree)?;
-    }
-    let inferred = table_size - total;
-    if !inferred.is_power_of_two() {
-        return Err(Error::InvalidHuffmanTree);
-    }
-    let inferred_weight = inferred.trailing_zeros() + 1;
-    let maximum_bits = table_size.trailing_zeros();
-    if maximum_bits == 0 || maximum_bits > 11 || inferred_weight > maximum_bits {
-        return Err(Error::InvalidHuffmanTree);
-    }
-    weights.push(inferred_weight as u8);
 
-    let maximum_bits = maximum_bits as usize;
-    let mut rank_count = [0usize; 12];
-    for weight in weights.iter().copied().filter(|weight| *weight != 0) {
-        let length = maximum_bits + 1 - usize::from(weight);
-        rank_count[length] = rank_count[length]
-            .checked_add(1)
-            .ok_or(Error::InvalidHuffmanTree)?;
-    }
-
-    // RFC 8878 assigns ranges from the longest codes toward the shortest,
-    // preserving natural symbol order within each rank.  Building the full
-    // bounded lookup table also keeps every symbol decode O(1).
-    let mut rank_index = [0usize; 12];
-    for length in (1..=maximum_bits).rev() {
-        let width = 1usize << (maximum_bits - length);
-        rank_index[length - 1] = rank_index[length]
-            .checked_add(
-                rank_count[length]
-                    .checked_mul(width)
-                    .ok_or(Error::InvalidHuffmanTree)?,
-            )
-            .ok_or(Error::InvalidHuffmanTree)?;
-    }
-    if rank_index[0] != table_size {
-        return Err(Error::InvalidHuffmanTree);
-    }
-
-    let mut table = vec![None; table_size];
-    for (symbol, weight) in weights.iter().copied().enumerate() {
-        if weight == 0 {
-            continue;
+        // RFC 8878 assigns ranges from the longest codes toward the shortest,
+        // preserving natural symbol order within each rank. Building the full
+        // bounded lookup table also keeps every symbol decode O(1).
+        let mut rank_index = [0usize; 12];
+        for length in (1..=maximum_bits).rev() {
+            let width = 1usize << (maximum_bits - length);
+            rank_index[length - 1] = rank_index[length]
+                .checked_add(
+                    rank_count[length]
+                        .checked_mul(width)
+                        .ok_or(Error::InvalidHuffmanTree)?,
+                )
+                .ok_or(Error::InvalidHuffmanTree)?;
         }
-        let length = maximum_bits + 1 - usize::from(weight);
-        let first = rank_index[length];
-        let count = 1usize << (maximum_bits - length);
-        let end = first
-            .checked_add(count)
-            .ok_or(Error::InvalidHuffmanTree)?;
-        let slots = table
-            .get_mut(first..end)
-            .ok_or(Error::InvalidHuffmanTree)?;
-        if slots.iter().any(Option::is_some) {
+        if rank_index[0] != table_size {
             return Err(Error::InvalidHuffmanTree);
         }
-        slots.fill(Some(HuffmanEntry {
-            symbol: symbol as u8,
-            length: length as u8,
-        }));
-        rank_index[length] = end;
-    }
-    if table.iter().any(Option::is_none) {
-        return Err(Error::InvalidHuffmanTree);
-    }
+
+        let mut table = vec![None; table_size];
+        for (symbol, weight) in weights.iter().copied().enumerate() {
+            if weight == 0 {
+                continue;
+            }
+            let length = maximum_bits + 1 - usize::from(weight);
+            let first = rank_index[length];
+            let count = 1usize << (maximum_bits - length);
+            let end = first.checked_add(count).ok_or(Error::InvalidHuffmanTree)?;
+            let slots = table.get_mut(first..end).ok_or(Error::InvalidHuffmanTree)?;
+            if slots.iter().any(Option::is_some) {
+                return Err(Error::InvalidHuffmanTree);
+            }
+            slots.fill(Some(HuffmanEntry {
+                symbol: symbol as u8,
+                length: length as u8,
+            }));
+            rank_index[length] = end;
+        }
+        if table.iter().any(Option::is_none) {
+            return Err(Error::InvalidHuffmanTree);
+        }
+
+        HuffmanTable {
+            entries: table,
+            maximum_bits: maximum_bits as u8,
+        }
+    };
 
     if !four_streams {
         let stream = reader.take(reader.remaining())?;
-        return decode_huffman_stream(&table, maximum_bits as u8, stream, regenerated_size);
+        let output =
+            decode_huffman_stream(&table.entries, table.maximum_bits, stream, regenerated_size)?;
+        return Ok((output, table));
     }
     let first_size = usize::try_from(read_little_endian(&mut reader, 2)?)
         .map_err(|_| Error::InvalidHuffmanStream)?;
@@ -455,10 +492,11 @@ fn decode_direct_huffman_literals(
     ];
     let mut output = Vec::with_capacity(regenerated_size);
     for (stream, output_size) in streams.into_iter().zip(output_sizes) {
-        let decoded = decode_huffman_stream(&table, maximum_bits as u8, stream, output_size)?;
+        let decoded =
+            decode_huffman_stream(&table.entries, table.maximum_bits, stream, output_size)?;
         output.extend_from_slice(&decoded);
     }
-    Ok(output)
+    Ok((output, table))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -687,6 +725,7 @@ fn parse_sequence_table(
 
 struct SequenceState {
     tables: Option<SequenceTables>,
+    huffman_table: Option<HuffmanTable>,
     repeated_offsets: [usize; 3],
 }
 
@@ -694,6 +733,7 @@ impl SequenceState {
     fn new() -> Self {
         Self {
             tables: None,
+            huffman_table: None,
             repeated_offsets: [1, 4, 8],
         }
     }
@@ -1163,7 +1203,13 @@ fn decode_huffman_stream(
     Ok(output)
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct HuffmanTable {
+    entries: Vec<Option<HuffmanEntry>>,
+    maximum_bits: u8,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct HuffmanEntry {
     symbol: u8,
     length: u8,
@@ -1462,10 +1508,10 @@ mod tests {
         let truncated_huffman_header = compressed_frame(&[2, 0]);
         assert_eq!(decode_zstd(&truncated_huffman_header, 2), Err(Error::Truncated));
 
-        let treeless = compressed_frame(&[3, 0]);
+        let treeless = compressed_frame(&[0x13, 0x40, 0, 0x03, 0]);
         assert_eq!(
             decode_zstd(&treeless, 2),
-            Err(Error::UnsupportedLiteralsCompression)
+            Err(Error::MissingHuffmanTree)
         );
     }
 
@@ -1608,6 +1654,49 @@ mod tests {
     }
 
     #[test]
+    fn decodes_treeless_huffman_literals_across_blocks() {
+        let mut single = MAGIC.to_vec();
+        single.extend_from_slice(&[0x00, 0x18]);
+        let direct = [
+            0x42, 0x80, 0x01, 0x84, 0x43, 0x20, 0x10, 0x01, 0x0d, 0,
+        ];
+        append_block(&mut single, false, 2, direct.len(), &direct);
+        let raw_literals = [0x08, b'z', 0];
+        append_block(
+            &mut single,
+            false,
+            2,
+            raw_literals.len(),
+            &raw_literals,
+        );
+        let treeless = [0x13, 0x40, 0, 0x03, 0];
+        append_block(&mut single, true, 2, treeless.len(), &treeless);
+        assert_eq!(decode_zstd(&single, 6).unwrap(), [0, 1, 4, 5, b'z', 0]);
+
+        let mut four = MAGIC.to_vec();
+        four.extend_from_slice(&[0x00, 0x18]);
+        let two_symbol_tree = [0x22, 0xc0, 0, 0x80, 0x10, 0x05, 0];
+        append_block(
+            &mut four,
+            false,
+            2,
+            two_symbol_tree.len(),
+            &two_symbol_tree,
+        );
+        let treeless_four = [
+            0x87, 0x80, 0x02, // regenerated=8, compressed=10
+            1, 0, 1, 0, 1, 0, // jump table
+            0x05, 0x05, 0x05, 0x05, // four streams
+            0,
+        ];
+        append_block(&mut four, true, 2, treeless_four.len(), &treeless_four);
+        assert_eq!(
+            decode_zstd(&four, 10).unwrap(),
+            [0, 1, 0, 1, 0, 1, 0, 1, 0, 1]
+        );
+    }
+
+    #[test]
     fn decodes_fse_compressed_huffman_weights() {
         // Accuracy_Log=5 with normalized frequencies [16,16] decodes the
         // interleaved stream to weights [1,1]; the inferred final weight is 2.
@@ -1667,10 +1756,10 @@ mod tests {
             Err(Error::InvalidFseStream)
         );
 
-        let treeless = compressed_frame(&[3]);
+        let treeless = compressed_frame(&[0x13, 0x40, 0, 0x03, 0]);
         assert_eq!(
             decode_zstd(&treeless, 1),
-            Err(Error::UnsupportedLiteralsCompression)
+            Err(Error::MissingHuffmanTree)
         );
 
         let undersized_four_stream = compressed_frame(&[0x46, 0, 0]);
