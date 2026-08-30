@@ -187,6 +187,13 @@ ack ordering, nonscratch private backing, complete parent/entry metadata, and
 no visible staging residue. Pre-start and repair-coupled link cases remain
 blocked.
 
+`controller-helper-closure-verifier-observation-repair-semantics-v0` defines
+the three observation-receipt repair tokens used by eight structural templates.
+It derives exact manifest digest, LF-record-count, and raw-byte-count fields
+from the recorded post-primary manifest bytes while preserving every
+untargeted receipt field and the primary manifest. The contract is inactive,
+source-only, and grants no repair, controller, workflow, or execution authority.
+
 `controller-helper-build-receipt-v0.fields` and
 `controller-helper-test-evidence-v0.fields` fix controller-owned receipts for
 two separately terminated build jobs and one thirteen-case test job. Contextual

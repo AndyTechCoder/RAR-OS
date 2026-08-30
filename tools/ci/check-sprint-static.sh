@@ -52,6 +52,7 @@ tools/ci/check-specs.sh
     tools/ci/check-controller-helper-closure-verifier-basic-filesystem-semantics-source.sh \
     tools/ci/check-controller-helper-closure-verifier-scalar-repair-semantics-source.sh \
     tools/ci/check-controller-helper-closure-verifier-synchronized-link-semantics-source.sh \
+    tools/ci/check-controller-helper-closure-verifier-observation-repair-semantics-source.sh \
     tools/ci/test-controller-helper-inventory-v0-policy.sh \
     tools/ci/check-controller-helper-build-evidence-v0.sh \
     tools/ci/check-controller-helper-build-receipt-v0.sh \
@@ -132,6 +133,7 @@ tools/ci/test-development-probe-policy.sh
 /bin/sh tools/ci/check-controller-helper-closure-verifier-basic-filesystem-semantics-source.sh
 /bin/sh tools/ci/check-controller-helper-closure-verifier-scalar-repair-semantics-source.sh
 /bin/sh tools/ci/check-controller-helper-closure-verifier-synchronized-link-semantics-source.sh
+/bin/sh tools/ci/check-controller-helper-closure-verifier-observation-repair-semantics-source.sh
 /bin/sh tools/ci/test-controller-handoff-attempt-v0-policy.sh
 /bin/sh tools/ci/test-remote-checkpoint-policy.sh
 /bin/sh tools/ci/test-workspace-budget-policy.sh
