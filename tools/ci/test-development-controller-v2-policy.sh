@@ -50,7 +50,7 @@ expect_rejected widened-reference-applicability
 /usr/bin/sed 's/^06|reference-verify|controller|F-G|reference-verdict$/06|reference-verify|controller|F-G|reference-accepted/' "$source" > "$plan"
 expect_rejected substituted-reference-verdict
 
-/usr/bin/sed 's/accepted-evidence-set+reference-verdict-digest/accepted-evidence-set/' "$source" > "$plan"
+/usr/bin/sed 's/accepted-evidence-record+reference-verdict-digest/accepted-evidence-record/' "$source" > "$plan"
 expect_rejected omitted-verdict-digest
 
 /bin/cp "$source" "$work/real.plan"
