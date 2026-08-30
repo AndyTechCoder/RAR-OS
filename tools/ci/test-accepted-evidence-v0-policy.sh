@@ -2,10 +2,7 @@
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 scratch=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
-[ "$scratch" != disabled ] || {
-    printf '%s\n' 'accepted evidence v0 mutation tests skipped: external read-only-source CI step required'
-    exit 0
-}
+[ "$scratch" != disabled ] || { printf '%s\n' 'accepted evidence v0 mutation tests skipped: external read-only-source CI step required'; exit 0; }
 work=$(mktemp -d "$scratch/accepted-evidence.XXXXXX")
 trap '/bin/rm -rf "$work"' EXIT HUP INT TERM
 checker=$root/tools/ci/verify-accepted-evidence-v0.sh
