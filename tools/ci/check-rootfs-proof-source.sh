@@ -106,7 +106,7 @@ for test_name in \
     resolves_digest_bound_layers_and_configuration_in_order \
     blob_source_receives_explicit_read_ceilings \
     rejects_tampered_blobs_before_layer_parsing \
-    resolves_gzip_and_rejects_unknown_compression_and_diff_id_mismatch \
+    resolves_gzip_zstd_and_rejects_unknown_compression_and_diff_id_mismatch \
     aggregate_layer_budgets_accept_exact_limits_and_reject_one_more \
     resolves_exact_manifest_through_verified_nested_index \
     rejects_tampered_nested_index_before_parsing \
