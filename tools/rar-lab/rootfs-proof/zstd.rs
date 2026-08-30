@@ -684,7 +684,9 @@ mod tests {
 
     #[test]
     fn decodes_rfc_8878_direct_huffman_single_stream_vector() {
-        let literals = [0x42, 0x80, 0x01, 0x84, 0x43, 0x20, 0x10, 0x10, 0x0d, 0];
+        // RFC 8878 Errata 8195 corrects the published "0145" bitstream from
+        // 0x10,0x0d (which encodes "0154") to 0x01,0x0d.
+        let literals = [0x42, 0x80, 0x01, 0x84, 0x43, 0x20, 0x10, 0x01, 0x0d, 0];
         let frame = compressed_frame(&literals);
         assert_eq!(decode_zstd(&frame, 4).unwrap(), [0, 1, 4, 5]);
         assert_eq!(
