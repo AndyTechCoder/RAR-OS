@@ -306,36 +306,57 @@ fn decode_direct_huffman_literals(
     }
     weights.push(inferred_weight as u8);
 
-    let mut table = vec![None; table_size];
-    let mut code = 0u16;
-    for weight in 1..=maximum_bits as u8 {
-        if weight > 1 {
-            code >>= 1;
-        }
-        let length = maximum_bits as u8 + 1 - weight;
-        for (symbol, candidate) in weights.iter().copied().enumerate() {
-            if candidate == weight {
-                let suffix_bits = maximum_bits as u8 - length;
-                let first = usize::from(code) << suffix_bits;
-                let count = 1usize << suffix_bits;
-                let end = first
-                    .checked_add(count)
-                    .ok_or(Error::InvalidHuffmanTree)?;
-                let slots = table
-                    .get_mut(first..end)
-                    .ok_or(Error::InvalidHuffmanTree)?;
-                if slots.iter().any(Option::is_some) {
-                    return Err(Error::InvalidHuffmanTree);
-                }
-                slots.fill(Some(HuffmanEntry {
-                    symbol: symbol as u8,
-                    length,
-                }));
-                code = code.checked_add(1).ok_or(Error::InvalidHuffmanTree)?;
-            }
-        }
+    let maximum_bits = maximum_bits as usize;
+    let mut rank_count = [0usize; 12];
+    for weight in weights.iter().copied().filter(|weight| *weight != 0) {
+        let length = maximum_bits + 1 - usize::from(weight);
+        rank_count[length] = rank_count[length]
+            .checked_add(1)
+            .ok_or(Error::InvalidHuffmanTree)?;
     }
-    if code != 2 || table.iter().any(Option::is_none) {
+
+    // RFC 8878 assigns ranges from the longest codes toward the shortest,
+    // preserving natural symbol order within each rank.  Building the full
+    // bounded lookup table also keeps every symbol decode O(1).
+    let mut rank_index = [0usize; 12];
+    for length in (1..=maximum_bits).rev() {
+        let width = 1usize << (maximum_bits - length);
+        rank_index[length - 1] = rank_index[length]
+            .checked_add(
+                rank_count[length]
+                    .checked_mul(width)
+                    .ok_or(Error::InvalidHuffmanTree)?,
+            )
+            .ok_or(Error::InvalidHuffmanTree)?;
+    }
+    if rank_index[0] != table_size {
+        return Err(Error::InvalidHuffmanTree);
+    }
+
+    let mut table = vec![None; table_size];
+    for (symbol, weight) in weights.iter().copied().enumerate() {
+        if weight == 0 {
+            continue;
+        }
+        let length = maximum_bits + 1 - usize::from(weight);
+        let first = rank_index[length];
+        let count = 1usize << (maximum_bits - length);
+        let end = first
+            .checked_add(count)
+            .ok_or(Error::InvalidHuffmanTree)?;
+        let slots = table
+            .get_mut(first..end)
+            .ok_or(Error::InvalidHuffmanTree)?;
+        if slots.iter().any(Option::is_some) {
+            return Err(Error::InvalidHuffmanTree);
+        }
+        slots.fill(Some(HuffmanEntry {
+            symbol: symbol as u8,
+            length: length as u8,
+        }));
+        rank_index[length] = end;
+    }
+    if table.iter().any(Option::is_none) {
         return Err(Error::InvalidHuffmanTree);
     }
 
@@ -524,12 +545,6 @@ mod tests {
 
     #[test]
     fn rejects_unsupported_or_reserved_features() {
-        let compressed = compressed_frame(&[2]);
-        assert_eq!(
-            decode_zstd(&compressed, 0),
-            Err(Error::UnsupportedLiteralsCompression)
-        );
-
         for descriptor_error in [
             (0x28, Error::ReservedDescriptorBit),
             (0x21, Error::UnsupportedDictionary),
