@@ -1173,6 +1173,12 @@ mod tests {
             Err(Error::InvalidLiteralsSection)
         );
 
+        let empty_single_stream_content = compressed_frame(&[0x12, 0, 0]);
+        assert_eq!(
+            decode_zstd(&empty_single_stream_content, 1),
+            Err(Error::InvalidLiteralsSection)
+        );
+
         let missing_four_stream_markers = compressed_frame(&[
             0x86, 0x80, 0x01, 0, 0, 0, 0, 0, 0,
         ]);
@@ -1199,12 +1205,12 @@ mod tests {
             Err(Error::InvalidHuffmanStream)
         );
 
-        let truncated_jump_table = compressed_frame(&[
+        let undersized_jump_payload = compressed_frame(&[
             0x86, 0xc0, 0x01, 0x80, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00,
         ]);
         assert_eq!(
-            decode_zstd(&truncated_jump_table, 8),
-            Err(Error::Truncated)
+            decode_zstd(&undersized_jump_payload, 8),
+            Err(Error::InvalidLiteralsSection)
         );
 
         let bad_padding = compressed_frame(&[
