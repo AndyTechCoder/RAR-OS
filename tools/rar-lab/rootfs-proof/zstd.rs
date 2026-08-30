@@ -6,8 +6,9 @@
 //! Sequence headers and their predefined, RLE, FSE-compressed, or repeated
 //! tables are parsed and bounded, then decoded against bounded literal and
 //! match-copy output.
-//! Dictionaries, checksums, skippable frames, and concatenated frames fail with
-//! explicit errors.
+//! Dictionaries, skippable frames, and concatenated frames fail with explicit
+//! errors. Standard frame content checksums are verified before output is
+//! returned.
 
 use super::MAX_LAYER_BYTES;
 
@@ -26,6 +27,7 @@ pub enum Error {
     ReservedDescriptorBit,
     UnsupportedDictionary,
     UnsupportedChecksum,
+    ChecksumMismatch,
     WindowTooLarge,
     ContentSizeTooLarge,
     InvalidBlock,
@@ -47,7 +49,7 @@ pub enum Error {
     TrailingData,
 }
 
-/// Decodes exactly one dictionary-free, checksum-free Zstandard frame.
+/// Decodes exactly one dictionary-free Zstandard frame.
 ///
 /// Raw/RLE blocks and compressed blocks with raw, RLE, or one- or four-stream
 /// Huffman literals using direct or FSE-compressed weights are supported,
@@ -128,10 +130,6 @@ pub fn decode_zstd(input: &[u8], maximum_output_bytes: usize) -> Result<Vec<u8>,
         Some(size)
     };
 
-    if checksum {
-        return Err(Error::UnsupportedChecksum);
-    }
-
     let window_limit = window_size.or(content_size).unwrap_or(MAX_BLOCK_BYTES);
     if window_limit > MAX_WINDOW_BYTES {
         return Err(Error::WindowTooLarge);
@@ -183,13 +181,107 @@ pub fn decode_zstd(input: &[u8], maximum_output_bytes: usize) -> Result<Vec<u8>,
         }
     }
 
-    if reader.remaining() != 0 {
-        return Err(Error::TrailingData);
+    if checksum {
+        let expected = read_little_endian(&mut reader, 4)? as u32;
+        if xxh64(&output, 0) as u32 != expected {
+            return Err(Error::ChecksumMismatch);
+        }
     }
     if content_size.is_some_and(|expected| expected != output.len()) {
         return Err(Error::ContentSizeMismatch);
     }
+    if reader.remaining() != 0 {
+        return Err(Error::TrailingData);
+    }
     Ok(output)
+}
+
+fn xxh64(input: &[u8], seed: u64) -> u64 {
+    const PRIME_1: u64 = 11_400_714_785_074_694_791;
+    const PRIME_2: u64 = 14_029_467_366_897_019_727;
+    const PRIME_3: u64 = 1_609_587_929_392_839_161;
+    const PRIME_4: u64 = 9_650_029_242_287_828_579;
+    const PRIME_5: u64 = 2_870_177_450_012_600_261;
+
+    fn round(accumulator: u64, lane: u64) -> u64 {
+        const PRIME_1: u64 = 11_400_714_785_074_694_791;
+        const PRIME_2: u64 = 14_029_467_366_897_019_727;
+        accumulator
+            .wrapping_add(lane.wrapping_mul(PRIME_2))
+            .rotate_left(31)
+            .wrapping_mul(PRIME_1)
+    }
+
+    fn merge_round(accumulator: u64, lane: u64) -> u64 {
+        const PRIME_1: u64 = 11_400_714_785_074_694_791;
+        const PRIME_4: u64 = 9_650_029_242_287_828_579;
+        (accumulator ^ round(0, lane))
+            .wrapping_mul(PRIME_1)
+            .wrapping_add(PRIME_4)
+    }
+
+    fn little_u64(bytes: &[u8]) -> u64 {
+        u64::from_le_bytes(bytes.try_into().expect("exact eight-byte lane"))
+    }
+
+    let mut offset = 0usize;
+    let mut hash = if input.len() >= 32 {
+        let mut lane_1 = seed.wrapping_add(PRIME_1).wrapping_add(PRIME_2);
+        let mut lane_2 = seed.wrapping_add(PRIME_2);
+        let mut lane_3 = seed;
+        let mut lane_4 = seed.wrapping_sub(PRIME_1);
+        while offset <= input.len() - 32 {
+            lane_1 = round(lane_1, little_u64(&input[offset..offset + 8]));
+            lane_2 = round(lane_2, little_u64(&input[offset + 8..offset + 16]));
+            lane_3 = round(lane_3, little_u64(&input[offset + 16..offset + 24]));
+            lane_4 = round(lane_4, little_u64(&input[offset + 24..offset + 32]));
+            offset += 32;
+        }
+        let combined = lane_1
+            .rotate_left(1)
+            .wrapping_add(lane_2.rotate_left(7))
+            .wrapping_add(lane_3.rotate_left(12))
+            .wrapping_add(lane_4.rotate_left(18));
+        merge_round(
+            merge_round(merge_round(merge_round(combined, lane_1), lane_2), lane_3),
+            lane_4,
+        )
+    } else {
+        seed.wrapping_add(PRIME_5)
+    };
+
+    hash = hash.wrapping_add(input.len() as u64);
+    while offset + 8 <= input.len() {
+        hash ^= round(0, little_u64(&input[offset..offset + 8]));
+        hash = hash
+            .rotate_left(27)
+            .wrapping_mul(PRIME_1)
+            .wrapping_add(PRIME_4);
+        offset += 8;
+    }
+    if offset + 4 <= input.len() {
+        let lane = u32::from_le_bytes(
+            input[offset..offset + 4]
+                .try_into()
+                .expect("exact four-byte lane"),
+        );
+        hash ^= u64::from(lane).wrapping_mul(PRIME_1);
+        hash = hash
+            .rotate_left(23)
+            .wrapping_mul(PRIME_2)
+            .wrapping_add(PRIME_3);
+        offset += 4;
+    }
+    for byte in &input[offset..] {
+        hash ^= u64::from(*byte).wrapping_mul(PRIME_5);
+        hash = hash.rotate_left(11).wrapping_mul(PRIME_1);
+    }
+
+    hash ^= hash >> 33;
+    hash = hash.wrapping_mul(PRIME_2);
+    hash ^= hash >> 29;
+    hash = hash.wrapping_mul(PRIME_3);
+    hash ^ (hash >> 32)
 }
 
 fn decode_compressed_block(
@@ -1381,7 +1473,6 @@ mod tests {
         for descriptor_error in [
             (0x28, Error::ReservedDescriptorBit),
             (0x21, Error::UnsupportedDictionary),
-            (0x24, Error::UnsupportedChecksum),
         ] {
             let mut frame = MAGIC.to_vec();
             frame.push(descriptor_error.0);
@@ -1396,6 +1487,43 @@ mod tests {
         reserved_block.extend_from_slice(&[0x20, 0x00]);
         append_block(&mut reserved_block, true, 3, 0, b"");
         assert_eq!(decode_zstd(&reserved_block, 0), Err(Error::InvalidBlock));
+    }
+
+    #[test]
+    fn verifies_frame_content_checksums() {
+        assert_eq!(xxh64(b"", 0), 0xef46_db37_51d8_e999);
+        assert_eq!(xxh64(b"a", 0), 0xd24e_c4f1_a98c_6e5b);
+        assert_eq!(xxh64(b"abc", 0), 0x44bc_2cf5_ad77_0999);
+        assert_eq!(
+            xxh64(b"The quick brown fox jumps over the lazy dog", 0),
+            0x0b24_2d36_1fda_71bc
+        );
+
+        let mut frame = MAGIC.to_vec();
+        frame.extend_from_slice(&[0x24, 3]);
+        append_block(&mut frame, true, 0, 3, b"abc");
+        frame.extend_from_slice(&0xad77_0999u32.to_le_bytes());
+        assert_eq!(decode_zstd(&frame, 3).unwrap(), b"abc");
+
+        let mut corrupt_payload = frame.clone();
+        corrupt_payload[9] ^= 1;
+        assert_eq!(
+            decode_zstd(&corrupt_payload, 3),
+            Err(Error::ChecksumMismatch)
+        );
+
+        let mut tampered = frame.clone();
+        let last = tampered.len() - 1;
+        tampered[last] ^= 1;
+        assert_eq!(decode_zstd(&tampered, 3), Err(Error::ChecksumMismatch));
+
+        assert_eq!(
+            decode_zstd(&frame[..frame.len() - 1], 3),
+            Err(Error::Truncated)
+        );
+        let mut trailing = frame;
+        trailing.push(0);
+        assert_eq!(decode_zstd(&trailing, 3), Err(Error::TrailingData));
     }
 
     #[test]
