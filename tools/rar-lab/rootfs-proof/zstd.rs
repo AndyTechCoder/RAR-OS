@@ -26,6 +26,10 @@ pub enum Error {
     InvalidBlock,
     TooManyBlocks,
     InvalidLiteralsSection,
+    InvalidHuffmanTree,
+    InvalidHuffmanStream,
+    UnsupportedHuffmanWeights,
+    UnsupportedLiteralsFormat,
     UnsupportedLiteralsCompression,
     UnsupportedSequences,
     TrailingBlockData,
@@ -183,40 +187,64 @@ fn decode_literal_only_compressed_block(
     let mut reader = Reader::new(block);
     let first = reader.byte()?;
     let literals_type = first & 0x03;
-    if literals_type >= 2 {
-        return Err(Error::UnsupportedLiteralsCompression);
-    }
     let size_format = (first >> 2) & 0x03;
-    let regenerated_size = match size_format {
-        0 | 2 => usize::from(first >> 3),
-        1 => {
-            usize::from(first >> 4) | (usize::from(reader.byte()?) << 4)
+    let (regenerated_size, literals) = match literals_type {
+        0 | 1 => {
+            let regenerated_size = match size_format {
+                0 | 2 => usize::from(first >> 3),
+                1 => usize::from(first >> 4) | (usize::from(reader.byte()?) << 4),
+                3 => {
+                    usize::from(first >> 4)
+                        | (usize::from(reader.byte()?) << 4)
+                        | (usize::from(reader.byte()?) << 12)
+                }
+                _ => unreachable!(),
+            };
+            if regenerated_size > block_maximum {
+                return Err(Error::InvalidLiteralsSection);
+            }
+            let mut literals = Vec::new();
+            match literals_type {
+                0 => extend_bounded(
+                    &mut literals,
+                    reader.take(regenerated_size)?,
+                    regenerated_size,
+                )?,
+                1 => resize_bounded(
+                    &mut literals,
+                    regenerated_size,
+                    reader.byte()?,
+                    regenerated_size,
+                )?,
+                _ => unreachable!(),
+            }
+            (regenerated_size, literals)
         }
-        3 => {
-            usize::from(first >> 4)
-                | (usize::from(reader.byte()?) << 4)
-                | (usize::from(reader.byte()?) << 12)
+        2 => {
+            if size_format != 0 {
+                return Err(Error::UnsupportedLiteralsFormat);
+            }
+            let second = reader.byte()?;
+            let third = reader.byte()?;
+            let header = u32::from(first)
+                | (u32::from(second) << 8)
+                | (u32::from(third) << 16);
+            let regenerated_size = ((header >> 4) & 0x03ff) as usize;
+            let compressed_size = ((header >> 14) & 0x03ff) as usize;
+            if regenerated_size > block_maximum || compressed_size > block_maximum {
+                return Err(Error::InvalidLiteralsSection);
+            }
+            let literals = decode_direct_huffman_literals(
+                reader.take(compressed_size)?,
+                regenerated_size,
+            )?;
+            (regenerated_size, literals)
         }
+        3 => return Err(Error::UnsupportedLiteralsCompression),
         _ => unreachable!(),
     };
     if regenerated_size > block_maximum {
         return Err(Error::InvalidLiteralsSection);
-    }
-
-    let mut literals = Vec::new();
-    match literals_type {
-        0 => extend_bounded(
-            &mut literals,
-            reader.take(regenerated_size)?,
-            regenerated_size,
-        )?,
-        1 => resize_bounded(
-            &mut literals,
-            regenerated_size,
-            reader.byte()?,
-            regenerated_size,
-        )?,
-        _ => unreachable!(),
     }
 
     if reader.byte()? != 0 {
@@ -226,6 +254,143 @@ fn decode_literal_only_compressed_block(
         return Err(Error::TrailingBlockData);
     }
     extend_bounded(output, &literals, maximum_output_bytes)
+}
+
+fn decode_direct_huffman_literals(
+    content: &[u8],
+    regenerated_size: usize,
+) -> Result<Vec<u8>, Error> {
+    let mut reader = Reader::new(content);
+    let header = reader.byte()?;
+    if header < 128 {
+        return Err(Error::UnsupportedHuffmanWeights);
+    }
+    let described_symbols = usize::from(header - 127);
+    let encoded_weight_bytes = described_symbols.div_ceil(2);
+    let encoded_weights = reader.take(encoded_weight_bytes)?;
+    let mut weights = Vec::with_capacity(described_symbols + 1);
+    for symbol in 0..described_symbols {
+        let byte = encoded_weights[symbol / 2];
+        weights.push(if symbol % 2 == 0 { byte >> 4 } else { byte & 0x0f });
+    }
+
+    let mut total = 0usize;
+    for weight in &weights {
+        if *weight > 11 {
+            return Err(Error::InvalidHuffmanTree);
+        }
+        if *weight != 0 {
+            total = total
+                .checked_add(1usize << (u32::from(*weight) - 1))
+                .ok_or(Error::InvalidHuffmanTree)?;
+        }
+    }
+    if total == 0 {
+        return Err(Error::InvalidHuffmanTree);
+    }
+    let mut table_size = total
+        .checked_next_power_of_two()
+        .ok_or(Error::InvalidHuffmanTree)?;
+    if table_size == total {
+        table_size = table_size.checked_mul(2).ok_or(Error::InvalidHuffmanTree)?;
+    }
+    let inferred = table_size - total;
+    if !inferred.is_power_of_two() {
+        return Err(Error::InvalidHuffmanTree);
+    }
+    let inferred_weight = inferred.trailing_zeros() + 1;
+    let maximum_bits = table_size.trailing_zeros();
+    if maximum_bits == 0 || maximum_bits > 11 || inferred_weight > maximum_bits {
+        return Err(Error::InvalidHuffmanTree);
+    }
+    weights.push(inferred_weight as u8);
+
+    let mut codes = Vec::new();
+    let mut code = 0u16;
+    for weight in 1..=maximum_bits as u8 {
+        if weight > 1 {
+            code >>= 1;
+        }
+        let length = maximum_bits as u8 + 1 - weight;
+        for (symbol, candidate) in weights.iter().copied().enumerate() {
+            if candidate == weight {
+                codes.push((symbol as u8, length, code));
+                code = code.checked_add(1).ok_or(Error::InvalidHuffmanTree)?;
+            }
+        }
+    }
+    if code != 2 {
+        return Err(Error::InvalidHuffmanTree);
+    }
+
+    let stream = reader.take(reader.remaining())?;
+    let mut bits = ReverseBits::new(stream)?;
+    let mut output = Vec::with_capacity(regenerated_size);
+    for _ in 0..regenerated_size {
+        let mut prefix = 0u16;
+        let mut decoded = None;
+        for length in 1..=maximum_bits as u8 {
+            prefix = (prefix << 1) | u16::from(bits.bit()?);
+            if let Some((symbol, _, _)) = codes
+                .iter()
+                .find(|(_, code_length, code_value)| {
+                    *code_length == length && *code_value == prefix
+                })
+            {
+                decoded = Some(*symbol);
+                break;
+            }
+        }
+        output.push(decoded.ok_or(Error::InvalidHuffmanStream)?);
+    }
+    if bits.remaining != 0 {
+        return Err(Error::InvalidHuffmanStream);
+    }
+    Ok(output)
+}
+
+struct ReverseBits<'a> {
+    input: &'a [u8],
+    byte_index: isize,
+    bit_index: i8,
+    remaining: usize,
+}
+
+impl<'a> ReverseBits<'a> {
+    fn new(input: &'a [u8]) -> Result<Self, Error> {
+        let last = *input.last().ok_or(Error::InvalidHuffmanStream)?;
+        if last == 0 {
+            return Err(Error::InvalidHuffmanStream);
+        }
+        let marker = 7 - last.leading_zeros() as usize;
+        Ok(Self {
+            input,
+            byte_index: input.len() as isize - 1,
+            bit_index: marker as i8 - 1,
+            remaining: (input.len() - 1)
+                .checked_mul(8)
+                .and_then(|bits| bits.checked_add(marker))
+                .ok_or(Error::InvalidHuffmanStream)?,
+        })
+    }
+
+    fn bit(&mut self) -> Result<u8, Error> {
+        if self.remaining == 0 {
+            return Err(Error::InvalidHuffmanStream);
+        }
+        if self.bit_index < 0 {
+            self.byte_index -= 1;
+            self.bit_index = 7;
+        }
+        let byte = *self
+            .input
+            .get(self.byte_index as usize)
+            .ok_or(Error::InvalidHuffmanStream)?;
+        let bit = (byte >> self.bit_index) & 1;
+        self.bit_index -= 1;
+        self.remaining -= 1;
+        Ok(bit)
+    }
 }
 
 fn read_little_endian(reader: &mut Reader<'_>, count: usize) -> Result<u64, Error> {
@@ -470,6 +635,42 @@ mod tests {
                 Err(Error::UnsupportedLiteralsCompression)
             );
         }
+    }
+
+    #[test]
+    fn decodes_rfc_8878_direct_huffman_single_stream_vector() {
+        let literals = [0x42, 0x80, 0x01, 0x84, 0x43, 0x20, 0x10, 0x10, 0x0d, 0];
+        let frame = compressed_frame(&literals);
+        assert_eq!(decode_zstd(&frame, 4).unwrap(), [0, 1, 4, 5]);
+    }
+
+    #[test]
+    fn rejects_invalid_or_unsupported_huffman_literals() {
+        let fse_weights = compressed_frame(&[0x42, 0x40, 0x00, 1, 0, 0]);
+        assert_eq!(
+            decode_zstd(&fse_weights, 4),
+            Err(Error::UnsupportedHuffmanWeights)
+        );
+
+        let treeless = compressed_frame(&[3]);
+        assert_eq!(
+            decode_zstd(&treeless, 1),
+            Err(Error::UnsupportedLiteralsCompression)
+        );
+
+        let four_stream = compressed_frame(&[0x46, 0, 0]);
+        assert_eq!(
+            decode_zstd(&four_stream, 1),
+            Err(Error::UnsupportedLiteralsFormat)
+        );
+
+        let bad_padding = compressed_frame(&[
+            0x42, 0x80, 0x01, 0x84, 0x43, 0x20, 0x10, 0x10, 0x00, 0,
+        ]);
+        assert_eq!(
+            decode_zstd(&bad_padding, 4),
+            Err(Error::InvalidHuffmanStream)
+        );
     }
 
     fn single_segment_frame(blocks: &[(bool, u32, &[u8])], content_size: u8) -> Vec<u8> {
