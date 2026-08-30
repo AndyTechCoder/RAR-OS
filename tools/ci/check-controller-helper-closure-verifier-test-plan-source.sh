@@ -11,7 +11,7 @@ fail() {
 
 [ -f "$plan" ] && [ ! -L "$plan" ] || fail 'test plan is unavailable'
 plan_sha=$(env -u LC_CTYPE LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$plan" | /usr/bin/awk '{ print $1 }')
-[ "$plan_sha" = 4783aef92271ccbe0abcceaea057f95847b5c3f7a625f3f8fe6e5d16799823c1 ] || fail 'test-plan bytes escaped review'
+[ "$plan_sha" = 6cd6c1824bc5a5bc8be7c398d4d36fec23019ac4c40b48376090de698c495ebe ] || fail 'test-plan bytes escaped review'
 
 for required in \
     'status=experimental-incomplete-source-only' \
@@ -23,9 +23,10 @@ for required in \
     'publication_rule=no-GitHub-write,no-lock+inventory+profile+controller+gate+readiness-update' \
     'success_oracle=exit-0+empty-stderr+exact-canonical-31-line-receipt+all-false-fields+not-ready-status+no-other-output' \
     'acceptance_rule=blocked;this-incomplete-plan-cannot-produce-an-acceptance-verdict' \
-    'precedence_status=absent,separate-reviewed-byte-contract-required-before-controller-implementation' \
+    'validation_catalog=controller-helper-closure-verifier-validation-v0.fields+controller-helper-closure-verifier-errors-v0+controller-helper-closure-verifier-precedence-v0,inactive-source-only' \
+    'precedence_status=source-order-only;constructible-dual-invalid-case+oracle-catalog-absent,not-runtime-tested,not-acceptance-evidence' \
     'evidence_status=absent,separate-versioned-canonical-case-evidence+normalized-verdict-contract+fixtures-required-before-controller-implementation' \
-    'activation_rule=separate-reviewed-complete-case+stderr+precedence+fault-contract,evidence+normalized-verdict-contract+fixtures,controller-source,fixture-image,tool-pins,subject-pins,workflow-wiring,and-exact-main-validation-required-before-first-run' \
+    'activation_rule=exact-reviewed-validation-catalog+separate-complete-explicit-case+constructible-runtime-precedence+input-domain+fault-contract,evidence+normalized-verdict-contract+fixtures,controller-source,fixture-image,tool-pins,subject-pins,workflow-wiring,and-exact-main-validation-required-before-first-run' \
     'local_rule=plan-check-is-text+hash+limited-direct-nonwiring-only;never-run-verifier,test-controller,container,compiler,helper,target,VM,or-emulator-on-Mac'; do
     grep -Fqx "$required" "$plan" || fail "required invariant is missing: $required"
 done
