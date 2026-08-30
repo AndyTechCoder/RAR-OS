@@ -1,8 +1,9 @@
 //! Bounded, dependency-free RFC 8878 frame decoder foundation.
 //!
-//! This decoder accepts raw and RLE blocks plus compressed blocks containing
-//! raw/RLE literals and zero sequences. Dictionaries, checksums, Huffman/FSE,
-//! skippable frames, and concatenated frames fail with explicit errors.
+//! This decoder accepts raw and RLE blocks plus zero-sequence compressed blocks
+//! containing raw, RLE, or direct-weight single-stream Huffman literals.
+//! Dictionaries, checksums, FSE, skippable frames, and concatenated frames fail
+//! with explicit errors.
 
 use super::MAX_LAYER_BYTES;
 
@@ -40,9 +41,9 @@ pub enum Error {
 
 /// Decodes exactly one dictionary-free, checksum-free Zstandard frame.
 ///
-/// Raw/RLE blocks and zero-sequence compressed blocks with raw/RLE literals are
-/// supported. Other frame features fail closed with a distinct error, and no
-/// partially decoded output is returned.
+/// Raw/RLE blocks and zero-sequence compressed blocks with raw, RLE, or
+/// direct-weight single-stream Huffman literals are supported. Other features
+/// fail closed with a distinct error, and no partial output is returned.
 pub fn decode_zstd(input: &[u8], maximum_output_bytes: usize) -> Result<Vec<u8>, Error> {
     if input.len() > MAX_INPUT_BYTES {
         return Err(Error::InputTooLarge);
@@ -305,7 +306,7 @@ fn decode_direct_huffman_literals(
     }
     weights.push(inferred_weight as u8);
 
-    let mut codes = Vec::new();
+    let mut table = vec![None; table_size];
     let mut code = 0u16;
     for weight in 1..=maximum_bits as u8 {
         if weight > 1 {
@@ -314,12 +315,27 @@ fn decode_direct_huffman_literals(
         let length = maximum_bits as u8 + 1 - weight;
         for (symbol, candidate) in weights.iter().copied().enumerate() {
             if candidate == weight {
-                codes.push((symbol as u8, length, code));
+                let suffix_bits = maximum_bits as u8 - length;
+                let first = usize::from(code) << suffix_bits;
+                let count = 1usize << suffix_bits;
+                let end = first
+                    .checked_add(count)
+                    .ok_or(Error::InvalidHuffmanTree)?;
+                let slots = table
+                    .get_mut(first..end)
+                    .ok_or(Error::InvalidHuffmanTree)?;
+                if slots.iter().any(Option::is_some) {
+                    return Err(Error::InvalidHuffmanTree);
+                }
+                slots.fill(Some(HuffmanEntry {
+                    symbol: symbol as u8,
+                    length,
+                }));
                 code = code.checked_add(1).ok_or(Error::InvalidHuffmanTree)?;
             }
         }
     }
-    if code != 2 {
+    if code != 2 || table.iter().any(Option::is_none) {
         return Err(Error::InvalidHuffmanTree);
     }
 
@@ -327,21 +343,15 @@ fn decode_direct_huffman_literals(
     let mut bits = ReverseBits::new(stream)?;
     let mut output = Vec::with_capacity(regenerated_size);
     for _ in 0..regenerated_size {
-        let mut prefix = 0u16;
-        let mut decoded = None;
-        for length in 1..=maximum_bits as u8 {
-            prefix = (prefix << 1) | u16::from(bits.bit()?);
-            if let Some((symbol, _, _)) = codes
-                .iter()
-                .find(|(_, code_length, code_value)| {
-                    *code_length == length && *code_value == prefix
-                })
-            {
-                decoded = Some(*symbol);
-                break;
-            }
+        let entry = table[bits.peek_padded(maximum_bits as u8)?];
+        let entry = entry.ok_or(Error::InvalidHuffmanStream)?;
+        if usize::from(entry.length) > bits.remaining {
+            return Err(Error::InvalidHuffmanStream);
         }
-        output.push(decoded.ok_or(Error::InvalidHuffmanStream)?);
+        for _ in 0..entry.length {
+            bits.bit()?;
+        }
+        output.push(entry.symbol);
     }
     if bits.remaining != 0 {
         return Err(Error::InvalidHuffmanStream);
@@ -349,6 +359,13 @@ fn decode_direct_huffman_literals(
     Ok(output)
 }
 
+#[derive(Clone, Copy)]
+struct HuffmanEntry {
+    symbol: u8,
+    length: u8,
+}
+
+#[derive(Clone)]
 struct ReverseBits<'a> {
     input: &'a [u8],
     byte_index: isize,
@@ -390,6 +407,18 @@ impl<'a> ReverseBits<'a> {
         self.bit_index -= 1;
         self.remaining -= 1;
         Ok(bit)
+    }
+
+    fn peek_padded(&self, count: u8) -> Result<usize, Error> {
+        let mut copy = self.clone();
+        let mut value = 0usize;
+        for _ in 0..count {
+            value <<= 1;
+            if copy.remaining != 0 {
+                value |= usize::from(copy.bit()?);
+            }
+        }
+        Ok(value)
     }
 }
 
@@ -628,13 +657,14 @@ mod tests {
             Err(Error::InvalidLiteralsSection)
         );
 
-        for literals_type in [2u8, 3u8] {
-            let frame = compressed_frame(&[literals_type, 0]);
-            assert_eq!(
-                decode_zstd(&frame, 2),
-                Err(Error::UnsupportedLiteralsCompression)
-            );
-        }
+        let truncated_huffman_header = compressed_frame(&[2, 0]);
+        assert_eq!(decode_zstd(&truncated_huffman_header, 2), Err(Error::Truncated));
+
+        let treeless = compressed_frame(&[3, 0]);
+        assert_eq!(
+            decode_zstd(&treeless, 2),
+            Err(Error::UnsupportedLiteralsCompression)
+        );
     }
 
     #[test]
@@ -642,6 +672,11 @@ mod tests {
         let literals = [0x42, 0x80, 0x01, 0x84, 0x43, 0x20, 0x10, 0x10, 0x0d, 0];
         let frame = compressed_frame(&literals);
         assert_eq!(decode_zstd(&frame, 4).unwrap(), [0, 1, 4, 5]);
+        assert_eq!(
+            decode_direct_huffman_literals(&[0x84, 0x43, 0x20, 0x10, 0x03], 1)
+                .unwrap(),
+            [0]
+        );
     }
 
     #[test]
