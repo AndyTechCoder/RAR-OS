@@ -1,7 +1,7 @@
 //! Non-activating OCI layer-resolution foundation for RAR Lab image proofs.
 //!
-//! This host-only library deliberately accepts only bounded, uncompressed
-//! POSIX ustar layers. It does not activate a Development Lab profile and it is
+//! This host-only library accepts only explicitly bounded OCI documents and
+//! layer encodings. It does not activate a Development Lab profile and it is
 //! not linked into RAR OS.
 
 #![forbid(unsafe_code)]
@@ -14,6 +14,7 @@ mod json;
 pub mod layout;
 pub mod oci;
 mod sha256;
+pub mod zstd;
 
 pub const BLOCK_BYTES: usize = 512;
 pub const MAX_LAYER_BYTES: usize = 1_073_741_824;
