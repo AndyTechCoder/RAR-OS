@@ -20,6 +20,7 @@ tools/ci/check-controller-handoff-attempt-v0.sh
 tools/ci/check-controller-helper-build-receipt-v0.sh
 tools/ci/check-reference-evidence-v0.sh
 tools/ci/verify-launch-evidence.sh
+tools/ci/verify-accepted-evidence-v0.sh
 tools/ci/test-controller-helper-evidence-v0-policy.sh
 tools/ci/check-controller-helper-build-evidence-v0.sh
 tools/ci/check-controller-helper-test-evidence-v0.sh
