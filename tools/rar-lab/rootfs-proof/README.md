@@ -13,7 +13,8 @@ files and ELF objects at any path, including paths outside role-specific `/opt`
 roots, and binds every effective regular file to its SHA-256 content digest.
 
 The implementation uses Rust `std` only, contains no `unsafe`, and does not
-spawn a process, decompress data, build an image, or execute target code. Its
+spawn a process, build an image, or execute target code. Its bounded in-process
+gzip decoder cannot launch or activate an image. The
 Linux cloud-only layout adapter confines filesystem reads beneath an opened,
 non-symlink root directory handle; inspects candidates through non-activating
 path-only handles before opening verified regular files; and rejects symlinks,
@@ -26,15 +27,20 @@ consumer must enforce that ceiling before allocation or I/O.
 Unit tests compile and run only in the pinned, network-disabled cloud validation
 container with read-only source and bounded tmpfs outputs.
 
-A separate, not-yet-wired RAR-owned decoder implements one bounded gzip member,
-including stored, fixed-Huffman, and dynamic-Huffman DEFLATE blocks, header
-bounds, exact end-of-stream handling, CRC-32, and uncompressed-size checks. It
-is based directly on [RFC 1951](https://www.rfc-editor.org/rfc/rfc1951) and
+A RAR-owned decoder implements one bounded gzip member, including stored,
+fixed-Huffman, and dynamic-Huffman DEFLATE blocks, header bounds, exact
+end-of-stream handling, CRC-32, and uncompressed-size checks. The OCI resolver
+accepts the standard gzip layer media type only after verifying the compressed
+descriptor digest, and separately verifies the decoded bytes against the image
+configuration's uncompressed `diff_id` before applying the layer. It is based
+directly on [RFC 1951](https://www.rfc-editor.org/rfc/rfc1951) and
 [RFC 1952](https://www.rfc-editor.org/rfc/rfc1952), not third-party code.
 
 ## Accepted subset
 
-- Uncompressed OCI layer media type semantics only.
+- Uncompressed and single-member gzip OCI layer media types; all gzip blobs in
+  one image are limited to 256 MiB total, and all decoded/uncompressed layer
+  bytes in that image are limited to 1 GiB total.
 - OCI layout version `1.0.0`, schema version 2 index/manifest documents, one
   caller-selected exact manifest digest, up to 8 nested index hops and 64 total
   index documents, standard image configuration, and up to 256 ordered layers.
@@ -59,8 +65,7 @@ is based directly on [RFC 1951](https://www.rfc-editor.org/rfc/rfc1951) and
 
 ## Not yet a complete image proof
 
-The gzip decoder is not yet connected to accepted OCI layer media types, and
-this slice does not decode zstd layers or emit/validate the accepted inventory
+This slice does not decode zstd layers or emit/validate the accepted inventory
 evidence format. Consequently it does not
 resolve the full security finding, activate image inventory v2, make a Lab
 profile ready, or authorize provisioning, target compilation, or guest
