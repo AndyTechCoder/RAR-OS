@@ -12,8 +12,8 @@ authoritative.
   publication/recovery is a separate pre-Milestone B gate.
 - Preparation is tracked by the discrete authoritative gates below, not a
   percentage. Overall readiness remains blocked.
-- Exact verified main: `ef02d685a9ca12035e35944c1ac64a26bbc6fa82`;
-  Specifications run `33303200512` passed full validation and mutation tests.
+- Exact verified main: `aa5aab5fb8c60aa162985de7f6791b0a5d349731`;
+  Specifications run `33305373626` passed full validation and mutation tests.
 - Target implementation: 0 of 7 milestones (A–G).
 - Working bootable GUI: does not exist yet.
 - Sprint Alpha completion evidence: none.
@@ -38,6 +38,12 @@ and cannot increase the implementation count.
   tests, independent reviews, merges, and exact-main validation are complete.
 - Proposed ADR 0030 precisely records the remaining accepted-evidence
   publication/recovery choice while granting no authority until owner approval.
+- Proposals 0027–0029 are explicit, non-authoritative B/A/B recommendations;
+  their exact owner decision remains required before boot-contract integration.
+- The dependency-free accepted-evidence record codec, distinct A/F fixtures,
+  static byte boundary, and non-authoritative post-approval work packet are
+  merged, independently reviewed, and exact-main validated. They contain no
+  publication/recovery or activation authority.
 - A recorded five-choice owner brief, gated integration plan, and eight-item
   completion-proof map prevent later tasks from improvising or overclaiming.
 
@@ -48,9 +54,11 @@ and cannot increase the implementation count.
 - ADRs 0022–0026 are accepted, but none of their dependent contracts or
   controller changes is ready merely from acceptance.
 - The exact Alpha boot/platform contracts are not ready.
-- The phase-8 accepted-evidence writer is not ready. Its preserved source
-  scaffold is unmerged, and publication/recovery behavior remains blocked on
-  owner selection and reviewed contract integration of proposed ADR 0030.
+- The phase-8 accepted-evidence writer is not ready. Only its pure record codec
+  is merged; the preserved publication scaffold remains unmerged, and naming,
+  journal, cleanup, recovery, retry, semantic-verification, and activation
+  behavior remain blocked on owner selection and reviewed contract integration
+  of proposed ADR 0030.
 - Gate-report v2 therefore reports the platform envelope, Core bootstrap,
   component bundle, initial system source, initial preserved source, and
   fixture manifest as missing; Milestones A and B remain blocked.

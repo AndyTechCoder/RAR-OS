@@ -1,18 +1,18 @@
 # Sprint Alpha 0.1 Status
 
 - Date: 2026-08-30
-- Current milestone: acceptance-v2 and gate-report-v2 preparation merged;
-  remaining pre-Milestone A boot/controller authority and phase-8 publication
-  recovery remain blocked
+- Current milestone: acceptance-v2 record codec and post-approval publication
+  packet merged; remaining pre-Milestone A boot/controller authority and
+  phase-8 publication/recovery decisions remain blocked
 - Objective: finish the reviewed boot/platform/controller/SSD gates before
   Milestone A; separately finish acceptance-v2 publication and controller
   closure before Milestone B
 - Status source: verified GitHub `main` at
-  `ef02d685a9ca12035e35944c1ac64a26bbc6fa82`
-- Active status worktree: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/alpha-status-rebaseline-ef02`
-- Active status branch: `codex/alpha-status-rebaseline-ef02`
-- Latest exact-main validation: Specifications run `33303200512`, job
-  `99235008063`, passed runner attestation, trusted-controller authority binding,
+  `aa5aab5fb8c60aa162985de7f6791b0a5d349731`
+- Active status worktree: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/alpha-status-post-codec`
+- Active status branch: `codex/alpha-status-post-codec`
+- Latest exact-main validation: Specifications run `33305373626`, job
+  `99240870980`, passed runner attestation, trusted-controller authority binding,
   full pinned read-only-container validation, and all external mutation tests
 - Bootstrap pull request: [#13](https://github.com/AndyTechCoder/RAR-OS/pull/13),
   merged at `abd75bfccf4fcd2f197871225d1a78233c0d87dc`; exact post-merge trusted-
@@ -45,8 +45,10 @@
 - Independent review: architecture, correctness, and security reviews are clean
   for the proposed Alpha platform/state boundary after bootstrap, parser,
   immutable-source, and ownership remediation. Consolidated correctness review
-  is clean for the decision-integration and completion-evidence maps. These are
-  source-only preparation reviews, not target implementation or completion proof
+  is clean for the decision-integration and completion-evidence maps. The
+  accepted-evidence codec and its post-approval publication/recovery task packet
+  each passed architecture, correctness, and security review. These are source-
+  only preparation reviews, not target implementation or completion proof
 - Target functionality: 0%; no RAR OS target implementation has started, built,
   booted, or run
 - Preparation is tracked by the discrete authoritative gates below, not a
@@ -94,7 +96,10 @@
   contextual chain, session-takeover, inventory-origin, or cleanup authority;
   those policy APIs and behavioral tests remain blocked on the reviewed
   isolated compiler identity. It performs no journal I/O, process or watchdog
-  operation, cloud action, or activation
+  operation, cloud action, or activation. A separate dependency-free 20-line
+  accepted-evidence codec with distinct A/F language-neutral fixtures is now
+  merged, positively byte-pinned, and exact-main validated. It defines no
+  filename, publication, recovery, cleanup, controller, or activation behavior
 - Probe dispatch state: GitHub rejected superseded run `33092166312` before job
   creation because the workflow referenced `runner.temp` at job-level `env`,
   before the runner context exists. The published correction binds the path only
@@ -160,7 +165,11 @@
   the phase-8 durable publication/recovery writer and controller/profile wiring
   remain closed gates. Proposed ADR 0030 now documents the required persistent
   transaction choice without selecting or authorizing it; PR #50 merged and its
-  exact-main validation passed
+  exact-main validation passed. Proposals 0027–0029 were normalized as explicit
+  owner-decision-required B/A/B recommendations in PR #42; their merge grants
+  no implementation authority. The independent record codec merged in PR #52,
+  and the byte-pinned non-authoritative post-approval work packet merged in PR
+  #53; exact-main Specifications runs `33304849966` and `33305373626` passed
 - Owner decisions: ADRs 0022 C, 0023 C, 0024 A, 0025 B, and 0026 C are recorded
   as accepted on 2026-08-29. Acceptance alone leaves every dependent contract,
   identity, evidence, controller, and readiness gate closed
@@ -187,7 +196,9 @@
 - Static enforcement: required-file, authority-status, ADR-classification, and
   exact approval-sentence checks now cover both execution maps, the owner brief,
   canonical ADRs 0022–0026, all three decision-integration gates, and all eight
-  completion-proof items so preparation cannot silently become authoritative,
+  completion-proof items. Proposals 0027–0030 remain machine-classified as
+  owner-decision-required, and the complete accepted-evidence publication task
+  packet is byte-pinned so preparation cannot silently become authoritative,
   incomplete, or disappear
 - Gate-report migration: schema v1 remains unchanged. The versioned v2 reporter
   is merged, reviewed, and exact-main validated. It exposes ADR 0025,
@@ -254,7 +265,9 @@
 - Next durable actions: resolve the remaining boot/platform findings through
   owner-approved ADRs; proposals 0027–0029 remain undecided and non-authoritative.
   Separately obtain the exact owner choice for proposed ADR 0030, then integrate
-  its reviewed contract before Milestone B. Independently, make the v2
+  its reviewed contract through the merged task packet before Milestone B. The
+  pure accepted-evidence record codec is already merged; publication, recovery,
+  semantic verification, and activation are not. Independently, make the v2
   controller/helper compiler,
   twice-reproduced helper, isolated test, and real immutable-identity evidence
   genuinely ready and pass the external Lab/PR/checkpoint gates before
