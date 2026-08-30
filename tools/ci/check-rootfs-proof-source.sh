@@ -48,6 +48,7 @@ for test_name in \
     rejects_malformed_compressed_blocks \
     decodes_rfc_8878_direct_huffman_single_stream_vector \
     decodes_direct_huffman_four_stream_size_formats \
+    decodes_treeless_huffman_literals_across_blocks \
     decodes_fse_compressed_huffman_weights \
     rejects_invalid_or_unsupported_huffman_literals \
     parses_bounded_sequence_counts_and_tables \
