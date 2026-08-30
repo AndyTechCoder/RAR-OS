@@ -22,7 +22,7 @@ sha_file() {
 for file in "$templates" "$dispositions" "$domain" "$subject"; do
     [ -f "$file" ] && [ ! -L "$file" ] || fail "required regular source is unavailable: $file"
 done
-[ "$(sha_file "$templates")" = a5ae29ea7053dc200147901b89db67271cd895013769865910314070744835a3 ] || fail 'case-template bytes escaped review'
+[ "$(sha_file "$templates")" = 443d30414ec3cc8542755006ada9a40d52e0f5efe3b26de7fdc5f82dc1152be4 ] || fail 'case-template bytes escaped review'
 [ "$(sha_file "$dispositions")" = 3e693cf86851164cb07577e71b7ff256a17201df1a844c7b9355b135e0e0ba61 ] || fail 'case dispositions escaped review'
 [ "$(sha_file "$domain")" = 67555f2d565569e95b44a247dda630c9b98d293ba0773880f248d69d802ac66c ] || fail 'input domain escaped review'
 [ "$(sha_file "$subject")" = 3cbeeb85abc3023980a8afe444178ea7acc31f298b3b0975d2c4d6630c82a76c ] || fail 'verifier subject escaped review'
@@ -77,7 +77,7 @@ while IFS='|' read -r id disposition class stage phase primary repairs oracle; d
     esac
     [ "$oracle" = "$class@$stage+normal-exit-status-1+no-valid-final-receipt" ] || fail "oracle differs from class occurrence: $id"
     case "$repairs" in
-        none | repair-tool-pin-env-sha256 | base-controller-uid=1000 | create-hidden-same-inode-link | \
+        none | repair-tool-pin-env-sha256 | create-hidden-same-inode-link | \
         rebuild-observation-canonical | repair-observation-manifest-fields | repair-observation-manifest-digest-and-bytes | \
         repair-observation-manifest-digest | repair-manifest-if-pre-start) ;;
         *) fail "unreviewed repair token: $id:$repairs" ;;

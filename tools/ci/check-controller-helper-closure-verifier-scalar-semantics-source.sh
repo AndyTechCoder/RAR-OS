@@ -22,9 +22,9 @@ sha_file() {
 for file in "$semantics" "$inventory" "$templates" "$domain"; do
     [ -f "$file" ] && [ ! -L "$file" ] || fail "required regular source is unavailable: $file"
 done
-[ "$(sha_file "$semantics")" = 963ece5eddc873ae1ea0bcb98c95d234ef9bf372599c79c1a43a7a53fefb54d7 ] || fail 'scalar semantics bytes escaped review'
-[ "$(sha_file "$inventory")" = 33468d5d2641b440e71817b1c0d143f56d4c7090978438f8e794a0fd616a311b ] || fail 'operator inventory bytes escaped review'
-[ "$(sha_file "$templates")" = a5ae29ea7053dc200147901b89db67271cd895013769865910314070744835a3 ] || fail 'case-template bytes escaped review'
+[ "$(sha_file "$semantics")" = fedf6b24d1b9356ebbcaf2c27f011358937a05671a06021d083c2c874ceaca10 ] || fail 'scalar semantics bytes escaped review'
+[ "$(sha_file "$inventory")" = ea2aef334d7c6b612635ea5237926df1a459a255c61c73a9e5b998e1cc244a80 ] || fail 'operator inventory bytes escaped review'
+[ "$(sha_file "$templates")" = 443d30414ec3cc8542755006ada9a40d52e0f5efe3b26de7fdc5f82dc1152be4 ] || fail 'case-template bytes escaped review'
 [ "$(sha_file "$domain")" = 67555f2d565569e95b44a247dda630c9b98d293ba0773880f248d69d802ac66c ] || fail 'input domain bytes escaped review'
 
 for required in \
@@ -37,7 +37,7 @@ for required in \
     'byte_model=finite-raw-byte-string;offsets-are-zero-based;line-number-is-one-based;LF-is-byte-0A;no-locale+Unicode+normalization+shell-evaluation+escape-decoding' \
     'base_model=operator-input-is-the-exact-target-value-from-the-future-byte-pinned-base-descriptor-or-the-controller-recorded-value-at-the-named-phase;one-primary-never-reads-another-primarys-output' \
     'failure_rule=decode+precondition+bounds+target-type+postcondition-failure-invalidates-the-case-before-launch;never-skip+truncate+wrap+coerce+fallback' \
-    'remaining_status=23-primary-families+2-hex-file-creation-templates+decimal-literal-nlink-template+8-non-none-repair-tokens+exact-base+controller+runtime-precedence+fault+evidence+verdict-semantics-remain-absent' \
+    'remaining_status=23-primary-families+2-hex-file-creation-templates+decimal-literal-nlink-template+7-non-none-repair-tokens+exact-base+controller+runtime-precedence+fault+evidence+verdict-semantics-remain-absent' \
     'activation_rule=blocked;this-slice-cannot-create-fixtures+execute-mutations+or-authorize-a-controller' \
     'consumer_rule=this-contract-does-not-authorize-fixture+mutation+repair+controller+container+compiler+helper+target+VM+emulator+workflow+wiring+gate+readiness' \
     'local_rule=text+hash+structure-check-only;never-run-verifier+controller+container+compiler+helper+target+VM+emulator-on-Mac'; do

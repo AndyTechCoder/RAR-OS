@@ -7,6 +7,7 @@ export LC_ALL LANG
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 inventory=$root/spec/alpha/lab/controller-helper-closure-verifier-operator-inventory-v0
 templates=$root/spec/alpha/lab/controller-helper-closure-verifier-case-templates-v0
+readme=$root/spec/alpha/lab/README.md
 
 fail() {
     printf 'controller-helper closure verifier operator-inventory source check failed: %s\n' "$1" >&2
@@ -17,17 +18,17 @@ sha_file() {
     env -u LC_CTYPE LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$1" | /usr/bin/awk '{ print $1 }'
 }
 
-for file in "$inventory" "$templates"; do
+for file in "$inventory" "$templates" "$readme"; do
     [ -f "$file" ] && [ ! -L "$file" ] || fail "required regular source is unavailable: $file"
 done
-[ "$(sha_file "$inventory")" = 33468d5d2641b440e71817b1c0d143f56d4c7090978438f8e794a0fd616a311b ] || fail 'operator inventory bytes escaped review'
-[ "$(sha_file "$templates")" = a5ae29ea7053dc200147901b89db67271cd895013769865910314070744835a3 ] || fail 'case-template bytes escaped review'
+[ "$(sha_file "$inventory")" = ea2aef334d7c6b612635ea5237926df1a459a255c61c73a9e5b998e1cc244a80 ] || fail 'operator inventory bytes escaped review'
+[ "$(sha_file "$templates")" = 443d30414ec3cc8542755006ada9a40d52e0f5efe3b26de7fdc5f82dc1152be4 ] || fail 'case-template bytes escaped review'
 
 for required in \
     'status=experimental-incomplete-inactive-source-only' \
     'execution_authority=none' \
     'primary_family_count=34' \
-    'repair_token_count=9' \
+    'repair_token_count=8' \
     'coverage_rule=every-template-primary-normalizes-to-exactly-one-listed-family+every-template-repair-equals-one-listed-token+no-unlisted-family-or-repair-is-permitted' \
     'parameter_rule=shape-checking-is-lexical-only;it-does-not-decode+apply+or-prove-a-mutation' \
     'semantic_status=exact-target+precondition+postcondition+deterministic-derivation+resource-feasibility+repair-independence-are-absent' \
@@ -41,7 +42,7 @@ done
 if LC_ALL=C grep -n '[^ -~]' "$inventory" >/dev/null; then fail 'inventory contains a non-ASCII byte'; fi
 if grep -n "$(printf '\r')" "$inventory" >/dev/null; then fail 'inventory contains CR'; fi
 [ "$(grep -Ec '^P[0-9][0-9][0-9]\|[a-z0-9-]+\|[A-Za-z0-9+-]+\|opaque$' "$inventory")" -eq 34 ] || fail 'primary-family rows are malformed'
-[ "$(grep -Ec '^R[0-9][0-9][0-9]\|[^| ]+\|(opaque|no-repair)$' "$inventory")" -eq 9 ] || fail 'repair-token rows are malformed'
+[ "$(grep -Ec '^R[0-9][0-9][0-9]\|[^| ]+\|(opaque|no-repair)$' "$inventory")" -eq 8 ] || fail 'repair-token rows are malformed'
 
 number=1
 while [ "$number" -le 34 ]; do
@@ -50,7 +51,7 @@ while [ "$number" -le 34 ]; do
     number=$((number + 1))
 done
 number=1
-while [ "$number" -le 9 ]; do
+while [ "$number" -le 8 ]; do
     id=$(printf 'R%03d' "$number")
     [ "$(grep -c "^$id|" "$inventory")" -eq 1 ] || fail "repair token ID is missing or duplicated: $id"
     number=$((number + 1))
@@ -84,6 +85,7 @@ while IFS='|' read -r id primary; do
             ;;
     esac
 done
+grep -Fqx '`controller-helper-closure-verifier-operator-inventory-v0` closes the lexical vocabulary used by those templates to 34 primary families and eight repair tokens.' "$readme" || fail 'README repair-token count is stale'
 
 if grep -R -Fq 'controller-helper-closure-verifier-operator-inventory-v0' "$root/.github/workflows"; then
     fail 'inactive operator inventory is wired to GitHub Actions'

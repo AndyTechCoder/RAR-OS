@@ -151,9 +151,8 @@ operator/repair semantics contract, immutable base descriptor, fixture-image
 identity, controller, phase instrumentation, fault contract, evidence/verdict
 contracts, and exact-main validation remain blocking prerequisites.
 
-`controller-helper-closure-verifier-operator-inventory-v0` closes the lexical
-vocabulary used by those templates to 34 primary families and nine repair
-tokens. It checks parameter shapes and exact coverage mechanically, but does
+`controller-helper-closure-verifier-operator-inventory-v0` closes the lexical vocabulary used by those templates to 34 primary families and eight repair tokens.
+It checks parameter shapes and exact coverage mechanically, but does
 not decode or apply a mutation. Exact targets, preconditions, postconditions,
 deterministic derivations, resource feasibility, repair independence, and the
 base fixture remain separate blocking semantics work.
@@ -176,10 +175,10 @@ deferring symlink, hardlink, raw-name, mount, tree, manifest-specific, and
 repair behavior. It remains source-only and cannot create or mutate a fixture.
 
 `controller-helper-closure-verifier-scalar-repair-semantics-v0` defines the
-reviewed-tool environment-digest repair used by five templates. It also records
-that `base-controller-uid=1000` is a context annotation, not a valid repair, so
-its four structural occurrences remain blocked pending catalog correction. The
-contract remains inactive and grants no mutation, repair, or execution path.
+reviewed-tool environment-digest repair used by five templates. Four UID
+primaries correctly require no repair: the byte-pinned base already supplies
+their comparison context. The contract remains inactive and grants no mutation,
+repair, or execution path.
 
 `controller-helper-closure-verifier-synchronized-link-semantics-v0` defines
 post-trigger hardlink insertion and atomic regular-file-to-self-symlink
