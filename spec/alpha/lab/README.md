@@ -194,6 +194,13 @@ from the recorded post-primary manifest bytes while preserving every
 untargeted receipt field and the primary manifest. The contract is inactive,
 source-only, and grants no repair, controller, workflow, or execution authority.
 
+`controller-helper-closure-verifier-rebuild-observation-canonical-semantics-v0`
+defines the canonical whole-receipt rebuild used by three scalar field-primary
+templates. It preserves exactly one deliberately mismatched manifest field,
+proves the two untargeted manifest fields against the unchanged manifest, and
+inherits the pinned fail-closed receipt stability boundary. It remains inactive
+and grants no repair, controller, workflow, or execution authority.
+
 `controller-helper-build-receipt-v0.fields` and
 `controller-helper-test-evidence-v0.fields` fix controller-owned receipts for
 two separately terminated build jobs and one thirteen-case test job. Contextual
