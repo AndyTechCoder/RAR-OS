@@ -15,8 +15,9 @@ if [ -n "$launch_override" ]; then
     [ "${RAR_POLICY_MUTATION_TESTS-}" = 1 ] || exit 1
     scratch=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
     [ "$scratch" != disabled ] || exit 1
-    case "$launch_override" in "$scratch"/*) ;; *) exit 1 ;; esac
     [ -f "$launch_override" ] && [ ! -L "$launch_override" ] || exit 1
+    override_parent=$(CDPATH= cd -- "$(dirname -- "$launch_override")" && pwd -P)
+    case "$override_parent" in "$scratch"|"$scratch"/*) ;; *) exit 1 ;; esac
 fi
 expected='README.md
 build.Containerfile
@@ -60,7 +61,7 @@ COPY --chown=65532:65532 tools/rar-lab/qmp-client/main.rs /controller/tools/rar-
 COPY --from=qmp-builder /build/rar-qmp-client /opt/rar-lab/bin/rar-qmp-client'
 actual_copy_instructions=$(/usr/bin/grep -Ei '^[[:space:]]*((COPY|ADD)([[:space:]]|$)|ONBUILD[[:space:]]+(COPY|ADD)([[:space:]]|$))' "$launch")
 [ "$actual_copy_instructions" = "$expected_copy_instructions" ] || exit 1
-! /usr/bin/grep -Eiq '^[[:space:]]*RUN[[:space:]]+--mount([=[:space:]]|$)' "$launch" || exit 1
+if /usr/bin/grep -Ev '^[[:space:]]*(#|$)' "$launch" | /usr/bin/grep -Fq -- '--mount'; then exit 1; fi
 
 /bin/sh "$root/tools/ci/check-development-image-inputs.sh" "$images/image-inputs-v1.env" >/dev/null
 printf '%s\n' 'Development image source policy passed'

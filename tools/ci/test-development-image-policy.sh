@@ -48,5 +48,8 @@ expect_launch_rejected lowercase-copy '  copy ./tools/rar-lab/qmp-client /contro
 expect_launch_rejected local-add 'ADD tools/rar-lab/qmp-client /controller/tools/rar-lab/qmp-client'
 expect_launch_rejected onbuild-copy 'ONBUILD COPY tools/rar-lab/qmp-client /controller/tools/rar-lab/qmp-client'
 expect_launch_rejected run-mount 'RUN --mount=type=bind,source=tools/rar-lab/qmp-client,target=/tmp/qmp cp /tmp/qmp/._hidden.rs /controller/tools/rar-lab/qmp-client/._hidden.rs'
+expect_launch_rejected run-mount-second-flag 'RUN --network=none --mount=type=bind,source=tools/rar-lab/qmp-client,target=/tmp/qmp cp /tmp/qmp/._hidden.rs /controller/tools/rar-lab/qmp-client/._hidden.rs'
+expect_launch_rejected run-mount-continuation 'RUN --network=none \
+    --mount=type=bind,source=tools/rar-lab/qmp-client,target=/tmp/qmp cp /tmp/qmp/._hidden.rs /controller/tools/rar-lab/qmp-client/._hidden.rs'
 
 printf '%s\n' 'Development image immutable-fixture checks passed'
