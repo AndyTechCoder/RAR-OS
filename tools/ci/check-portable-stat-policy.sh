@@ -57,7 +57,8 @@ check_file tools/ci/check-reference-verdict-v0.sh 1
 check_file tools/ci/check-controller-handoff-attempt-v0.sh 1
 check_file tools/ci/check-controller-helper-build-receipt-v0.sh 4
 check_file tools/ci/check-reference-evidence-v0.sh 1
-check_file tools/ci/verify-launch-evidence.sh 3
+check_file tools/ci/verify-launch-evidence.sh 7
+check_file tools/ci/verify-accepted-evidence-v0.sh 2
 check_file tools/ci/test-controller-helper-evidence-v0-policy.sh 1
 check_file tools/ci/check-controller-helper-build-evidence-v0.sh 4
 check_file tools/ci/check-controller-helper-test-evidence-v0.sh 4
@@ -75,8 +76,14 @@ require_line tools/ci/check-controller-helper-build-receipt-v0.sh 'size_of() { /
 require_line tools/ci/check-controller-helper-build-receipt-v0.sh 'identity() { /usr/bin/stat -c '\''%d:%i:%s:%h:%u:%Y'\'' "$1" 2>/dev/null || /usr/bin/stat -f '\''%d:%i:%z:%l:%u:%m'\'' "$1"; }'
 require_line tools/ci/check-reference-evidence-v0.sh 'size_of() { /usr/bin/stat -c %s "$1" 2>/dev/null || /usr/bin/stat -f %z "$1"; }'
 require_line tools/ci/verify-launch-evidence.sh 'serial_size=$(/usr/bin/stat -c %s "$serial" 2>/dev/null || /usr/bin/stat -f %z "$serial")'
+require_line tools/ci/verify-launch-evidence.sh 'serial_links=$(/usr/bin/stat -c %h "$serial" 2>/dev/null || /usr/bin/stat -f %l "$serial")'
+require_line tools/ci/verify-launch-evidence.sh 'actions_size=$(/usr/bin/stat -c %s "$actions" 2>/dev/null || /usr/bin/stat -f %z "$actions")'
+require_line tools/ci/verify-launch-evidence.sh 'actions_links=$(/usr/bin/stat -c %h "$actions" 2>/dev/null || /usr/bin/stat -f %l "$actions")'
 require_line tools/ci/verify-launch-evidence.sh '        image_size=$(/usr/bin/stat -c %s "$image" 2>/dev/null || /usr/bin/stat -f %z "$image")'
+require_line tools/ci/verify-launch-evidence.sh '        image_links=$(/usr/bin/stat -c %h "$image" 2>/dev/null || /usr/bin/stat -f %l "$image")'
 require_line tools/ci/verify-launch-evidence.sh '    size=$(/usr/bin/stat -c %s "$base/$name" 2>/dev/null || /usr/bin/stat -f %z "$base/$name")'
+require_line tools/ci/verify-accepted-evidence-v0.sh 'size=$(/usr/bin/stat -c %s "$manifest" 2>/dev/null || /usr/bin/stat -f %z "$manifest")'
+require_line tools/ci/verify-accepted-evidence-v0.sh 'links=$(/usr/bin/stat -c %h "$manifest" 2>/dev/null || /usr/bin/stat -f %l "$manifest")'
 require_line tools/ci/test-controller-helper-evidence-v0-policy.sh 'size=$(/usr/bin/stat -c %s "$build_source" 2>/dev/null || /usr/bin/stat -f %z "$build_source")'
 require_line tools/ci/check-controller-helper-build-evidence-v0.sh '    links=$(/usr/bin/stat -c %h "$file" 2>/dev/null || /usr/bin/stat -f %l "$file")'
 require_line tools/ci/check-controller-helper-build-evidence-v0.sh '    owner=$(/usr/bin/stat -c %u "$file" 2>/dev/null || /usr/bin/stat -f %u "$file")'
@@ -89,4 +96,4 @@ require_line tools/ci/check-controller-helper-test-evidence-v0.sh 'identity() { 
 require_line tools/ci/test-reference-verdict-v0-policy.sh 'size=$(/usr/bin/stat -c %s "$accepted" 2>/dev/null || /usr/bin/stat -f %z "$accepted")'
 require_line tools/ci/check-development-image-inputs.sh 'size=$(/usr/bin/stat -c %s "$inputs" 2>/dev/null || /usr/bin/stat -f %z "$inputs")'
 
-printf '%s\n' 'portable stat policy passed: files=13 fallbacks=24'
+printf '%s\n' 'portable stat policy passed: files=14 fallbacks=30'

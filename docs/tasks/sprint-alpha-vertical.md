@@ -21,10 +21,10 @@ and rollback. A host mock, Linux-hosted UI, or unbooted image is not acceptance.
 - New Alpha-only contracts use an explicit experimental version under
   `spec/alpha/`; they are not stable RAR ABI, RID, package, storage, or update
   promises.
-- Milestone A may use historical `../../spec/alpha/evidence/acceptance-v1.plan`
-  only before the reviewed ADR 0025 cutover. After cutover, every new A–G probe
-  binds the exact reviewed v2 plan and rejects v1; implementation can never
-  replace a required guest result with a generic ready marker.
+- Historical `../../spec/alpha/evidence/acceptance-v1.plan` is immutable and
+  rejected for every new A–G probe. The ADR 0025 cutover binds the exact
+  reviewed v2 plan; implementation can never replace a required guest result
+  with a generic ready marker.
 
 ## Preconditions
 

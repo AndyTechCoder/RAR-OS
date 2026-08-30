@@ -14,6 +14,8 @@ required_field|reference_inventory_sha256|sha256-or-unavailable
 required_field|launch_inventory_sha256|sha256-or-unavailable
 required_field|crypto_inventory_sha256|sha256-or-unavailable
 required_field|comparison_schema_sha256|sha256-or-unavailable
+required_field|acceptance_plan_path|literal:spec/alpha/evidence/acceptance-v2.plan
+required_field|acceptance_plan_sha256|literal:ffdb07b584abc94122b14a416593916cf18df439de042c97ff83fda9e4444ccd
 required_field|compiler_path|build-root-path-or-unavailable
 required_field|compiler_sha256|sha256-or-unavailable
 required_field|linker_path|build-root-path-or-unavailable
@@ -58,6 +60,7 @@ runtime_handoff_rule=controller-opens-bounded-regular-output-no-follow,checks-ow
 identity_rule|image-digests|build,reference,launch-pairwise-distinct
 identity_rule|inventory-digests|match-exact-image-contents
 identity_rule|comparison-schema|match-trusted-controller-copy
+identity_rule|acceptance-plan|exact-v2-path+reviewed-literal-digest,controller+profile+verifier+transcript-match,v1-rejected
 blocked_rule|all-activating-identities|unavailable
 ready_rule|all-identities|lowercase-sha256-or-digest-pinned
 ready_rule|candidate-images|two-independent-byte-identical-exports

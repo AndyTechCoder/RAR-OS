@@ -44,7 +44,7 @@ expect_rejected() {
 
 reset_fixture
 [ "$(RAR_POLICY_MUTATION_TESTS=1 /bin/sh "$checker" "$fixture")" = \
-    'portable stat policy passed: files=13 fallbacks=24' ] || exit 1
+    'portable stat policy passed: files=14 fallbacks=30' ] || exit 1
 
 if /usr/bin/env -u GITHUB_ACTIONS RAR_POLICY_MUTATION_TESTS=1 \
     /bin/sh "$checker" "$fixture" >/dev/null 2>&1; then

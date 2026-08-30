@@ -143,8 +143,11 @@
   auto-chains B–D through strict ordered `none` inputs, preserves the GUI-
   continuity row's exact post-crash position, and changes only its minimum from
   C to E. C would prove restart plus peer continuity; cumulative E–G probes
-  would prove real GUI continuity. Acceptance changes no active protocol;
-  separately reviewed v2 implementation and cutover remain required
+  would prove real GUI continuity. The exact v2 protocol, transcript, verifier,
+  fixture, and anti-replay contracts are prepared on a dedicated branch and
+  reject historical v1 for every new A–G probe. The cutover is not complete or
+  active: the phase-8 durable writer, gate-report v2, independent review, merge,
+  and exact-main validation remain closed gates
 - Owner decisions: ADRs 0022 C, 0023 C, 0024 A, 0025 B, and 0026 C are recorded
   as accepted on 2026-08-29. Acceptance alone leaves every dependent contract,
   identity, evidence, controller, and readiness gate closed
