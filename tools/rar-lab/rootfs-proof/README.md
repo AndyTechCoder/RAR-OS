@@ -40,8 +40,12 @@ A separate RAR-owned [RFC 8878](https://www.rfc-editor.org/rfc/rfc8878)
 foundation parses one bounded Zstandard frame; decodes raw and RLE blocks; and
 decodes compressed blocks whose sequence count is zero and whose literals are
 raw, RLE, or one or four RFC 8878 Huffman streams using direct or bounded
-FSE-compressed weights. It rejects dictionaries, checksums, treeless literals,
-sequence codes, skippable frames, and concatenated frames with explicit errors.
+FSE-compressed weights. For nonzero sequence counts it parses and bounds the
+variable count, reserved bits, and predefined, RLE, FSE-compressed, or repeated
+literal-length, offset, and match-length tables before failing closed because
+sequence execution is not yet enabled. It rejects dictionaries, checksums,
+treeless literals, skippable frames, and concatenated frames with explicit
+errors.
 It is not connected to OCI layer acceptance until complete compressed-block
 support and its focused tests are ready.
 
@@ -74,8 +78,8 @@ support and its focused tests are ready.
 
 ## Not yet a complete image proof
 
-This slice does not yet decode treeless literals, FSE sequence codes, accept
-zstd OCI layers, or emit/validate
+This slice does not yet decode treeless literals, execute FSE sequence codes,
+accept zstd OCI layers, or emit/validate
 the accepted inventory evidence format.
 Consequently it does not
 resolve the full security finding, activate image inventory v2, make a Lab
