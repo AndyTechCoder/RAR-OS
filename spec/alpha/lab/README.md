@@ -111,9 +111,18 @@ shape guards are source-proven, while a freshly hashed all-zero SHA-256 value is
 recorded as residual cryptographic risk rather than a practical fixture. The
 catalogs deliberately exclude injected
 command, read, write, close, tool-output, and resource-exhaustion failures;
-those still require separate reviewed input-domain and fault contracts. No
-catalog is a test result, controller implementation, workflow permission, or
-readiness evidence.
+the input domain described below is now present, while those failures still
+require a separate reviewed fault contract. No catalog is a test result,
+controller implementation, workflow permission, or readiness evidence.
+
+`controller-helper-closure-verifier-input-domain-v0.fields` fixes the future
+controller-owned environment, mount, file, mutation-target, diagnostic-token,
+and case-isolation domains against the exact inactive verifier and validation
+catalog bytes. It requires opaque one-pass token substitution, a fresh bounded
+private fixture per case, explicit treatment of unrepresentable inputs, and no
+ambient host state. It creates no fixtures, cases, fault injection, controller,
+workflow, or execution authority; explicit constructible cases and fault
+behavior remain separate blocking contracts.
 
 `controller-helper-build-receipt-v0.fields` and
 `controller-helper-test-evidence-v0.fields` fix controller-owned receipts for
