@@ -23,11 +23,11 @@ sha_file() {
 for file in "$semantics" "$templates" "$inventory" "$domain" "$scalar"; do
     [ -f "$file" ] && [ ! -L "$file" ] || fail "required regular source is unavailable: $file"
 done
-[ "$(sha_file "$semantics")" = 83e1e916620622804edf58df74504d4bd416b91ed4412d65a7cad6c6effceb80 ] || fail 'scalar repair semantics bytes escaped review'
-[ "$(sha_file "$templates")" = a5ae29ea7053dc200147901b89db67271cd895013769865910314070744835a3 ] || fail 'case-template bytes escaped review'
-[ "$(sha_file "$inventory")" = 33468d5d2641b440e71817b1c0d143f56d4c7090978438f8e794a0fd616a311b ] || fail 'operator inventory bytes escaped review'
+[ "$(sha_file "$semantics")" = 0a45a6d52209aa6cb77b9f936814ce02b49d0f03638688d93f2d661b2e29599f ] || fail 'scalar repair semantics bytes escaped review'
+[ "$(sha_file "$templates")" = 443d30414ec3cc8542755006ada9a40d52e0f5efe3b26de7fdc5f82dc1152be4 ] || fail 'case-template bytes escaped review'
+[ "$(sha_file "$inventory")" = ea2aef334d7c6b612635ea5237926df1a459a255c61c73a9e5b998e1cc244a80 ] || fail 'operator inventory bytes escaped review'
 [ "$(sha_file "$domain")" = 67555f2d565569e95b44a247dda630c9b98d293ba0773880f248d69d802ac66c ] || fail 'input domain bytes escaped review'
-[ "$(sha_file "$scalar")" = 963ece5eddc873ae1ea0bcb98c95d234ef9bf372599c79c1a43a7a53fefb54d7 ] || fail 'scalar semantics bytes escaped review'
+[ "$(sha_file "$scalar")" = fedf6b24d1b9356ebbcaf2c27f011358937a05671a06021d083c2c874ceaca10 ] || fail 'scalar semantics bytes escaped review'
 
 for required in \
     'status=experimental-incomplete-inactive-source-only' \
@@ -35,12 +35,11 @@ for required in \
     'semantic_row_count=1' \
     'repair_token_coverage=repair-tool-pin-env-sha256' \
     'covered_template_count=5' \
-    'deferred_context_token=base-controller-uid=1000-is-not-a-consistency-repair-because-it-names-no-distinct-declared-target+pre-bytes+post-bytes;its-4-template-occurrences-remain-structural-only+unbound+blocked-pending-reviewed-template-catalog-correction' \
     'ordering_rule=complete+validate+record-the-one-primary-postcondition-first;then-apply-only-the-declared-repair;launch-only-after-the-primary+repair+combined-postconditions-pass;primary-failure+repair-failure+overlap-invalidates-before-launch' \
     'noncancellation_rule=repair-never-restores+rewrites+aliases+replaces+or-changes-identity+bytes+metadata-of-the-primary-target;all-primary-postconditions-remain-true-through-launch' \
     'tool_pin_digest_rule=after-primary-post-state-recording+compute-SHA-256-over-the-exact-complete-mutated-tool-pin-regular-file-byte-string-with-the-future-byte-pinned-controller-hasher;encode-the-32-octet-digest-as-exactly-64-lowercase-ASCII-hex-bytes-with-no-prefix+separator+LF+NUL;set-only-RAR_REVIEWED_VERIFIER_TOOLS_SHA256-to-those-bytes' \
     'failure_rule=base-proof+ordering+read-scope+digest+encoding+environment+identity+noncancellation+combined-postcondition-failure-invalidates-before-launch;never-skip+retry+coerce+fallback+repair-the-primary-target' \
-    'remaining_status=7-non-none-repair-tokens-including-the-unbound-base-controller-uid-context-token+23-primary-families+pre-start+repair-coupled-links+required-path-symlinks+raw-name+path-alias+mount+tree+manifest-specific-primary-families+exact-base+controller+runtime-precedence+fault+evidence+verdict-remain-absent' \
+    'remaining_status=6-non-none-repair-tokens+23-primary-families+pre-start+repair-coupled-links+required-path-symlinks+raw-name+path-alias+mount+tree+manifest-specific-primary-families+exact-base+controller+runtime-precedence+fault+evidence+verdict-remain-absent' \
     'activation_rule=blocked;this-slice-cannot-create-fixtures+execute-mutations+apply-repairs+or-authorize-a-controller' \
     'consumer_rule=this-contract-does-not-authorize-fixture+mutation+repair+controller+container+compiler+helper+target+VM+emulator+workflow+wiring+gate+readiness' \
     'local_rule=text+hash+structure-check-only;never-run-verifier+controller+container+compiler+helper+target+VM+emulator-on-Mac'; do
@@ -52,9 +51,9 @@ if LC_ALL=C grep -n '[^ -~]' "$semantics" >/dev/null; then fail 'semantics conta
 if grep -n "$(printf '\r')" "$semantics" >/dev/null; then fail 'semantics contain CR'; fi
 [ "$(grep -Ec '^R[0-9][0-9][0-9]\|[^| ]+\|[^| ]+\|[^| ]+\|[^| ]+$' "$semantics")" -eq 1 ] || fail 'semantic rows are malformed'
 grep -Fqx 'R001|repair-tool-pin-env-sha256|env.RAR_REVIEWED_VERIFIER_TOOLS_SHA256|pre-start+primary-postcondition-recorded+mutated-tool-pin-remains-declared-single-link-regular-file+controller-hasher-identity-byte-pinned+repair-target-pre-bytes-recorded|tool_pin_digest_rule+repair-target-post-bytes-are-the-derived-64-byte-digest+preserve-primary-file-bytes+identity+metadata+all-other-environment-bindings' "$semantics" || fail 'tool-pin digest repair row changed'
-if grep -Fq '|base-controller-uid=1000|' "$semantics"; then fail 'invalid context token gained repair semantics'; fi
+if grep -Fq 'base-controller-uid=1000' "$semantics"; then fail 'removed context token returned to repair semantics'; fi
 
-[ "$(grep -c '|base-controller-uid=1000|' "$templates")" -eq 4 ] || fail 'controller UID repair template count changed'
+[ "$(grep -c '|base-controller-uid=1000|' "$templates")" -eq 0 ] || fail 'removed controller UID repair token returned'
 [ "$(grep -c '|repair-tool-pin-env-sha256|' "$templates")" -eq 5 ] || fail 'tool-pin repair template count changed'
 
 /usr/bin/awk -F '|' '
@@ -77,4 +76,4 @@ fi
 grep -qx 'rust_toolchain_closure_manifest_relative=none' "$root/tools/toolchain/host-tools.x86_64-unknown-linux-gnu-ci.lock" || fail 'CI lock was activated'
 grep -qx 'state=blocked' "$root/tools/sprint-alpha/controller-helper-v0.env" || fail 'helper inventory is not blocked'
 
-printf '%s\n' 'controller-helper closure verifier scalar repair semantics cover one token and five templates with one context token deferred, inactive and directly unwired'
+printf '%s\n' 'controller-helper closure verifier scalar repair semantics cover one token and five templates, inactive and directly unwired'

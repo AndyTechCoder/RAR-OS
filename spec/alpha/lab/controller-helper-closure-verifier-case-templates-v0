@@ -82,12 +82,12 @@ C045|D046|E041|runtime-tool-identities|pre-start|file./usr/bin/wc=append-hex:00|
 C046|D047|E042|runtime-tool-identities|pre-start|file./usr/bin/stat=append-hex:00|none|E042@runtime-tool-identities+normal-exit-status-1+no-valid-final-receipt
 C047|D048|E043|runtime-tool-identities|pre-start|file./usr/bin/cmp=append-hex:00|none|E043@runtime-tool-identities+normal-exit-status-1+no-valid-final-receipt
 C048|D049|E044|runtime-tool-identities|pre-start|file./usr/bin/id=append-hex:00|none|E044@runtime-tool-identities+normal-exit-status-1+no-valid-final-receipt
-C049|D050|E045|controller-ownership|pre-start|env.RAR_CONTROLLER_UID=hex:31303031|base-controller-uid=1000|E045@controller-ownership+normal-exit-status-1+no-valid-final-receipt
-C050|D051|E046|controller-ownership|pre-start|metadata./evidence.uid=1001|base-controller-uid=1000|E046@controller-ownership+normal-exit-status-1+no-valid-final-receipt
-C051|D052|E047|controller-ownership|pre-start|metadata./verification.uid=1001|base-controller-uid=1000|E047@controller-ownership+normal-exit-status-1+no-valid-final-receipt
+C049|D050|E045|controller-ownership|pre-start|env.RAR_CONTROLLER_UID=hex:31303031|none|E045@controller-ownership+normal-exit-status-1+no-valid-final-receipt
+C050|D051|E046|controller-ownership|pre-start|metadata./evidence.uid=1001|none|E046@controller-ownership+normal-exit-status-1+no-valid-final-receipt
+C051|D052|E047|controller-ownership|pre-start|metadata./verification.uid=1001|none|E047@controller-ownership+normal-exit-status-1+no-valid-final-receipt
 C052|D053|E048|input-identity|pre-start|entry./evidence/controller-helper-closure.sha256=absent|none|E048@input-identity+normal-exit-status-1+no-valid-final-receipt
 C053|D055|E050|input-identity|pre-start|metadata./evidence/controller-helper-closure.sha256.nlink=2|create-hidden-same-inode-link|E050@input-identity+normal-exit-status-1+no-valid-final-receipt
-C054|D056|E051|input-identity|pre-start|metadata./evidence/controller-helper-closure.sha256.uid=1001|base-controller-uid=1000|E051@input-identity+normal-exit-status-1+no-valid-final-receipt
+C054|D056|E051|input-identity|pre-start|metadata./evidence/controller-helper-closure.sha256.uid=1001|none|E051@input-identity+normal-exit-status-1+no-valid-final-receipt
 C055|D058|E053|input-identity|pre-start|file./verification/controller-helper-closure-verification.receipt=hex:58|none|E053@input-identity+normal-exit-status-1+no-valid-final-receipt
 C056|D059|E054|evidence-exact-set|pre-start|file./evidence/unexpected=hex:58|none|E054@evidence-exact-set+normal-exit-status-1+no-valid-final-receipt
 C057|D060|E055|evidence-exact-set|after-safe-inputs-before-evidence-enumeration|entry./evidence/controller-helper-closure.sha256=remove|none|E055@evidence-exact-set+normal-exit-status-1+no-valid-final-receipt
