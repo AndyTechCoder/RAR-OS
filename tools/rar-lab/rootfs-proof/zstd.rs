@@ -1,8 +1,8 @@
 //! Bounded, dependency-free RFC 8878 frame decoder foundation.
 //!
-//! This first slice accepts one standard frame containing raw and RLE blocks.
-//! Compressed blocks, dictionaries, checksums, skippable frames, and concatenated
-//! frames fail with explicit errors until their independently reviewed slices land.
+//! This decoder accepts raw and RLE blocks plus compressed blocks containing
+//! raw/RLE literals and zero sequences. Dictionaries, checksums, Huffman/FSE,
+//! skippable frames, and concatenated frames fail with explicit errors.
 
 use super::MAX_LAYER_BYTES;
 
@@ -36,8 +36,9 @@ pub enum Error {
 
 /// Decodes exactly one dictionary-free, checksum-free Zstandard frame.
 ///
-/// Raw and RLE blocks are supported. All other frame features fail closed with
-/// a distinct error and no partially decoded output is returned.
+/// Raw/RLE blocks and zero-sequence compressed blocks with raw/RLE literals are
+/// supported. Other frame features fail closed with a distinct error, and no
+/// partially decoded output is returned.
 pub fn decode_zstd(input: &[u8], maximum_output_bytes: usize) -> Result<Vec<u8>, Error> {
     if input.len() > MAX_INPUT_BYTES {
         return Err(Error::InputTooLarge);
@@ -329,9 +330,7 @@ mod tests {
 
     #[test]
     fn rejects_unsupported_or_reserved_features() {
-        let mut compressed = MAGIC.to_vec();
-        compressed.extend_from_slice(&[0x20, 0x00]);
-        append_block(&mut compressed, true, 2, 0, b"");
+        let compressed = compressed_frame(&[2]);
         assert_eq!(
             decode_zstd(&compressed, 0),
             Err(Error::UnsupportedLiteralsCompression)
