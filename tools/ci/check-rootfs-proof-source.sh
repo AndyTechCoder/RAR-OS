@@ -58,9 +58,14 @@ done
 for test_name in \
     reads_exact_regular_blob_through_root_handle \
     rejects_symlinked_blob_and_symlinked_root \
-    rejects_intermediate_escape_and_size_mismatch_before_read; do
+    rejects_intermediate_escape_and_size_mismatch_before_read \
+    exact_reader_never_requests_bytes_beyond_ceiling \
+    rejects_special_file_after_path_only_inspection; do
     /usr/bin/grep -Fq "fn $test_name()" "$tree/layout.rs" || exit 1
 done
+/usr/bin/grep -Fq 'custom_flags(O_PATH | O_NOFOLLOW | O_NONBLOCK)' "$tree/layout.rs" || exit 1
+/usr/bin/grep -Fq 'read_exact(&mut bytes)' "$tree/layout.rs" || exit 1
+! /usr/bin/grep -Fq '.take(' "$tree/layout.rs" || exit 1
 for test_name in \
     parses_utf8_unicode_escapes_and_unsigned_integers \
     rejects_duplicates_invalid_numbers_and_trailing_data; do

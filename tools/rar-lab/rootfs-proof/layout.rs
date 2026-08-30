@@ -14,6 +14,7 @@ use std::path::{Component, Path, PathBuf};
 const O_NONBLOCK: i32 = 0o004000;
 const O_DIRECTORY: i32 = 0o200000;
 const O_NOFOLLOW: i32 = 0o400000;
+const O_PATH: i32 = 0o10000000;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Error {
@@ -95,17 +96,21 @@ impl LayoutDirectory {
         }
         let proc_relative = PathBuf::from(format!("/proc/self/fd/{}", self.root.as_raw_fd()))
             .join(relative);
-        let file = OpenOptions::new()
+        // Inspect through O_PATH first: opening a hostile device or FIFO for
+        // ordinary reads can itself have side effects or block.
+        let path_handle = OpenOptions::new()
             .read(true)
-            .custom_flags(O_NOFOLLOW | O_NONBLOCK)
+            .custom_flags(O_PATH | O_NOFOLLOW | O_NONBLOCK)
             .open(proc_relative)
             .map_err(|_| oci::Error::MissingBlob)?;
-        let metadata = file.metadata().map_err(|_| oci::Error::MissingBlob)?;
+        let metadata = path_handle
+            .metadata()
+            .map_err(|_| oci::Error::MissingBlob)?;
         if !metadata.is_file() {
             return Err(oci::Error::MissingBlob);
         }
         let expected_path = self.canonical_root.join(relative);
-        if canonicalize_fd(file.as_raw_fd()).as_deref() != Some(expected_path.as_path()) {
+        if canonicalize_fd(path_handle.as_raw_fd()).as_deref() != Some(expected_path.as_path()) {
             return Err(oci::Error::MissingBlob);
         }
         let metadata_bytes = usize::try_from(metadata.len()).map_err(|_| oci::Error::BlobTooLarge)?;
@@ -116,14 +121,27 @@ impl LayoutDirectory {
             return Err(oci::Error::BlobSizeMismatch);
         }
 
-        let mut bytes = Vec::with_capacity(metadata_bytes);
-        file.take((maximum_bytes as u64).saturating_add(1))
-            .read_to_end(&mut bytes)
+        // Reopen only the already-verified O_PATH object. This proc path is
+        // derived solely from our descriptor, never from layout-controlled text.
+        let mut file = OpenOptions::new()
+            .read(true)
+            .custom_flags(O_NONBLOCK)
+            .open(format!("/proc/self/fd/{}", path_handle.as_raw_fd()))
             .map_err(|_| oci::Error::MissingBlob)?;
-        if bytes.len() > maximum_bytes {
-            return Err(oci::Error::BlobTooLarge);
+        let read_metadata = file.metadata().map_err(|_| oci::Error::MissingBlob)?;
+        if !read_metadata.is_file()
+            || read_metadata.dev() != metadata.dev()
+            || read_metadata.ino() != metadata.ino()
+            || canonicalize_fd(file.as_raw_fd()).as_deref() != Some(expected_path.as_path())
+        {
+            return Err(oci::Error::MissingBlob);
         }
-        if exact_bytes.is_some_and(|expected| bytes.len() != expected) {
+        let bytes = read_exact_bytes(&mut file, metadata_bytes)?;
+        let final_metadata = file.metadata().map_err(|_| oci::Error::MissingBlob)?;
+        if final_metadata.dev() != metadata.dev()
+            || final_metadata.ino() != metadata.ino()
+            || final_metadata.len() != metadata.len()
+        {
             return Err(oci::Error::BlobSizeMismatch);
         }
         Ok(bytes)
@@ -159,6 +177,14 @@ fn canonicalize_fd(fd: RawFd) -> Option<PathBuf> {
     fs::canonicalize(format!("/proc/self/fd/{fd}")).ok()
 }
 
+fn read_exact_bytes<R: Read>(reader: &mut R, exact_bytes: usize) -> Result<Vec<u8>, oci::Error> {
+    let mut bytes = vec![0_u8; exact_bytes];
+    reader
+        .read_exact(&mut bytes)
+        .map_err(|_| oci::Error::BlobSizeMismatch)?;
+    Ok(bytes)
+}
+
 fn is_canonical_relative(path: &Path) -> bool {
     !path.as_os_str().is_empty()
         && !path.is_absolute()
@@ -171,6 +197,8 @@ fn is_canonical_relative(path: &Path) -> bool {
 mod tests {
     use super::*;
     use crate::sha256;
+    use std::io;
+    use std::os::unix::net::UnixListener;
     use std::os::unix::fs::symlink;
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -231,6 +259,48 @@ mod tests {
         assert_eq!(
             layout.with_blob(&digest, bytes.len() - 1, |_| Ok(())),
             Err(oci::Error::BlobTooLarge)
+        );
+    }
+
+    #[test]
+    fn exact_reader_never_requests_bytes_beyond_ceiling() {
+        struct CountingReader {
+            bytes: Vec<u8>,
+            offset: usize,
+            returned: usize,
+        }
+
+        impl Read for CountingReader {
+            fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+                let remaining = &self.bytes[self.offset..];
+                let count = remaining.len().min(output.len());
+                output[..count].copy_from_slice(&remaining[..count]);
+                self.offset += count;
+                self.returned += count;
+                Ok(count)
+            }
+        }
+
+        let mut reader = CountingReader {
+            bytes: b"four".to_vec(),
+            offset: 0,
+            returned: 0,
+        };
+        assert_eq!(read_exact_bytes(&mut reader, 3).unwrap(), b"fou");
+        assert_eq!(reader.returned, 3);
+    }
+
+    #[test]
+    fn rejects_special_file_after_path_only_inspection() {
+        let root = fixture_root("special");
+        let digest = sha256::digest_string(b"socket").unwrap();
+        let path = blob_path(&root, &digest);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let _socket = UnixListener::bind(&path).unwrap();
+        let mut layout = LayoutDirectory::open(&root).unwrap();
+        assert_eq!(
+            layout.with_blob(&digest, 6, |_| Ok(())),
+            Err(oci::Error::MissingBlob)
         );
     }
 

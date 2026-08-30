@@ -15,9 +15,11 @@ roots, and binds every effective regular file to its SHA-256 content digest.
 The implementation uses Rust `std` only, contains no `unsafe`, and does not
 spawn a process, decompress data, build an image, or execute target code. Its
 Linux cloud-only layout adapter confines filesystem reads beneath an opened,
-non-symlink root directory handle; accepts only exact regular-file paths; and
-rejects symlinks, special files, out-of-root resolution, and size changes before
-content parsing. The sole public document resolver uses a bounded source
+non-symlink root directory handle; inspects candidates through non-activating
+path-only handles before opening verified regular files; and rejects symlinks,
+special files, out-of-root resolution, and size changes before content parsing.
+Reads use one exact-sized allocation and never probe beyond the declared
+ceiling. The sole public document resolver uses a bounded source
 interface that supplies exact blob bytes by digest and receives the descriptor's
 exact declared size as the ceiling before each access. A trusted future layout
 consumer must enforce that ceiling before allocation or I/O.
