@@ -8,6 +8,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+pub mod gzip;
 mod json;
 #[cfg(target_os = "linux")]
 pub mod layout;

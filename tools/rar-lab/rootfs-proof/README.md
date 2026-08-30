@@ -26,6 +26,12 @@ consumer must enforce that ceiling before allocation or I/O.
 Unit tests compile and run only in the pinned, network-disabled cloud validation
 container with read-only source and bounded tmpfs outputs.
 
+A separate, not-yet-wired RAR-owned decoder implements one bounded gzip member,
+including stored, fixed-Huffman, and dynamic-Huffman DEFLATE blocks, header
+bounds, exact end-of-stream handling, CRC-32, and uncompressed-size checks. It
+is based directly on [RFC 1951](https://www.rfc-editor.org/rfc/rfc1951) and
+[RFC 1952](https://www.rfc-editor.org/rfc/rfc1952), not third-party code.
+
 ## Accepted subset
 
 - Uncompressed OCI layer media type semantics only.
@@ -53,8 +59,9 @@ container with read-only source and bounded tmpfs outputs.
 
 ## Not yet a complete image proof
 
-This slice does not decompress gzip/zstd layers or emit/validate the accepted
-inventory evidence format. Consequently it does not
+The gzip decoder is not yet connected to accepted OCI layer media types, and
+this slice does not decode zstd layers or emit/validate the accepted inventory
+evidence format. Consequently it does not
 resolve the full security finding, activate image inventory v2, make a Lab
 profile ready, or authorize provisioning, target compilation, or guest
 execution. Those capabilities require reviewed follow-up slices and any
