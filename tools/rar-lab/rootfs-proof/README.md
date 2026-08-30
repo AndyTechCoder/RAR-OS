@@ -57,8 +57,9 @@ applying the layer.
 ## Accepted subset
 
 - Uncompressed, single-member gzip, and single-frame zstd OCI layer media
-  types; all compressed blobs in one image share a 256 MiB aggregate limit,
-  and all decoded/uncompressed layer bytes share a 1 GiB aggregate limit.
+  types; gzip and zstd frames accept at most 8,192 compressed-data blocks,
+  all compressed blobs in one image share a 256 MiB aggregate limit, and all
+  decoded/uncompressed layer bytes share a 1 GiB aggregate limit.
 - OCI layout version `1.0.0`, schema version 2 index/manifest documents, one
   caller-selected exact manifest digest, up to 8 nested index hops and 64 total
   index documents, standard image configuration, and up to 256 ordered layers.

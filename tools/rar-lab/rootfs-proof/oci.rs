@@ -616,16 +616,32 @@ mod tests {
 
     fn rebind_first_layer_blob(fixture: &mut Fixture, replacement: Vec<u8>) {
         let old_layer_digest = fixture.first_layer_digest.clone();
+        let old_layer_size = fixture.blobs[&old_layer_digest].len();
         let new_layer_digest = sha256::digest_string(&replacement).unwrap();
         let old_manifest_digest = fixture.manifest_digest.clone();
+        let old_manifest_size = fixture.blobs[&old_manifest_digest].len();
         let manifest = String::from_utf8(fixture.blobs[&old_manifest_digest].clone()).unwrap();
+        let old_layer_descriptor =
+            format!("\"digest\":\"{old_layer_digest}\",\"size\":{old_layer_size}");
+        let new_layer_descriptor = format!(
+            "\"digest\":\"{new_layer_digest}\",\"size\":{}",
+            replacement.len()
+        );
+        assert!(manifest.contains(&old_layer_descriptor));
         let manifest = manifest
-            .replace(&old_layer_digest, &new_layer_digest)
+            .replacen(&old_layer_descriptor, &new_layer_descriptor, 1)
             .into_bytes();
         let new_manifest_digest = sha256::digest_string(&manifest).unwrap();
         let index = String::from_utf8(fixture.index.clone()).unwrap();
+        let old_manifest_descriptor =
+            format!("\"digest\":\"{old_manifest_digest}\",\"size\":{old_manifest_size}");
+        let new_manifest_descriptor = format!(
+            "\"digest\":\"{new_manifest_digest}\",\"size\":{}",
+            manifest.len()
+        );
+        assert!(index.contains(&old_manifest_descriptor));
         fixture.index = index
-            .replace(&old_manifest_digest, &new_manifest_digest)
+            .replacen(&old_manifest_descriptor, &new_manifest_descriptor, 1)
             .into_bytes();
         fixture.blobs.insert(new_layer_digest.clone(), replacement);
         fixture
@@ -764,6 +780,22 @@ mod tests {
             |digest| malformed.blobs.get(digest).map(Vec::as_slice),
         );
         assert_eq!(result, Err(Error::Zstd(zstd::Error::InvalidMagic)));
+    }
+
+    #[test]
+    fn maps_verified_gzip_block_limit_failures() {
+        let mut fixture = fixture(GZIP_LAYER_MEDIA_TYPE, false);
+        let replacement = gzip_empty_stored_blocks(gzip::MAX_DEFLATE_BLOCKS + 1);
+        rebind_first_layer_blob(&mut fixture, replacement);
+        let result = resolve_uncompressed_image(
+            &fixture.layout,
+            &fixture.index,
+            &fixture.manifest_digest,
+            "amd64",
+            "linux",
+            |digest| fixture.blobs.get(digest).map(Vec::as_slice),
+        );
+        assert_eq!(result, Err(Error::Gzip(gzip::Error::TooManyBlocks)));
     }
 
     #[test]
@@ -980,6 +1012,18 @@ mod tests {
         output.extend_from_slice(bytes);
         output.extend_from_slice(&test_crc32(bytes).to_le_bytes());
         output.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        output
+    }
+
+    fn gzip_empty_stored_blocks(block_count: usize) -> Vec<u8> {
+        let mut output = vec![0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 255];
+        for block in 0..block_count {
+            output.push(u8::from(block + 1 == block_count));
+            output.extend_from_slice(&0u16.to_le_bytes());
+            output.extend_from_slice(&u16::MAX.to_le_bytes());
+        }
+        output.extend_from_slice(&0u32.to_le_bytes());
+        output.extend_from_slice(&0u32.to_le_bytes());
         output
     }
 
