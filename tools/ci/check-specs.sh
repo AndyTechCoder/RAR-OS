@@ -44,6 +44,11 @@ docs/tasks/release-0.md
 docs/tasks/sprint-alpha-vertical.md
 docs/tasks/sprint-alpha-milestone-a-execution-map.md
 docs/tasks/sprint-alpha-milestones-b-g-execution-map.md
+docs/adr/0022-alpha-graphics-input-authority.md
+docs/adr/0023-alpha-boot-determinism-and-entry-state.md
+docs/adr/0024-alpha-controller-helper-build-trust.md
+docs/adr/0025-alpha-gui-continuity-evidence-sequencing.md
+docs/adr/0026-alpha-platform-payload-and-state-sources.md
 docs/proposals/alpha-owner-choice-brief.md
 docs/proposals/0022-alpha-graphics-input-authority.md
 docs/proposals/0023-alpha-boot-determinism-and-entry-state.md
@@ -290,27 +295,34 @@ done
 /bin/sh tools/ci/check-reference-verdict-v0.sh spec/alpha/lab/fixtures/reference-verdict-accepted.v0 milestone-f spec/alpha/lab/fixtures/controller-context.v0 spec/alpha/lab/fixtures/source-context.v0 spec/alpha/lab/fixtures/comparison-transcript.v0 spec/alpha/lab/fixtures/reference-inventory.v0 spec/alpha/lab/fixtures/comparison-evidence.v0 spec/alpha/lab/fixtures/reference-harness.v0 >/dev/null
 /bin/sh tools/ci/check-reference-verdict-v0.sh spec/alpha/lab/fixtures/reference-verdict-not-required.v0 milestone-a spec/alpha/lab/fixtures/controller-context.v0 spec/alpha/lab/fixtures/source-context.v0 spec/alpha/lab/fixtures/comparison-transcript.v0 none none none >/dev/null
 /bin/sh tools/ci/check-sprint-alpha-gate-report-policy.sh >/dev/null
+historical_gate_report_sha=$(env LC_ALL=C LANG=C /usr/bin/shasum -a 256 \
+    tools/ci/report-sprint-alpha-gates.sh | /usr/bin/awk '{ print $1 }')
+[ "$historical_gate_report_sha" = 78782b52f2b063c0dd56f3778e17242dc21088729da7f075a2bc74ab038fa8f8 ] || \
+    fail "historical gate-report v1 bytes changed"
+if /bin/sh tools/ci/report-sprint-alpha-gates.sh >/dev/null 2>&1; then
+    fail "historical gate-report v1 remains active after ADR 0022-0026 acceptance"
+fi
 /bin/sh tools/ci/test-proposed-adr-classifier-policy.sh >/dev/null
 [ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
-    docs/proposals/0022-alpha-graphics-input-authority.md 0022 \
-    docs/approval-record.md)" = owner-decision-required ] || fail "ADR 0022 decision state is inconsistent"
+    docs/adr/0022-alpha-graphics-input-authority.md 0022 \
+    docs/approval-record.md)" = accepted ] || fail "ADR 0022 decision state is inconsistent"
 [ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
-    docs/proposals/0023-alpha-boot-determinism-and-entry-state.md 0023 \
-    docs/approval-record.md)" = owner-decision-required ] || fail "ADR 0023 decision state is inconsistent"
+    docs/adr/0023-alpha-boot-determinism-and-entry-state.md 0023 \
+    docs/approval-record.md)" = accepted ] || fail "ADR 0023 decision state is inconsistent"
 [ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
-    docs/proposals/0024-alpha-controller-helper-build-trust.md 0024 \
-    docs/approval-record.md)" = owner-decision-required ] || fail "ADR 0024 decision state is inconsistent"
+    docs/adr/0024-alpha-controller-helper-build-trust.md 0024 \
+    docs/approval-record.md)" = accepted ] || fail "ADR 0024 decision state is inconsistent"
 [ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
-    docs/proposals/0025-alpha-gui-continuity-evidence-sequencing.md 0025 \
-    docs/approval-record.md)" = owner-decision-required ] || fail "ADR 0025 decision state is inconsistent"
+    docs/adr/0025-alpha-gui-continuity-evidence-sequencing.md 0025 \
+    docs/approval-record.md)" = accepted ] || fail "ADR 0025 decision state is inconsistent"
 [ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
-    docs/proposals/0026-alpha-platform-payload-and-state-sources.md 0026 \
-    docs/approval-record.md)" = owner-decision-required ] || fail "ADR 0026 decision state is inconsistent"
+    docs/adr/0026-alpha-platform-payload-and-state-sources.md 0026 \
+    docs/approval-record.md)" = accepted ] || fail "ADR 0026 decision state is inconsistent"
 grep -qx 'Status: Non-authoritative preparation — implementation remains blocked' \
     docs/tasks/sprint-alpha-milestone-a-execution-map.md || fail "Milestone A execution map overstates authority"
 grep -qx 'Status: Non-authoritative preparation — implementation remains sequential and gated' \
     docs/tasks/sprint-alpha-milestones-b-g-execution-map.md || fail "Milestones B-G execution map overstates authority"
-grep -qx 'Status: Non-authoritative preparation — proposed decisions remain undecided' \
+grep -qx 'Status: Non-authoritative integration plan — decisions accepted, activation gated' \
     docs/proposals/alpha-decision-integration-plan.md || fail "Alpha decision integration plan overstates authority"
 grep -Fqx '## Gate 1 — before Milestone A implementation' \
     docs/proposals/alpha-decision-integration-plan.md || fail "Alpha decision Gate 1 is missing"
@@ -345,11 +357,12 @@ grep -Fq 'PR #5 is never merged, rebased, or' \
 grep -Fq 'wholesale cherry-picked into the Sprint Alpha line' \
     docs/proposals/alpha-decision-integration-plan.md || fail "Alpha transition permits wholesale PR #5 cherry-picking"
 grep -Fq 'Never merge PR #5 into the Alpha line.' BACKLOG.md || fail "Backlog permits PR #5 merge"
-grep -Fq 'Record ADR 0025 and complete the reviewed protocol/controller v2 cutover' BACKLOG.md || fail "Backlog omits ADR 0025 before Milestone B"
-grep -Fq 'before Milestone B.' BACKLOG.md || fail "Backlog does not bind ADR 0025 to pre-B"
-grep -Fq 'ADR 0023, ADR 0024, and ADR 0026 choices' BACKLOG.md || fail "Backlog omits a pre-A owner decision"
-grep -Fq 'controller/helper evidence before Milestone A.' BACKLOG.md || fail "Backlog does not bind ADR 0023/0024/0026 to pre-A"
-grep -Fq 'Record ADR 0022 and its reviewed peripheral-grant contract before Milestone E.' BACKLOG.md || fail "Backlog omits ADR 0022 before Milestone E"
+grep -Fq 'Record ADR 0025 Alternative B.' BACKLOG.md || fail "Backlog omits accepted ADR 0025"
+grep -Fq 'Complete the reviewed protocol/controller v2 cutover before Milestone B.' BACKLOG.md || fail "Backlog does not bind ADR 0025 activation to pre-B"
+grep -Fq "Record the owner's ADR 0023, ADR 0024, and ADR 0026 choices." BACKLOG.md || fail "Backlog omits the recorded pre-A decisions"
+grep -Fq 'controller/helper evidence before Milestone A.' BACKLOG.md || fail "Backlog does not bind ADR 0023/0024/0026 activation to pre-A"
+grep -Fq 'Record ADR 0022 Alternative C.' BACKLOG.md || fail "Backlog omits accepted ADR 0022"
+grep -Fq 'Complete its reviewed peripheral-grant contract before Milestone E.' BACKLOG.md || fail "Backlog does not bind ADR 0022 activation to pre-E"
 grep -qx 'Status: Non-authoritative preparation — no completion evidence exists yet' \
     docs/tasks/sprint-alpha-completion-evidence-map.md || fail "Alpha completion evidence map overstates readiness"
 grep -qx 'Status: Explanatory only — not authority or completion evidence' \
@@ -374,6 +387,19 @@ grep -Fq 'Anything less remains incomplete, regardless of the final guest marker
     docs/tasks/sprint-alpha-completion-evidence-map.md || fail "Alpha evidence closure rule is missing"
 grep -Fqx '`Approve ADR 0022 Alternative C, ADR 0023 Alternative C, ADR 0024 Alternative A, ADR 0025 Alternative B, and ADR 0026 Alternative C.`' \
     docs/proposals/alpha-owner-choice-brief.md || fail "Alpha owner approval sentence is missing or ambiguous"
+grep -Fqx 'Status: Historical decision aid — canonical decisions recorded elsewhere' \
+    docs/proposals/alpha-owner-choice-brief.md || fail "Alpha owner brief overstates current authority"
+grep -Fq 'Root reads only the' docs/tasks/sprint-alpha-milestone-a-execution-map.md || fail "Milestone A map omits Root staging ownership"
+grep -Fq 'fixed Recovery, Nucleus, Core-bootstrap, component-bundle, initial-system,' \
+    docs/tasks/sprint-alpha-milestone-a-execution-map.md || fail "Milestone A map omits ADR 0026 source staging"
+grep -Fq 'Recovery—not Nucleus—owns outer source-set' \
+    docs/tasks/sprint-alpha-milestone-a-execution-map.md || fail "Milestone A map misassigns outer source validation"
+grep -Fq 'Required exact observations: 11 rows' \
+    docs/tasks/sprint-alpha-milestones-b-g-execution-map.md || fail "Milestone C evidence count disagrees with ADR 0025"
+grep -Fq 'Required exact observations: 7 captured rows—GUI continuity' \
+    docs/tasks/sprint-alpha-milestones-b-g-execution-map.md || fail "Milestone E evidence count disagrees with ADR 0025"
+grep -Fq 'all 45 ordered acceptance rows (A:5, B:7, C:11,' \
+    docs/tasks/sprint-alpha-milestones-b-g-execution-map.md || fail "Final evidence buckets disagree with ADR 0025"
 /bin/sh tools/ci/check-alpha-preimplementation-contracts.sh >/dev/null
 [ "$(sed -n '1p' tools/sprint-alpha/x86_64-q35-v1.profile)" = 'schema=rar-development-machine-profile-v1' ] || fail "Sprint Alpha machine profile schema is invalid"
 grep -qx 'acceleration=tcg' tools/sprint-alpha/x86_64-q35-v1.profile || fail "Sprint Alpha machine profile must use software emulation"
@@ -432,7 +458,7 @@ duplicates=$(printf '%s\n' "$index_targets" | sort | uniq -d)
 
 adr_files=$(sed -n 's/^- \[ADR [^]]*\](\(adr\/[^)]*\.md\))$/docs\/\1/p' docs/README.md)
 adr_count=$(printf '%s\n' "$adr_files" | awk 'NF { count++ } END { print count + 0 }')
-[ "$adr_count" -eq 21 ] || fail "expected exactly 21 indexed ADRs"
+[ "$adr_count" -eq 26 ] || fail "expected exactly 26 indexed ADRs"
 
 approval_date=$(sed -n 's/^Date: //p' docs/approval-record.md)
 case "$approval_date" in
@@ -449,6 +475,13 @@ grep -q '^Approver: .\+' docs/approval-record.md || fail "approval record has no
 [ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
     docs/adr/0021-alpha-boot-payload-boundary.md 0021 \
     docs/approval-record.md)" = accepted ] || fail "ADR 0021 is not bound to owner approval"
+for accepted_adr in 0022 0023 0024 0025 0026; do
+    accepted_path=$(printf 'docs/adr/%s-' "$accepted_adr")
+    accepted_file=$(find docs/adr -maxdepth 1 -type f -name "${accepted_adr}-*.md")
+    [ "$(printf '%s\n' "$accepted_file" | awk 'NF { count++ } END { print count + 0 }')" -eq 1 ] || fail "ADR $accepted_adr canonical file is not unique"
+    case "$accepted_file" in "$accepted_path"*) ;; *) fail "ADR $accepted_adr canonical path is invalid" ;; esac
+    [ "$(/bin/sh tools/ci/classify-proposed-adr.sh "$accepted_file" "$accepted_adr" docs/approval-record.md)" = accepted ] || fail "ADR $accepted_adr is not bound to owner approval"
+done
 grep -qx "Status: Gate 0 approved on $approval_date" docs/README.md || fail "index approval date disagrees with approval record"
 grep -q "Gate 0 was approved on $approval_date" README.md || fail "root README approval date disagrees with approval record"
 grep -qx 'Status: Draft PR open' docs/publication-record.md || fail "initial publication record status is inconsistent"
@@ -496,6 +529,7 @@ printf '%s\n' "$adr_files" | while IFS= read -r adr; do
         docs/adr/0017-*) adr_approval_date=2026-08-20 ;;
         docs/adr/0018-*) adr_approval_date=2026-08-25 ;;
         docs/adr/0019-* | docs/adr/0020-* | docs/adr/0021-*) adr_approval_date=2026-08-26 ;;
+        docs/adr/0022-* | docs/adr/0023-* | docs/adr/0024-* | docs/adr/0025-* | docs/adr/0026-*) adr_approval_date=2026-08-29 ;;
         *) adr_approval_date=$approval_date ;;
     esac
     grep -qx "Status: Accepted — $adr_approval_date" "$adr" || fail "ADR status mismatch: $adr"

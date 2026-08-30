@@ -1,11 +1,12 @@
 # ADR 0022: Alpha Graphics and Input Authority
 
-Status: Historical proposal — superseded on 2026-08-29
-Decision: Undecided at proposal publication
+Status: Accepted — 2026-08-29
+Decision: Alternative C
 
-Canonical decision: [ADR 0022](../adr/0022-alpha-graphics-input-authority.md).
-This file is retained unchanged in substance as proposal history and is not an
-authority source.
+Approval basis: explicit owner approval of the repository's exact five-choice
+sentence on 2026-08-29. Acceptance selects the private Alpha envelope and
+non-DMA-first direction; it does not make the peripheral contract ready or
+authorize target implementation, cloud provisioning, or execution.
 
 ## Context
 
@@ -33,7 +34,7 @@ private boot boundary and therefore requires an explicit decision.
 - Avoid pulling a production PCI, USB, HID, IOMMU, or RHD v2 design into Alpha.
 - Keep the shortcut bounded, testable, and replaceable.
 
-## Alternatives
+## Considered options
 
 ### A. Define production Boot Entry and RHD v2 now
 
@@ -67,18 +68,18 @@ The machine profile changes to a pinned, proven QMP-injectable non-DMA input
 transport if the selected QEMU/firmware combination can provide one. If not,
 Alpha retains xHCI/USB but confines it as in Alternative B. QMP remains a
 host-only evidence mechanism and grants no guest authority. This option is
-proposed.
+selected.
 
-## Proposed direction
+## Decision
 
 Select Alternative C. Before implementation, the pinned QEMU candidate must
 prove which non-DMA transport is available. A reviewed experimental contract
 then fixes the exact envelope bytes, profile digest, framebuffer format,
 address spaces, ranges, rights, interrupt semantics, validation order, and
-failure codes. No GUI/input target code may assume this proposal before owner
-acceptance.
+failure codes. No GUI/input target code may begin before that reviewed contract
+and its dependent gates are complete.
 
-## Consequences if accepted
+## Consequences
 
 - Milestone E gains an honest, minimal device-authority path without changing
   stable R0-002 semantics.
@@ -96,6 +97,22 @@ acceptance.
 - Because E changes the private outer entry and platform profile, the E gate
   reruns the complete cumulative A–D boot, R0, memory, isolation, and recovery
   evidence plus fresh architecture, correctness, and security review.
+
+## Security and data impact
+
+The private grant conveys only profile-bound framebuffer and input authority.
+Validation precedes mapping or capability creation, rights are attenuated by
+service, and no application receives raw device, DMA, or host authority. The
+Alpha path carries no owner data and creates no production hardware trust.
+If the non-DMA transport cannot be proven, the reviewed xHCI fallback contract
+must fix the trusted adapter's DMA blast radius, exclusive bounce/staging
+regions, range checks, revocation, and negative cases before E can become ready.
+
+## Compatibility and migration
+
+The outer envelope and peripheral grant are experimental Alpha contracts. They
+do not change R0-002, and later hardware discovery and RHD evolution replace
+them without preserving their byte format.
 
 ## Validation
 
@@ -118,10 +135,8 @@ production device authority.
 
 ## Ownership and integration boundary
 
-If ADR 0026 is accepted, this peripheral grant occupies only its separately
+Under accepted ADR 0026, this peripheral grant occupies only its separately
 framed optional record in `AlphaPlatformEntryV0`; it cannot reinterpret or
 overlap the component, system-state, preserved-data, or unchanged R0 sources.
-If ADR 0026 is not accepted, ADR 0022 requires another reviewed outer-envelope
-integration decision before implementation. In either case, owner acceptance
-of this proposal alone does not modify the vertical packet or trusted
-controller ownership.
+Acceptance alone does not modify the vertical packet or trusted-controller
+ownership.

@@ -62,16 +62,24 @@ Status: Gate 0 approved on 2026-07-16
 - [ADR 0019: Alpha Layer Signing Profile](adr/0019-alpha-layer-signing.md)
 - [ADR 0020: Alpha Reference-Oracle Isolation](adr/0020-alpha-reference-oracle-isolation.md)
 - [ADR 0021: Alpha Boot Payload and Handoff Boundary](adr/0021-alpha-boot-payload-boundary.md)
+- [ADR 0022: Alpha Graphics and Input Authority](adr/0022-alpha-graphics-input-authority.md)
+- [ADR 0023: Alpha Boot Determinism and Entry State](adr/0023-alpha-boot-determinism-and-entry-state.md)
+- [ADR 0024: Alpha Controller Helper Build Trust](adr/0024-alpha-controller-helper-build-trust.md)
+- [ADR 0025: Alpha Pre-GUI Evidence Input and Continuity Sequencing](adr/0025-alpha-gui-continuity-evidence-sequencing.md)
+- [ADR 0026: Alpha Platform Payload and State Sources](adr/0026-alpha-platform-payload-and-state-sources.md)
 
-Gate 0 approval makes the indexed direction and the Release 0 task packet implementation contracts. It does not approve later release-specific interfaces early, prevent ADR-governed evolution, or make a technical implementation permanently irreplaceable.
+Gate 0 approval covers ADRs 0001–0016 and the Release 0 task packet. Later
+indexed ADRs are authoritative only through their separately recorded approval
+dates. No approval prevents ADR-governed evolution or makes an implementation
+permanently irreplaceable.
 
-## Open Alpha architecture decision
+## Sprint Alpha decision history and integration
 
-- [Plain-language Alpha owner choice brief](proposals/alpha-owner-choice-brief.md)
-- [Proposed ADR 0022: Alpha Graphics and Input Authority](proposals/0022-alpha-graphics-input-authority.md)
-- [Proposed ADR 0023: Alpha Boot Determinism and Entry State](proposals/0023-alpha-boot-determinism-and-entry-state.md)
-- [Proposed ADR 0024: Alpha Controller Helper Build Trust](proposals/0024-alpha-controller-helper-build-trust.md)
-- [Proposed ADR 0025: Alpha Pre-GUI Evidence Input and Continuity Sequencing](proposals/0025-alpha-gui-continuity-evidence-sequencing.md)
-- [Proposed ADR 0026: Alpha Platform Payload and State Sources](proposals/0026-alpha-platform-payload-and-state-sources.md)
+- [Recorded Alpha owner choices](proposals/alpha-owner-choice-brief.md)
+- [Historical proposal 0022](proposals/0022-alpha-graphics-input-authority.md)
+- [Historical proposal 0023](proposals/0023-alpha-boot-determinism-and-entry-state.md)
+- [Historical proposal 0024](proposals/0024-alpha-controller-helper-build-trust.md)
+- [Historical proposal 0025](proposals/0025-alpha-gui-continuity-evidence-sequencing.md)
+- [Historical proposal 0026](proposals/0026-alpha-platform-payload-and-state-sources.md)
 - [Alpha Decision Integration Plan](proposals/alpha-decision-integration-plan.md)
 - [Sprint Alpha Completion Evidence Map](tasks/sprint-alpha-completion-evidence-map.md)

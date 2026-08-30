@@ -1,11 +1,12 @@
 # ADR 0023: Alpha Boot Determinism and Entry State
 
-Status: Historical proposal — superseded on 2026-08-29
-Decision: Undecided at proposal publication
+Status: Accepted — 2026-08-29
+Decision: Alternative C
 
-Canonical decision: [ADR 0023](../adr/0023-alpha-boot-determinism-and-entry-state.md).
-This file is retained unchanged in substance as proposal history and is not an
-authority source.
+Approval basis: explicit owner approval of the repository's exact five-choice
+sentence on 2026-08-29. Acceptance selects one private deterministic Alpha
+profile; it does not complete its field contract or authorize target builds,
+images, provisioning, or execution.
 
 ## Context
 
@@ -71,9 +72,9 @@ Create a reviewed Alpha Boot Contract v0 and Machine Profile v2 with:
 
 All standard serialization and validation remains RAR-owned. UEFI/FAT/GPT/ELF
 are compatibility standards, not imported implementations. This option is
-proposed.
+selected.
 
-## Proposed direction
+## Decision
 
 Select Alternative C. Generate language-neutral fixture bytes from the reviewed
 field contract and require two independent RAR-owned implementations—the image
@@ -85,7 +86,7 @@ This choice authorizes specification and source implementation only. It does
 not authorize Mac target compilation or execution, cloud credentials,
 provisioning, deployment, VM launch, or production compatibility claims.
 
-## Consequences if accepted
+## Consequences
 
 - Milestone A receives a deterministic, enforceable boot contract.
 - The private Alpha image and fixed physical slots are intentionally disposable.
@@ -102,6 +103,10 @@ Exact source placement and ownership prevent aliasing; total attribute mapping
 prevents accidental rights inflation; NX/WP requirements enforce W^X; the fixed
 timer value is accepted only from the digest-bound emulated profile. The Mac
 remains storage-only and no target execution is authorized.
+
+The ready boot contract must prove required protections before parsing any
+untrusted payload/source bytes, remove writable aliases before executable
+mapping, and recheck the required state across Root → Recovery → Nucleus.
 
 ## Compatibility and migration
 

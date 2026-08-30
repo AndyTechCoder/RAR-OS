@@ -1,14 +1,16 @@
 # Sprint Alpha 0.1 Status
 
 - Date: 2026-08-29
-- Current milestone: End-of-week rebaseline, before Milestone A target implementation
-- Objective: merge the trusted cloud Development Lab controller, then implement
-  and retain the authentic A–G bootable GUI vertical slice
-- Worktree: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/sprint-alpha-rebaseline`
-- Branch: `codex/sprint-alpha-rebaseline-closure` (documentation checkpoint
-  based on verified `main`; the merged source branch remains preserved)
-- Pull request: [#7](https://github.com/AndyTechCoder/RAR-OS/pull/7), merged
-  at `7bcf6a1e28b1c7fa886d2696fa9f1e595d87ec51`
+- Current milestone: owner decisions recorded; pre-Milestone A contracts and
+  controller evidence remain blocked
+- Objective: durably record ADRs 0022–0026, then complete the selected pre-A
+  contracts/controller gates before authentic A–G implementation starts
+- Worktree: `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/alpha-owner-decisions`
+- Branch: `codex/alpha-owner-decisions`, based on verified `main` at
+  `abd75bfccf4fcd2f197871225d1a78233c0d87dc`
+- Bootstrap pull request: [#13](https://github.com/AndyTechCoder/RAR-OS/pull/13),
+  merged at `abd75bfccf4fcd2f197871225d1a78233c0d87dc`; exact post-merge trusted-
+  controller run `33294557261` passed
 - Durability proof: exact-head `1f409393995c8e558d71eed34e3641daf2f21f3c`
   passed run `33268129412`; the distinct exact-merge `main` run `33268347971`,
   job `99142287272`, passed complete validation and mutation testing
@@ -95,15 +97,15 @@
   effects. The superseded v1 two-role runner also stops before reading cloud
   context or issuing any container command; no default dispatch path can reach
   it after ADR 0020
-- Controller-helper build trust: proposed ADR 0024 records three bounded cloud
-  build choices and recommends a twice-reproduced, fully pinned compiler closure
-  on the approved Linux runner for Alpha. It remains owner-decision-required;
+- Controller-helper build trust: accepted ADR 0024 Alternative A selects two
+  builds from a fully pinned compiler closure on the approved Linux runner for
+  Alpha. Real compiler/helper identities and reviewed evidence remain absent;
   no helper compilation, cloud provisioning, or execution is authorized
 - Controller-helper inventory: an option-neutral blocked instance now binds the
   required builder, compiler closure, trusted source, golden vector, twice-
   reproduced binary, and isolated test-evidence identities. All activating
   values remain `unavailable`; 40 declarative cases and mutation tests prevent
-  a ready claim before ADR 0024 acceptance and real reviewed cloud evidence.
+  a ready claim before real reviewed cloud evidence.
   Strict contextual parsers now validate the future aggregate build record,
   two distinct controller-owned build receipts, and a thirteen-case test receipt
   against their actual selected inputs. They reject aliases, hardlinks when the
@@ -118,8 +120,8 @@
 - Boot implementation state: accepted ADR 0021 selects the Alpha boot-volume,
   payload-loader, and Root-to-Recovery boundary. The candidate specification is
   explicitly `draft-incomplete` and cannot authorize implementation until its
-  five review findings are decided and fixed. Proposed ADR 0023 groups them
-  into one owner choice with Alternative C recommended; no target implementation began
+  five review findings are fixed. Accepted ADR 0023 Alternative C selects the
+  deterministic private Alpha profile; no target implementation began
 - Milestone A preparation: a non-authoritative execution map now decomposes the
   existing packet into eight ordered work packets, maps all 41 mandatory boot
   cases, fixes one-writer paths and stop conditions, and keeps every target
@@ -132,27 +134,24 @@
 - Acceptance-sequence defect: the fixed Milestone C plan requires
   `component:gui-responsive`, but A–C own no GUI/presentation implementation and
   Milestone E is the first graphics owner. No synthetic marker or hidden pre-E
-  component is permitted; an architecture-governed continuity witness or plan
-  correction is required before C starts
-- Acceptance-input defect: the fixed plan injects keyboard shortcuts to trigger
+  component is permitted; accepted ADR 0025's combined protocol-v2 correction
+  is required before Milestone B starts
+- Historical acceptance-input defect: v1 injects keyboard shortcuts to trigger
   B, C, and D, but input authority and implementation first exist at E. No
   hidden pre-E keyboard handler or marker without consumed input is permitted
-- Proposed resolution: ADR 0025 recommends a new reviewed protocol version that
+- Accepted resolution: ADR 0025 Alternative B selects a new reviewed protocol version that
   auto-chains B–D through strict ordered `none` inputs, preserves the GUI-
   continuity row's exact post-crash position, and changes only its minimum from
   C to E. C would prove restart plus peer continuity; cumulative E–G probes
-  would prove real GUI continuity. The proposal records no decision and changes
-  no active protocol
-- Owner decision readiness: the plain-language choice brief now explains ADR
-  0025 and ADR 0026 alongside ADRs 0022–0024 and provides one exact five-decision approval
-  sentence. The brief remains non-authoritative and records no approval. The
-  owner's delegation of safe operational choices while unavailable does not
-  replace the exact architecture-decision approval required by the packet;
-  ADRs 0022–0026 and every dependent gate therefore remain unchanged
+  would prove real GUI continuity. Acceptance changes no active protocol;
+  separately reviewed v2 implementation and cutover remain required
+- Owner decisions: ADRs 0022 C, 0023 C, 0024 A, 0025 B, and 0026 C are recorded
+  as accepted on 2026-08-29. Acceptance alone leaves every dependent contract,
+  identity, evidence, controller, and readiness gate closed
 - Decision integration readiness: one non-authoritative plan now sequences the
-  recommended decisions into pre-A boot/platform/controller, pre-B evidence-
-  protocol, and pre-E peripheral-authority gates. It records no approval and
-  changes no active packet, protocol, ownership, or readiness state
+  accepted decisions into pre-A boot/platform/controller, pre-B evidence-
+  protocol, and pre-E peripheral-authority gates. It grants no readiness or
+  execution authority
 - Implementation-task boundary: this persistent preparation goal and rebaseline
   worktree cannot roll into Milestone A. After PR #7 and every precondition pass,
   implementation begins from verified `main` in the packet-required fresh SSD
@@ -171,27 +170,26 @@
   Sprint Alpha
 - Static enforcement: required-file, authority-status, ADR-classification, and
   exact approval-sentence checks now cover both execution maps, the owner brief,
-  proposed ADRs 0025/0026, all three decision-integration gates, and all eight
+  canonical ADRs 0022–0026, all three decision-integration gates, and all eight
   completion-proof items so preparation cannot silently become authoritative,
   incomplete, or disappear
-- Gate-report migration: schema v1 remains unchanged. Proposed ADR 0025 now
+- Gate-report migration: schema v1 remains unchanged. Accepted ADR 0025
   requires a versioned v2 compatibility cutover exposing ADR 0025, protocol-v2,
-  and fail-closed Milestone B states if the proposal is accepted; no active
+  and fail-closed Milestone B states; no active
   readiness or public format changed
 - Platform delivery/state gaps: the existing Alpha boot grants no runtime
-  storage authority and delivers no Core/component/app/state bytes. Proposed
-  ADR 0026 recommends four immutable Root-staged sources—fixed Core bootstrap,
+  storage authority and delivers no Core/component/app/state bytes. Accepted
+  ADR 0026 selects four immutable Root-staged sources—fixed Core bootstrap,
   component bundle, initial system state, and initial preserved data—in one
-  bounded Alpha envelope. It records no decision, persistence claim, device
-  authority, or implementation readiness
-- E ownership gap: proposed ADR 0022 now explicitly requires narrow temporary
+  bounded Alpha envelope. It creates no persistence claim, device authority,
+  or implementation readiness
+- E ownership gap: accepted ADR 0022 requires narrow temporary
   Recovery/Nucleus adapter ownership, separate trusted profile/controller work,
   and full cumulative A–D revalidation instead of allowing E to edit unowned
   boot paths implicitly
-- GUI/input architecture: proposed ADR 0022 identifies the authority missing
-  from R0-002. It remains owner-decision-required, so it does not block the
-  Milestone A boot foundation but must be accepted before Milestone E target
-  graphics/input code
+- GUI/input architecture: accepted ADR 0022 identifies the authority missing
+  from R0-002. Its reviewed peripheral contract and Lab evidence remain required
+  before Milestone E target graphics/input code
 - External blockers: the stale internal-Mac capacity safeguard is removed
   locally under the owner's 2026-08-27 SSD-workspace clarification; the SSD
   reserve and exact-root budget remain unchanged. The repository is now public
@@ -234,14 +232,14 @@
   `rar-os-ssd`, `permission_profile`, or permissions-profile declaration; no
   external file was changed. The reviewed `rar-os-ssd` profile therefore still
   needs one-time owner-approved installation and confinement evidence in a
-  fresh SSD-root task
-- Next durable action: record exact owner choices for ADRs 0023, 0024, and 0026,
-  make the boot contract and v2 controller/helper evidence genuinely ready, and
+  fresh SSD-root task. The profile is now installed without replacing existing
+  settings; effective confinement evidence remains a fresh-task pre-A gate
+- Next durable action: make the selected boot/platform contracts and v2
+  controller/helper evidence genuinely ready, and
   pass the external Lab/PR/checkpoint gates before Milestone A. ADR 0025 remains
   mandatory before Milestone B; ADR 0022 and its reviewed peripheral-grant
-  contract remain mandatory before Milestone E. The non-authoritative
-  plain-language choice brief is indexed at
-  `docs/proposals/alpha-owner-choice-brief.md`; it records no approval
+  contract remain mandatory before Milestone E. The canonical approval is in
+  `docs/approval-record.md`
 - Deadline: 2026-08-30 23:59 America/Los_Angeles
 - Local safety: target compilation, image creation, firmware loading, QEMU,
   emulator, VM, guest execution, macOS modification, and access outside the

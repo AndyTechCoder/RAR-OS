@@ -1,23 +1,23 @@
 # Alpha Decision Integration Plan
 
-Status: Non-authoritative preparation — proposed decisions remain undecided
+Status: Non-authoritative integration plan — decisions accepted, activation gated
 
 ## Purpose
 
-This plan records how the current Sprint Alpha packet would be amended if the
-owner accepts the recommended alternatives in ADRs 0022–0026. It prevents a
+This plan records how the current Sprint Alpha packet is amended after the
+owner accepted the selected alternatives in ADRs 0022–0026. It prevents a
 future task from treating an owner choice as a ready contract, editing a trusted
 controller from an implementation branch, or inventing path ownership.
 
-This document records no decision and changes no active contract, evidence
-protocol, task ownership, execution authority, or readiness state. The proposal
-files, approval record, accepted ADRs, reviewed specifications, and authoritative
+This document is not the approval record and changes no active contract,
+evidence protocol, task ownership, execution authority, or readiness state. The
+decision files, approval record, reviewed specifications, and authoritative
 vertical packet always win.
 
 ## Decision and activation rule
 
-Each ADR remains independently undecided until the approval record contains an
-exact owner decision accepted through the repository's ADR process. Acceptance
+Each selected ADR is accepted only because the approval record contains its
+exact owner decision through the repository's ADR process. Acceptance
 authorizes only the work stated by that ADR. It does not make a format ready,
 satisfy a preflight, merge a PR, authorize a cloud run, or authorize any Mac
 target build or execution.
@@ -30,12 +30,12 @@ closed.
 
 ## Gate 1 — before Milestone A implementation
 
-Recommended decisions: ADR 0023 Alternative C, ADR 0024 Alternative A, and ADR
-0026 Alternative C. ADR 0022 Alternative C may be accepted at the same time so
-the common private envelope is reviewed once, but its peripheral record remains
-absent and grants no authority until Gate 3.
+Accepted decisions: ADR 0023 Alternative C, ADR 0024 Alternative A, and ADR
+0026 Alternative C. Accepted ADR 0022 Alternative C permits the common private
+envelope to be reviewed once, but its peripheral record remains absent and
+grants no authority until Gate 3.
 
-After exact owner acceptance, one architecture-owned contract change must:
+After recorded owner acceptance, one architecture-owned contract change must:
 
 1. Complete the private Alpha Boot Contract and Machine Profile v2 selected by
    ADR 0023, including byte-exact image construction, fixed source slots, total
@@ -64,6 +64,12 @@ helper builds, independent helper conformance evidence, ready v2 Lab bindings,
 and no target or owner-data access. The vertical implementation branch must not
 edit this controller authority.
 
+A separately reviewed gate-report schema v2 must also land before Milestone A.
+It classifies ADR 0026 and binds exact ready identities for the private platform
+envelope, Core bootstrap, component bundle, initial system state, and initial
+preserved-data source. It may report acceptance protocol v2 as
+`reviewed-implementation-required` until the separate pre-B cutover.
+
 Milestone A remains closed until the amended packet and contracts are reviewed
 and ready; the helper/controller evidence is real and merged; PR #7 and every
 required workflow are green, reviewed, merged, and verified; and every local,
@@ -72,21 +78,21 @@ authoritative packet passes. A zero-step workflow is not a passing check.
 
 ## Gate 2 — before Milestone B implementation
 
-Recommended decision: ADR 0025 Alternative B.
+Accepted decision: ADR 0025 Alternative B.
 
-After exact owner acceptance, one separately reviewed default-branch evidence
+After recorded owner acceptance, one separately reviewed default-branch evidence
 change must:
 
 1. Add immutable `acceptance-v2.plan` with exactly the four field changes,
    45-row order, bucket counts, and cumulative counts specified by ADR 0025.
 2. Bind the exact v2 digest in the controller, verifier, profile, fixtures, and
    documentation; reject v1 for every new A–G probe after cutover.
-3. Add versioned gate-report schema v2 with explicit ADR 0025, protocol-v2, and
-   Milestone B readiness state. Gate-report v1 and acceptance v1 remain
-   immutable historical evidence and are never reinterpreted.
-4. Update the authoritative vertical packet and B–G execution map together so
+3. Update the authoritative vertical packet and B–G execution map together so
    B–D auto-chain without pre-E keyboard authority and GUI continuity first
    becomes mandatory in cumulative E–G probes.
+
+Gate-report v1 and acceptance v1 remain immutable historical evidence and are
+never reinterpreted or used for active readiness after these decisions.
 
 This change is trusted controller/protocol work, not Milestone B target work.
 The B writer must not edit `.github/workflows/`, trusted `tools/ci/`, or the
@@ -95,7 +101,7 @@ reviewed, exactly bound, and a successful real-step workflow proves it.
 
 ## Gate 3 — before Milestone E graphics/input implementation
 
-Required decision: ADR 0022 Alternative C.
+Accepted decision: ADR 0022 Alternative C.
 
 The approved cloud Lab must first produce reviewed capability evidence for the
 pinned QEMU/firmware profile. The evidence selects either a proven non-DMA input

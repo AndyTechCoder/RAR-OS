@@ -65,9 +65,9 @@ credentials, URLs, or cloud authority and cannot locate roots by themselves.
 
 `controller-helper-inventory-v0.fields` and its build-evidence contract define
 the identities required to turn that primitive into a trusted Linux helper.
-They are deliberately topology-neutral while ADR 0024 is undecided: the checked
-instance contains no compiler, builder, source, binary, or evidence identity and
-cannot become ready. Whichever alternative is accepted must reproduce the same
+ADR 0024 Alternative A is accepted, but the checked instance remains
+non-activating: it contains no compiler, builder, source, binary, or evidence
+identity and cannot become ready. The selected path must reproduce the same
 bounded helper twice and bind isolated test evidence before controller activation.
 
 `controller-helper-build-receipt-v0.fields` and
