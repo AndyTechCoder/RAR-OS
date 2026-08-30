@@ -1,5 +1,6 @@
 schema=rar-policy-test-modes-v0
 path|mode
+tools/ci/test-accepted-evidence-v0-policy.sh|ephemeral
 tools/ci/test-alpha-crypto-reference-policy.sh|ephemeral
 tools/ci/test-alpha-dependency-policy.sh|ephemeral
 tools/ci/test-alpha-preimplementation-contract-policy.sh|ephemeral

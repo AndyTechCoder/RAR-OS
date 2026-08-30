@@ -8,10 +8,10 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 [ "$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")" = /tmp ] || exit 1
 ulimit -f 131072
 
+/bin/sh "$root/tools/ci/test-accepted-evidence-v0-policy.sh"
 /bin/sh "$root/tools/ci/test-alpha-crypto-reference-policy.sh"
 /bin/sh "$root/tools/ci/test-alpha-dependency-policy.sh"
 /bin/sh "$root/tools/ci/test-alpha-preimplementation-contract-policy.sh"
-/bin/sh "$root/tools/ci/test-accepted-evidence-v0-policy.sh"
 /bin/sh "$root/tools/ci/test-controller-helper-evidence-v0-policy.sh"
 /bin/sh "$root/tools/ci/test-controller-helper-inventory-v0-policy.sh"
 /bin/sh "$root/tools/ci/test-development-controller-v2-policy.sh"
