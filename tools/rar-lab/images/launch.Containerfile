@@ -10,7 +10,10 @@ ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} \
 USER root
 RUN set -eu; mkdir -p /evidence; chown 65532:65532 /evidence; chmod 0700 /evidence
 USER 65532:65532
-COPY --chown=65532:65532 tools/rar-lab/qmp-client /controller/tools/rar-lab/qmp-client
+COPY --chown=65532:65532 tools/rar-lab/qmp-client/README.md /controller/tools/rar-lab/qmp-client/README.md
+COPY --chown=65532:65532 tools/rar-lab/qmp-client/build-plan.v1 /controller/tools/rar-lab/qmp-client/build-plan.v1
+COPY --chown=65532:65532 tools/rar-lab/qmp-client/json.rs /controller/tools/rar-lab/qmp-client/json.rs
+COPY --chown=65532:65532 tools/rar-lab/qmp-client/main.rs /controller/tools/rar-lab/qmp-client/main.rs
 WORKDIR /controller/tools/rar-lab/qmp-client
 RUN set -eu; \
     /opt/rar-toolchain/bin/rustc --edition=2024 --test -C debuginfo=0 \

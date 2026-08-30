@@ -44,6 +44,11 @@ done
 /usr/bin/grep -Fq 'cmp /build/rar-qmp-client-a /build/rar-qmp-client-b' "$launch" || exit 1
 /usr/bin/grep -Fq 'mkdir -p /evidence' "$launch" || exit 1
 ! /usr/bin/grep -Fq '/workspace' "$launch" || exit 1
+for source in README.md build-plan.v1 json.rs main.rs; do
+    [ "$(/usr/bin/grep -Fxc "COPY --chown=65532:65532 tools/rar-lab/qmp-client/$source /controller/tools/rar-lab/qmp-client/$source" "$launch")" -eq 1 ] || exit 1
+done
+[ "$(/usr/bin/grep -c '^COPY --chown=65532:65532 tools/rar-lab/qmp-client/' "$launch")" -eq 4 ] || exit 1
+! /usr/bin/grep -Fqx 'COPY --chown=65532:65532 tools/rar-lab/qmp-client /controller/tools/rar-lab/qmp-client' "$launch" || exit 1
 
 /bin/sh "$root/tools/ci/check-development-image-inputs.sh" "$images/image-inputs-v1.env" >/dev/null
 printf '%s\n' 'Development image source policy passed'
