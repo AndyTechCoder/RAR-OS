@@ -7,7 +7,7 @@ tools/ci/test-controller-handoff-attempt-v0-policy.sh|immutable
 tools/ci/test-controller-helper-evidence-v0-policy.sh|ephemeral
 tools/ci/test-controller-helper-inventory-v0-policy.sh|ephemeral
 tools/ci/test-development-controller-v2-policy.sh|ephemeral
-tools/ci/test-development-image-policy.sh|immutable
+tools/ci/test-development-image-policy.sh|ephemeral
 tools/ci/test-development-lab-profile-policy.sh|ephemeral
 tools/ci/test-development-lab-profile-v2-policy.sh|ephemeral
 tools/ci/test-development-probe-policy.sh|immutable
@@ -22,6 +22,7 @@ tools/ci/test-proposed-adr-classifier-policy.sh|immutable
 tools/ci/test-qmp-client-source-policy.sh|ephemeral
 tools/ci/test-reference-evidence-v0-policy.sh|ephemeral
 tools/ci/test-reference-verdict-v0-policy.sh|ephemeral
+tools/ci/test-release-0-reference-harness-policy.sh|ephemeral
 tools/ci/test-remote-checkpoint-policy.sh|immutable
 tools/ci/test-trusted-launcher-policy.sh|ephemeral
 tools/ci/test-workspace-budget-policy.sh|immutable

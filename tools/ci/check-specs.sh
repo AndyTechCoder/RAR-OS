@@ -36,6 +36,7 @@ docs/host-safety.md
 docs/handoff-prompt.md
 docs/v1-alpha-execution.md
 docs/runbooks/github-actions-account-unblock.md
+docs/security-remediation-status.md
 docs/sprint-alpha.md
 docs/sprint-alpha-dashboard.md
 SPRINT_STATUS.md
@@ -157,6 +158,7 @@ tools/ci/check-reference-evidence-v0.sh
 tools/ci/test-reference-evidence-v0-policy.sh
 tools/ci/check-reference-verdict-v0.sh
 tools/ci/test-reference-verdict-v0-policy.sh
+tools/ci/test-release-0-reference-harness-policy.sh
 tools/ci/check-portable-stat-policy.sh
 tools/ci/test-portable-stat-policy.sh
 tools/ci/verify-remote-checkpoint.sh
@@ -180,6 +182,8 @@ tools/ci/check-workspace-budget-values.sh
 tools/ci/require-ephemeral-policy-test-root.sh
 tools/ci/check-ephemeral-policy-test-confinement.sh
 tools/ci/run-ephemeral-policy-tests.sh
+tools/ci/run-qmp-client-unit-tests.sh
+tools/ci/run-rootfs-proof-unit-tests.sh
 tools/ci/policy-test-modes.v0
 tools/ci/test-workspace-budget-policy.sh
 tools/ci/verify-pinned-file.sh
@@ -187,6 +191,7 @@ tools/ci/test-pinned-file-policy.sh
 tools/ci/check-qmp-client-contract.sh
 tools/ci/check-qmp-client-source.sh
 tools/ci/test-qmp-client-source-policy.sh
+tools/ci/check-rootfs-proof-source.sh
 tools/ci/check-development-image-inputs.sh
 tools/ci/check-development-image-sources.sh
 tools/ci/check-containerfile-static-policy.sh
@@ -214,6 +219,9 @@ tools/rar-lab/qmp-client/README.md
 tools/rar-lab/qmp-client/build-plan.v1
 tools/rar-lab/qmp-client/json.rs
 tools/rar-lab/qmp-client/main.rs
+tools/rar-lab/rootfs-proof/README.md
+tools/rar-lab/rootfs-proof/build-plan.v0
+tools/rar-lab/rootfs-proof/lib.rs
 tools/rar-lab/controller-handoff/README.md
 tools/rar-lab/controller-handoff/attempt.rs
 tools/rar-lab/controller-handoff/build-plan.v0
@@ -251,7 +259,7 @@ printf '%s\n' "$required_files" | while IFS= read -r file; do
     [ -s "$file" ] || fail "empty required file: $file"
 done
 
-for script in tools/ci/check-specs.sh tools/ci/check-specifications-authority.sh tools/ci/check-sprint-static.sh tools/ci/check-local-sprint-preflight.sh tools/ci/check-remote-sprint-preflight.sh tools/ci/test-local-sprint-preflight-policy.sh tools/ci/check-alpha-preimplementation-contracts.sh tools/ci/test-alpha-preimplementation-contract-policy.sh tools/ci/check-development-lab-profile-v2.sh tools/ci/test-development-lab-profile-v2-policy.sh tools/ci/check-development-controller-v2.sh tools/ci/test-development-controller-v2-policy.sh tools/ci/check-controller-handoff-core.sh tools/ci/check-controller-handoff-attempt-v0.sh tools/ci/test-controller-handoff-attempt-v0-policy.sh tools/ci/check-controller-helper-inventory-v0.sh tools/ci/test-controller-helper-inventory-v0-policy.sh tools/ci/check-controller-helper-build-evidence-v0.sh tools/ci/check-controller-helper-build-receipt-v0.sh tools/ci/check-controller-helper-test-evidence-v0.sh tools/ci/test-controller-helper-evidence-v0-policy.sh tools/ci/check-reference-evidence-v0.sh tools/ci/test-reference-evidence-v0-policy.sh tools/ci/check-reference-verdict-v0.sh tools/ci/test-reference-verdict-v0-policy.sh tools/ci/check-portable-stat-policy.sh tools/ci/test-portable-stat-policy.sh tools/ci/check-containerfile-static-policy.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/launch-cloud-target.sh tools/ci/prepare-launch-control.sh tools/ci/wait-for-launch-release.sh tools/ci/check-workspace-budget.sh tools/ci/check-workspace-budget-values.sh tools/ci/require-ephemeral-policy-test-root.sh tools/ci/check-ephemeral-policy-test-confinement.sh tools/ci/run-ephemeral-policy-tests.sh tools/ci/verify-cloud-target-tools.sh tools/ci/development-probe-status.sh tools/ci/test-development-probe-policy.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/alpha/lab/fixtures/generate.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
+for script in tools/ci/check-specs.sh tools/ci/check-specifications-authority.sh tools/ci/check-sprint-static.sh tools/ci/check-local-sprint-preflight.sh tools/ci/check-remote-sprint-preflight.sh tools/ci/test-local-sprint-preflight-policy.sh tools/ci/check-alpha-preimplementation-contracts.sh tools/ci/test-alpha-preimplementation-contract-policy.sh tools/ci/check-development-lab-profile-v2.sh tools/ci/test-development-lab-profile-v2-policy.sh tools/ci/check-development-controller-v2.sh tools/ci/test-development-controller-v2-policy.sh tools/ci/check-controller-handoff-core.sh tools/ci/check-controller-handoff-attempt-v0.sh tools/ci/test-controller-handoff-attempt-v0-policy.sh tools/ci/check-controller-helper-inventory-v0.sh tools/ci/test-controller-helper-inventory-v0-policy.sh tools/ci/check-controller-helper-build-evidence-v0.sh tools/ci/check-controller-helper-build-receipt-v0.sh tools/ci/check-controller-helper-test-evidence-v0.sh tools/ci/test-controller-helper-evidence-v0-policy.sh tools/ci/check-reference-evidence-v0.sh tools/ci/test-reference-evidence-v0-policy.sh tools/ci/check-reference-verdict-v0.sh tools/ci/test-reference-verdict-v0-policy.sh tools/ci/test-release-0-reference-harness-policy.sh tools/ci/check-portable-stat-policy.sh tools/ci/test-portable-stat-policy.sh tools/ci/check-containerfile-static-policy.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/launch-cloud-target.sh tools/ci/prepare-launch-control.sh tools/ci/wait-for-launch-release.sh tools/ci/check-workspace-budget.sh tools/ci/check-workspace-budget-values.sh tools/ci/require-ephemeral-policy-test-root.sh tools/ci/check-ephemeral-policy-test-confinement.sh tools/ci/run-ephemeral-policy-tests.sh tools/ci/run-qmp-client-unit-tests.sh tools/ci/run-rootfs-proof-unit-tests.sh tools/ci/check-rootfs-proof-source.sh tools/ci/verify-cloud-target-tools.sh tools/ci/development-probe-status.sh tools/ci/test-development-probe-policy.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/alpha/lab/fixtures/generate.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
     [ -x "$script" ] || fail "required script is not executable: $script"
 done
 
@@ -550,6 +558,7 @@ grep -qx 'license_2=ISC' "$crypto_refs" || fail 'libsodium reference license mis
 /bin/sh tools/ci/check-alpha-crypto-references.sh >/dev/null
 /bin/sh tools/ci/check-qmp-client-contract.sh >/dev/null
 /bin/sh tools/ci/check-qmp-client-source.sh >/dev/null
+/bin/sh tools/ci/check-rootfs-proof-source.sh >/dev/null
 /bin/sh tools/ci/check-development-image-sources.sh >/dev/null
 
 class_b_inventory=tools/toolchain/class-b-host-tools.v1

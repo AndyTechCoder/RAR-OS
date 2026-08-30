@@ -10,6 +10,15 @@ images=${1-$expected_images}
 [ "$images" = "$expected_images" ] || exit 1
 [ -d "$images" ] && [ ! -L "$images" ] || exit 1
 [ "$(CDPATH= cd -- "$images" && pwd -P)" = "$expected_images" ] || exit 1
+launch_override=${2-}
+if [ -n "$launch_override" ]; then
+    [ "${RAR_POLICY_MUTATION_TESTS-}" = 1 ] || exit 1
+    scratch=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
+    [ "$scratch" != disabled ] || exit 1
+    [ -f "$launch_override" ] && [ ! -L "$launch_override" ] || exit 1
+    override_parent=$(CDPATH= cd -- "$(dirname -- "$launch_override")" && pwd -P)
+    case "$override_parent" in "$scratch"|"$scratch"/*) ;; *) exit 1 ;; esac
+fi
 expected='README.md
 build.Containerfile
 image-inputs-v1.env
@@ -21,8 +30,9 @@ find "$images" -type l -print | /usr/bin/grep -q . && exit 1
 
 build=$images/build.Containerfile
 launch_base=$images/launch-base.Containerfile
-launch=$images/launch.Containerfile
-/bin/sh "$root/tools/ci/check-containerfile-static-policy.sh" "$build" "$launch_base" "$launch" >/dev/null
+canonical_launch=$images/launch.Containerfile
+launch=${launch_override:-$canonical_launch}
+/bin/sh "$root/tools/ci/check-containerfile-static-policy.sh" "$build" "$launch_base" "$canonical_launch" >/dev/null
 [ "$(/usr/bin/grep -c '^FROM \${BUILD_BASE}$' "$build")" -eq 1 ] || exit 1
 [ "$(/usr/bin/grep -c '^FROM \${LAUNCH_BASE}$' "$launch_base")" -eq 1 ] || exit 1
 [ "$(/usr/bin/grep -c '^FROM \${BUILD_IMAGE} AS qmp-builder$' "$launch")" -eq 1 ] || exit 1
@@ -44,6 +54,35 @@ done
 /usr/bin/grep -Fq 'cmp /build/rar-qmp-client-a /build/rar-qmp-client-b' "$launch" || exit 1
 /usr/bin/grep -Fq 'mkdir -p /evidence' "$launch" || exit 1
 ! /usr/bin/grep -Fq '/workspace' "$launch" || exit 1
+expected_copy_instructions='COPY --chown=65532:65532 tools/rar-lab/qmp-client/README.md /controller/tools/rar-lab/qmp-client/README.md
+COPY --chown=65532:65532 tools/rar-lab/qmp-client/build-plan.v1 /controller/tools/rar-lab/qmp-client/build-plan.v1
+COPY --chown=65532:65532 tools/rar-lab/qmp-client/json.rs /controller/tools/rar-lab/qmp-client/json.rs
+COPY --chown=65532:65532 tools/rar-lab/qmp-client/main.rs /controller/tools/rar-lab/qmp-client/main.rs
+COPY --from=qmp-builder /build/rar-qmp-client /opt/rar-lab/bin/rar-qmp-client'
+! /usr/bin/grep -Eiq '^[[:space:]]*#[[:space:]]*[a-z][a-z0-9_-]*[[:space:]]*=' "$launch" || exit 1
+logical_instructions=$(/usr/bin/awk '
+    {
+        line=$0
+        if (continued && line ~ /^[[:space:]]*(#.*)?$/) exit 1
+        if (!continued && line ~ /^[[:space:]]*#/) {
+            print line
+            next
+        }
+        if (line ~ /\\[[:space:]]*$/) {
+            sub(/\\[[:space:]]*$/, "", line)
+            logical=logical line
+            continued=1
+            next
+        }
+        print logical line
+        logical=""
+        continued=0
+    }
+    END { if (continued || logical != "") exit 1 }
+' "$launch") || exit 1
+actual_copy_instructions=$(/usr/bin/printf '%s\n' "$logical_instructions" | /usr/bin/grep -Ei '^[[:space:]]*((COPY|ADD)([[:space:]]|$)|ONBUILD[[:space:]]+(COPY|ADD)([[:space:]]|$))')
+[ "$actual_copy_instructions" = "$expected_copy_instructions" ] || exit 1
+if /usr/bin/printf '%s\n' "$logical_instructions" | /usr/bin/grep -Eiq '^[[:space:]]*RUN[[:space:]]+--'; then exit 1; fi
 
 /bin/sh "$root/tools/ci/check-development-image-inputs.sh" "$images/image-inputs-v1.env" >/dev/null
 printf '%s\n' 'Development image source policy passed'

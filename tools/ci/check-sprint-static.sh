@@ -41,6 +41,7 @@ tools/ci/check-specs.sh
     tools/ci/test-reference-evidence-v0-policy.sh \
     tools/ci/check-reference-verdict-v0.sh \
     tools/ci/test-reference-verdict-v0-policy.sh \
+    tools/ci/test-release-0-reference-harness-policy.sh \
     tools/ci/check-portable-stat-policy.sh \
     tools/ci/test-portable-stat-policy.sh \
     tools/ci/verify-remote-checkpoint.sh \
@@ -64,6 +65,7 @@ tools/ci/check-specs.sh
     tools/ci/require-ephemeral-policy-test-root.sh \
     tools/ci/check-ephemeral-policy-test-confinement.sh \
     tools/ci/run-ephemeral-policy-tests.sh \
+    tools/ci/run-qmp-client-unit-tests.sh \
     tools/ci/test-workspace-budget-policy.sh \
     tools/ci/verify-pinned-file.sh \
     tools/ci/test-pinned-file-policy.sh \
@@ -98,7 +100,6 @@ tools/ci/test-development-probe-policy.sh
 /bin/sh tools/ci/test-controller-handoff-attempt-v0-policy.sh
 /bin/sh tools/ci/test-remote-checkpoint-policy.sh
 /bin/sh tools/ci/test-workspace-budget-policy.sh
-/bin/sh tools/ci/test-development-image-policy.sh
 printf '%s\n' 'mutation policy evidence: external read-only-source CI step required'
 
 [ "$budget_check" = false ] || /bin/sh tools/ci/check-workspace-budget.sh >/dev/null

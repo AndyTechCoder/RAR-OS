@@ -12,6 +12,31 @@ find "$tree" -name '._*' -type f -exec /bin/rm -f {} \;
 checker=$root/tools/ci/check-qmp-client-source.sh
 /bin/sh "$checker" "$tree" >/dev/null
 
+hash_scratch=$work/hash-scratch
+/bin/mkdir -p "$hash_scratch"
+baseline_hash=$(/bin/sh "$root/tools/ci/hash-source-tree.sh" "$tree" "$hash_scratch")
+/usr/bin/printf '%s\n' 'removable-volume metadata' > "$tree/._main.rs"
+metadata_hash=$(/bin/sh "$root/tools/ci/hash-source-tree.sh" "$tree" "$hash_scratch")
+[ "$metadata_hash" = "$baseline_hash" ] || exit 1
+
+expect_hash_rejected() {
+    label=$1
+    if /bin/sh "$root/tools/ci/hash-source-tree.sh" "$tree" "$hash_scratch" >/dev/null 2>&1; then
+        printf 'unsafe QMP hash input unexpectedly passed: %s\n' "$label" >&2
+        exit 1
+    fi
+}
+/bin/ln -s main.rs "$tree/._linked"
+expect_hash_rejected appledouble-symlink
+/bin/rm -f "$tree/._linked"
+/bin/mkdir "$tree/._directory"
+/usr/bin/printf '%s\n' hidden > "$tree/._directory/input.rs"
+expect_hash_rejected appledouble-directory
+/bin/rm -rf "$tree/._directory"
+/usr/bin/mkfifo "$tree/._fifo"
+expect_hash_rejected appledouble-special-file
+/bin/rm -f "$tree/._fifo"
+
 expect_rejected() {
     label=$1
     if /bin/sh "$checker" "$tree" >/dev/null 2>&1; then
@@ -22,6 +47,10 @@ expect_rejected() {
 /usr/bin/printf '%s\n' 'unsafe fn bypass() {}' >> "$tree/main.rs"
 expect_rejected unsafe-rust
 /bin/cp "$root/tools/rar-lab/qmp-client/main.rs" "$tree/main.rs"
+/usr/bin/printf '%s\n' '#[path = "._hidden.rs"]' 'mod hidden;' >> "$tree/main.rs"
+/usr/bin/printf '%s\n' 'pub fn hidden() {}' > "$tree/._hidden.rs"
+expect_rejected hidden-path-module
+/bin/cp "$root/tools/rar-lab/qmp-client/main.rs" "$tree/main.rs"
 /usr/bin/printf '%s\n' extra > "$tree/extra.rs"
 expect_rejected extra-source
 /bin/rm -f "$tree/extra.rs"
@@ -30,6 +59,10 @@ expect_rejected extra-source
 expect_rejected symlink-source
 /bin/rm -f "$tree/json.rs"
 /bin/mv "$tree/json.real" "$tree/json.rs"
+/usr/bin/sed '/^    deadline: Instant,$/d' "$tree/main.rs" > "$tree/main.rs.mutated"
+/bin/mv "$tree/main.rs.mutated" "$tree/main.rs"
+expect_rejected missing-cumulative-deadline
+/bin/cp "$root/tools/rar-lab/qmp-client/main.rs" "$tree/main.rs"
 /usr/bin/sed 's/^network=none$/network=enabled/' "$tree/build-plan.v1" > "$tree/plan"
 /bin/mv "$tree/plan" "$tree/build-plan.v1"
 expect_rejected networked-build-plan

@@ -26,6 +26,15 @@ epoch is that snapshot instant (`2026-08-03T00:00:00Z`).
 A reviewed controller must consume the role schemas in `spec/alpha/lab/` and
 bind them to real input/output identities. The schemas themselves do not
 authorize provisioning.
+The experimental RAR-owned resolver in `../rootfs-proof/` now provides bounded
+OCI layout/index/manifest/config parsing, exact SHA-256 descriptor verification,
+bounded gzip/zstd decoding, ordered ustar resolution with OCI whiteout
+semantics, and a Linux descriptor-relative filesystem adapter that rejects
+links, special files, escape, and size races before parsing. It remains
+non-activating: accepted inventory-evidence binding is still required before an
+inventory can prove a complete image filesystem. Nested indexes are traversed
+only within explicit depth/document bounds, and the resolver retains exact
+SHA-256 content digests for every effective regular file.
 Candidate provisioning remains deliberately absent until that schema and its
 real identities pass independent review. The future provisioner must use a pinned isolated builder, a bounded fresh
 context, two independent OCI exports, byte/digest comparison, complete
