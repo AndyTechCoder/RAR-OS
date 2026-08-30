@@ -175,6 +175,12 @@ semantics for ten more templates. It pins ownership and metadata capture while
 deferring symlink, hardlink, raw-name, mount, tree, manifest-specific, and
 repair behavior. It remains source-only and cannot create or mutate a fixture.
 
+`controller-helper-closure-verifier-scalar-repair-semantics-v0` defines the
+reviewed-tool environment-digest repair used by five templates. It also records
+that `base-controller-uid=1000` is a context annotation, not a valid repair, so
+its four structural occurrences remain blocked pending catalog correction. The
+contract remains inactive and grants no mutation, repair, or execution path.
+
 `controller-helper-build-receipt-v0.fields` and
 `controller-helper-test-evidence-v0.fields` fix controller-owned receipts for
 two separately terminated build jobs and one thirteen-case test job. Contextual
