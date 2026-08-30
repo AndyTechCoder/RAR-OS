@@ -175,6 +175,12 @@ semantics for ten more templates. It pins ownership and metadata capture while
 deferring symlink, hardlink, raw-name, mount, tree, manifest-specific, and
 repair behavior. It remains source-only and cannot create or mutate a fixture.
 
+`controller-helper-closure-verifier-scalar-repair-semantics-v0` defines the
+reviewed-tool environment-digest repair used by five templates. It also records
+that `base-controller-uid=1000` is a context annotation, not a valid repair, so
+its four structural occurrences remain blocked pending catalog correction. The
+contract remains inactive and grants no mutation, repair, or execution path.
+
 `controller-helper-closure-verifier-synchronized-link-semantics-v0` defines
 post-trigger hardlink insertion and atomic regular-file-to-self-symlink
 replacement for six no-repair closure templates. It requires exact trigger and
