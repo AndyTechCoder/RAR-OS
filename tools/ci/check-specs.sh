@@ -44,6 +44,7 @@ docs/tasks/release-0.md
 docs/tasks/sprint-alpha-vertical.md
 docs/tasks/sprint-alpha-milestone-a-execution-map.md
 docs/tasks/sprint-alpha-milestones-b-g-execution-map.md
+docs/tasks/sprint-alpha-accepted-evidence-publication.md
 docs/adr/0022-alpha-graphics-input-authority.md
 docs/adr/0023-alpha-boot-determinism-and-entry-state.md
 docs/adr/0024-alpha-controller-helper-build-trust.md
@@ -365,6 +366,12 @@ grep -qx 'Status: Non-authoritative preparation — implementation remains block
     docs/tasks/sprint-alpha-milestone-a-execution-map.md || fail "Milestone A execution map overstates authority"
 grep -qx 'Status: Non-authoritative preparation — implementation remains sequential and gated' \
     docs/tasks/sprint-alpha-milestones-b-g-execution-map.md || fail "Milestones B-G execution map overstates authority"
+grep -qx 'Status: Non-authoritative preparation — ADR 0030 owner decision required' \
+    docs/tasks/sprint-alpha-accepted-evidence-publication.md || fail "accepted-evidence publication packet overstates authority"
+publication_packet_sha=$(env LC_ALL=C LANG=C /usr/bin/shasum -a 256 \
+    docs/tasks/sprint-alpha-accepted-evidence-publication.md | /usr/bin/awk '{ print $1 }')
+[ "$publication_packet_sha" = 1f3318b7d6df2fd31a918bada01ffcdad79b43515209f303df1e96af23a4a2d3 ] || \
+    fail "accepted-evidence publication packet escaped its reviewed byte boundary"
 grep -qx 'Status: Non-authoritative integration plan — decisions accepted, activation gated' \
     docs/proposals/alpha-decision-integration-plan.md || fail "Alpha decision integration plan overstates authority"
 grep -Fqx '## Gate 1 — before Milestone A implementation' \

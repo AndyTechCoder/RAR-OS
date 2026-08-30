@@ -30,6 +30,7 @@ Status: Gate 0 approved on 2026-07-16
 - [Sprint Alpha Vertical Implementation Packet](tasks/sprint-alpha-vertical.md)
 - [Sprint Alpha Milestone A execution map](tasks/sprint-alpha-milestone-a-execution-map.md)
 - [Sprint Alpha Milestones B–G execution and evidence map](tasks/sprint-alpha-milestones-b-g-execution-map.md)
+- [Sprint Alpha accepted-evidence publication/recovery task packet](tasks/sprint-alpha-accepted-evidence-publication.md)
 - [Initial Codex Handoff Prompt](handoff-prompt.md)
 - [V1 Alpha Codex Execution Runbook](v1-alpha-execution.md)
 - [GitHub Actions account-unblock runbook](runbooks/github-actions-account-unblock.md)
