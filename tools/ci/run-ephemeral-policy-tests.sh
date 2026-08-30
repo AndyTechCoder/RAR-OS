@@ -30,6 +30,7 @@ ulimit -f 131072
 /bin/sh "$root/tools/ci/test-reference-verdict-v0-policy.sh"
 /bin/sh "$root/tools/ci/test-release-0-reference-harness-policy.sh"
 /bin/sh "$root/tools/ci/test-specifications-authority-policy.sh"
+/bin/sh "$root/tools/ci/test-sprint-alpha-gate-report-v2-policy.sh"
 /bin/sh "$root/tools/ci/test-trusted-launcher-policy.sh"
 
-printf '%s\n' 'Ephemeral policy tests passed: executed=23 source=read-only scratch=tmpfs'
+printf '%s\n' 'Ephemeral policy tests passed: executed=24 source=read-only scratch=tmpfs'

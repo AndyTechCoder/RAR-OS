@@ -27,6 +27,9 @@ functionality and cannot increase the implementation count.
   exists in source form.
 - Accepted ADRs 0022–0026 select the remaining boot, controller, evidence,
   payload/state, and graphics/input directions while activation stays gated.
+- Gate-report schema v2 now classifies canonical ADR 0026 and the inactive
+  acceptance-v2 preparation while failing closed on every unavailable private
+  platform identity. It is orientation only, not readiness evidence.
 - A recorded five-choice owner brief, gated integration plan, and eight-item
   completion-proof map prevent later tasks from improvising or overclaiming.
 
@@ -37,6 +40,9 @@ functionality and cannot increase the implementation count.
 - ADRs 0022–0026 are accepted, but none of their dependent contracts or
   controller changes is ready merely from acceptance.
 - The exact Alpha boot/platform contracts are not ready.
+- Gate-report v2 therefore reports the platform envelope, Core bootstrap,
+  component bundle, initial system source, initial preserved source, and
+  fixture manifest as missing; Milestones A and B remain blocked.
 - The Lab/controller/helper lacks real activating identities and reviewed cloud
   build/test evidence.
 - PR #13 is merged at `abd75bfccf4fcd2f197871225d1a78233c0d87dc`;
@@ -90,3 +96,6 @@ execution, broader SSD access, deletion, merge, or owner approval.
 - Authoritative task packet: `tasks/sprint-alpha-vertical.md`
 - Decision integration: `proposals/alpha-decision-integration-plan.md`
 - Completion proof map: `tasks/sprint-alpha-completion-evidence-map.md`
+- Current gate orientation: run
+  `/bin/sh tools/ci/report-sprint-alpha-gates-v2.sh`; validate its fail-closed
+  policy with `/bin/sh tools/ci/check-sprint-alpha-gate-report-v2-policy.sh`.

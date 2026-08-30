@@ -144,6 +144,10 @@ tools/ci/check-local-sprint-preflight.sh
 tools/ci/check-local-readonly.sh
 tools/ci/report-sprint-alpha-gates.sh
 tools/ci/check-sprint-alpha-gate-report-policy.sh
+tools/ci/contracts/sprint-alpha-gate-report-v2.fields
+tools/ci/report-sprint-alpha-gates-v2.sh
+tools/ci/check-sprint-alpha-gate-report-v2-policy.sh
+tools/ci/test-sprint-alpha-gate-report-v2-policy.sh
 tools/ci/classify-proposed-adr.sh
 tools/ci/test-proposed-adr-classifier-policy.sh
 tools/ci/check-alpha-preimplementation-contracts.sh
@@ -312,6 +316,13 @@ historical_gate_report_sha=$(env LC_ALL=C LANG=C /usr/bin/shasum -a 256 \
 if /bin/sh tools/ci/report-sprint-alpha-gates.sh >/dev/null 2>&1; then
     fail "historical gate-report v1 remains active after ADR 0022-0026 acceptance"
 fi
+/bin/sh tools/ci/check-sprint-alpha-gate-report-v2-policy.sh >/dev/null
+gate_report_v2=$(/bin/sh tools/ci/report-sprint-alpha-gates-v2.sh)
+[ "$(printf '%s\n' "$gate_report_v2" | grep -Fxc 'schema=rar-sprint-alpha-gate-report-v2')" -eq 1 ] || fail "gate-report v2 schema is unavailable"
+[ "$(printf '%s\n' "$gate_report_v2" | grep -Fxc 'adr_0026=accepted')" -eq 1 ] || fail "gate-report v2 does not classify canonical ADR 0026"
+[ "$(printf '%s\n' "$gate_report_v2" | grep -Fxc 'platform_source_set=blocked')" -eq 1 ] || fail "gate-report v2 does not fail closed on unbound platform sources"
+[ "$(printf '%s\n' "$gate_report_v2" | grep -Fxc 'acceptance_protocol_v2=reviewed-implementation-required')" -eq 1 ] || fail "gate-report v2 overstates acceptance v2 activation"
+[ "$(printf '%s\n' "$gate_report_v2" | grep -Fxc 'overall=blocked')" -eq 1 ] || fail "gate-report v2 overstates Alpha readiness"
 /bin/sh tools/ci/test-proposed-adr-classifier-policy.sh >/dev/null
 [ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
     docs/adr/0022-alpha-graphics-input-authority.md 0022 \
