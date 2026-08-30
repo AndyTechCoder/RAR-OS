@@ -292,7 +292,10 @@ mod tests {
 
     #[test]
     fn rejects_special_file_after_path_only_inspection() {
-        let root = fixture_root("special");
+        // Keep the complete socket path below Linux sockaddr_un::sun_path.
+        let serial = NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed);
+        let root = std::env::temp_dir().join(format!("rl{}x{serial}", std::process::id()));
+        fs::create_dir(&root).unwrap();
         let digest = sha256::digest_string(b"socket").unwrap();
         let path = blob_path(&root, &digest);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
