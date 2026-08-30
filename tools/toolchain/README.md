@@ -14,3 +14,10 @@ The Linux CI image digest plus an enforced read-only container userland is the s
 The Class B inventory records the upstream license and provenance source plus the exact repository setup/pin for each selected group. GNU/Debian package licenses remain available in the immutable image under the packaged copyright records; Xcode and Apple SDK use remains governed by the recorded Apple agreement. GitHub's hosted runner and container engine are explicitly `external-attested-noncertifying`: a separate host-runner job checks the observed `ubuntu-24.04` image version and passes those exact values through named job outputs to the read-only container job. The container and bootstrap refuse missing or mismatched handoff values instead of assuming GitHub propagates runner-only environment variables into a container. Those service layers are not folded into the OCI userland digest and cannot support target certification or the deferred artifact-reproducibility claim. A runner-image change fails CI until its inventory record is reviewed and updated.
 
 Both locks keep external LLD, every QEMU backend, and both firmware inputs unavailable. `certifiable=false` remains mandatory. No command downloads or installs a tool, and no Cargo package, third-party crate, target-linked dependency, target artifact, target asset, firmware payload, or Dependency Exception Record is present.
+
+The CI compiler-closure fields remain `none`. A byte-pinned, source-only
+observer and its experimental contract are checked in for later review, but are
+not wired to a workflow and carry no execution authority. A future explicitly
+authorized cloud observation may emit only a candidate manifest and a
+not-ready receipt; the lock cannot change until the observer tools, complete
+file set, and verifier are independently reviewed and pinned.
