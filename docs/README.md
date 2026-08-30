@@ -81,5 +81,6 @@ permanently irreplaceable.
 - [Historical proposal 0024](proposals/0024-alpha-controller-helper-build-trust.md)
 - [Historical proposal 0025](proposals/0025-alpha-gui-continuity-evidence-sequencing.md)
 - [Historical proposal 0026](proposals/0026-alpha-platform-payload-and-state-sources.md)
+- [Open proposal 0030: Alpha Accepted-Evidence Publication and Recovery](proposals/0030-alpha-accepted-evidence-publication-recovery.md)
 - [Alpha Decision Integration Plan](proposals/alpha-decision-integration-plan.md)
 - [Sprint Alpha Completion Evidence Map](tasks/sprint-alpha-completion-evidence-map.md)
