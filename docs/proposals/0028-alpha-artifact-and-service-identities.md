@@ -1,12 +1,11 @@
-# ADR 0028 Proposal: Alpha Artifact and Service Identities
+# ADR 0028: Alpha Artifact and Service Identities
 
-Status: Proposed — 2026-08-29
-Recommended decision: Alternative A
+Status: Proposed — owner decision required
+Decision: Undecided
 
-Approval context: the owner's conditional statement, "If it's safe, I
-approve," is recorded without expansion. This proposal grants no authority
-unless its exact decision passes independent architecture, correctness, and
-security review and is accepted through the repository's normal ADR process.
+Recommended alternative: A. This recommendation is not a decision and grants
+no implementation, build, execution, provisioning, merge, or activation
+authority. Exact owner approval and the normal accepted-ADR process are required.
 
 ## Context
 
@@ -33,19 +32,26 @@ immutable artifact bytes. Identity fields are never part of their own preimage.
 
 The image packer and independent inspector compute the Root identity from exact
 `BOOTX64.EFI` file bytes as build evidence. Root separately reads that exact
-fixed path before DMA closure and emits the same descriptive identity. No
-authority decision trusts Root's self-reported identity in this unsigned Alpha.
+fixed path into a retained immutable buffer before DMA closure, re-hashes that
+buffer after DMA closure, and emits the same descriptive identity. The buffer
+is retired only after that re-hash. No authority decision trusts Root's
+self-reported identity in this unsigned Alpha; if the retained-buffer rule
+cannot be met, the pre-closure value is untrusted diagnostic evidence only.
 
 Root retains exact `RECOVERY.ELF` file bytes in a fixed immutable source slot,
 computes the Recovery identity over those file bytes after DMA closure, and
-transports both the bounded read-only source descriptor and identity through
-Root-to-Recovery. Recovery recomputes the identity from that retained file-byte
-source before parsing/loading it, then transports the verified identity through
-Recovery-to-Nucleus. Recovery retires the file-byte slot before Nucleus entry;
-it is an existing Root-to-Recovery boot payload, not a fifth ADR 0026 platform
-source or a Nucleus capability. Nucleus validates only the
-Recovery-authenticated identity field and record framing. It neither receives
-those file bytes nor claims independent file-digest verification.
+compares it with the reviewed expected literal before parsing, mapping, or
+loading Recovery. Root then transports both the bounded read-only source
+descriptor and verified identity through Root-to-Recovery. After entry,
+Recovery independently recomputes the identity from that retained file-byte
+source as a secondary chain check, transports the verified identity through
+Recovery-to-Nucleus, and retires the file-byte slot before Nucleus entry. The
+slot is an existing Root-to-Recovery boot payload, not a fifth ADR 0026
+platform source or a Nucleus capability. Nucleus compares the
+Recovery-authenticated identity with its reviewed expected literal and
+validates the record framing. It neither receives those file bytes nor claims
+independent file-digest verification. Root remains the sole actor that
+validates and loads Recovery.
 
 Each initial state-service identity covers its distinct role, the exact
 service-executable contract identity, and exact immutable executable payload
@@ -78,15 +84,15 @@ authority.
 Signed manifests provide publisher authenticity but pull later package,
 signing, rollback, and trust-root work into the Alpha bootstrap.
 
-## Decision
+## Recommended decision
 
-Select Alternative A. These values are deterministic integrity and identity
+Recommend Alternative A. These values are deterministic integrity and identity
 bindings only; they do not claim publisher authenticity or production trust.
 
 ## Consequences
 
-- Recovery retains its exact input file bytes only through its own validation
-  and retires them before Nucleus entry.
+- Recovery retains its exact input file bytes only through its post-entry
+  secondary chain check and retires them before Nucleus entry.
 - The trusted build order becomes service artifacts, literal identity table,
   Nucleus artifact, then final outer record/image.
 - A state-service byte change requires a reviewed Alpha envelope transition.
@@ -98,9 +104,11 @@ The experimental contracts must specify:
 
 - ASCII domain tags, version, byte order, length framing, included fields, and
   exact excluded self-referential fields for every identity;
-- producer, immutable preimage source, transport record, verifier, comparison
-  stage, and mismatch outcome for Root build evidence, Recovery, contract,
-  component, and both state-service identities;
+- producer, immutable preimage source, transport record, verifier, expected
+  literal, comparison stage, and mismatch outcome for Root build evidence,
+  Root's descriptive self-check, Recovery's Root-enforced pre-load check and
+  post-entry secondary check, contract, component, and both state-service
+  identities;
 - exact executable contract identities as hashes of reviewed canonical
   contract bytes;
 - the controller-bound literal expected-service-identity table, its one-way

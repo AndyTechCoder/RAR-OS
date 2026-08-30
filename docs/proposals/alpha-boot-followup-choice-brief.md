@@ -1,10 +1,10 @@
 # Alpha Boot Follow-up Choice Brief
 
-Status: Proposed — 2026-08-29
+Status: Proposed — owner decision required
 
-The first boot/platform contract draft correctly remained uncommitted after
-independent reviews found three owner-level trust-boundary gaps. The recommended
-decision set for only those gaps is:
+The first boot/platform contract draft remains unmerged and non-authoritative
+after independent reviews found three owner-level trust-boundary gaps. The
+recommended decision set for only those gaps is:
 
 1. ADR 0027 Alternative B — keep firmware placement for Root, deterministically
    retire/unmap all Root ranges, and enforce q35 AHCI shutdown plus PCI
@@ -28,9 +28,8 @@ transitions, static-check integration, and readiness documentation all remain
 blocking and must be repaired and freshly reviewed after these ADRs are
 accepted.
 
-The owner's exact conditional statement was: `If it's safe, I approve.`
+The earlier conditional statement `If it's safe, I approve.` is not treated as
+an informed ADR selection. The proposal packet remains undecided and grants no
+authority until the owner sends this exact sentence:
 
-The statement is mapped only to the independently recommended B/A/B set above.
-It grants no broader authority and becomes effective only if the exact decision
-record is merged after all required independent reviews and checks report no
-blocking finding.
+`I approve ADR 0027 Alternative B, ADR 0028 Alternative A, and ADR 0029 Alternative B for experimental Alpha specification work under the documented safety limits.`

@@ -1,14 +1,11 @@
-# ADR 0027 Proposal: Alpha Bootstrap Retirement and DMA Closure
+# ADR 0027: Alpha Bootstrap Retirement and DMA Closure
 
-Status: Proposed — 2026-08-29
-Recommended decision: Alternative B
+Status: Proposed — owner decision required
+Decision: Undecided
 
-Approval context: the owner stated, "If it's safe, I approve." This proposal
-records the smallest independently recommended enforceable design. That
-statement is conditional: this document grants no implementation, build,
-execution, provisioning, merge, or activation authority unless the exact
-decision survives architecture, correctness, and security review and is
-recorded through the repository's normal accepted-ADR process.
+Recommended alternative: B. This recommendation is not a decision and grants
+no implementation, build, execution, provisioning, merge, or activation
+authority. Exact owner approval and the normal accepted-ADR process are required.
 
 ## Context
 
@@ -78,9 +75,9 @@ The controller or firmware states that DMA has stopped. This is smallest, but
 the guest cannot enforce the claim and a mutable source could change after its
 digest check.
 
-## Decision
+## Recommended decision
 
-Select Alternative B for the experimental q35 Alpha only. It resolves Root
+Recommend Alternative B for the experimental q35 Alpha only. It resolves Root
 lifetime deterministically and makes DMA closure an enforceable transition
 without creating a production IOMMU promise.
 

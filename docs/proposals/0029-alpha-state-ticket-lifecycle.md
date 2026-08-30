@@ -1,12 +1,11 @@
-# ADR 0029 Proposal: Alpha State Ticket Lifecycle
+# ADR 0029: Alpha State Ticket Lifecycle
 
-Status: Proposed — 2026-08-29
-Recommended decision: Alternative B
+Status: Proposed — owner decision required
+Decision: Undecided
 
-Approval context: the owner's conditional statement, "If it's safe, I
-approve," authorizes no active trust-boundary change by itself. This proposal
-must pass independent architecture, correctness, and security review and the
-normal accepted-ADR process before it can govern implementation.
+Recommended alternative: B. This recommendation is not a decision and grants
+no implementation, build, execution, provisioning, merge, or activation
+authority. Exact owner approval and the normal accepted-ADR process are required.
 
 ## Context
 
@@ -73,9 +72,9 @@ This option is recommended.
 A permanent broker can serve restarted processes, but it creates an unnecessary
 continuing policy interface and a wider confused-deputy surface.
 
-## Decision
+## Recommended decision
 
-Select Alternative B. It preserves one-time authority binding per live service
+Recommend Alternative B. It preserves one-time authority binding per live service
 incarnation, permits safe restart of the same verified service, and never gives
 state-readable authority to Core.
 
