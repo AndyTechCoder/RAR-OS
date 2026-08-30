@@ -42,6 +42,7 @@ tools/ci/check-specs.sh
     tools/ci/check-reference-verdict-v0.sh \
     tools/ci/test-reference-verdict-v0-policy.sh \
     tools/ci/test-release-0-reference-harness-policy.sh \
+    tools/ci/test-specifications-authority-policy.sh \
     tools/ci/check-portable-stat-policy.sh \
     tools/ci/test-portable-stat-policy.sh \
     tools/ci/verify-remote-checkpoint.sh \

@@ -53,6 +53,13 @@ git_read() {
 [ "$(git_read "$source_root" rev-parse HEAD)" = "$RAR_EXPECTED_SOURCE_REVISION" ] ||
     fail 'source checkout does not match the requested SHA'
 
+trusted_status=$(git_read "$trusted_root" status --porcelain=v1 --untracked-files=all --ignored=matching) ||
+    fail 'cannot verify trusted checkout state'
+source_status=$(git_read "$source_root" status --porcelain=v1 --untracked-files=all --ignored=matching) ||
+    fail 'cannot verify source checkout state'
+[ -z "$trusted_status" ] || fail 'trusted checkout is not exact and clean'
+[ -z "$source_status" ] || fail 'source checkout is not exact and clean'
+
 set -- \
     .github/workflows/specifications.yml \
     tools \
