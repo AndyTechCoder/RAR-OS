@@ -1533,9 +1533,12 @@ mod tests {
             Err(Error::InvalidSequenceStream)
         );
 
-        let trailing_bits = compressed_frame(&[0, 1, 0x54, 0, 0, 0, 3]);
+        let mut trailing_bits = MAGIC.to_vec();
+        trailing_bits.extend_from_slice(&[0x00, 0x18]);
+        append_block(&mut trailing_bits, false, 0, 4, b"abcd");
+        append_block(&mut trailing_bits, true, 2, 7, &[0, 1, 0x54, 0, 0, 0, 3]);
         assert_eq!(
-            decode_zstd(&trailing_bits, 4),
+            decode_zstd(&trailing_bits, 7),
             Err(Error::InvalidSequenceStream)
         );
 
