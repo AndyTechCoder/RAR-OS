@@ -175,6 +175,13 @@ semantics for ten more templates. It pins ownership and metadata capture while
 deferring symlink, hardlink, raw-name, mount, tree, manifest-specific, and
 repair behavior. It remains source-only and cannot create or mutate a fixture.
 
+`controller-helper-closure-verifier-synchronized-link-semantics-v0` defines
+post-trigger hardlink insertion and atomic regular-file-to-self-symlink
+replacement for six no-repair closure templates. It requires exact trigger and
+ack ordering, nonscratch private backing, complete parent/entry metadata, and
+no visible staging residue. Pre-start and repair-coupled link cases remain
+blocked.
+
 `controller-helper-build-receipt-v0.fields` and
 `controller-helper-test-evidence-v0.fields` fix controller-owned receipts for
 two separately terminated build jobs and one thirteen-case test job. Contextual
