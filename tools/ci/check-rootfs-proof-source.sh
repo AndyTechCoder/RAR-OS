@@ -48,6 +48,7 @@ for test_name in \
     rejects_malformed_or_sequence_bearing_compressed_blocks \
     decodes_rfc_8878_direct_huffman_single_stream_vector \
     decodes_direct_huffman_four_stream_size_formats \
+    decodes_fse_compressed_huffman_weights \
     rejects_invalid_or_unsupported_huffman_literals; do
     /usr/bin/grep -Fq "fn $test_name()" "$tree/zstd.rs" || exit 1
 done

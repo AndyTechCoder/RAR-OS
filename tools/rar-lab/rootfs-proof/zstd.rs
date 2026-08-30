@@ -1,9 +1,10 @@
 //! Bounded, dependency-free RFC 8878 frame decoder foundation.
 //!
 //! This decoder accepts raw and RLE blocks plus zero-sequence compressed blocks
-//! containing raw, RLE, or direct-weight one- or four-stream Huffman literals.
-//! Dictionaries, checksums, FSE, skippable frames, and concatenated frames fail
-//! with explicit errors.
+//! containing raw, RLE, or direct- or FSE-weight one- or four-stream Huffman
+//! literals.
+//! Dictionaries, checksums, sequence FSE, skippable frames, and concatenated
+//! frames fail with explicit errors.
 
 use super::MAX_LAYER_BYTES;
 
@@ -29,7 +30,8 @@ pub enum Error {
     InvalidLiteralsSection,
     InvalidHuffmanTree,
     InvalidHuffmanStream,
-    UnsupportedHuffmanWeights,
+    InvalidFseTable,
+    InvalidFseStream,
     UnsupportedLiteralsFormat,
     UnsupportedLiteralsCompression,
     UnsupportedSequences,
@@ -42,8 +44,9 @@ pub enum Error {
 /// Decodes exactly one dictionary-free, checksum-free Zstandard frame.
 ///
 /// Raw/RLE blocks and zero-sequence compressed blocks with raw, RLE, or
-/// direct-weight one- or four-stream Huffman literals are supported. Other features
-/// fail closed with a distinct error, and no partial output is returned.
+/// one- or four-stream Huffman literals using direct or FSE-compressed weights
+/// are supported. Other features fail closed with a distinct error, and no
+/// partial output is returned.
 pub fn decode_zstd(input: &[u8], maximum_output_bytes: usize) -> Result<Vec<u8>, Error> {
     if input.len() > MAX_INPUT_BYTES {
         return Err(Error::InputTooLarge);
@@ -243,9 +246,12 @@ fn decode_literal_only_compressed_block(
                 .map_err(|_| Error::InvalidLiteralsSection)?;
             let compressed_size = usize::try_from((header >> (4 + field_bits)) & field_mask)
                 .map_err(|_| Error::InvalidLiteralsSection)?;
-            // Verified RFC 8878 Errata 7297 makes 6 the minimum for both
-            // fields in every four-stream compressed-literals format.
-            if size_format != 0 && (regenerated_size < 6 || compressed_size < 6) {
+            // Verified RFC 8878 Errata 7297 makes 6 the minimum regenerated
+            // size in four-stream mode. The current format also requires four
+            // one-byte streams in addition to the six-byte jump table.
+            if (size_format == 0 && compressed_size == 0)
+                || (size_format != 0 && (regenerated_size < 6 || compressed_size < 10))
+            {
                 return Err(Error::InvalidLiteralsSection);
             }
             if regenerated_size > block_maximum || compressed_size > block_maximum {
@@ -281,17 +287,20 @@ fn decode_direct_huffman_literals(
 ) -> Result<Vec<u8>, Error> {
     let mut reader = Reader::new(content);
     let header = reader.byte()?;
-    if header < 128 {
-        return Err(Error::UnsupportedHuffmanWeights);
-    }
-    let described_symbols = usize::from(header - 127);
-    let encoded_weight_bytes = described_symbols.div_ceil(2);
-    let encoded_weights = reader.take(encoded_weight_bytes)?;
-    let mut weights = Vec::with_capacity(described_symbols + 1);
-    for symbol in 0..described_symbols {
-        let byte = encoded_weights[symbol / 2];
-        weights.push(if symbol % 2 == 0 { byte >> 4 } else { byte & 0x0f });
-    }
+    let mut weights = if header >= 128 {
+        let described_symbols = usize::from(header - 127);
+        let encoded_weight_bytes = described_symbols.div_ceil(2);
+        let encoded_weights = reader.take(encoded_weight_bytes)?;
+        let mut weights = Vec::with_capacity(described_symbols + 1);
+        for symbol in 0..described_symbols {
+            let byte = encoded_weights[symbol / 2];
+            weights.push(if symbol % 2 == 0 { byte >> 4 } else { byte & 0x0f });
+        }
+        weights
+    } else {
+        let description = reader.take(usize::from(header))?;
+        decode_fse_weights(description)?
+    };
 
     let mut total = 0usize;
     for weight in &weights {
@@ -418,6 +427,297 @@ fn decode_direct_huffman_literals(
         output.extend_from_slice(&decoded);
     }
     Ok(output)
+}
+
+struct FseTable {
+    symbols: Vec<u8>,
+    bit_counts: Vec<u8>,
+    bases: Vec<u16>,
+    accuracy_log: u8,
+}
+
+fn decode_fse_weights(description: &[u8]) -> Result<Vec<u8>, Error> {
+    let mut header = ForwardBits::new(description);
+    let accuracy_log = u8::try_from(header.read(4)? + 5).map_err(|_| Error::InvalidFseTable)?;
+    if accuracy_log > 6 {
+        return Err(Error::InvalidFseTable);
+    }
+    let mut remaining = 1i32 << accuracy_log;
+    let mut frequencies = Vec::new();
+    while remaining > 0 {
+        if frequencies.len() >= 256 {
+            return Err(Error::InvalidFseTable);
+        }
+        let bits = (32 - u32::try_from(remaining + 1)
+            .map_err(|_| Error::InvalidFseTable)?
+            .leading_zeros()) as u8;
+        let mut value = header.read(bits)?;
+        let lower_mask = (1u16 << (bits - 1)) - 1;
+        let threshold = (1u16 << bits)
+            .checked_sub(1)
+            .and_then(|value| value.checked_sub((remaining + 1) as u16))
+            .ok_or(Error::InvalidFseTable)?;
+        if value & lower_mask < threshold {
+            header.rewind_one()?;
+            value &= lower_mask;
+        } else if value > lower_mask {
+            value = value
+                .checked_sub(threshold)
+                .ok_or(Error::InvalidFseTable)?;
+        }
+        let probability = i16::try_from(value).map_err(|_| Error::InvalidFseTable)? - 1;
+        let magnitude = if probability < 0 {
+            -i32::from(probability)
+        } else {
+            i32::from(probability)
+        };
+        remaining = remaining
+            .checked_sub(magnitude)
+            .ok_or(Error::InvalidFseTable)?;
+        if remaining < 0 {
+            return Err(Error::InvalidFseTable);
+        }
+        frequencies.push(probability);
+
+        if probability == 0 {
+            loop {
+                let repeat = usize::from(header.read(2)?);
+                if frequencies.len().checked_add(repeat).is_none_or(|size| size > 256) {
+                    return Err(Error::InvalidFseTable);
+                }
+                frequencies.resize(frequencies.len() + repeat, 0);
+                if repeat != 3 {
+                    break;
+                }
+            }
+        }
+    }
+    let stream_offset = header.align_to_byte()?;
+    if frequencies.len() >= 256
+        || frequencies.iter().filter(|frequency| **frequency != 0).count() < 2
+        || stream_offset >= description.len()
+    {
+        return Err(Error::InvalidFseTable);
+    }
+    let table = build_fse_table(&frequencies, accuracy_log)?;
+    decode_fse_interleaved2(&table, &description[stream_offset..])
+}
+
+fn build_fse_table(frequencies: &[i16], accuracy_log: u8) -> Result<FseTable, Error> {
+    let size = 1usize << accuracy_log;
+    let mask = size - 1;
+    let mut symbols = vec![None; size];
+    let mut state_descriptions = vec![0u16; frequencies.len()];
+    let mut high_threshold = size;
+    for (symbol, frequency) in frequencies.iter().copied().enumerate() {
+        if frequency < -1 {
+            return Err(Error::InvalidFseTable);
+        }
+        if frequency == -1 {
+            high_threshold = high_threshold.checked_sub(1).ok_or(Error::InvalidFseTable)?;
+            symbols[high_threshold] = Some(symbol as u8);
+            state_descriptions[symbol] = 1;
+        }
+    }
+
+    let step = (size >> 1) + (size >> 3) + 3;
+    let mut position = 0usize;
+    for (symbol, frequency) in frequencies.iter().copied().enumerate() {
+        if frequency <= 0 {
+            continue;
+        }
+        state_descriptions[symbol] = frequency as u16;
+        for _ in 0..frequency {
+            if position >= high_threshold || symbols[position].is_some() {
+                return Err(Error::InvalidFseTable);
+            }
+            symbols[position] = Some(symbol as u8);
+            let mut probes = 0usize;
+            loop {
+                position = (position + step) & mask;
+                probes += 1;
+                if position < high_threshold {
+                    break;
+                }
+                if probes > size {
+                    return Err(Error::InvalidFseTable);
+                }
+            }
+        }
+    }
+    if position != 0 || symbols.iter().any(Option::is_none) {
+        return Err(Error::InvalidFseTable);
+    }
+
+    let symbols: Vec<u8> = symbols.into_iter().map(Option::unwrap).collect();
+    let mut bit_counts = Vec::with_capacity(size);
+    let mut bases = Vec::with_capacity(size);
+    for symbol in &symbols {
+        let description = state_descriptions
+            .get_mut(usize::from(*symbol))
+            .ok_or(Error::InvalidFseTable)?;
+        if *description == 0 {
+            return Err(Error::InvalidFseTable);
+        }
+        let highest = 15 - description.leading_zeros() as u8;
+        let bit_count = accuracy_log
+            .checked_sub(highest)
+            .ok_or(Error::InvalidFseTable)?;
+        let base = description
+            .checked_shl(u32::from(bit_count))
+            .and_then(|value| value.checked_sub(size as u16))
+            .ok_or(Error::InvalidFseTable)?;
+        bit_counts.push(bit_count);
+        bases.push(base);
+        *description = description.checked_add(1).ok_or(Error::InvalidFseTable)?;
+    }
+    Ok(FseTable {
+        symbols,
+        bit_counts,
+        bases,
+        accuracy_log,
+    })
+}
+
+fn decode_fse_interleaved2(table: &FseTable, stream: &[u8]) -> Result<Vec<u8>, Error> {
+    let mut bits = PaddedReverseBits::new(stream)?;
+    let initial_bits = isize::from(table.accuracy_log)
+        .checked_mul(2)
+        .ok_or(Error::InvalidFseStream)?;
+    if bits.remaining < initial_bits {
+        return Err(Error::InvalidFseStream);
+    }
+    let mut first = bits.read(table.accuracy_log)?;
+    let mut second = bits.read(table.accuracy_log)?;
+    let mut output = Vec::new();
+    loop {
+        decode_fse_state(table, &mut bits, &mut first, &mut output)?;
+        if bits.remaining < 0 {
+            push_fse_symbol(table, second, &mut output)?;
+            break;
+        }
+        decode_fse_state(table, &mut bits, &mut second, &mut output)?;
+        if bits.remaining < 0 {
+            push_fse_symbol(table, first, &mut output)?;
+            break;
+        }
+    }
+    Ok(output)
+}
+
+fn decode_fse_state(
+    table: &FseTable,
+    bits: &mut PaddedReverseBits<'_>,
+    state: &mut usize,
+    output: &mut Vec<u8>,
+) -> Result<(), Error> {
+    push_fse_symbol(table, *state, output)?;
+    let count = *table.bit_counts.get(*state).ok_or(Error::InvalidFseStream)?;
+    let base = usize::from(*table.bases.get(*state).ok_or(Error::InvalidFseStream)?);
+    *state = base
+        .checked_add(bits.read(count)?)
+        .ok_or(Error::InvalidFseStream)?;
+    if *state >= table.symbols.len() {
+        return Err(Error::InvalidFseStream);
+    }
+    Ok(())
+}
+
+fn push_fse_symbol(table: &FseTable, state: usize, output: &mut Vec<u8>) -> Result<(), Error> {
+    if output.len() >= 255 {
+        return Err(Error::InvalidFseStream);
+    }
+    output.push(*table.symbols.get(state).ok_or(Error::InvalidFseStream)?);
+    Ok(())
+}
+
+struct ForwardBits<'a> {
+    input: &'a [u8],
+    offset: usize,
+}
+
+impl<'a> ForwardBits<'a> {
+    fn new(input: &'a [u8]) -> Self {
+        Self { input, offset: 0 }
+    }
+
+    fn read(&mut self, count: u8) -> Result<u16, Error> {
+        if count == 0 || count > 15 {
+            return Err(Error::InvalidFseTable);
+        }
+        let end = self
+            .offset
+            .checked_add(usize::from(count))
+            .ok_or(Error::InvalidFseTable)?;
+        if end > self.input.len().saturating_mul(8) {
+            return Err(Error::Truncated);
+        }
+        let mut value = 0u16;
+        for shift in 0..count {
+            let bit_offset = self.offset + usize::from(shift);
+            value |= u16::from((self.input[bit_offset / 8] >> (bit_offset % 8)) & 1) << shift;
+        }
+        self.offset = end;
+        Ok(value)
+    }
+
+    fn rewind_one(&mut self) -> Result<(), Error> {
+        self.offset = self.offset.checked_sub(1).ok_or(Error::InvalidFseTable)?;
+        Ok(())
+    }
+
+    fn align_to_byte(&mut self) -> Result<usize, Error> {
+        self.offset = self
+            .offset
+            .checked_add(7)
+            .map(|offset| offset & !7)
+            .ok_or(Error::InvalidFseTable)?;
+        let bytes = self.offset / 8;
+        if bytes > self.input.len() {
+            return Err(Error::Truncated);
+        }
+        Ok(bytes)
+    }
+}
+
+struct PaddedReverseBits<'a> {
+    input: &'a [u8],
+    next_bit: isize,
+    remaining: isize,
+}
+
+impl<'a> PaddedReverseBits<'a> {
+    fn new(input: &'a [u8]) -> Result<Self, Error> {
+        let last = *input.last().ok_or(Error::InvalidFseStream)?;
+        if last == 0 {
+            return Err(Error::InvalidFseStream);
+        }
+        let marker = 7 - last.leading_zeros() as usize;
+        let remaining = (input.len() - 1)
+            .checked_mul(8)
+            .and_then(|bits| bits.checked_add(marker))
+            .and_then(|bits| isize::try_from(bits).ok())
+            .ok_or(Error::InvalidFseStream)?;
+        Ok(Self {
+            input,
+            next_bit: remaining - 1,
+            remaining,
+        })
+    }
+
+    fn read(&mut self, count: u8) -> Result<usize, Error> {
+        let mut value = 0usize;
+        for _ in 0..count {
+            value <<= 1;
+            if self.next_bit >= 0 {
+                let bit = self.next_bit as usize;
+                value |= usize::from((self.input[bit / 8] >> (bit % 8)) & 1);
+            }
+            self.next_bit -= 1;
+            self.remaining -= 1;
+        }
+        Ok(value)
+    }
 }
 
 fn decode_huffman_stream(
@@ -796,11 +1096,63 @@ mod tests {
     }
 
     #[test]
-    fn rejects_invalid_or_unsupported_huffman_literals() {
-        let fse_weights = compressed_frame(&[0x42, 0x40, 0x00, 1, 0, 0]);
+    fn decodes_fse_compressed_huffman_weights() {
+        // Accuracy_Log=5 with normalized frequencies [16,16] decodes the
+        // interleaved stream to weights [1,1]; the inferred final weight is 2.
+        let content = [0x04, 0x10, 0x3f, 0x63, 0x04, 0x03];
         assert_eq!(
-            decode_zstd(&fse_weights, 4),
-            Err(Error::UnsupportedHuffmanWeights)
+            decode_direct_huffman_literals(&content, 1, false).unwrap(),
+            [2]
+        );
+
+        let literals = [
+            0x12, 0x80, 0x01, // regenerated=1, compressed=6
+            0x04, 0x10, 0x3f, 0x63, 0x04, 0x03, // tree and Huffman stream
+            0,
+        ];
+        assert_eq!(decode_zstd(&compressed_frame(&literals), 1).unwrap(), [2]);
+    }
+
+    #[test]
+    fn rejects_invalid_or_unsupported_huffman_literals() {
+        let truncated_fse_weights = compressed_frame(&[0x42, 0x40, 0x00, 1, 0, 0]);
+        assert_eq!(
+            decode_zstd(&truncated_fse_weights, 4),
+            Err(Error::Truncated)
+        );
+
+        let excessive_accuracy = [0x02, 0x03, 0x01];
+        assert_eq!(
+            decode_direct_huffman_literals(&excessive_accuracy, 0, false),
+            Err(Error::InvalidFseTable)
+        );
+        let weight_accuracy_seven = [0x02, 0x02, 0x01];
+        assert_eq!(
+            decode_direct_huffman_literals(&weight_accuracy_seven, 0, false),
+            Err(Error::InvalidFseTable)
+        );
+
+        let one_probability = [0x03, 0xf0, 0x03, 0x01];
+        assert_eq!(
+            decode_direct_huffman_literals(&one_probability, 0, false),
+            Err(Error::InvalidFseTable)
+        );
+
+        let absent_initial_states = [0x03, 0x10, 0x3f, 0x01];
+        assert_eq!(
+            decode_direct_huffman_literals(&absent_initial_states, 0, false),
+            Err(Error::InvalidFseStream)
+        );
+        let truncated_second_state = [0x03, 0x10, 0x3f, 0x20];
+        assert_eq!(
+            decode_direct_huffman_literals(&truncated_second_state, 0, false),
+            Err(Error::InvalidFseStream)
+        );
+
+        let zero_marker = [0x03, 0x10, 0x3f, 0x00];
+        assert_eq!(
+            decode_direct_huffman_literals(&zero_marker, 0, false),
+            Err(Error::InvalidFseStream)
         );
 
         let treeless = compressed_frame(&[3]);
@@ -818,6 +1170,20 @@ mod tests {
         let undersized_four_stream_content = compressed_frame(&[0x86, 0, 0]);
         assert_eq!(
             decode_zstd(&undersized_four_stream_content, 8),
+            Err(Error::InvalidLiteralsSection)
+        );
+
+        let empty_single_stream_content = compressed_frame(&[0x12, 0, 0]);
+        assert_eq!(
+            decode_zstd(&empty_single_stream_content, 1),
+            Err(Error::InvalidLiteralsSection)
+        );
+
+        let missing_four_stream_markers = compressed_frame(&[
+            0x86, 0x80, 0x01, 0, 0, 0, 0, 0, 0,
+        ]);
+        assert_eq!(
+            decode_zstd(&missing_four_stream_markers, 8),
             Err(Error::InvalidLiteralsSection)
         );
 
@@ -839,12 +1205,12 @@ mod tests {
             Err(Error::InvalidHuffmanStream)
         );
 
-        let truncated_jump_table = compressed_frame(&[
+        let undersized_jump_payload = compressed_frame(&[
             0x86, 0xc0, 0x01, 0x80, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00,
         ]);
         assert_eq!(
-            decode_zstd(&truncated_jump_table, 8),
-            Err(Error::Truncated)
+            decode_zstd(&undersized_jump_payload, 8),
+            Err(Error::InvalidLiteralsSection)
         );
 
         let bad_padding = compressed_frame(&[
