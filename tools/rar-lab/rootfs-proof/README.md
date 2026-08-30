@@ -46,8 +46,10 @@ predefined, RLE, FSE-compressed, or repeated
 literal-length, offset, and match-length tables; decodes their interleaved
 reverse bitstream; executes bounded literal and overlapping match copies; and
 preserves sequence tables and repeat offsets across compressed blocks. It
-rejects dictionaries, checksums, skippable frames, and concatenated frames with
-explicit errors.
+verifies the standard lower-32-bit XXH64 frame content checksum using
+dependency-free RAR-owned code, and rejects dictionaries, skippable frames,
+concatenated frames, malformed checksums, and trailing bytes with explicit
+errors.
 It is not connected to OCI layer acceptance until complete compressed-block
 support and its focused tests are ready.
 
