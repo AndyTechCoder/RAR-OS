@@ -12,6 +12,13 @@ find "$tree" -name '._*' -type f -exec /bin/rm -f {} \;
 checker=$root/tools/ci/check-qmp-client-source.sh
 /bin/sh "$checker" "$tree" >/dev/null
 
+hash_scratch=$work/hash-scratch
+/bin/mkdir -p "$hash_scratch"
+baseline_hash=$(/bin/sh "$root/tools/ci/hash-source-tree.sh" "$tree" "$hash_scratch")
+/usr/bin/printf '%s\n' 'removable-volume metadata' > "$tree/._main.rs"
+metadata_hash=$(/bin/sh "$root/tools/ci/hash-source-tree.sh" "$tree" "$hash_scratch")
+[ "$metadata_hash" = "$baseline_hash" ] || exit 1
+
 expect_rejected() {
     label=$1
     if /bin/sh "$checker" "$tree" >/dev/null 2>&1; then
