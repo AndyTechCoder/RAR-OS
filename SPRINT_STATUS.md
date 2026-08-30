@@ -252,7 +252,7 @@
   fresh SSD-root task. The profile is now installed without replacing existing
   settings; effective confinement evidence remains a fresh-task pre-A gate
 - Next durable actions: resolve the remaining boot/platform findings through
-  owner-approved ADRs; preserved draft PR #42 is unmerged and non-authoritative.
+  owner-approved ADRs; proposals 0027–0029 remain undecided and non-authoritative.
   Separately obtain the exact owner choice for proposed ADR 0030, then integrate
   its reviewed contract before Milestone B. Independently, make the v2
   controller/helper compiler,
