@@ -3,8 +3,10 @@
 //! This decoder accepts raw and RLE blocks plus zero-sequence compressed blocks
 //! containing raw, RLE, or direct- or FSE-weight one- or four-stream Huffman
 //! literals.
-//! Dictionaries, checksums, sequence FSE, skippable frames, and concatenated
-//! frames fail with explicit errors.
+//! Sequence headers and their predefined, RLE, FSE-compressed, or repeated
+//! tables are parsed and bounded, but sequence execution is not yet enabled.
+//! Dictionaries, checksums, skippable frames, and concatenated frames fail with
+//! explicit errors.
 
 use super::MAX_LAYER_BYTES;
 
@@ -32,6 +34,8 @@ pub enum Error {
     InvalidHuffmanStream,
     InvalidFseTable,
     InvalidFseStream,
+    InvalidSequenceHeader,
+    InvalidSequenceTable,
     UnsupportedLiteralsFormat,
     UnsupportedLiteralsCompression,
     UnsupportedSequences,
@@ -271,7 +275,8 @@ fn decode_literal_only_compressed_block(
         return Err(Error::InvalidLiteralsSection);
     }
 
-    if reader.byte()? != 0 {
+    let (number_of_sequences, _) = parse_sequence_tables(&mut reader, None)?;
+    if number_of_sequences != 0 {
         return Err(Error::UnsupportedSequences);
     }
     if reader.remaining() != 0 {
@@ -429,6 +434,7 @@ fn decode_direct_huffman_literals(
     Ok(output)
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct FseTable {
     symbols: Vec<u8>,
     bit_counts: Vec<u8>,
@@ -437,15 +443,27 @@ struct FseTable {
 }
 
 fn decode_fse_weights(description: &[u8]) -> Result<Vec<u8>, Error> {
+    let (table, stream_offset) = parse_fse_distribution(description, 6, 255)?;
+    if stream_offset >= description.len() {
+        return Err(Error::InvalidFseTable);
+    }
+    decode_fse_interleaved2(&table, &description[stream_offset..])
+}
+
+fn parse_fse_distribution(
+    description: &[u8],
+    maximum_accuracy_log: u8,
+    maximum_symbol: u8,
+) -> Result<(FseTable, usize), Error> {
     let mut header = ForwardBits::new(description);
     let accuracy_log = u8::try_from(header.read(4)? + 5).map_err(|_| Error::InvalidFseTable)?;
-    if accuracy_log > 6 {
+    if accuracy_log > maximum_accuracy_log {
         return Err(Error::InvalidFseTable);
     }
     let mut remaining = 1i32 << accuracy_log;
     let mut frequencies = Vec::new();
     while remaining > 0 {
-        if frequencies.len() >= 256 {
+        if frequencies.len() > usize::from(maximum_symbol) {
             return Err(Error::InvalidFseTable);
         }
         let bits = (32 - u32::try_from(remaining + 1)
@@ -482,7 +500,11 @@ fn decode_fse_weights(description: &[u8]) -> Result<Vec<u8>, Error> {
         if probability == 0 {
             loop {
                 let repeat = usize::from(header.read(2)?);
-                if frequencies.len().checked_add(repeat).is_none_or(|size| size > 256) {
+                if frequencies
+                    .len()
+                    .checked_add(repeat)
+                    .is_none_or(|size| size > usize::from(maximum_symbol) + 1)
+                {
                     return Err(Error::InvalidFseTable);
                 }
                 frequencies.resize(frequencies.len() + repeat, 0);
@@ -493,14 +515,147 @@ fn decode_fse_weights(description: &[u8]) -> Result<Vec<u8>, Error> {
         }
     }
     let stream_offset = header.align_to_byte()?;
-    if frequencies.len() >= 256
-        || frequencies.iter().filter(|frequency| **frequency != 0).count() < 2
-        || stream_offset >= description.len()
+    if frequencies.len() > usize::from(maximum_symbol) + 1
+        || frequencies
+            .iter()
+            .filter(|frequency| **frequency != 0)
+            .count()
+            < 2
     {
         return Err(Error::InvalidFseTable);
     }
     let table = build_fse_table(&frequencies, accuracy_log)?;
-    decode_fse_interleaved2(&table, &description[stream_offset..])
+    Ok((table, stream_offset))
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct SequenceTables {
+    literal_lengths: FseTable,
+    offsets: FseTable,
+    match_lengths: FseTable,
+}
+
+#[derive(Clone, Copy)]
+enum SequenceTableMode {
+    Predefined,
+    Rle,
+    Compressed,
+    Repeat,
+}
+
+const LITERAL_LENGTH_DEFAULT: [i16; 36] = [
+    4, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3,
+    2, 1, 1, 1, 1, 1, -1, -1, -1, -1,
+];
+const OFFSET_DEFAULT: [i16; 29] = [
+    1, 1, 1, 1, 1, 1, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -1,
+    -1, -1, -1, -1,
+];
+const MATCH_LENGTH_DEFAULT: [i16; 53] = [
+    1, 4, 3, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -1, -1, -1, -1,
+    -1, -1, -1,
+];
+
+fn parse_sequence_tables(
+    reader: &mut Reader<'_>,
+    previous: Option<&SequenceTables>,
+) -> Result<(usize, Option<SequenceTables>), Error> {
+    let first = reader.byte()?;
+    let number_of_sequences = match first {
+        0..=127 => usize::from(first),
+        128..=254 => (usize::from(first - 128) << 8) | usize::from(reader.byte()?),
+        255 => usize::try_from(read_little_endian(reader, 2)?)
+            .map_err(|_| Error::InvalidSequenceHeader)?
+            .checked_add(0x7f00)
+            .ok_or(Error::InvalidSequenceHeader)?,
+    };
+    if number_of_sequences == 0 {
+        return Ok((0, None));
+    }
+
+    let modes = reader.byte()?;
+    if modes & 0x03 != 0 {
+        return Err(Error::InvalidSequenceHeader);
+    }
+    let literal_lengths = parse_sequence_table(
+        reader,
+        table_mode((modes >> 6) & 0x03),
+        previous.map(|tables| &tables.literal_lengths),
+        &LITERAL_LENGTH_DEFAULT,
+        6,
+        9,
+        35,
+    )?;
+    let offsets = parse_sequence_table(
+        reader,
+        table_mode((modes >> 4) & 0x03),
+        previous.map(|tables| &tables.offsets),
+        &OFFSET_DEFAULT,
+        5,
+        8,
+        28,
+    )?;
+    let match_lengths = parse_sequence_table(
+        reader,
+        table_mode((modes >> 2) & 0x03),
+        previous.map(|tables| &tables.match_lengths),
+        &MATCH_LENGTH_DEFAULT,
+        6,
+        9,
+        52,
+    )?;
+    Ok((
+        number_of_sequences,
+        Some(SequenceTables {
+            literal_lengths,
+            offsets,
+            match_lengths,
+        }),
+    ))
+}
+
+fn table_mode(encoded: u8) -> SequenceTableMode {
+    match encoded {
+        0 => SequenceTableMode::Predefined,
+        1 => SequenceTableMode::Rle,
+        2 => SequenceTableMode::Compressed,
+        3 => SequenceTableMode::Repeat,
+        _ => unreachable!(),
+    }
+}
+
+fn parse_sequence_table(
+    reader: &mut Reader<'_>,
+    mode: SequenceTableMode,
+    previous: Option<&FseTable>,
+    predefined: &[i16],
+    predefined_accuracy_log: u8,
+    maximum_accuracy_log: u8,
+    maximum_symbol: u8,
+) -> Result<FseTable, Error> {
+    match mode {
+        SequenceTableMode::Predefined => build_fse_table(predefined, predefined_accuracy_log),
+        SequenceTableMode::Rle => {
+            let symbol = reader.byte()?;
+            if symbol > maximum_symbol {
+                return Err(Error::InvalidSequenceTable);
+            }
+            Ok(FseTable {
+                symbols: vec![symbol],
+                bit_counts: vec![0],
+                bases: vec![0],
+                accuracy_log: 0,
+            })
+        }
+        SequenceTableMode::Compressed => {
+            let (table, consumed) =
+                parse_fse_distribution(reader.rest(), maximum_accuracy_log, maximum_symbol)?;
+            reader.take(consumed)?;
+            Ok(table)
+        }
+        SequenceTableMode::Repeat => previous.cloned().ok_or(Error::InvalidSequenceTable),
+    }
 }
 
 fn build_fse_table(frequencies: &[i16], accuracy_log: u8) -> Result<FseTable, Error> {
@@ -870,6 +1025,10 @@ impl<'a> Reader<'a> {
     fn remaining(&self) -> usize {
         self.input.len() - self.offset
     }
+
+    fn rest(&self) -> &'a [u8] {
+        &self.input[self.offset..]
+    }
 }
 
 #[cfg(test)]
@@ -1022,7 +1181,7 @@ mod tests {
 
     #[test]
     fn rejects_malformed_or_sequence_bearing_compressed_blocks() {
-        let sequence = compressed_frame(&[0x08, b'x', 1]);
+        let sequence = compressed_frame(&[0x08, b'x', 1, 0, 1]);
         assert_eq!(decode_zstd(&sequence, 1), Err(Error::UnsupportedSequences));
 
         let trailing = compressed_frame(&[0x08, b'x', 0, 0]);
@@ -1219,6 +1378,94 @@ mod tests {
         assert_eq!(
             decode_zstd(&bad_padding, 4),
             Err(Error::InvalidHuffmanStream)
+        );
+    }
+
+    #[test]
+    fn parses_bounded_sequence_counts_and_tables() {
+        let mut predefined = Reader::new(&[1, 0x00, 0x80]);
+        let (count, tables) = parse_sequence_tables(&mut predefined, None).unwrap();
+        let tables = tables.unwrap();
+        assert_eq!(count, 1);
+        assert_eq!(tables.literal_lengths.accuracy_log, 6);
+        assert_eq!(tables.literal_lengths.symbols.len(), 64);
+        assert_eq!(tables.offsets.accuracy_log, 5);
+        assert_eq!(tables.offsets.symbols.len(), 32);
+        assert_eq!(tables.match_lengths.accuracy_log, 6);
+        assert_eq!(tables.match_lengths.symbols.len(), 64);
+        assert_eq!(predefined.rest(), &[0x80]);
+
+        let mut rle = Reader::new(&[0x80, 1, 0x54, 35, 28, 52, 0x80]);
+        let (count, rle_tables) = parse_sequence_tables(&mut rle, None).unwrap();
+        let rle_tables = rle_tables.unwrap();
+        assert_eq!(count, 1);
+        assert_eq!(rle_tables.literal_lengths.symbols, [35]);
+        assert_eq!(rle_tables.offsets.symbols, [28]);
+        assert_eq!(rle_tables.match_lengths.symbols, [52]);
+        assert_eq!(rle.rest(), &[0x80]);
+
+        let mut repeated = Reader::new(&[1, 0xfc, 0x80]);
+        let (_, repeated_tables) = parse_sequence_tables(&mut repeated, Some(&rle_tables)).unwrap();
+        assert_eq!(repeated_tables.unwrap(), rle_tables);
+        assert_eq!(repeated.rest(), &[0x80]);
+
+        // Accuracy_Log=5 with normalized frequencies [16,16] is valid for
+        // each sequence alphabet; each table consumes exactly two bytes.
+        let mut compressed = Reader::new(&[1, 0xa8, 0x10, 0x3f, 0x10, 0x3f, 0x10, 0x3f, 0x80]);
+        let (_, compressed_tables) = parse_sequence_tables(&mut compressed, None).unwrap();
+        let compressed_tables = compressed_tables.unwrap();
+        assert_eq!(compressed_tables.literal_lengths.accuracy_log, 5);
+        assert_eq!(compressed_tables.offsets.accuracy_log, 5);
+        assert_eq!(compressed_tables.match_lengths.accuracy_log, 5);
+        assert_eq!(compressed.rest(), &[0x80]);
+
+        let mut largest_count = Reader::new(&[0xff, 0xff, 0xff, 0x00, 0x80]);
+        let (count, _) = parse_sequence_tables(&mut largest_count, None).unwrap();
+        assert_eq!(count, 0x17eff);
+        assert_eq!(largest_count.rest(), &[0x80]);
+
+        let mut zero = Reader::new(&[0, 0xff]);
+        assert_eq!(parse_sequence_tables(&mut zero, None).unwrap(), (0, None));
+        assert_eq!(zero.rest(), &[0xff]);
+    }
+
+    #[test]
+    fn rejects_invalid_sequence_headers_and_tables() {
+        assert_eq!(
+            parse_sequence_tables(&mut Reader::new(&[]), None),
+            Err(Error::Truncated)
+        );
+        assert_eq!(
+            parse_sequence_tables(&mut Reader::new(&[0x80]), None),
+            Err(Error::Truncated)
+        );
+        assert_eq!(
+            parse_sequence_tables(&mut Reader::new(&[1, 0x01]), None),
+            Err(Error::InvalidSequenceHeader)
+        );
+        assert_eq!(
+            parse_sequence_tables(&mut Reader::new(&[1, 0x40, 36]), None),
+            Err(Error::InvalidSequenceTable)
+        );
+        assert_eq!(
+            parse_sequence_tables(&mut Reader::new(&[1, 0x10, 29]), None),
+            Err(Error::InvalidSequenceTable)
+        );
+        assert_eq!(
+            parse_sequence_tables(&mut Reader::new(&[1, 0x04, 53]), None),
+            Err(Error::InvalidSequenceTable)
+        );
+        assert_eq!(
+            parse_sequence_tables(&mut Reader::new(&[1, 0xfc]), None),
+            Err(Error::InvalidSequenceTable)
+        );
+        assert_eq!(
+            parse_sequence_tables(&mut Reader::new(&[1, 0x80, 0x05]), None),
+            Err(Error::InvalidFseTable)
+        );
+        assert_eq!(
+            parse_sequence_tables(&mut Reader::new(&[1, 0x20, 0x04]), None),
+            Err(Error::InvalidFseTable)
         );
     }
 
