@@ -91,6 +91,7 @@ spec/alpha/lab/controller-helper-closure-verifier-basic-filesystem-semantics-v0
 spec/alpha/lab/controller-helper-closure-verifier-scalar-repair-semantics-v0
 spec/alpha/lab/controller-helper-closure-verifier-synchronized-link-semantics-v0
 spec/alpha/lab/controller-helper-closure-verifier-observation-repair-semantics-v0
+spec/alpha/lab/controller-helper-closure-verifier-rebuild-observation-canonical-semantics-v0
 spec/alpha/lab/controller-helper-build-evidence-v0.fields
 spec/alpha/lab/controller-helper-build-receipt-v0.fields
 spec/alpha/lab/controller-helper-test-evidence-v0.fields
@@ -204,6 +205,7 @@ tools/ci/check-controller-helper-closure-verifier-basic-filesystem-semantics-sou
 tools/ci/check-controller-helper-closure-verifier-scalar-repair-semantics-source.sh
 tools/ci/check-controller-helper-closure-verifier-synchronized-link-semantics-source.sh
 tools/ci/check-controller-helper-closure-verifier-observation-repair-semantics-source.sh
+tools/ci/check-controller-helper-closure-verifier-rebuild-observation-canonical-semantics-source.sh
 tools/ci/test-controller-helper-inventory-v0-policy.sh
 tools/ci/check-controller-helper-build-evidence-v0.sh
 tools/ci/check-controller-helper-build-receipt-v0.sh
@@ -325,6 +327,8 @@ done
     fail 'required script is not executable: tools/ci/check-controller-helper-closure-verifier-scalar-repair-semantics-source.sh'
 [ -x tools/ci/check-controller-helper-closure-verifier-observation-repair-semantics-source.sh ] || \
     fail 'required script is not executable: tools/ci/check-controller-helper-closure-verifier-observation-repair-semantics-source.sh'
+[ -x tools/ci/check-controller-helper-closure-verifier-rebuild-observation-canonical-semantics-source.sh ] || \
+    fail 'required script is not executable: tools/ci/check-controller-helper-closure-verifier-rebuild-observation-canonical-semantics-source.sh'
 [ -x tools/ci/check-controller-helper-closure-verifier-input-domain-source.sh ] || \
     fail 'required script is not executable: tools/ci/check-controller-helper-closure-verifier-input-domain-source.sh'
 
@@ -363,6 +367,7 @@ done
 /bin/sh tools/ci/check-controller-helper-closure-verifier-scalar-repair-semantics-source.sh >/dev/null
 /bin/sh tools/ci/check-controller-helper-closure-verifier-synchronized-link-semantics-source.sh >/dev/null
 /bin/sh tools/ci/check-controller-helper-closure-verifier-observation-repair-semantics-source.sh >/dev/null
+/bin/sh tools/ci/check-controller-helper-closure-verifier-rebuild-observation-canonical-semantics-source.sh >/dev/null
 /bin/sh tools/ci/check-controller-helper-build-evidence-v0.sh spec/alpha/lab/fixtures/controller-helper/build-evidence.v0 . adr-0024-alternative-a runner-closure 1111111111111111111111111111111111111111 spec/alpha/lab/fixtures/controller-helper/runner-image.v0 spec/alpha/lab/fixtures/controller-helper/source-tree.v0 spec/alpha/lab/fixtures/controller-helper/build-plan.v0 spec/alpha/lab/fixtures/controller-helper/golden-vector.v0 spec/alpha/lab/fixtures/controller-helper/builder-inventory.v0 spec/alpha/lab/fixtures/controller-helper/compiler-closure.v0 spec/alpha/lab/fixtures/controller-helper/compiler.v0 spec/alpha/lab/fixtures/controller-helper/helper-build-1.v0 spec/alpha/lab/fixtures/controller-helper/helper-build-2.v0 spec/alpha/lab/fixtures/controller-helper/helper-final.v0 spec/alpha/lab/fixtures/controller-helper/build-1-receipt.v0 spec/alpha/lab/fixtures/controller-helper/build-2-receipt.v0 spec/alpha/lab/fixtures/controller-helper/build-1.log.v0 spec/alpha/lab/fixtures/controller-helper/build-2.log.v0 spec/alpha/lab/fixtures/controller-helper/test-evidence.v0 spec/alpha/lab/fixtures/controller-helper/test-cases.v0 spec/alpha/lab/fixtures/controller-helper/test.log.v0 >/dev/null
 /bin/sh tools/ci/check-reference-evidence-v0.sh spec/alpha/lab/fixtures/comparison-evidence.v0 spec/alpha/lab/fixtures/comparison-transcript.v0 spec/alpha/lab/fixtures/reference-inventory.v0 spec/alpha/lab/fixtures/reference-harness.v0 >/dev/null
 /bin/sh tools/ci/check-reference-verdict-v0.sh spec/alpha/lab/fixtures/reference-verdict-accepted.v0 milestone-f spec/alpha/lab/fixtures/controller-context.v0 spec/alpha/lab/fixtures/source-context.v0 spec/alpha/lab/fixtures/comparison-transcript.v0 spec/alpha/lab/fixtures/reference-inventory.v0 spec/alpha/lab/fixtures/comparison-evidence.v0 spec/alpha/lab/fixtures/reference-harness.v0 >/dev/null
