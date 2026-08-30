@@ -124,6 +124,22 @@ ambient host state. It creates no fixtures, cases, fault injection, controller,
 workflow, or execution authority; explicit constructible cases and fault
 behavior remain separate blocking contracts.
 
+`controller-helper-closure-verifier-case-dispositions-v0` classifies all 147
+class-and-occurrence-stage pairs exactly once. It separates ordinary pre-start
+fixtures, phase-synchronized controller mutations, separately reviewed injected
+faults, validation-declared source proofs, additional source-dominated guards,
+the fresh SHA-256 zero-digest residual, and two cases needing reviewed domain
+extensions: input aliasing and unrelated mount-info mutation. Lossy NUL-bearing
+tool-pin and observation behavior are assigned to the future fault contract
+rather than silently excluded. The catalog is not an executable case instance,
+runtime oracle, harness, result, or authority.
+
+For every future case, verifier scratch becomes controller-inaccessible before
+launch: no retained path, descriptor, backing handle, mount-namespace entry,
+`proc`/ptrace write, primary mutation, or repair may reach `/tmp` or the
+scratch subtree. Scratch syscall, tool, and output failures belong only to the
+separately reviewed fault contract.
+
 `controller-helper-build-receipt-v0.fields` and
 `controller-helper-test-evidence-v0.fields` fix controller-owned receipts for
 two separately terminated build jobs and one thirteen-case test job. Contextual
