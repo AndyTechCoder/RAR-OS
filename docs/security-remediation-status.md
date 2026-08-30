@@ -19,7 +19,7 @@ Specifications workflow.
 | Proposal-controlled validators could self-attest | Reviewed, bootstrap-blocked | Draft PR [#13](https://github.com/AndyTechCoder/RAR-OS/pull/13) at `d222cf1e1989448002b8088bee3bd6088d92fe18`; requires explicit owner authorization for the one-time reviewed bootstrap merge, followed by an exact-main run |
 | Specifications CI lacked resource limits | Resolved | PR [#12](https://github.com/AndyTechCoder/RAR-OS/pull/12), merge `2643309d078f3c8fcbbfd9ff292083dd974ff208`, exact-main run `33273672164` |
 | Reference verdict is not bound to frozen-artifact execution | Owner decision required | Correct remediation changes the accepted ADR 0020 evidence boundary and public evidence format; no activating path may proceed meanwhile |
-| Role inventory cannot prove whole-rootfs absence | Implementation in progress | The non-activating `tools/rar-lab/rootfs-proof/` foundation traverses bounded nested OCI indexes, resolves layout/manifest/config documents, verifies SHA-256 descriptors and uncompressed diff IDs, applies ordered ustar layers with OCI whiteout semantics, hashes every effective regular file, and finds executable/ELF objects across `/`. A trusted filesystem adapter, compression, evidence binding, and independent review remain required; keep v2 inactive |
+| Role inventory cannot prove whole-rootfs absence | Evidence binding pending | The independently reviewed, non-activating `tools/rar-lab/rootfs-proof/` foundation now confines OCI reads beneath a trusted Linux root handle; traverses bounded nested indexes; verifies compressed descriptors and uncompressed diff IDs; decodes bounded gzip and zstd layers; applies ordered ustar layers with OCI whiteout semantics; hashes every effective regular file; and finds executable/ELF objects across `/`. Binding that complete result to the accepted inventory evidence remains required; keep v2 inactive |
 | Controller identity is self-attested | Owner decision required | Correct remediation changes the Lab profile and retained-evidence trust contracts; all controller activation remains blocked |
 | Release 0 fixture harness accepted escaping or unbounded reads | Resolved | PR [#14](https://github.com/AndyTechCoder/RAR-OS/pull/14), merge `f87dbb0b070a775931efc6f75decc9c0db0649b8`, exact-main run `33276136509` |
 | Guest-authored markers could masquerade as acceptance proof | Owner decision required | Correct remediation changes the Alpha acceptance trust boundary and evidence format; the dormant launch path remains non-accepting |
@@ -36,9 +36,10 @@ Specifications workflow.
   `a2df039274c905f2a62b67f0f4253994ac9a7a83` passed exact-main run
   `33277513266`.
 - The effective-rootfs proof work is intentionally sliced without weakening the
-  finding: the in-memory descriptor-bound resolver is useful implementation
-  progress, but only complete OCI image traversal and accepted inventory
-  evidence may close the row.
+  finding: PRs #18–#34 complete the bounded in-memory filesystem, trusted
+  read boundary, gzip/zstd decoding, descriptor/diff-id verification, and
+  whole-rootfs executable discovery. Only accepted inventory-evidence binding
+  may close the row; none of those merges activates a Lab profile.
 
 ## Continuation rule
 
