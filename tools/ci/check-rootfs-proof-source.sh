@@ -9,6 +9,7 @@ tree=${1-$root/tools/rar-lab/rootfs-proof}
 [ -d "$tree" ] && [ ! -L "$tree" ] || exit 1
 expected='README.md
 build-plan.v0
+gzip.rs
 json.rs
 layout.rs
 lib.rs
@@ -18,7 +19,7 @@ actual=$(find "$tree" -mindepth 1 -maxdepth 1 ! -name '._*' -print | /usr/bin/se
 [ "$actual" = "$expected" ] || exit 1
 find "$tree" -type l -print | /usr/bin/grep -q . && exit 1
 
-for file in README.md build-plan.v0 json.rs layout.rs lib.rs oci.rs sha256.rs; do
+for file in README.md build-plan.v0 gzip.rs json.rs layout.rs lib.rs oci.rs sha256.rs; do
     [ -s "$tree/$file" ] && [ ! -L "$tree/$file" ] || exit 1
 done
 
@@ -32,8 +33,14 @@ for line in \
     [ "$(/usr/bin/grep -Fxc "$line" "$tree/build-plan.v0")" -eq 1 ] || exit 1
 done
 
-for file in json.rs layout.rs lib.rs oci.rs sha256.rs; do
+for file in gzip.rs json.rs layout.rs lib.rs oci.rs sha256.rs; do
     ! /usr/bin/grep -En '(unsafe[[:space:]]+(fn|impl|extern)|unsafe[[:space:]]*\{|extern[[:space:]]+crate|include!|include_bytes!|include_str!|todo!|unimplemented!|std::process::Command|Command::new|TcpStream|UdpSocket|libc::)' "$tree/$file" >/dev/null || exit 1
+done
+for test_name in \
+    decodes_stored_fixed_and_dynamic_blocks \
+    enforces_output_crc_size_and_single_member_bounds \
+    rejects_bad_headers_stored_lengths_and_huffman_trees; do
+    /usr/bin/grep -Fq "fn $test_name()" "$tree/gzip.rs" || exit 1
 done
 for test_name in \
     whiteouts_remove_only_lower_layer_entries_regardless_of_archive_order \
@@ -83,9 +90,11 @@ for test_name in \
     /usr/bin/grep -Fq "fn $test_name()" "$tree/oci.rs" || exit 1
 done
 /usr/bin/grep -Fq 'fn official_short_sha256_vectors()' "$tree/sha256.rs" || exit 1
-/usr/bin/grep -Fqx 'modules=json.rs,layout.rs,oci.rs,sha256.rs' "$tree/build-plan.v0" || exit 1
+/usr/bin/grep -Fqx 'modules=gzip.rs,json.rs,layout.rs,oci.rs,sha256.rs' "$tree/build-plan.v0" || exit 1
 for source in layer.md image-layout.md manifest.md descriptor.md config.md; do
     /usr/bin/grep -Fq "https://github.com/opencontainers/image-spec/blob/v1.1.1/$source" "$tree/README.md" || exit 1
 done
+/usr/bin/grep -Fq 'https://www.rfc-editor.org/rfc/rfc1951' "$tree/README.md" || exit 1
+/usr/bin/grep -Fq 'https://www.rfc-editor.org/rfc/rfc1952' "$tree/README.md" || exit 1
 /usr/bin/grep -Fq 'full security finding' "$tree/README.md" || exit 1
 printf '%s\n' 'rootfs proof source policy passed'
