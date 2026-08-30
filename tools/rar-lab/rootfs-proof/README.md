@@ -13,7 +13,8 @@ files and ELF objects at any path, including paths outside role-specific `/opt`
 roots, and binds every effective regular file to its SHA-256 content digest.
 
 The implementation uses Rust `std` only, contains no `unsafe`, and does not
-spawn a process, decompress data, build an image, or execute target code. Its
+spawn a process, build an image, or execute target code. Its bounded in-process
+gzip decoder cannot launch or activate an image. The
 Linux cloud-only layout adapter confines filesystem reads beneath an opened,
 non-symlink root directory handle; inspects candidates through non-activating
 path-only handles before opening verified regular files; and rejects symlinks,
@@ -37,8 +38,9 @@ directly on [RFC 1951](https://www.rfc-editor.org/rfc/rfc1951) and
 
 ## Accepted subset
 
-- Uncompressed and single-member gzip OCI layer media types; compressed blobs
-  are limited to 256 MiB and decoded layers to 1 GiB.
+- Uncompressed and single-member gzip OCI layer media types; all gzip blobs in
+  one image are limited to 256 MiB total, and all decoded/uncompressed layer
+  bytes in that image are limited to 1 GiB total.
 - OCI layout version `1.0.0`, schema version 2 index/manifest documents, one
   caller-selected exact manifest digest, up to 8 nested index hops and 64 total
   index documents, standard image configuration, and up to 256 ordered layers.

@@ -11,7 +11,8 @@ const MANIFEST_MEDIA_TYPE: &str = "application/vnd.oci.image.manifest.v1+json";
 const CONFIG_MEDIA_TYPE: &str = "application/vnd.oci.image.config.v1+json";
 const UNCOMPRESSED_LAYER_MEDIA_TYPE: &str = "application/vnd.oci.image.layer.v1.tar";
 const GZIP_LAYER_MEDIA_TYPE: &str = "application/vnd.oci.image.layer.v1.tar+gzip";
-const MAX_COMPRESSED_LAYER_BYTES: usize = 268_435_456;
+const MAX_TOTAL_COMPRESSED_LAYER_BYTES: usize = 268_435_456;
+const MAX_TOTAL_UNCOMPRESSED_LAYER_BYTES: usize = MAX_LAYER_BYTES;
 const MAX_INDEX_MANIFESTS: usize = 64;
 const MAX_INDEX_DOCUMENTS: usize = 64;
 const MAX_INDEX_DEPTH: usize = 8;
@@ -34,6 +35,43 @@ enum LayerEncoding {
 struct LayerDescriptor {
     descriptor: Descriptor,
     encoding: LayerEncoding,
+}
+
+struct LayerBudgets {
+    remaining_uncompressed_bytes: usize,
+}
+
+impl LayerBudgets {
+    fn reserve(layers: &[LayerDescriptor]) -> Result<Self, Error> {
+        let mut compressed_bytes = 0usize;
+        let mut uncompressed_bytes = 0usize;
+        for layer in layers {
+            let total = match layer.encoding {
+                LayerEncoding::Uncompressed => &mut uncompressed_bytes,
+                LayerEncoding::Gzip => &mut compressed_bytes,
+            };
+            *total = total
+                .checked_add(layer.descriptor.size)
+                .ok_or(Error::BlobTooLarge)?;
+        }
+        if compressed_bytes > MAX_TOTAL_COMPRESSED_LAYER_BYTES
+            || uncompressed_bytes > MAX_TOTAL_UNCOMPRESSED_LAYER_BYTES
+        {
+            return Err(Error::BlobTooLarge);
+        }
+        Ok(Self {
+            remaining_uncompressed_bytes: MAX_TOTAL_UNCOMPRESSED_LAYER_BYTES
+                - uncompressed_bytes,
+        })
+    }
+
+    fn consume_decoded(&mut self, bytes: usize) -> Result<(), Error> {
+        self.remaining_uncompressed_bytes = self
+            .remaining_uncompressed_bytes
+            .checked_sub(bytes)
+            .ok_or(Error::BlobTooLarge)?;
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -188,7 +226,7 @@ where
         let descriptor = parse_descriptor(value)?;
         let (encoding, maximum_size) = match descriptor.media_type.as_str() {
             UNCOMPRESSED_LAYER_MEDIA_TYPE => (LayerEncoding::Uncompressed, MAX_LAYER_BYTES),
-            GZIP_LAYER_MEDIA_TYPE => (LayerEncoding::Gzip, MAX_COMPRESSED_LAYER_BYTES),
+            GZIP_LAYER_MEDIA_TYPE => (LayerEncoding::Gzip, MAX_TOTAL_COMPRESSED_LAYER_BYTES),
             _ => return Err(Error::UnsupportedLayerMediaType),
         };
         if descriptor.size > maximum_size {
@@ -199,6 +237,7 @@ where
             encoding,
         });
     }
+    let mut layer_budgets = LayerBudgets::reserve(&layer_descriptors)?;
 
     let configuration = with_verified_blob(
         &config_descriptor,
@@ -217,14 +256,19 @@ where
     for (layer, diff_id) in layer_descriptors.iter().zip(&diff_ids) {
         let maximum_size = match layer.encoding {
             LayerEncoding::Uncompressed => MAX_LAYER_BYTES,
-            LayerEncoding::Gzip => MAX_COMPRESSED_LAYER_BYTES,
+            LayerEncoding::Gzip => MAX_TOTAL_COMPRESSED_LAYER_BYTES,
         };
         with_verified_blob(&layer.descriptor, maximum_size, source, |bytes| {
             let decoded;
             let layer_bytes = match layer.encoding {
                 LayerEncoding::Uncompressed => bytes,
                 LayerEncoding::Gzip => {
-                    decoded = gzip::decode_gzip(bytes, MAX_LAYER_BYTES).map_err(Error::Gzip)?;
+                    decoded = gzip::decode_gzip(
+                        bytes,
+                        layer_budgets.remaining_uncompressed_bytes,
+                    )
+                    .map_err(Error::Gzip)?;
+                    layer_budgets.consume_decoded(decoded.len())?;
                     &decoded
                 }
             };
@@ -642,6 +686,57 @@ mod tests {
     }
 
     #[test]
+    fn aggregate_layer_budgets_accept_exact_limits_and_reject_one_more() {
+        let exact = vec![
+            synthetic_layer(
+                LayerEncoding::Gzip,
+                MAX_TOTAL_COMPRESSED_LAYER_BYTES / 2,
+            ),
+            synthetic_layer(
+                LayerEncoding::Gzip,
+                MAX_TOTAL_COMPRESSED_LAYER_BYTES / 2,
+            ),
+            synthetic_layer(
+                LayerEncoding::Uncompressed,
+                MAX_TOTAL_UNCOMPRESSED_LAYER_BYTES / 2,
+            ),
+            synthetic_layer(
+                LayerEncoding::Uncompressed,
+                MAX_TOTAL_UNCOMPRESSED_LAYER_BYTES / 2,
+            ),
+        ];
+        let mut budgets = LayerBudgets::reserve(&exact).unwrap();
+        assert_eq!(budgets.remaining_uncompressed_bytes, 0);
+        assert_eq!(budgets.consume_decoded(0), Ok(()));
+
+        let compressed_over = vec![
+            synthetic_layer(LayerEncoding::Gzip, MAX_TOTAL_COMPRESSED_LAYER_BYTES),
+            synthetic_layer(LayerEncoding::Gzip, 1),
+        ];
+        assert!(matches!(
+            LayerBudgets::reserve(&compressed_over),
+            Err(Error::BlobTooLarge)
+        ));
+
+        let uncompressed_over = vec![
+            synthetic_layer(
+                LayerEncoding::Uncompressed,
+                MAX_TOTAL_UNCOMPRESSED_LAYER_BYTES,
+            ),
+            synthetic_layer(LayerEncoding::Uncompressed, 1),
+        ];
+        assert!(matches!(
+            LayerBudgets::reserve(&uncompressed_over),
+            Err(Error::BlobTooLarge)
+        ));
+
+        let mut runtime = LayerBudgets {
+            remaining_uncompressed_bytes: 1,
+        };
+        assert_eq!(runtime.consume_decoded(2), Err(Error::BlobTooLarge));
+    }
+
+    #[test]
     fn resolves_exact_manifest_through_verified_nested_index() {
         let mut fixture = fixture(UNCOMPRESSED_LAYER_MEDIA_TYPE, false);
         let child = fixture.index.clone();
@@ -805,6 +900,17 @@ mod tests {
         output.extend_from_slice(&test_crc32(bytes).to_le_bytes());
         output.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
         output
+    }
+
+    fn synthetic_layer(encoding: LayerEncoding, size: usize) -> LayerDescriptor {
+        LayerDescriptor {
+            descriptor: Descriptor {
+                media_type: String::new(),
+                digest: String::new(),
+                size,
+            },
+            encoding,
+        }
     }
 
     fn test_crc32(bytes: &[u8]) -> u32 {
