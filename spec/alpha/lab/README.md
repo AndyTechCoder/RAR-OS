@@ -151,6 +151,13 @@ operator/repair semantics contract, immutable base descriptor, fixture-image
 identity, controller, phase instrumentation, fault contract, evidence/verdict
 contracts, and exact-main validation remain blocking prerequisites.
 
+`controller-helper-closure-verifier-operator-inventory-v0` closes the lexical
+vocabulary used by those templates to 34 primary families and nine repair
+tokens. It checks parameter shapes and exact coverage mechanically, but does
+not decode or apply a mutation. Exact targets, preconditions, postconditions,
+deterministic derivations, resource feasibility, repair independence, and the
+base fixture remain separate blocking semantics work.
+
 `controller-helper-build-receipt-v0.fields` and
 `controller-helper-test-evidence-v0.fields` fix controller-owned receipts for
 two separately terminated build jobs and one thirteen-case test job. Contextual
