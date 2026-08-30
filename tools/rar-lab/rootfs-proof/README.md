@@ -37,10 +37,12 @@ directly on [RFC 1951](https://www.rfc-editor.org/rfc/rfc1951) and
 [RFC 1952](https://www.rfc-editor.org/rfc/rfc1952), not third-party code.
 
 A separate RAR-owned [RFC 8878](https://www.rfc-editor.org/rfc/rfc8878)
-foundation parses one bounded Zstandard frame and decodes raw and RLE blocks.
-It rejects dictionaries, checksums, compressed blocks, skippable frames, and
-concatenated frames with explicit errors. It is not connected to OCI layer
-acceptance until the compressed-block decoder and its focused tests are ready.
+foundation parses one bounded Zstandard frame; decodes raw and RLE blocks; and
+decodes compressed blocks whose literals are raw or RLE and whose sequence
+count is zero. It rejects dictionaries, checksums, Huffman literals, sequence
+codes, skippable frames, and concatenated frames with explicit errors. It is
+not connected to OCI layer acceptance until complete compressed-block support
+and its focused tests are ready.
 
 ## Accepted subset
 
@@ -71,8 +73,8 @@ acceptance until the compressed-block decoder and its focused tests are ready.
 
 ## Not yet a complete image proof
 
-This slice does not yet decode Zstandard compressed blocks or accept zstd OCI
-layers, and it does not emit/validate the accepted inventory evidence format.
+This slice does not yet decode Huffman literals or FSE sequence codes, accept
+zstd OCI layers, or emit/validate the accepted inventory evidence format.
 Consequently it does not
 resolve the full security finding, activate image inventory v2, make a Lab
 profile ready, or authorize provisioning, target compilation, or guest

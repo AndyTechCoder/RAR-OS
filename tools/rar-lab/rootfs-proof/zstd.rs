@@ -25,7 +25,10 @@ pub enum Error {
     ContentSizeTooLarge,
     InvalidBlock,
     TooManyBlocks,
-    UnsupportedCompressedBlock,
+    InvalidLiteralsSection,
+    UnsupportedLiteralsCompression,
+    UnsupportedSequences,
+    TrailingBlockData,
     OutputTooLarge,
     ContentSizeMismatch,
     TrailingData,
@@ -145,7 +148,15 @@ pub fn decode_zstd(input: &[u8], maximum_output_bytes: usize) -> Result<Vec<u8>,
                 let byte = reader.byte()?;
                 resize_bounded(&mut output, block_size, byte, maximum_output_bytes)?;
             }
-            2 => return Err(Error::UnsupportedCompressedBlock),
+            2 => {
+                let block = reader.take(block_size)?;
+                decode_literal_only_compressed_block(
+                    block,
+                    &mut output,
+                    block_maximum,
+                    maximum_output_bytes,
+                )?;
+            }
             _ => return Err(Error::InvalidBlock),
         }
         if last {
@@ -160,6 +171,60 @@ pub fn decode_zstd(input: &[u8], maximum_output_bytes: usize) -> Result<Vec<u8>,
         return Err(Error::ContentSizeMismatch);
     }
     Ok(output)
+}
+
+fn decode_literal_only_compressed_block(
+    block: &[u8],
+    output: &mut Vec<u8>,
+    block_maximum: usize,
+    maximum_output_bytes: usize,
+) -> Result<(), Error> {
+    let mut reader = Reader::new(block);
+    let first = reader.byte()?;
+    let literals_type = first & 0x03;
+    if literals_type >= 2 {
+        return Err(Error::UnsupportedLiteralsCompression);
+    }
+    let size_format = (first >> 2) & 0x03;
+    let regenerated_size = match size_format {
+        0 | 2 => usize::from(first >> 3),
+        1 => {
+            usize::from(first >> 4) | (usize::from(reader.byte()?) << 4)
+        }
+        3 => {
+            usize::from(first >> 4)
+                | (usize::from(reader.byte()?) << 4)
+                | (usize::from(reader.byte()?) << 12)
+        }
+        _ => unreachable!(),
+    };
+    if regenerated_size > block_maximum {
+        return Err(Error::InvalidLiteralsSection);
+    }
+
+    let mut literals = Vec::new();
+    match literals_type {
+        0 => extend_bounded(
+            &mut literals,
+            reader.take(regenerated_size)?,
+            regenerated_size,
+        )?,
+        1 => resize_bounded(
+            &mut literals,
+            regenerated_size,
+            reader.byte()?,
+            regenerated_size,
+        )?,
+        _ => unreachable!(),
+    }
+
+    if reader.byte()? != 0 {
+        return Err(Error::UnsupportedSequences);
+    }
+    if reader.remaining() != 0 {
+        return Err(Error::TrailingBlockData);
+    }
+    extend_bounded(output, &literals, maximum_output_bytes)
 }
 
 fn read_little_endian(reader: &mut Reader<'_>, count: usize) -> Result<u64, Error> {
@@ -267,7 +332,10 @@ mod tests {
         let mut compressed = MAGIC.to_vec();
         compressed.extend_from_slice(&[0x20, 0x00]);
         append_block(&mut compressed, true, 2, 0, b"");
-        assert_eq!(decode_zstd(&compressed, 0), Err(Error::UnsupportedCompressedBlock));
+        assert_eq!(
+            decode_zstd(&compressed, 0),
+            Err(Error::UnsupportedLiteralsCompression)
+        );
 
         for descriptor_error in [
             (0x28, Error::ReservedDescriptorBit),
@@ -349,6 +417,62 @@ mod tests {
         );
     }
 
+    #[test]
+    fn decodes_literal_only_compressed_blocks_and_size_formats() {
+        let raw = compressed_frame(&[0x18, b'a', b'b', b'c', 0]);
+        assert_eq!(decode_zstd(&raw, 3).unwrap(), b"abc");
+
+        let rle = compressed_frame(&[0x29, b'x', 0]);
+        assert_eq!(decode_zstd(&rle, 5).unwrap(), b"xxxxx");
+
+        let payload_40 = vec![b'y'; 40];
+        let mut format_01 = vec![0x84, 0x02];
+        format_01.extend_from_slice(&payload_40);
+        format_01.push(0);
+        assert_eq!(
+            decode_zstd(&compressed_frame(&format_01), 40).unwrap(),
+            payload_40
+        );
+
+        let payload_4096 = vec![b'z'; 4096];
+        let mut format_11 = vec![0x0c, 0x00, 0x01];
+        format_11.extend_from_slice(&payload_4096);
+        format_11.push(0);
+        assert_eq!(
+            decode_zstd(&compressed_frame(&format_11), 4096).unwrap(),
+            payload_4096
+        );
+
+        let format_10 = compressed_frame(&[0x08, b'q', 0]);
+        assert_eq!(decode_zstd(&format_10, 1).unwrap(), b"q");
+    }
+
+    #[test]
+    fn rejects_malformed_or_sequence_bearing_compressed_blocks() {
+        let sequence = compressed_frame(&[0x08, b'x', 1]);
+        assert_eq!(decode_zstd(&sequence, 1), Err(Error::UnsupportedSequences));
+
+        let trailing = compressed_frame(&[0x08, b'x', 0, 0]);
+        assert_eq!(decode_zstd(&trailing, 1), Err(Error::TrailingBlockData));
+
+        let truncated = compressed_frame(&[0x18, b'a', b'b']);
+        assert_eq!(decode_zstd(&truncated, 3), Err(Error::Truncated));
+
+        let oversized = compressed_frame(&[0x1c, 0x00, 0x02, 0]);
+        assert_eq!(
+            decode_zstd(&oversized, 1),
+            Err(Error::InvalidLiteralsSection)
+        );
+
+        for literals_type in [2u8, 3u8] {
+            let frame = compressed_frame(&[literals_type, 0]);
+            assert_eq!(
+                decode_zstd(&frame, 2),
+                Err(Error::UnsupportedLiteralsCompression)
+            );
+        }
+    }
+
     fn single_segment_frame(blocks: &[(bool, u32, &[u8])], content_size: u8) -> Vec<u8> {
         let mut frame = MAGIC.to_vec();
         frame.extend_from_slice(&[0x20, content_size]);
@@ -360,6 +484,13 @@ mod tests {
             };
             append_block(&mut frame, *last, *block_type, regenerated_size, content);
         }
+        frame
+    }
+
+    fn compressed_frame(block: &[u8]) -> Vec<u8> {
+        let mut frame = MAGIC.to_vec();
+        frame.extend_from_slice(&[0x00, 0x18]);
+        append_block(&mut frame, true, 2, block.len(), block);
         frame
     }
 
