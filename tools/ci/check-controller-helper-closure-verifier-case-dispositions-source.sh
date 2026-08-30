@@ -23,7 +23,7 @@ sha_file() {
 for file in "$catalog" "$errors" "$validation" "$domain" "$subject"; do
     [ -f "$file" ] && [ ! -L "$file" ] || fail "required regular source is unavailable: $file"
 done
-[ "$(sha_file "$catalog")" = 873265794ef134a1b6f7d545ccad514649efac54b5d9e9c5094e1f3c96d8a734 ] || fail 'case-disposition bytes escaped review'
+[ "$(sha_file "$catalog")" = 3e693cf86851164cb07577e71b7ff256a17201df1a844c7b9355b135e0e0ba61 ] || fail 'case-disposition bytes escaped review'
 [ "$(sha_file "$errors")" = 9370f2e29e3932f42826441568baed629d2d2ab8fd107f50b6fb58e1d1637b4f ] || fail 'error catalog escaped review'
 [ "$(sha_file "$validation")" = 1958c06a458cca81d4c5914f2664d4e70e0575ef2d7e260407638485c1727f2f ] || fail 'validation contract escaped review'
 [ "$(sha_file "$domain")" = 67555f2d565569e95b44a247dda630c9b98d293ba0773880f248d69d802ac66c ] || fail 'input-domain contract escaped review'
@@ -70,7 +70,14 @@ actual=$(sed -n 's/^D[0-9][0-9][0-9]|\(E[0-9][0-9][0-9]|[a-z0-9-]*\)|[^|]*|[^|]*
 [ "$(grep -c '|source-proof|' "$catalog")" -eq 4 ] || fail 'source-proof occurrence count changed'
 [ "$(grep -c '|source-dominated|' "$catalog")" -eq 6 ] || fail 'source-dominated occurrence count changed'
 [ "$(grep -c '|cryptographic-residual|' "$catalog")" -eq 1 ] || fail 'cryptographic residual count changed'
-[ "$(grep -c '|domain-extension|' "$catalog")" -eq 2 ] || fail 'domain-extension count changed'
+[ "$(grep -c '|domain-extension|' "$catalog")" -eq 4 ] || fail 'domain-extension count changed'
+domain_extensions=$(grep '|domain-extension|' "$catalog" | sort)
+expected_domain_extensions=$(printf '%s\n' \
+    'D057|E052|input-identity|domain-extension|requires-reviewed-input-alias-mount-domain' \
+    'D104|E083|closure-first-pass|domain-extension|requires-cross-device-mount-domain' \
+    'D105|E083|closure-second-pass|domain-extension|requires-cross-device-mount-domain' \
+    'D133|E098|closure-stability|domain-extension|requires-nonclosure-mountinfo-mutation-domain' | sort)
+[ "$domain_extensions" = "$expected_domain_extensions" ] || fail 'domain-extension occurrence set changed'
 source_proofs=$(grep '|source-proof|' "$catalog" | sort)
 expected_source_proofs=$(printf '%s\n' \
     'D141|E106|receipt-publication|source-proof|unreachable-under-bound-subject' \

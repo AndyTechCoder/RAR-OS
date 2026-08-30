@@ -131,8 +131,8 @@ D100|E081|closure-first-pass|synchronized-mutation|change-at-named-pass-window
 D101|E081|closure-second-pass|synchronized-mutation|change-at-named-pass-window
 D102|E082|closure-first-pass|synchronized-mutation|newline-alias-after-alphabet-check
 D103|E082|closure-second-pass|synchronized-mutation|newline-alias-after-alphabet-check
-D104|E083|closure-first-pass|synchronized-mutation|change-at-named-pass-window
-D105|E083|closure-second-pass|synchronized-mutation|change-at-named-pass-window
+D104|E083|closure-first-pass|domain-extension|requires-cross-device-mount-domain
+D105|E083|closure-second-pass|domain-extension|requires-cross-device-mount-domain
 D106|E084|closure-first-pass|synchronized-mutation|hardlink-after-link-count-check
 D107|E084|closure-second-pass|synchronized-mutation|hardlink-after-link-count-check
 D108|E085|closure-first-pass|source-dominated|unreachable-under-bound-subject
