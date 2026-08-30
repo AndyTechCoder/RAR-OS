@@ -64,6 +64,10 @@ logical_instructions=$(/usr/bin/awk '
     {
         line=$0
         if (continued && line ~ /^[[:space:]]*(#.*)?$/) exit 1
+        if (!continued && line ~ /^[[:space:]]*#/) {
+            print line
+            next
+        }
         if (line ~ /\\[[:space:]]*$/) {
             sub(/\\[[:space:]]*$/, "", line)
             logical=logical line

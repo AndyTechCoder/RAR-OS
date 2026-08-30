@@ -55,6 +55,8 @@ expect_launch_prefix_rejected() {
     fi
 }
 expect_launch_prefix_rejected spaced-escape-directive '# escape = `'
+expect_launch_rejected comment-backslash-copy '# harmless \
+COPY tools/rar-lab/qmp-client /controller/tools/rar-lab/qmp-client'
 expect_launch_rejected json-copy 'COPY ["tools/rar-lab/qmp-client", "/controller/tools/rar-lab/qmp-client"]'
 expect_launch_rejected lowercase-copy '  copy ./tools/rar-lab/qmp-client /controller/tools/rar-lab/qmp-client'
 expect_launch_rejected local-add 'ADD tools/rar-lab/qmp-client /controller/tools/rar-lab/qmp-client'
