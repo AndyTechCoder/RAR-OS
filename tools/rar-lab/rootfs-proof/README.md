@@ -36,6 +36,12 @@ configuration's uncompressed `diff_id` before applying the layer. It is based
 directly on [RFC 1951](https://www.rfc-editor.org/rfc/rfc1951) and
 [RFC 1952](https://www.rfc-editor.org/rfc/rfc1952), not third-party code.
 
+A separate RAR-owned [RFC 8878](https://www.rfc-editor.org/rfc/rfc8878)
+foundation parses one bounded Zstandard frame and decodes raw and RLE blocks.
+It rejects dictionaries, checksums, compressed blocks, skippable frames, and
+concatenated frames with explicit errors. It is not connected to OCI layer
+acceptance until the compressed-block decoder and its focused tests are ready.
+
 ## Accepted subset
 
 - Uncompressed and single-member gzip OCI layer media types; all gzip blobs in
@@ -65,8 +71,9 @@ directly on [RFC 1951](https://www.rfc-editor.org/rfc/rfc1951) and
 
 ## Not yet a complete image proof
 
-This slice does not decode zstd layers or emit/validate the accepted inventory
-evidence format. Consequently it does not
+This slice does not yet decode Zstandard compressed blocks or accept zstd OCI
+layers, and it does not emit/validate the accepted inventory evidence format.
+Consequently it does not
 resolve the full security finding, activate image inventory v2, make a Lab
 profile ready, or authorize provisioning, target compilation, or guest
 execution. Those capabilities require reviewed follow-up slices and any
