@@ -55,6 +55,7 @@ docs/proposals/0023-alpha-boot-determinism-and-entry-state.md
 docs/proposals/0024-alpha-controller-helper-build-trust.md
 docs/proposals/0025-alpha-gui-continuity-evidence-sequencing.md
 docs/proposals/0026-alpha-platform-payload-and-state-sources.md
+docs/proposals/0030-alpha-accepted-evidence-publication-recovery.md
 docs/proposals/alpha-decision-integration-plan.md
 docs/tasks/sprint-alpha-completion-evidence-map.md
 spec/alpha/lab/README.md
@@ -339,6 +340,9 @@ gate_report_v2=$(/bin/sh tools/ci/report-sprint-alpha-gates-v2.sh)
 [ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
     docs/adr/0026-alpha-platform-payload-and-state-sources.md 0026 \
     docs/approval-record.md)" = accepted ] || fail "ADR 0026 decision state is inconsistent"
+[ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
+    docs/proposals/0030-alpha-accepted-evidence-publication-recovery.md 0030 \
+    docs/approval-record.md)" = owner-decision-required ] || fail "ADR 0030 proposal overstates authority"
 grep -qx 'Status: Non-authoritative preparation — implementation remains blocked' \
     docs/tasks/sprint-alpha-milestone-a-execution-map.md || fail "Milestone A execution map overstates authority"
 grep -qx 'Status: Non-authoritative preparation — implementation remains sequential and gated' \

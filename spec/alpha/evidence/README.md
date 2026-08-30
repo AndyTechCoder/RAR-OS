@@ -45,6 +45,12 @@ source, artifact, protocol, machine profile, emulator/firmware/QMP identities,
 handoff/reference/inventory identities, and recomputed output digests. A record
 or output cannot be accepted alone; every mismatch or downgrade rejects.
 
+The durable phase-8 writer remains blocked on the publication and recovery
+choice documented in `docs/proposals/0030-alpha-accepted-evidence-publication-recovery.md`.
+No final/temporary naming, commit, cleanup, retry, or uncertain-state behavior
+is authoritative until that proposal is accepted and integrated through a
+reviewed contract change.
+
 This protocol is acceptance evidence, not a stable target ABI. Changing it
 requires an ADR-governed trusted-controller review before implementation code
 may rely on the replacement.
