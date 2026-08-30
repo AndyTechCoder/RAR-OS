@@ -8,15 +8,19 @@ authoritative.
 
 ## Current position
 
-- Phase: rebaseline durable; remaining pre-Milestone A contracts and authority.
-- Rebaseline preparation orientation: 100% complete.
+- Phase: pre-Milestone A boot/platform/controller/SSD gates; acceptance-v2
+  publication/recovery is a separate pre-Milestone B gate.
+- Preparation is tracked by the discrete authoritative gates below, not a
+  percentage. Overall readiness remains blocked.
+- Exact verified main: `ef02d685a9ca12035e35944c1ac64a26bbc6fa82`;
+  Specifications run `33303200512` passed full validation and mutation tests.
 - Target implementation: 0 of 7 milestones (A–G).
 - Working bootable GUI: does not exist yet.
 - Sprint Alpha completion evidence: none.
 - V1 alpha (Releases 0–6): not complete and much larger than Sprint Alpha.
 
-The percentage is only an orienteer for preparation work. It is not earned OS
-functionality and cannot increase the implementation count.
+Preparation documents and merged scaffolding are not earned OS functionality
+and cannot increase the implementation count.
 
 ## What is ready
 
@@ -30,6 +34,10 @@ functionality and cannot increase the implementation count.
 - Gate-report schema v2 now classifies canonical ADR 0026 and the inactive
   acceptance-v2 preparation while failing closed on every unavailable private
   platform identity. It is orientation only, not readiness evidence.
+- Acceptance-v2 controller preparation, gate-report-v2, their adversarial policy
+  tests, independent reviews, merges, and exact-main validation are complete.
+- Proposed ADR 0030 precisely records the remaining accepted-evidence
+  publication/recovery choice while granting no authority until owner approval.
 - A recorded five-choice owner brief, gated integration plan, and eight-item
   completion-proof map prevent later tasks from improvising or overclaiming.
 
@@ -40,6 +48,9 @@ functionality and cannot increase the implementation count.
 - ADRs 0022–0026 are accepted, but none of their dependent contracts or
   controller changes is ready merely from acceptance.
 - The exact Alpha boot/platform contracts are not ready.
+- The phase-8 accepted-evidence writer is not ready. Its preserved source
+  scaffold is unmerged, and publication/recovery behavior remains blocked on
+  owner selection and reviewed contract integration of proposed ADR 0030.
 - Gate-report v2 therefore reports the platform envelope, Core bootstrap,
   component bundle, initial system source, initial preserved source, and
   fixture manifest as missing; Milestones A and B remain blocked.
