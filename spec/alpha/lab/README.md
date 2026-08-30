@@ -97,6 +97,24 @@ controller source, and wiring remain required separate reviews. Static checks
 bind only these draft bytes and confirm that no directly named future harness or
 plan reference is wired; they do not claim transitive workflow-call proof.
 
+`controller-helper-closure-verifier-validation-v0.fields` and its error and
+precedence catalogs bind the inactive verifier's exact source hash, 32 ordered
+control-flow stages, 127 byte-exact representable error templates, and 50
+class-located source-order relationships. Shared verifier source sites name each
+possible occurrence stage, and the adjacent-stage prefix is checked against the
+stage list rather than merely counted. Dynamic diagnostic bytes use one-pass
+opaque hex-decoded substitution; inputs outside the stated diagnostic domain
+remain an explicit coverage gap. The source-order table does not claim that
+every defensive guard is fixture-reachable or define executable dual-invalid
+oracles; that separate contract remains required. Digest syntax and receipt
+shape guards are source-proven, while a freshly hashed all-zero SHA-256 value is
+recorded as residual cryptographic risk rather than a practical fixture. The
+catalogs deliberately exclude injected
+command, read, write, close, tool-output, and resource-exhaustion failures;
+those still require separate reviewed input-domain and fault contracts. No
+catalog is a test result, controller implementation, workflow permission, or
+readiness evidence.
+
 `controller-helper-build-receipt-v0.fields` and
 `controller-helper-test-evidence-v0.fields` fix controller-owned receipts for
 two separately terminated build jobs and one thirteen-case test job. Contextual

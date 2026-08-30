@@ -1,0 +1,132 @@
+schema=rar-alpha-controller-helper-closure-verifier-errors-v0
+class|occurrence-stage-set|message-template
+E001|invocation-mode|explicit verification mode is required
+E002|github-actions-boundary|GitHub Actions boundary is absent
+E003|ci-boundary|CI boundary is absent
+E004|event-boundary|only a push event may verify a candidate
+E005|ref-boundary|only the canonical main ref may verify a candidate
+E006|repository-boundary|canonical repository mismatch
+E007|revision-context|%LABEL% revision is malformed
+E008|revision-context|%LABEL% revision length is invalid
+E009|revision-context|controller is not exact main
+E010|revision-context|source is not exact main
+E011|run-context|%LABEL% is not canonical positive decimal
+E012|run-context|%LABEL% exceeds 20 digits
+E013|runner-context|runner OS evidence mismatch
+E014|runner-context|runner image version is malformed
+E015|runner-context|runner image version is oversized
+E016|runner-context|runner operating system mismatch
+E017|runner-context|runner architecture mismatch
+E018|controller-pins|%LABEL% is not lowercase SHA-256
+E019|controller-pins|%LABEL% SHA-256 length is invalid
+E020|controller-pins|%LABEL% SHA-256 is zero
+E110|controller-pins|%LABEL% is not canonical positive decimal
+E111|controller-pins|%LABEL% exceeds 20 digits
+E021|bootstrap-image|bootstrap image identity mismatch
+E022|required-paths|executing verifier path mismatch
+E023|required-paths|required trusted regular file is unavailable: %PATH%
+E024|required-paths|closure root is unavailable or symbolic
+E025|required-paths|evidence input boundary is unavailable
+E026|required-paths|verification output boundary is unavailable
+E027|required-paths|mount topology evidence is unavailable
+E028|bootstrap-identities|shell identity mismatch
+E029|bootstrap-identities|hasher identity mismatch
+E030|bootstrap-identities|directory creator identity mismatch
+E031|bootstrap-identities|verifier escaped controller-bound reviewed identity
+E032|bootstrap-identities|verifier tool pins escaped reviewed identity
+E033|scratch-boundary|private scratch path already exists
+E034|tool-pin-parse|tool pin grammar or order invalid at line %LINE%
+E035|tool-pin-parse|tool pin field count is invalid
+E036|tool-pin-canonicality|verifier tool pins are not canonical bytes
+E037|tool-pin-canonicality|verifier tool pins exceed reviewed bounds
+E112|tool-pin-parse|%LABEL% is not lowercase SHA-256
+E113|tool-pin-parse|%LABEL% SHA-256 length is invalid
+E114|tool-pin-parse|%LABEL% SHA-256 is zero
+E038|runtime-tool-identities|verification tool is unavailable: %PATH%
+E039|runtime-tool-identities|find identity mismatch
+E040|runtime-tool-identities|sort identity mismatch
+E041|runtime-tool-identities|wc identity mismatch
+E042|runtime-tool-identities|stat identity mismatch
+E043|runtime-tool-identities|cmp identity mismatch
+E044|runtime-tool-identities|id identity mismatch
+E045|controller-ownership|verifier uid differs from controller uid
+E046|controller-ownership|evidence boundary is not controller-owned
+E047|controller-ownership|verification boundary is not controller-owned
+E048|input-identity|missing, symbolic, or empty input: %FILE%
+E049|input-identity|input metadata is malformed: %FILE%
+E050|input-identity|input is hardlinked: %FILE%
+E051|input-identity|input is not controller-owned: %FILE%
+E052|input-identity|candidate inputs alias
+E053|input-identity|verification receipt already exists
+E054|evidence-exact-set|evidence boundary contains an unexpected entry
+E055|evidence-exact-set|evidence boundary does not contain exactly two inputs
+E056|input-snapshot+candidate-manifest|candidate manifest exceeds reviewed bounds
+E057|input-snapshot|observation receipt exceeds reviewed bounds
+E058|observation-record|observation receipt grammar or order invalid at line %LINE%
+E059|observation-record|observation receipt field count is invalid
+E060|observation-record|receipt revision context mismatch
+E115|observation-record|%LABEL% revision is malformed
+E116|observation-record|%LABEL% revision length is invalid
+E117|observation-record|%LABEL% is not canonical positive decimal
+E118|observation-record|%LABEL% exceeds 20 digits
+E119|observation-record|%LABEL% is not lowercase SHA-256
+E120|observation-record|%LABEL% SHA-256 length is invalid
+E061|observation-record|receipt runner image version is malformed
+E062|observation-record|receipt runner image version is oversized
+E063|observation-record|observer source identity mismatch
+E064|observation-record|observed find differs from reviewed verifier tool
+E065|observation-record|observed sort differs from reviewed verifier tool
+E066|observation-record|receipt manifest digest mismatch
+E067|observation-record|receipt manifest byte count mismatch
+E068|observation-record|observation receipt is not canonical bytes
+E069|candidate-manifest|candidate manifest line exceeds reviewed bound
+E070|candidate-manifest|candidate manifest separator is invalid
+E121|candidate-manifest|%LABEL% is not lowercase SHA-256
+E122|candidate-manifest|%LABEL% SHA-256 length is invalid
+E071|candidate-manifest|unsafe candidate closure path: %RELATIVE%
+E072|candidate-manifest|oversized candidate closure path: %RELATIVE%
+E073|candidate-manifest|candidate manifest entry count mismatch
+E074|candidate-manifest|candidate manifest byte grammar mismatch
+E075|candidate-manifest|candidate manifest paths are unordered or duplicated
+E076|baseline-mount-topology+final-mount-topology|closure contains a nested or replacement mount: %MOUNT%
+E077|closure-first-pass+closure-second-pass|closure contains a path outside the reviewed ASCII alphabet or length
+E078|closure-first-pass+closure-second-pass|closure contains a non-directory or non-regular entry
+E079|closure-first-pass+closure-second-pass|closure contains a hardlinked regular file
+E080|closure-first-pass+closure-second-pass|unsafe closure topology path: %RELATIVE%
+E081|closure-first-pass+closure-second-pass|oversized closure topology path: %RELATIVE%
+E082|closure-first-pass+closure-second-pass|closure contains a path alias
+E083|closure-first-pass+closure-second-pass|closure crosses a device boundary
+E084|closure-first-pass+closure-second-pass|closure contains a device/inode alias
+E085|closure-first-pass+closure-second-pass|closure topology line exceeds reviewed bound
+E086|closure-first-pass+closure-second-pass|closure regular paths are duplicated
+E123|closure-first-pass+closure-second-pass|snapshot line count exceeds bound: %FILE%
+E124|closure-first-pass+closure-second-pass|snapshot byte count exceeds bound: %FILE%
+E087|closure-first-pass+closure-second-pass|closure entry changed type: %RELATIVE%
+E088|closure-first-pass+closure-second-pass|closure file is hardlinked: %RELATIVE%
+E089|closure-first-pass+closure-second-pass|regenerated manifest exceeds reviewed bounds
+E090|closure-first-pass+closure-second-pass|regenerated manifest is empty
+E091|closure-first-pass+closure-second-pass|regenerated manifest record count mismatch
+E092|closure-first-pass+closure-second-pass|regenerated manifest byte count mismatch
+E093|first-pass-comparison|candidate manifest differs from complete closure set
+E094|inter-pass-comparisons|closure manifest changed between verification passes
+E095|inter-pass-comparisons|closure topology changed between verification passes
+E096|inter-pass-comparisons|closure identities changed between verification passes
+E097|inter-pass-comparisons|candidate manifest differs from second complete closure set
+E098|closure-stability|mount topology changed during verification
+E099|closure-stability|candidate manifest identity changed during verification
+E100|closure-stability|observation receipt identity changed during verification
+E101|closure-stability|candidate manifest bytes changed during verification
+E102|closure-stability|observation receipt bytes changed during verification
+E103|closure-stability|verifier identity changed during verification
+E104|closure-stability|verifier bytes changed during verification
+E105|closure-stability|recomputed manifest digest mismatch
+E106|receipt-publication|verification receipt line count mismatch
+E107|receipt-publication|verification receipt exceeds reviewed bounds
+E108|receipt-publication|verifier identity changed before receipt publication
+E109|receipt-publication|verifier bytes changed before receipt publication
+E125|output-digest-validation|%LABEL% is not lowercase SHA-256
+E126|output-digest-validation|%LABEL% SHA-256 length is invalid
+E127|output-digest-validation|%LABEL% SHA-256 is zero
+source_proof_classes=E106+E107+E125+E126
+cryptographic_residual_class=E127-for-freshly-hashed-values
+catalog_scope=listed-classes-cover-representable-predicate+comparison-rejections;catalog-row-order-is-nonsemantic;shared-source-site-classes-list-each-control-flow-occurrence-stage;messages-from-command+read+write+close+hash+stat+count+sort+enumeration-failures-are-deferred-to-the-fault-contract
