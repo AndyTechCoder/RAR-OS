@@ -18,6 +18,8 @@ reset_fixture() {
     /bin/cp "$root/tools/ci/contracts/sprint-alpha-gate-report-v2.fields" "$fixture/tools/ci/contracts/"
     /bin/cp "$root/tools/ci/classify-proposed-adr.sh" "$fixture/tools/ci/"
     /bin/cp "$root/tools/ci/check-acceptance-v2.sh" "$fixture/tools/ci/"
+    /bin/cp "$root/tools/ci/run-alpha-scenario.sh" "$fixture/tools/ci/"
+    /bin/cp "$root/tools/ci/verify-launch-evidence.sh" "$fixture/tools/ci/"
     /bin/cp "$root/docs/approval-record.md" "$fixture/docs/"
     for number in 0020 0021 0022 0023 0024 0025 0026; do
         file=$(/usr/bin/find "$root/docs/adr" -maxdepth 1 -type f -name "$number-*.md")
