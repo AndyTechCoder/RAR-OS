@@ -181,6 +181,13 @@ that `base-controller-uid=1000` is a context annotation, not a valid repair, so
 its four structural occurrences remain blocked pending catalog correction. The
 contract remains inactive and grants no mutation, repair, or execution path.
 
+`controller-helper-closure-verifier-synchronized-link-semantics-v0` defines
+post-trigger hardlink insertion and atomic regular-file-to-self-symlink
+replacement for six no-repair closure templates. It requires exact trigger and
+ack ordering, nonscratch private backing, complete parent/entry metadata, and
+no visible staging residue. Pre-start and repair-coupled link cases remain
+blocked.
+
 `controller-helper-build-receipt-v0.fields` and
 `controller-helper-test-evidence-v0.fields` fix controller-owned receipts for
 two separately terminated build jobs and one thirteen-case test job. Contextual
