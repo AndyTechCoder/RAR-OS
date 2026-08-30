@@ -377,6 +377,8 @@ fn decode_direct_huffman_literals(
         let stream = reader.take(reader.remaining())?;
         return decode_huffman_stream(&table, maximum_bits as u8, stream, regenerated_size);
     }
+    // Verified RFC 8878 Errata 7297 makes 6 the minimum regenerated size for
+    // every four-stream format, avoiding an underflowing fourth partition.
     if regenerated_size < 6 {
         return Err(Error::InvalidLiteralsSection);
     }
@@ -779,6 +781,18 @@ mod tests {
                 [0, 1, 0, 1, 0, 1, 0, 1]
             );
         }
+
+        let mut uneven = vec![0x76, 0x00, 0x03];
+        uneven.extend_from_slice(&[
+            0x80, 0x10, // two one-bit symbols
+            0x01, 0x00, 0x01, 0x00, 0x01, 0x00, // jump table
+            0x05, 0x05, 0x05, 0x03, // [0,1], [0,1], [0,1], [1]
+            0,
+        ]);
+        assert_eq!(
+            decode_zstd(&compressed_frame(&uneven), 7).unwrap(),
+            [0, 1, 0, 1, 0, 1, 1]
+        );
     }
 
     #[test]
@@ -795,10 +809,36 @@ mod tests {
             Err(Error::UnsupportedLiteralsCompression)
         );
 
-        let four_stream = compressed_frame(&[0x46, 0, 0]);
+        let undersized_four_stream = compressed_frame(&[0x46, 0, 0]);
         assert_eq!(
-            decode_zstd(&four_stream, 1),
-            Err(Error::UnsupportedLiteralsFormat)
+            decode_zstd(&undersized_four_stream, 4),
+            Err(Error::InvalidLiteralsSection)
+        );
+
+        let jump_sum_exceeds_streams = compressed_frame(&[
+            0x86, 0x00, 0x03, 0x80, 0x10, 0x02, 0x00, 0x02, 0x00, 0x02, 0x00,
+            0x05, 0x05, 0x05, 0x05,
+        ]);
+        assert_eq!(
+            decode_zstd(&jump_sum_exceeds_streams, 8),
+            Err(Error::InvalidHuffmanStream)
+        );
+
+        let empty_required_stream = compressed_frame(&[
+            0x86, 0xc0, 0x02, 0x80, 0x10, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
+            0x05, 0x05, 0x05,
+        ]);
+        assert_eq!(
+            decode_zstd(&empty_required_stream, 8),
+            Err(Error::InvalidHuffmanStream)
+        );
+
+        let truncated_jump_table = compressed_frame(&[
+            0x86, 0xc0, 0x01, 0x80, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ]);
+        assert_eq!(
+            decode_zstd(&truncated_jump_table, 8),
+            Err(Error::Truncated)
         );
 
         let bad_padding = compressed_frame(&[
