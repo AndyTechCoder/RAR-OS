@@ -90,21 +90,26 @@ readiness state; provenance, licenses, acquisition, tool pins, retained bytes,
 and runtime evidence still require separate review.
 
 `controller-helper-closure-verifier-test-plan-v0.fields` now binds the complete
-source-only C1 validation design. The 147 disposition cases, 50 executable
-precedence oracles, 12 injected-fault cases, canonical evidence schema, closure-
-acceptance schema, and 127-case helper runtime/test contract remain inactive and
-unwired. C3V must still supply reviewed fixtures, pins, controller code, retained
+source-only C1 validation design. It accounts for 117 constructible disposition
+cases, 30 disposition residual proofs, 37 executable precedence oracles, 13
+precedence residual proofs, and 12 injected-fault cases: 166 runtime cases plus
+43 non-executing residual proofs across 209 logical relationships. Its evidence
+and closure-acceptance schemas remain inactive and unwired. The separate v1
+test-evidence parser schema has 127 ordered record rows; those are parser records,
+not closure-verifier runtime cases. C3V must still supply reviewed fixtures, pins, controller code, retained
 runtime evidence, and exact-main proof; C3A alone may later accept that evidence.
 
 `controller-helper-closure-verifier-validation-v0.fields` and its error and
 precedence catalogs bind the inactive verifier's exact source hash, 32 ordered
 control-flow stages, 127 byte-exact representable error templates, and 50
-class-located source-order relationships. Shared verifier source sites name each
+class-located source-order relationships. The relationship catalog remains 50
+logical relationships; C1 classifies 37 as executable and 13 as residual proofs. Shared verifier source sites name each
 possible occurrence stage, and the adjacent-stage prefix is checked against the
 stage list rather than merely counted. Dynamic diagnostic bytes use one-pass
 opaque hex-decoded substitution; inputs outside the stated diagnostic domain
-remain an explicit coverage gap. The exhaustive C1 case catalog now binds every constructible class-and-stage
-instance and each executable dual-invalid precedence oracle. Digest syntax and
+remain an explicit coverage gap. The exhaustive C1 case catalog binds every
+constructible class-and-stage instance, every reviewed disposition residual,
+37 executable dual-invalid precedence oracles, and 13 precedence residual proofs. Digest syntax and
 receipt-shape guards remain source-proven, while a freshly hashed all-zero
 SHA-256 value remains an explicit residual cryptographic risk rather than a
 practical fixture. The separate C1 fault catalog binds the future injected
@@ -126,9 +131,11 @@ execution wiring, and retained evidence.
 class-and-occurrence-stage pairs exactly once. It separates ordinary pre-start
 fixtures, phase-synchronized controller mutations, separately reviewed injected
 faults, validation-declared source proofs, additional source-dominated guards,
-the fresh SHA-256 zero-digest residual, and four occurrences needing reviewed
-domain extensions: input aliasing, unrelated mount-info mutation, and a
-cross-device mount during either closure pass. Lossy NUL-bearing tool-pin and observation behavior is bound to explicit C1
+the fresh SHA-256 zero-digest residual, and 12 occurrences needing reviewed
+domain extensions: evidence and verification mount replacement, private proc
+absence, paired visible/hidden link relocation, input aliasing, a cross-device
+mount during either closure pass, four resource-staging-limit occurrences, and
+unrelated mount-info mutation. Lossy NUL-bearing tool-pin and observation behavior is bound to explicit C1
 fault cases rather than silently excluded. The catalog is not an executable case instance,
 runtime oracle, harness, result, or authority.
 
@@ -140,13 +147,13 @@ separately reviewed fault contract.
 
 `controller-helper-closure-verifier-case-templates-v0` enumerates one structural
 base-relative primary token, phase window, repair token, and error oracle for
-each of the 125 constructible class-and-stage occurrences. C1 now binds the
+each of the 117 constructible class-and-stage occurrences. C1 now binds the
 operator/repair semantics, exhaustive case/fault catalogs, and evidence grammar.
 These remain inactive templates rather than executable instances or evidence;
 C3V still must bind the immutable base, fixture image, controller, phase
 instrumentation, tool pins, retained results, and exact-main validation.
 
-`controller-helper-closure-verifier-operator-inventory-v0` closes the lexical vocabulary used by those templates to 34 primary families and eight repair tokens.
+`controller-helper-closure-verifier-operator-inventory-v0` records 32 active and two deferred primary families plus seven active and one deferred repair token.
 It checks parameter shapes and exact coverage mechanically and now includes
 one exact target-domain, precondition, operation, postcondition, and bound row
 for each primary family plus one independence-bounded row for each repair token.
