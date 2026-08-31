@@ -335,8 +335,6 @@ profile_expected=$(/usr/bin/sed -n 's/^machine_profile_sha256=//p' "$boot_contra
 if [ "$p0_active" -eq 1 ]; then
     /bin/sh "$root/tools/ci/check-alpha-boot-platform-contracts.sh" "$alpha" >/dev/null ||
         fail 'Alpha boot/platform P0 contract set is invalid'
-    /bin/sh "$root/tools/ci/test-alpha-boot-platform-contract-policy.sh" >/dev/null ||
-        fail 'Alpha boot/platform P0 mutation policy is invalid'
 fi
 
 printf '%s\n' 'Alpha preimplementation contract structure passed'

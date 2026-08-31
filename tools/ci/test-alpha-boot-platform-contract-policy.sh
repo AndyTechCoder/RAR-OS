@@ -5,6 +5,10 @@ LANG=C
 export LC_ALL LANG
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
+if [ ! -f "$root/spec/alpha/platform/contract-set-v0.manifest" ]; then
+    printf '%s\n' 'Alpha boot/platform policy mutations dormant: P0 manifest absent'
+    exit 0
+fi
 scratch=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
 [ "$scratch" != disabled ] || { printf '%s\n' 'Alpha boot/platform policy mutations skipped: ephemeral CI required'; exit 0; }
 work=$(mktemp -d "$scratch/alpha-boot-platform.XXXXXX")

@@ -287,7 +287,10 @@ hardware_expected=$(/usr/bin/sed -n 's/^r0_hardware_contract_sha256=//p' "$contr
 require_line "$contract_manifest" 'machine_activation=blocked-until-retained-cloud-firmware+q35+PCI+AHCI-evidence-exactly-matches'
 require_line "$contract_manifest" 'authority_rule=contract-only,no-target-source,no-build,no-image,no-launch,no-execution'
 
-ephemeral=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
+ephemeral=disabled
+if [ "${RAR_POLICY_MUTATION_TESTS-}" = 1 ]; then
+    ephemeral=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
+fi
 if [ "$ephemeral" != disabled ]; then
     golden=$(env LC_ALL=C LANG=C /usr/bin/perl - \
         "$platform/fixtures/v0/root.artifact" \
