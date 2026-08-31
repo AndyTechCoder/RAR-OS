@@ -8,14 +8,7 @@ subject=$root/spec/alpha/lab/controller-helper-runtime-v0.fields
 fail() { printf '%s\n' 'rar-alpha-controller-helper-runtime-v0 source check failed: '"$1" >&2; exit 1; }
 [ -f "$subject" ] && [ ! -L "$subject" ] || fail 'subject unavailable'
 actual=$(env -u LC_CTYPE LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$subject" | /usr/bin/awk '{print $1}')
-[ "$actual" = perl: warning: Setting locale failed.
-perl: warning: Please check that your locale settings:
-	LC_ALL = "C.UTF-8",
-	LC_CTYPE = "C.UTF-8",
-	LANG = "C.UTF-8"
-    are supported and installed on your system.
-perl: warning: Falling back to the standard locale ("C").
-panic: locale.c: 4486: Could not change LC_CTYPE locale to C.UTF-8, errno=9 ] || fail 'subject bytes escaped review'
+[ "$actual" = 57620b332c0706ad2dd02a245593757ace511f2d9f58b49259c55346c6bd1b65 ] || fail 'subject bytes escaped review'
 grep -Fqx 'schema=rar-alpha-controller-helper-runtime-v0' "$subject" || fail 'schema changed'
 grep -Fqx 'descriptor_count=6' "$subject" || fail 'descriptor count changed'
 [ "$(grep -c '^descriptor|' "$subject")" -eq 6 ] || fail 'descriptor rows incomplete'
