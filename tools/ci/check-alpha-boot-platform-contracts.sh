@@ -240,7 +240,7 @@ require_line "$slots" 'core_forbidden_authority=state-read,state-map,state-write
 [ "$(/usr/bin/grep -c '^transition|' "$slots")" -eq 44 ] || fail 'state-slot transition table must cover 4 states x 11 events'
 boot_case_count=41
 [ "$topology" != p0-compact-bdf ] || boot_case_count=50
-/usr/bin/awk -F '|' -v expected_count="$boot_case_count" '
+/usr/bin/awk -F '|' '
     /^transition\|/ {
         key = $2 SUBSEP $3
         if (++seen[key] != 1 || NF != 6) bad = 1
@@ -301,7 +301,7 @@ boot_case_count=41
     }
 ' "$validation" "$precedence" || fail 'precedence cases do not cover every adjacent and sensitive pair'
 
-/usr/bin/awk -F '|' '
+/usr/bin/awk -F '|' -v expected_count="$boot_case_count" '
     NR == 1 { if ($0 != "schema=rar-alpha-boot-cases-v0") bad = 1; next }
     NR == 2 { if ($0 != "id|stage|expected") bad = 1; next }
     NR > 2 {

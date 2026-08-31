@@ -235,7 +235,11 @@ my (%scalar,@vectors,@disabled);
 for my $line (split /\n/,$text) {
     next if $line eq '';
     if ($line =~ /^vector\|/) { my @f=split /\|/,$line,-1; die unless @f==7; push @vectors,\@f }
-    elsif ($line =~ /^disabled\|/) { my @f=split /\|/,$line,-1; die unless @f==8; push @disabled,\@f }
+    elsif ($line =~ /^disabled\|/) {
+        die 'oracle disabled grammar' unless $line =~
+            /\Adisabled\|([0-9]+)\|([0-9]+)\|([0-9]+)\|([0-9]+)\|(0x[0-9a-f]{4})\|([0-9a-f]{4})\z/;
+        push @disabled,['disabled',$1,$2,$3,$4,$5,$6];
+    }
     else { my ($k,$v)=split /=/,$line,2; die unless defined($v) && !exists($scalar{$k}); $scalar{$k}=$v }
 }
 my %expected_scalar=(
@@ -325,8 +329,25 @@ compact_replace_reject() {
     replace_label=$3
     prepare_wire_case
     enable_compact_case
-    mutate "$wire_case/fixtures/compact-bdf-vectors.fixture" \
-        "s|$old_value|$new_value|"
+    /usr/bin/perl - "$wire_case/fixtures/compact-bdf-vectors.fixture" \
+        "$old_value" "$new_value" "$wire_case/literal-replacement" <<'PERL'
+use strict;
+use warnings;
+my ($input,$old,$new,$output)=@ARGV;
+open my $in,'<',$input or die $!;
+local $/;
+my $text=<$in>;
+close $in or die $!;
+my $offset=index($text,$old);
+die 'literal mutation target missing' if $offset < 0;
+die 'literal mutation target duplicated' if index($text,$old,$offset+length($old)) >= 0;
+substr($text,$offset,length($old),$new);
+open my $out,'>',$output or die $!;
+print {$out} $text or die $!;
+close $out or die $!;
+PERL
+    /bin/mv "$wire_case/literal-replacement" \
+        "$wire_case/fixtures/compact-bdf-vectors.fixture"
     compact_reject "$replace_label"
 }
 

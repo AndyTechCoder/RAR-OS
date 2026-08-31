@@ -168,11 +168,11 @@ sub compact_preimage {
             push @vector,\@field;
         } elsif ($line =~ /^disabled\|/) {
             my @field=split /\|/,$line,-1;
-            die 'compact disabled grammar' unless @field==8;
+            die 'compact disabled grammar' unless @field==7;
             push @disabled,\@field;
         } else {
             my ($key,$value)=split /=/,$line,2;
-            die 'compact scalar grammar' unless defined($value) && $key =~ /\A[a-z_]+\z/ &&
+            die 'compact scalar grammar' unless defined($value) && $key =~ /\A[a-z][a-z0-9_]*\z/ &&
                 length($value) && !exists($scalar{$key});
             $scalar{$key}=$value;
         }
