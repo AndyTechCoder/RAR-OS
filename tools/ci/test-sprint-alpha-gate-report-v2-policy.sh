@@ -39,6 +39,12 @@ reset_fixture() {
     /bin/cp "$root/spec/alpha/boot/alpha-boot-v0.fields" "$fixture/spec/alpha/boot/"
 }
 
+install_platform_fixture() {
+    [ -f "$root/spec/alpha/platform/contract-set-v0.manifest" ] || return 1
+    /bin/cp -R "$root/spec/alpha/platform" "$fixture/spec/alpha/"
+    /bin/cp "$root/spec/alpha/boot/alpha-machine-closure-v0.fields" "$fixture/spec/alpha/boot/"
+}
+
 report() {
     RAR_POLICY_MUTATION_TESTS=1 /bin/sh "$reporter" "$fixture"
 }
@@ -81,6 +87,27 @@ reset_fixture
 /bin/mkdir -p "$fixture/spec/alpha/platform"
 require_row 'platform_envelope_state=invalid'
 require_row 'platform_source_set=blocked'
+
+if [ -f "$root/spec/alpha/platform/contract-set-v0.manifest" ]; then
+    reset_fixture
+    install_platform_fixture
+    require_row 'platform_envelope_state=pending-review'
+    require_row 'core_bootstrap_state=pending-review'
+    require_row 'platform_fixture_manifest_state=pending-review'
+
+    reset_fixture
+    install_platform_fixture
+    /bin/mv "$fixture/spec/alpha/platform/contract-set-v0.manifest" "$work/platform-manifest"
+    /bin/ln -s "$work/platform-manifest" "$fixture/spec/alpha/platform/contract-set-v0.manifest"
+    require_row 'platform_envelope_state=invalid'
+
+    reset_fixture
+    install_platform_fixture
+    /usr/bin/sed 's/status=experimental-pending-review/status=ready/' \
+        "$fixture/spec/alpha/platform/contract-set-v0.manifest" > "$work/bad"
+    /bin/mv "$work/bad" "$fixture/spec/alpha/platform/contract-set-v0.manifest"
+    require_row 'platform_envelope_state=invalid'
+fi
 
 reset_fixture
 /usr/bin/printf '%s\n' 'CANARY' > "$work/canary"

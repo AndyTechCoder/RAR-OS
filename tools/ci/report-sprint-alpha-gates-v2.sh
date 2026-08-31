@@ -89,10 +89,21 @@ adr_0025=$(classify 0025 alpha-gui-continuity-evidence-sequencing)
 adr_0026=$(classify 0026 alpha-platform-payload-and-state-sources)
 
 platform_contract_state=missing
+platform_identity=unavailable
 if [ -e "$source_root/spec/alpha/platform" ] || [ -L "$source_root/spec/alpha/platform" ]; then
     platform_contract_state=invalid
+    platform_manifest=$source_root/spec/alpha/platform/contract-set-v0.manifest
+    if [ -f "$platform_manifest" ] && [ ! -L "$platform_manifest" ] && [ -s "$platform_manifest" ] &&
+        RAR_POLICY_MUTATION_TESTS= /bin/sh "$repository_root/tools/ci/check-alpha-boot-platform-contracts.sh" \
+            "$source_root/spec/alpha" >/dev/null 2>&1; then
+        platform_contract_state=pending-review
+        platform_identity=$(hash_file "$platform_manifest") || platform_identity=unavailable
+        printf '%s\n' "$platform_identity" | /usr/bin/grep -Eq '^[0-9a-f]{64}$' || {
+            platform_contract_state=invalid
+            platform_identity=unavailable
+        }
+    fi
 fi
-platform_identity=unavailable
 
 acceptance_v2_state=invalid
 acceptance_v2_plan_sha256=unavailable
