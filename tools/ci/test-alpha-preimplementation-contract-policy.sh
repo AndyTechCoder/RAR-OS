@@ -70,6 +70,11 @@ reset_fixture
 expect_rejected malformed-case-row
 
 reset_fixture
+/bin/mkdir -p "$work/alpha/platform"
+/usr/bin/printf '%s\n' partial-p0 > "$work/alpha/platform/partial.fixture"
+expect_rejected partial-p0-without-manifest
+
+reset_fixture
 /bin/mv "$work/alpha/boot/alpha-boot-v0.fields" "$work/alpha/boot/real.fields"
 /bin/ln -s real.fields "$work/alpha/boot/alpha-boot-v0.fields"
 expect_rejected symbolic-contract

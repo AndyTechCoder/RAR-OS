@@ -9,6 +9,20 @@ alpha=${1-$root/spec/alpha}
 lab=$alpha/lab
 boot=$alpha/boot
 evidence=$alpha/evidence
+p0_manifest=$alpha/platform/contract-set-v0.manifest
+
+if [ -e "$p0_manifest" ] || [ -L "$p0_manifest" ]; then
+    [ -f "$p0_manifest" ] && [ ! -L "$p0_manifest" ] && [ -s "$p0_manifest" ] ||
+        { printf '%s\n' 'Alpha preimplementation contract blocked: P0 manifest is not a regular non-symbolic file' >&2; exit 1; }
+    p0_active=1
+else
+    if [ -e "$alpha/platform" ] || [ -L "$alpha/platform" ] ||
+        [ -e "$boot/alpha-machine-closure-v0.fields" ] || [ -L "$boot/alpha-machine-closure-v0.fields" ]; then
+        printf '%s\n' 'Alpha preimplementation contract blocked: partial P0 topology exists without its manifest' >&2
+        exit 1
+    fi
+    p0_active=0
+fi
 
 fail() {
     printf 'Alpha preimplementation contract blocked: %s\n' "$1" >&2
@@ -165,7 +179,7 @@ require_digest "$lab/controller-helper-test-evidence-v0.fields" bbef4dd6a0e343c8
 require_digest "$lab/controller-helper-cases.v0" 08e36412d104cc5c41169faf5d5e4dd423eb7fbfb0dba0623911423c51238e59
 require_digest "$lab/reference-evidence-v0.fields" 2edbb270323d5fd074d3adc2929c695e0bb7ca957464ea814627ea82fc0c259e
 require_digest "$lab/cases.v0" 966d84739240b871d2dd22e362ce07ec0e82706cbde32dfd4e493c0bd9758342
-if [ -f "$alpha/platform/contract-set-v0.manifest" ]; then
+if [ "$p0_active" -eq 1 ]; then
     require_digest "$boot/alpha-boot-v0.fields" 170b2533444cf153f4c301d71405e5afc2e6747fafab256776031d1cc2ddf082
 else
     require_digest "$boot/alpha-boot-v0.fields" 8a97440b2366e3554cca8948c47d0df8e3146230a1d049ead48a105612623e0e
@@ -282,7 +296,7 @@ helper_fixtures=$lab/fixtures/controller-helper
 
 boot_contract=$boot/alpha-boot-v0.fields
 require_line "$boot_contract" 'schema=rar-alpha-x86_64-boot-v0'
-if [ -f "$alpha/platform/contract-set-v0.manifest" ]; then
+if [ "$p0_active" -eq 1 ]; then
     require_line "$boot_contract" 'status=experimental-pending-review'
     require_line "$boot_contract" 'readiness=blocked-until-contract-set-review-merge-exact-main-and-machine-evidence'
 else
@@ -302,7 +316,7 @@ require_line "$boot_contract" 'r0_source_producer=recovery-only'
 require_line "$boot_contract" 'r0_source_precondition=complete-writes,producer-write-revoked,dma-revoked,immutable-where-required'
 require_line "$boot_contract" 'r0_device_authority=apic-exact-mmio-descriptor,serial-exact-io-port-descriptor,no-unused-device-descriptor'
 require_line "$boot_contract" 'limitations=no-signatures,no-rollback-counter,no-A-B,no-production-entropy,no-persistent-format,no-update-compatibility,no-physical-support'
-if [ -f "$alpha/platform/contract-set-v0.manifest" ]; then
+if [ "$p0_active" -eq 1 ]; then
     [ "$(/usr/bin/grep -c '^wire_field|RootRecoveryHeaderV0|' "$boot_contract")" -eq 30 ] || fail 'Root-to-Recovery header layout is incomplete'
 else
     [ "$(/usr/bin/grep -c '^wire_field|RootRecoveryHeaderV0|' "$boot_contract")" -eq 20 ] || fail 'Root-to-Recovery header layout is incomplete'
@@ -318,7 +332,7 @@ profile_expected=$(/usr/bin/sed -n 's/^machine_profile_sha256=//p' "$boot_contra
 [ "$hardware_expected" = "$(digest_file "$root/spec/hardware/rhd-v1.fields")" ] || fail 'R0 hardware contract binding changed'
 [ "$profile_expected" = "$(digest_file "$root/tools/sprint-alpha/x86_64-q35-v1.profile")" ] || fail 'machine profile binding changed'
 
-if [ -f "$alpha/platform/contract-set-v0.manifest" ]; then
+if [ "$p0_active" -eq 1 ]; then
     /bin/sh "$root/tools/ci/check-alpha-boot-platform-contracts.sh" "$alpha" >/dev/null ||
         fail 'Alpha boot/platform P0 contract set is invalid'
     /bin/sh "$root/tools/ci/test-alpha-boot-platform-contract-policy.sh" >/dev/null ||

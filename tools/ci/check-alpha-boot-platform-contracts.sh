@@ -107,6 +107,17 @@ precedence=$platform/precedence.v0
 fixture_manifest=$platform/fixtures/manifest.v0
 contract_manifest=$platform/contract-set-v0.manifest
 
+require_line "$fixture_manifest" 'schema=rar-alpha-platform-fixture-manifest-v0'
+require_line "$fixture_manifest" 'status=experimental-pending-review'
+require_line "$fixture_manifest" 'fixture_count=15'
+require_line "$fixture_manifest" 'manifest_rule=paths-relative-to-fixtures-directory,ASCII-sorted,regular-nonsymbolic,exact-bytes,exact-SHA-256,no-extra-fixture'
+require_line "$fixture_manifest" 'derivation_rule=packer-and-independent-inspector-both-recompute-size+digest+semantic-cross-references'
+require_line "$contract_manifest" 'schema=rar-alpha-boot-platform-contract-set-v0'
+require_line "$contract_manifest" 'status=experimental-pending-review'
+require_line "$contract_manifest" 'readiness=blocked-until-architecture-correctness-security-mutation-merge-and-exact-main'
+require_line "$contract_manifest" 'contract_count=13'
+require_line "$contract_manifest" 'consumer_rule=P1-binds-this-exact-manifest-after-P0-exact-main,no-individual-caller-selected-contract'
+
 require_line "$boot_contract" 'status=experimental-pending-review'
 require_line "$boot_contract" 'entry_total_bytes_authority=RSI-equals-header-total_bytes,one-authoritative-length,no-duplicated-source-record-length'
 require_line "$boot_contract" 'executable_mapping_transition=RW+NX,copy-and-zero,remove-write,TLB-flush,RX,no-writable-alias'
@@ -231,8 +242,8 @@ done < "$fixture_manifest"
 expected_contracts='spec/alpha/boot/alpha-boot-v0.fields
 spec/alpha/boot/alpha-machine-closure-v0.fields
 spec/alpha/boot/cases.v0
-spec/alpha/platform/alpha-core-bootstrap-v0.fields
 spec/alpha/platform/alpha-component-bundle-v0.fields
+spec/alpha/platform/alpha-core-bootstrap-v0.fields
 spec/alpha/platform/alpha-identities-v0.fields
 spec/alpha/platform/alpha-platform-entry-v0.fields
 spec/alpha/platform/alpha-state-image-v0.fields
