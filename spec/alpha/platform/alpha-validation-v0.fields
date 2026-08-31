@@ -61,5 +61,5 @@ sensitive_nonadjacent_pair|031|046
 sensitive_nonadjacent_pair|038|040
 sensitive_nonadjacent_pair|039|042
 sensitive_nonadjacent_pair|041|044
-sensitive_nonadjacent_pair|045|046
+sensitive_nonadjacent_pair|045|047
 precedence_fixture_rule=every-adjacent-pair-001-through-048-plus-every-listed-sensitive-pair,expected-first-lower-ordinal,effect-log-empty
