@@ -124,22 +124,24 @@
   it after ADR 0020
 - Controller-helper build trust: accepted ADR 0024 Alternative A selects two
   builds from a fully pinned compiler closure on the approved Linux runner for
-  Alpha. Real compiler/helper identities and reviewed evidence remain absent;
-  no helper compilation, cloud provisioning, or execution is authorized.
+  Alpha. Real compiler/helper identities and runtime evidence remain absent; C1 now
+  supplies complete source-only runtime, verifier, acceptance, and v1 evidence
+  contracts. No helper compilation, cloud provisioning, or execution is authorized.
   PR #57 merged a byte-pinned, inactive source observer and exact candidate
   output contract at `65ae7aedd11298c8f15ed96cd94166e2afa03e2a`;
   exact-main run `33308569835` passed. The observer is not wired or executed,
   the CI closure lock remains `none`, the helper inventory remains blocked, and
-  any future candidate remains untrusted until its tools, complete file set,
-  exact-set verifier, retained bytes, and runtime fault/confinement evidence
-  receive separate review
+  any future candidate remains untrusted until C3V binds its tools, complete file
+  set, controller, fixtures, retained bytes, and runtime fault/confinement
+  evidence, followed by separate C3A review
 - Controller-helper inventory: an option-neutral blocked instance now binds the
   required builder, compiler closure, trusted source, golden vector, twice-
   reproduced binary, and isolated test-evidence identities. All activating
   values remain `unavailable`; 40 declarative cases and mutation tests prevent
   a ready claim before real reviewed cloud evidence.
   Strict contextual parsers now validate the future aggregate build record,
-  two distinct controller-owned build receipts, and a thirteen-case test receipt
+  two distinct controller-owned build receipts; the v1 validator now requires all
+  97 inherited attempt cases plus 30 runtime/authority cases and rejects the legacy 13-case receipt
   against their actual selected inputs. They reject aliases, hardlinks when the
   host filesystem supports exercising them, path escape, stale logs, reused
   job/root nonces, missing/duplicate cases, and self-declared results without
