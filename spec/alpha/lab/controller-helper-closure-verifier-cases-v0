@@ -224,7 +224,7 @@ case|X011|fault|F011|resource-file-size|receipt-staging|RLIMIT_FSIZE=0+SIGXFSZ-u
 case|X012|fault|F012|phase-mutation|closure-stability|declared-fixture|exit-1+no-valid-final-receipt
 fixture_rule=immutable-byte-pinned-base+fixture-image+tools+subject+controller,one-fresh-root+nonce-per-case
 constructible_rule=every-fixture+synchronized-mutation-row-binds-exactly-one-C-template+primary+repair+oracle
-precedence_instance_rule=each-Q-row-binds-two-exact-primary+repair-tuples-on-one-fresh-base;source-proof-output-classes-use-explicit-staged-receipt-byte-mutations
+precedence_projection_rule=precedence-rows-bind-two-exact-primary+repair-tuples-on-one-fresh-base;precedence-residual-rows-bind-only-reviewed-catalog-sides+reason+no-runtime-mutation+no-observed-result
 mutation_rule=exact-phase-trigger+ack,controller-cannot-reach-scratch-after-launch,independent-repair-only
 ordering_rule=V001-through-V147,Q001-through-Q050,X001-through-X012,exactly-once,no-extra-row
 unrepresentable_rule=source-proof+source-dominated+cryptographic-residual+domain-extension-remain-explicit-rows,never-silently-skipped
