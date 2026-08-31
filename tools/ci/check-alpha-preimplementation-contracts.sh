@@ -165,7 +165,11 @@ require_digest "$lab/controller-helper-test-evidence-v0.fields" bbef4dd6a0e343c8
 require_digest "$lab/controller-helper-cases.v0" 08e36412d104cc5c41169faf5d5e4dd423eb7fbfb0dba0623911423c51238e59
 require_digest "$lab/reference-evidence-v0.fields" 2edbb270323d5fd074d3adc2929c695e0bb7ca957464ea814627ea82fc0c259e
 require_digest "$lab/cases.v0" 966d84739240b871d2dd22e362ce07ec0e82706cbde32dfd4e493c0bd9758342
-require_digest "$boot/alpha-boot-v0.fields" 8a97440b2366e3554cca8948c47d0df8e3146230a1d049ead48a105612623e0e
+if [ -f "$alpha/platform/contract-set-v0.manifest" ]; then
+    require_digest "$boot/alpha-boot-v0.fields" 170b2533444cf153f4c301d71405e5afc2e6747fafab256776031d1cc2ddf082
+else
+    require_digest "$boot/alpha-boot-v0.fields" 8a97440b2366e3554cca8948c47d0df8e3146230a1d049ead48a105612623e0e
+fi
 require_digest "$boot/cases.v0" 370f829f791681cb4c1fb96dbf850f9535751a7a64295534562ea47a9f84bee3
 require_digest "$evidence/acceptance-v2.plan" ffdb07b584abc94122b14a416593916cf18df439de042c97ff83fda9e4444ccd
 require_digest "$evidence/acceptance-v2.fields" 7a4416fb7429de5244694f985c3c62deaa91d9d441f746ece4cd675367ef6e15
@@ -278,8 +282,13 @@ helper_fixtures=$lab/fixtures/controller-helper
 
 boot_contract=$boot/alpha-boot-v0.fields
 require_line "$boot_contract" 'schema=rar-alpha-x86_64-boot-v0'
-require_line "$boot_contract" 'status=draft-incomplete'
-require_line "$boot_contract" 'readiness=blocked-on-byte-layout-memory-attributes-timer-and-x86-control-state'
+if [ -f "$alpha/platform/contract-set-v0.manifest" ]; then
+    require_line "$boot_contract" 'status=experimental-pending-review'
+    require_line "$boot_contract" 'readiness=blocked-until-contract-set-review-merge-exact-main-and-machine-evidence'
+else
+    require_line "$boot_contract" 'status=draft-incomplete'
+    require_line "$boot_contract" 'readiness=blocked-on-byte-layout-memory-attributes-timer-and-x86-control-state'
+fi
 require_line "$boot_contract" 'root_path=\EFI\BOOT\BOOTX64.EFI'
 require_line "$boot_contract" 'recovery_path=\RAR\ALPHA\RECOVERY.ELF'
 require_line "$boot_contract" 'nucleus_path=\RAR\ALPHA\NUCLEUS.ELF'
@@ -293,7 +302,11 @@ require_line "$boot_contract" 'r0_source_producer=recovery-only'
 require_line "$boot_contract" 'r0_source_precondition=complete-writes,producer-write-revoked,dma-revoked,immutable-where-required'
 require_line "$boot_contract" 'r0_device_authority=apic-exact-mmio-descriptor,serial-exact-io-port-descriptor,no-unused-device-descriptor'
 require_line "$boot_contract" 'limitations=no-signatures,no-rollback-counter,no-A-B,no-production-entropy,no-persistent-format,no-update-compatibility,no-physical-support'
-[ "$(/usr/bin/grep -c '^wire_field|RootRecoveryHeaderV0|' "$boot_contract")" -eq 20 ] || fail 'Root-to-Recovery header layout is incomplete'
+if [ -f "$alpha/platform/contract-set-v0.manifest" ]; then
+    [ "$(/usr/bin/grep -c '^wire_field|RootRecoveryHeaderV0|' "$boot_contract")" -eq 30 ] || fail 'Root-to-Recovery header layout is incomplete'
+else
+    [ "$(/usr/bin/grep -c '^wire_field|RootRecoveryHeaderV0|' "$boot_contract")" -eq 20 ] || fail 'Root-to-Recovery header layout is incomplete'
+fi
 [ "$(/usr/bin/grep -c '^wire_field|RootRecoveryMapRecordV0|' "$boot_contract")" -eq 7 ] || fail 'Root-to-Recovery map layout is incomplete'
 [ "$(/usr/bin/grep -c '^memory_type_rule|' "$boot_contract")" -eq 15 ] || fail 'UEFI memory mapping table is incomplete'
 validate_case_file "$boot/cases.v0" 'schema=rar-alpha-boot-cases-v0' 41
@@ -304,5 +317,12 @@ profile_expected=$(/usr/bin/sed -n 's/^machine_profile_sha256=//p' "$boot_contra
 [ "$handoff_expected" = "$(digest_file "$root/spec/boot/handoff-v1.fields")" ] || fail 'R0 handoff contract binding changed'
 [ "$hardware_expected" = "$(digest_file "$root/spec/hardware/rhd-v1.fields")" ] || fail 'R0 hardware contract binding changed'
 [ "$profile_expected" = "$(digest_file "$root/tools/sprint-alpha/x86_64-q35-v1.profile")" ] || fail 'machine profile binding changed'
+
+if [ -f "$alpha/platform/contract-set-v0.manifest" ]; then
+    /bin/sh "$root/tools/ci/check-alpha-boot-platform-contracts.sh" "$alpha" >/dev/null ||
+        fail 'Alpha boot/platform P0 contract set is invalid'
+    /bin/sh "$root/tools/ci/test-alpha-boot-platform-contract-policy.sh" >/dev/null ||
+        fail 'Alpha boot/platform P0 mutation policy is invalid'
+fi
 
 printf '%s\n' 'Alpha preimplementation contract structure passed'
