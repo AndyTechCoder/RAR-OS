@@ -103,15 +103,13 @@ class-located source-order relationships. Shared verifier source sites name each
 possible occurrence stage, and the adjacent-stage prefix is checked against the
 stage list rather than merely counted. Dynamic diagnostic bytes use one-pass
 opaque hex-decoded substitution; inputs outside the stated diagnostic domain
-remain an explicit coverage gap. The source-order table does not claim that
-every defensive guard is fixture-reachable or define executable dual-invalid
-oracles; that separate contract remains required. Digest syntax and receipt
-shape guards are source-proven, while a freshly hashed all-zero SHA-256 value is
-recorded as residual cryptographic risk rather than a practical fixture. The
-catalogs deliberately exclude injected
-command, read, write, close, tool-output, and resource-exhaustion failures;
-the input domain described below is now present, while those failures still
-require a separate reviewed fault contract. No catalog is a test result,
+remain an explicit coverage gap. The exhaustive C1 case catalog now binds every constructible class-and-stage
+instance and each executable dual-invalid precedence oracle. Digest syntax and
+receipt-shape guards remain source-proven, while a freshly hashed all-zero
+SHA-256 value remains an explicit residual cryptographic risk rather than a
+practical fixture. The separate C1 fault catalog binds the future injected
+command, read, write, close, tool-output, and resource-file-size failures. These
+are still source contracts, not executed cases or retained evidence. No catalog is a test result,
 controller implementation, workflow permission, or readiness evidence.
 
 `controller-helper-closure-verifier-input-domain-v0.fields` fixes the future
@@ -119,9 +117,10 @@ controller-owned environment, mount, file, mutation-target, diagnostic-token,
 and case-isolation domains against the exact inactive verifier and validation
 catalog bytes. It requires opaque one-pass token substitution, a fresh bounded
 private fixture per case, explicit treatment of unrepresentable inputs, and no
-ambient host state. It creates no fixtures, cases, fault injection, controller,
-workflow, or execution authority; explicit constructible cases and fault
-behavior remain separate blocking contracts.
+ambient host state. It creates no fixtures, controller, workflow, or execution authority. The C1
+case and fault contracts now bind the required future behavior, while C3V still
+must provide the immutable fixture image, reviewed controller, tool pins,
+execution wiring, and retained evidence.
 
 `controller-helper-closure-verifier-case-dispositions-v0` classifies all 147
 class-and-occurrence-stage pairs exactly once. It separates ordinary pre-start
@@ -129,9 +128,8 @@ fixtures, phase-synchronized controller mutations, separately reviewed injected
 faults, validation-declared source proofs, additional source-dominated guards,
 the fresh SHA-256 zero-digest residual, and four occurrences needing reviewed
 domain extensions: input aliasing, unrelated mount-info mutation, and a
-cross-device mount during either closure pass. Lossy NUL-bearing
-tool-pin and observation behavior are assigned to the future fault contract
-rather than silently excluded. The catalog is not an executable case instance,
+cross-device mount during either closure pass. Lossy NUL-bearing tool-pin and observation behavior is bound to explicit C1
+fault cases rather than silently excluded. The catalog is not an executable case instance,
 runtime oracle, harness, result, or authority.
 
 For every future case, verifier scratch becomes controller-inaccessible before
@@ -149,10 +147,12 @@ C3V still must bind the immutable base, fixture image, controller, phase
 instrumentation, tool pins, retained results, and exact-main validation.
 
 `controller-helper-closure-verifier-operator-inventory-v0` closes the lexical vocabulary used by those templates to 34 primary families and eight repair tokens.
-It checks parameter shapes and exact coverage mechanically, but does
-not decode or apply a mutation. Exact targets, preconditions, postconditions,
-deterministic derivations, resource feasibility, repair independence, and the
-base fixture remain separate blocking semantics work.
+It checks parameter shapes and exact coverage mechanically and now includes
+one exact target-domain, precondition, operation, postcondition, and bound row
+for each primary family plus one independence-bounded row for each repair token.
+The dedicated semantics slices remain cross-bound to those rows. This still
+does not create or mutate a fixture; the immutable base fixture, controller,
+runtime evidence, C3V, and C3A remain blocking.
 
 `controller-helper-closure-verifier-scalar-semantics-v0` defines raw-byte,
 line, UID, offset, and deterministic alternate-digest behavior for nine
