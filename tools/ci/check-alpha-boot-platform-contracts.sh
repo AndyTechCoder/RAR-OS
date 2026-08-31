@@ -350,7 +350,7 @@ if [ "${RAR_POLICY_MUTATION_TESTS-}" = 1 ]; then
     ephemeral=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
 fi
 if [ "$ephemeral" != disabled ]; then
-    image_file=$(mktemp "$ephemeral/alpha-golden-image.XXXXXX")
+    image_file=$ephemeral/alpha-golden-image.$RAR_EXPECTED_SOURCE_REVISION
     golden=$(env LC_ALL=C LANG=C /usr/bin/perl - \
         "$image_file" \
         "$platform/fixtures/v0/root.artifact" \
@@ -363,6 +363,7 @@ if [ "$ephemeral" != disabled ]; then
 use strict;
 use warnings;
 use Digest::SHA ();
+use Fcntl qw(O_CREAT O_NOFOLLOW O_RDWR);
 
 sub u16 { pack('v', $_[0]) }
 sub u32 { pack('V', $_[0]) }
@@ -478,8 +479,15 @@ for my $i (0 .. 6) {
 
 # Bounded sequential emission: segments are small metadata/fixture buffers and all
 # intervening bytes are streamed as fixed-size zero chunks.
-open my $output, '>', $output_path or die "open image output: $!";
+sysopen my $output, $output_path, O_RDWR | O_CREAT | O_NOFOLLOW, 0600
+    or die "open image output: $!";
 binmode $output;
+my @output_stat = stat($output);
+die 'image output is not regular' unless -f $output;
+die 'image output owner' unless $output_stat[4] == $<;
+die 'image output mode' unless ($output_stat[2] & 0777) == 0600;
+die 'image output prior size' unless $output_stat[7] == 0 || $output_stat[7] == 67108864;
+seek($output, 0, 0) or die "seek image output: $!";
 my $sha = Digest::SHA->new(256);
 my $cursor = 0;
 my $image_bytes = 67108864;
@@ -505,6 +513,9 @@ while ($cursor < $image_bytes) {
     $emit->($remaining >= length($zero_chunk) ? $zero_chunk : substr($zero_chunk, 0, $remaining));
 }
 die 'streamed image length' unless $cursor == $image_bytes;
+die 'streamed image position' unless tell($output) == $image_bytes;
+@output_stat = stat($output);
+die 'streamed image file length' unless $output_stat[7] == $image_bytes;
 close $output or die "close image output: $!";
 print $sha->hexdigest, "\n";
 PERL
