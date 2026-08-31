@@ -45,6 +45,7 @@ docs/tasks/sprint-alpha-vertical.md
 docs/tasks/sprint-alpha-milestone-a-execution-map.md
 docs/tasks/sprint-alpha-milestones-b-g-execution-map.md
 docs/tasks/sprint-alpha-accepted-evidence-publication.md
+docs/tasks/sprint-alpha-compact-bdf-integration.md
 docs/tasks/sprint-alpha-boot-platform-contract-integration.md
 docs/adr/0022-alpha-graphics-input-authority.md
 docs/adr/0023-alpha-boot-determinism-and-entry-state.md
@@ -452,6 +453,12 @@ grep -Fqx '`I approve ADR 0027 Alternative B, ADR 0028 Alternative A, and ADR 00
     docs/approval-record.md)" = owner-decision-required ] || fail "ADR 0031 proposal overstates authority"
 grep -Fqx '`I approve ADR 0031 Alternative A for experimental Alpha compact PCI BDF encoding under the documented safety limits.`' \
     docs/proposals/0031-alpha-compact-pci-bdf-encoding.md || fail "ADR 0031 exact owner-approval sentence drifted"
+grep -qx 'Status: Non-authoritative preparation — ADR 0031 owner decision required' \
+    docs/tasks/sprint-alpha-compact-bdf-integration.md || fail "ADR 0031 integration packet overstates authority"
+compact_bdf_packet_sha=$(env LC_ALL=C LANG=C /usr/bin/shasum -a 256 \
+    docs/tasks/sprint-alpha-compact-bdf-integration.md | /usr/bin/awk '{ print $1 }')
+[ "$compact_bdf_packet_sha" = 9f98fa0b8ab8373271bfaf1c635ebfdbc4ee8dbb98989158f6031ebbf723c87b ] || \
+    fail "ADR 0031 integration packet escaped its reviewed byte boundary"
 grep -qx 'Status: Non-authoritative preparation — implementation remains blocked' \
     docs/tasks/sprint-alpha-milestone-a-execution-map.md || fail "Milestone A execution map overstates authority"
 grep -qx 'Status: Non-authoritative preparation — implementation remains sequential and gated' \
