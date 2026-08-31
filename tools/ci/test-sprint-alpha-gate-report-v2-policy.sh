@@ -94,6 +94,14 @@ if [ -f "$root/spec/alpha/platform/contract-set-v0.manifest" ]; then
     require_row 'platform_envelope_state=pending-review'
     require_row 'core_bootstrap_state=pending-review'
     require_row 'platform_fixture_manifest_state=pending-review'
+    platform_entry_sha=$(/usr/bin/sed -n \
+        's|^contract[|]spec/alpha/platform/alpha-platform-entry-v0.fields[|][0-9][0-9]*[|]\([0-9a-f]*\)$|\1|p' \
+        "$root/spec/alpha/platform/contract-set-v0.manifest")
+    core_bootstrap_sha=$(/usr/bin/sed -n \
+        's|^contract[|]spec/alpha/platform/alpha-core-bootstrap-v0.fields[|][0-9][0-9]*[|]\([0-9a-f]*\)$|\1|p' \
+        "$root/spec/alpha/platform/contract-set-v0.manifest")
+    require_row "platform_envelope_contract_sha256=$platform_entry_sha"
+    require_row "core_bootstrap_contract_sha256=$core_bootstrap_sha"
 
     reset_fixture
     install_platform_fixture
