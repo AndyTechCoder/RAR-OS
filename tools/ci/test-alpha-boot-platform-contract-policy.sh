@@ -107,6 +107,30 @@ mutate "$work/alpha/platform/contract-set-v0.manifest" 's/status=experimental-pe
 reject overstated-readiness
 
 reset_fixture
+/usr/bin/printf '%s\n' 'status=approved' >> "$work/alpha/platform/contract-set-v0.manifest"
+reject additive-conflicting-contract-status
+
+reset_fixture
+/usr/bin/printf '%s\n' 'status=experimental-pending-review' >> "$work/alpha/platform/contract-set-v0.manifest"
+reject duplicate-contract-status
+
+reset_fixture
+/usr/bin/printf '%s\n' 'unexpected_rule=not-authorized' >> "$work/alpha/platform/contract-set-v0.manifest"
+reject unknown-contract-manifest-row
+
+reset_fixture
+/usr/bin/printf '%s\n' 'status=approved' >> "$work/alpha/platform/fixtures/manifest.v0"
+reject additive-conflicting-fixture-status
+
+reset_fixture
+/usr/bin/printf '%s\n' 'status=experimental-pending-review' >> "$work/alpha/platform/fixtures/manifest.v0"
+reject duplicate-fixture-status
+
+reset_fixture
+/usr/bin/printf '%s\n' 'unexpected_rule=not-authorized' >> "$work/alpha/platform/fixtures/manifest.v0"
+reject unknown-fixture-manifest-row
+
+reset_fixture
 /bin/mv "$work/alpha/platform/alpha-identities-v0.fields" "$work/alpha/platform/identities.real"
 /bin/ln -s identities.real "$work/alpha/platform/alpha-identities-v0.fields"
 reject symbolic-contract
