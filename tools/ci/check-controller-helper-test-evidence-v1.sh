@@ -10,7 +10,7 @@ sha(){ env -u LC_CTYPE LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$1" | /usr/bin/aw
 line(){ [ "$(grep -Fxc "$2" "$1")" -eq 1 ] || fail "missing or duplicate field: $2"; }
 is_sha(){ printf '%s\n' "$1" | grep -Eq '^[0-9a-f]{64}$' && [ "$1" != 0000000000000000000000000000000000000000000000000000000000000000 ]; }
 [ -f "$contract" ] && [ ! -L "$contract" ] || fail 'contract unavailable'
-[ "$(sha "$contract")" = 6f65bc40ec34b204d8d94d41e9f78ca0a718630b546c65dfb24a4997d2589e2b ] || fail 'contract bytes escaped review'
+[ "$(sha "$contract")" = 62e0b135014a854d1187ef6ff9b24da9de07be50cd6e2e9b14cd9d59a0508ad7 ] || fail 'contract bytes escaped review'
 line "$contract" 'schema=rar-alpha-controller-helper-test-evidence-v1'
 line "$contract" 'case_set=97-inherited-attempt-cases+30-runtime-cases,127-total,exactly-once,canonical-order'
 [ -f "$cases" ] && [ ! -L "$cases" ] || fail 'runtime cases unavailable'
