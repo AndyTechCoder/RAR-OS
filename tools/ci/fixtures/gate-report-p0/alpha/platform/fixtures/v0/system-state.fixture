@@ -1,0 +1,6 @@
+schema=rar-alpha-state-fixture-v0
+role=system-state
+object_count=2
+object|1|0|directory|root|none
+object|2|1|blob|system|5241522d414c5048412d53595354454d2d5630
+expected=accept
