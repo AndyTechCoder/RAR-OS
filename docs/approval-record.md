@@ -94,6 +94,28 @@ SSD subtree. The SSD reserve, workspace/output ceilings, exact-root confinement,
 no-deletion directive, and local target non-build/non-execution rules remain
 unchanged.
 
+## SSD workspace ceiling adjustment
+
+Status: Approved
+
+On 2026-08-30, after receiving the exact 8-to-9-GiB change, retained limits,
+blast radius, and independent safety assessment, the owner approved continuing.
+The one-writer, source-only migration raises only the exact RAR OS workspace
+ceiling from 8 GiB (8388608 KiB) to 9 GiB (9437184 KiB), including its bounded
+migration writes while the old ceiling is exceeded.
+
+The exact RAR OS root, 10 GiB (10485760 KiB) minimum free-space limit, 512 MiB
+(524288 KiB) combined output limit, no-deletion directive, no-overwrite
+directive, and local target non-build/non-execution rules remain unchanged.
+This approval authorizes no future ceiling increase, cleanup, deletion,
+overwrite, broader path, target build, or target execution. The new ceiling
+becomes ordinary work authority only after the reviewed migration merges and a
+distinct exact-main validation succeeds.
+
+Workspace adjustment: approved
+Approver: Andy / RAR project owner
+Adjustment date: 2026-08-30
+
 ## Sprint Alpha architecture decisions
 
 Status: Approved

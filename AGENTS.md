@@ -60,7 +60,7 @@ read-only and must not approve their own implementation.
 - Preserve user-authored and unrelated changes in the workspace.
 - The SSD is shared with irreplaceable owner data. Before and after every local
   write-producing phase, run `tools/ci/check-workspace-budget.sh`; stop below
-  10 GiB SSD free, above 8 GiB total RAR OS workspace, or above 512 MiB combined
+  10 GiB SSD free, above 9 GiB total RAR OS workspace, or above 512 MiB combined
   repository `out/` data. Local scripts must set a per-file or aggregate bound;
   never create unbounded logs, caches, artifacts, downloads, or build outputs.
 
