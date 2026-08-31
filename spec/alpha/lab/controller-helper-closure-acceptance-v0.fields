@@ -5,7 +5,8 @@ required_fields=schema,controller_sha,source_sha,observer_sha,verifier_sha,obser
 identity_rule=all-identities-nonzero-lowercase-SHA-256+controller-selected+byte-verified,all-nonces+roots-nonzero+pairwise-distinct
 revision_rule=controller+source+observer+verifier+receipts+manifest+evidence-same-reviewed-revision,no-cross-revision
 provenance_rule=compiler+closure+licenses+upstream-provenance+authenticated-acquisition+retained-bytes-all-bound
-runtime_rule=complete-observer-cases+147-dispositions+50-precedence+12-faults,failed-count-zero,normalized-verdict-exact
+runtime_rule=complete-observer-cases+117-runtime-dispositions+37-runtime-precedence+12-runtime-faults=166-runtime-cases,failed-count-zero,normalized-verdict-exact
+residual_rule=30-disposition-residual-proofs+13-precedence-residual-proofs=43-reviewed-nonexecuting-proofs;all-209-logical-relationships-accounted-for;no-residual-observed-exit+stdout+stderr+filesystem-result
 topology_rule=immutable-fixture-image+read-only-subject+private-scratch+controller-inaccessible-after-launch+network-none+credential-none
 anti_replay_rule=receipt+evidence+nonce+root+revision-tuple-unique,no-prior-acceptance-reuse
 producer_rule=trusted-outer-controller-after-independent-observer+verifier-termination,never-subject-self-attested
