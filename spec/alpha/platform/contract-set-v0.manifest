@@ -8,7 +8,7 @@ contract|spec/alpha/boot/cases.v0|1789|370f829f791681cb4c1fb96dbf850f9535751a7a6
 contract|spec/alpha/platform/alpha-core-bootstrap-v0.fields|2989|0e7ccc13a21a9a4ec2fa081eedb3e36f0b14eb9b2c4b02423edc6a59cce869b8
 contract|spec/alpha/platform/alpha-component-bundle-v0.fields|5584|9b619ff1192e4030f0231e24074ef82631a902efad2d1b8fb21d800f54009bcd
 contract|spec/alpha/platform/alpha-identities-v0.fields|5377|8c78ff78d882b9f0db453843997432820748661297f4d86a34e9a94fb6e8d4f6
-contract|spec/alpha/platform/alpha-platform-entry-v0.fields|3960|34e85d329af14f8889e5d229b4c58588c9aa08f80e217cc01d6e0899b81495e9
+contract|spec/alpha/platform/alpha-platform-entry-v0.fields|3960|7febcff3944774261841efd13f4c463f6727f39d26220f7be9a29118746d2212
 contract|spec/alpha/platform/alpha-state-image-v0.fields|3412|0a0737a15fd0f4f6c493ee8832300dddbbb507521479b03f3b60a69dde355a50
 contract|spec/alpha/platform/alpha-state-slots-v0.fields|7509|8f7780c88817e4faf0ebd4f8cbf046761dc8bf1aced1c7a88a39e2a53ef73d21
 contract|spec/alpha/platform/alpha-validation-v0.fields|3751|b34067a96a297c0c618f3da0d5bb89a991148d1a45bd83d00f9ab191c74d13bb
