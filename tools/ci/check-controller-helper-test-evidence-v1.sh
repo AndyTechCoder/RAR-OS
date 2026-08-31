@@ -20,6 +20,11 @@ line "$contract" 'case_set=97-inherited-attempt-cases+30-runtime-cases,127-total
 evidence=$1; shift
 [ -f "$evidence" ] && [ ! -L "$evidence" ] || fail 'evidence unavailable'
 [ "$(wc -c < "$evidence" | tr -d ' ')" -le 8388608 ] || fail 'evidence oversized'
+[ "$(wc -l < "$evidence" | tr -d ' ')" -eq 143 ] || fail 'evidence line count changed'
+expected_header=$(printf '%s\n' schema controller_sha source_sha helper_sha closure_acceptance_sha runtime_contract_sha attempt_contract_sha cases_sha fixture_sha run_nonce root_identity case_count failed_count network credential status)
+actual_header=$(/usr/bin/sed -n '1,16p' "$evidence" | /usr/bin/awk -F '=' '{ print $1 }')
+[ "$actual_header" = "$expected_header" ] || fail 'header fields are missing, extra, duplicated, or reordered'
+/usr/bin/awk 'NR > 16 && $0 !~ /^case\\|/ { exit 1 }' "$evidence" || fail 'non-case data follows the header'
 for value in "$@"; do case "$value" in *[!0-9a-f]*|'') fail 'context identity malformed';; esac; done
 controller=$1 source=$2 helper=$3 acceptance=$4 runtime=$5 attempt=$6 case_sha=$7 fixture=$8 previous_nonce=$9 previous_root=${10}
 for value in "$controller" "$source" "$helper" "$acceptance" "$runtime" "$attempt" "$case_sha" "$fixture" "$previous_nonce" "$previous_root"; do is_sha "$value" || fail 'zero or malformed context identity'; done
@@ -44,5 +49,14 @@ is_sha "$nonce" && is_sha "$root_id" || fail 'fresh identity malformed'
 expected=$(awk -F '|' '/^[AR][0-9][0-9][0-9]\|/ {print $1 "|" $2 "|" $3 "|" $4}' "$cases")
 actual=$(awk -F '|' '/^case\|[AR][0-9][0-9][0-9]\|/ {print $2 "|" $3 "|" $4 "|" $5}' "$evidence")
 [ "$actual" = "$expected" ] || fail 'case set missing, duplicate, or reordered'
-awk -F '|' '/^case\|/ { if (NF != 12 || $6 !~ /^-?[0-9]+$/ || $7 !~ /^(none|[0-9]+)$/ || $8 !~ /^[0-9a-f]{64}$/ || $9 !~ /^[0-9a-f]{64}$/ || $10 !~ /^[0-9a-f]{64}$/ || $11 !~ /^[0-9a-f]{64}$/ || $12 != "pass") exit 1 }' "$evidence" || fail 'case result malformed or incomplete'
+awk -F '|' '
+    BEGIN { zero="0000000000000000000000000000000000000000000000000000000000000000" }
+    /^case\|/ {
+        if (NF != 12 || $6 !~ /^-?[0-9]+$/ || $7 !~ /^(none|[0-9]+)$/ ||
+            $8 !~ /^[0-9a-f]{64}$/ || $9 !~ /^[0-9a-f]{64}$/ ||
+            $10 !~ /^[0-9a-f]{64}$/ || $11 !~ /^[0-9a-f]{64}$/ ||
+            $8 == zero || $9 == zero || $10 == zero || $11 == zero ||
+            $12 != "pass") exit 1
+    }
+' "$evidence" || fail 'case result malformed, zero, or incomplete'
 printf '%s\n' 'controller-helper test evidence v1 accepted'
