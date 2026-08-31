@@ -28,11 +28,17 @@ publication/recovery authority.
 - Local work is documentation, specification, static policy, hashes, and source
   inspection only. Runtime tests and compiler use are cloud-only.
 
-Every phase starts from its predecessor's exact reviewed green merge. One writer
-owns only named paths. Architecture, correctness, and security reviews are
-required for each contract, workflow, executable, unsafe boundary, or trust
-state change. Red checks, stale revisions, missing identities, mutable inputs,
-or unresolved findings stop progression.
+Every phase starts from its predecessor's exact reviewed green merge and a
+distinct successful exact-main Specifications validation and mutation run. Red
+checks, stale revisions, missing identities, mutable inputs, or unresolved
+findings stop progression.
+
+D0 is the only phase that grants paths directly. Every later description below
+is scope guidance, not ownership. Before C1, C2, C3, H1, H1C, H2, I1, or I2
+starts, a separately reviewed child packet must list every exact path, with no
+glob or directory ownership, and must itself merge and pass distinct exact-main
+validation. Architecture, correctness, and security reviews are required for
+each contract, workflow, executable, unsafe boundary, or trust-state change.
 
 ## D0 - Packet registration
 
@@ -43,13 +49,16 @@ Owned paths:
 - packet-only assertions in `tools/ci/check-specs.sh`
 
 D0 adds no executable path, workflow, identity, format authority, or readiness.
-The checker byte-pins this packet.
+The checker byte-pins this packet. Because D0 changes the trusted checker, its
+pull-request validation is intentionally deferred. C1 is forbidden until D0 is
+merged and a distinct exact-main run completes both validation and mutation
+successfully.
 
 ## C1 - Contract closure before wiring
 
-Owned paths are limited to these new experimental host contracts, matching
+The C1 child packet may select these new experimental host contracts, matching
 source-only checkers, `spec/alpha/lab/README.md`, and minimum checker
-registration:
+registration, but it must name every selected path literally:
 
 - `spec/alpha/lab/controller-helper-runtime-v0.fields`
 - `spec/alpha/lab/controller-helper-runtime-cases.v0`
@@ -59,7 +68,7 @@ registration:
 - `spec/alpha/lab/controller-helper-closure-verifier-evidence-v0.fields`
 - `spec/alpha/lab/controller-helper-closure-acceptance-v0.fields`
 - `spec/alpha/lab/controller-helper-test-evidence-v1.fields`
-- exact matching `tools/ci/check-*-source.sh` files
+- individually named matching source-only checker files under `tools/ci/`
 
 The runtime contract fixes a sealed inherited-FD table, canonical basenames,
 `O_NOFOLLOW|O_EXCL|O_CLOEXEC`, UID/GID/mode/link/device/inode attestation,
@@ -87,9 +96,9 @@ C1 is source-only: no workflow, harness, compiler use, or ready identity.
 
 ## C2 - Observer discovery
 
-Owned paths are one trusted-main observer workflow, one bounded controller
-wrapper, its policy/runtime harness under `tools/ci/`, and controller-owned
-fixtures under `spec/alpha/lab/fixtures/`.
+The C2 child packet must literally name its single trusted-main observer
+workflow, bounded controller wrapper, policy/runtime harness files, and every
+controller-owned fixture. This paragraph grants no directory ownership.
 
 The wrapper enforces canonical main push, exact controller/source revision,
 pinned read-only OCI, no network or credentials, non-root, no capabilities,
@@ -102,10 +111,10 @@ and changes no lock, inventory, profile, gate report, or readiness.
 
 ## C3 - Exact-set verification and closure acceptance
 
-Owned paths are one trusted-main verifier workflow, bounded controller/harness
-and tests under `tools/ci/`, reviewed pins/fixtures under
-`spec/alpha/lab/fixtures/`, and one closure-acceptance instance under
-`tools/toolchain/`.
+The C3 child packet must literally name its single trusted-main verifier
+workflow, bounded controller/harness and test files, every reviewed pin and
+fixture, and the one closure-acceptance instance. This paragraph grants no
+directory ownership.
 
 Observation receipts bind current exact main. C3 therefore re-runs the observer
 at the exact C3 merge revision immediately before verification; an earlier C2
@@ -120,9 +129,9 @@ compiles or executes no helper or target.
 
 ## H1 - Descriptor-only helper source
 
-Owned paths are exact entrypoint/contextual runtime modules under
-`tools/rar-lab/controller-handoff/`, existing files explicitly named by the
-H1 child packet, and focused source checks/documentation.
+The H1 child packet must literally name every entrypoint, contextual runtime
+module, existing touched file, source checker, and documentation file. This
+paragraph grants no directory ownership.
 
 The dependency-free host helper accepts only the sealed descriptor protocol and
 implements bounded stop/open/copy/recheck plus watchdog/journal recovery. It has
@@ -130,9 +139,23 @@ no ambient path, shell, network, cloud, credential, GitHub, publication, or
 target authority. H1 remains source-only until C3 acceptance merges. No local
 compilation or execution is allowed.
 
+## H1C - Trusted build/test controller source
+
+Before H2, a separate child packet must literally name and implement the
+trusted-main build/test controller, its one workflow, harness, static policy,
+fixtures, and refusal tests. H1C is source-only: it cannot invoke a compiler,
+execute the helper, run a container, or produce build/test evidence.
+
+H1C requires architecture, correctness, and security review, merge, and a
+distinct exact-main validation and mutation run. Only the resulting trusted
+exact-main controller may execute H2.
+
 ## H2 - Reproducible cloud evidence
 
-The exact-main controller verifies C3 closure acceptance, then makes two
+The H2 child packet must literally name every workflow, controller input,
+fixture, evidence destination, validator, and documentation path it consumes or
+changes. It cannot edit the H1C controller. The exact-main H1C controller
+verifies C3 closure acceptance, then makes two
 distinct fresh bounded network-disabled builds from identical controller SHA,
 source, plan, compiler, and closure. Producers stop before descriptor-safe copy.
 Size, hash, and byte equality are mandatory.
@@ -148,9 +171,9 @@ evidence, and aggregate evidence. Failure emits no ready or success record.
 
 ## I1 - Bind helper without readying the Lab
 
-Owned paths are `tools/sprint-alpha/controller-helper-v0.env`, exact runnable
-v2 controller files named by an I1 child packet, and focused validators, tests,
-and documentation.
+The I1 child packet must literally name `tools/sprint-alpha/controller-helper-v0.env`,
+every runnable v2 controller file, and each validator, test, and documentation
+file. This paragraph grants no unnamed ownership.
 
 Bind only real reviewed identities. `development-lab-v2.env` stays blocked
 and `development-controller-v2.plan` stays activation-forbidden until
@@ -159,7 +182,9 @@ retained-machine-evidence, and SSD-confinement gates pass.
 
 ## I2 - No-target integration proof
 
-On exact main, a fixed synthetic host-only fixture proves stop/open/copy/
+The I2 child packet must literally name every fixed synthetic fixture, harness,
+validator, evidence, and documentation path. On exact main, that fixture proves
+stop/open/copy/
 recheck, termination at every durable transition, recovery/discard/block,
 replay rejection, descriptor confinement, bounded failure, and no readiness or
 publication after failure.
