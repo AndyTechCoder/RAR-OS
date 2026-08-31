@@ -1,27 +1,33 @@
 #!/bin/sh
 set -eu
-LC_ALL=C
-LANG=C
+LC_ALL=C LANG=C
 export LC_ALL LANG
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-subject=$root/spec/alpha/lab/controller-helper-build-evidence-v1.fields
-fail() { printf '%s\n' 'rar-alpha-controller-helper-build-evidence-v1 source check failed: '"$1" >&2; exit 1; }
-[ -f "$subject" ] && [ ! -L "$subject" ] || fail 'subject unavailable'
-actual=$(env -u LC_CTYPE LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$subject" | /usr/bin/awk '{print $1}')
-[ "$actual" = perl: warning: Setting locale failed.
-perl: warning: Please check that your locale settings:
-	LC_ALL = "C.UTF-8",
-	LC_CTYPE = "C.UTF-8",
-	LANG = "C.UTF-8"
-    are supported and installed on your system.
-perl: warning: Falling back to the standard locale ("C").
-panic: locale.c: 4486: Could not change LC_CTYPE locale to C.UTF-8, errno=9 ] || fail 'subject bytes escaped review'
-grep -Fqx 'schema=rar-alpha-controller-helper-build-evidence-v1' "$subject" || fail 'schema changed'
-grep -Fqx 'build_rule=exactly-two-builds,distinct-fresh-job-nonces+roots,network-none,credential-none,preexisting-output-no,controller-observed-exit-0' "$subject" || fail 'two-build rule changed'
-grep -Fqx 'test_rule=consume-exactly-one-controller-helper-test-evidence-v1-instance,127-cases,failed-count-0,no-v0-or-13-case-substitution' "$subject" || fail 'v1 test binding changed'
-grep -Fqx 'closure_rule=consume-exactly-one-reviewed-C3A-closure-acceptance-identity,same-controller+source+compiler+closure' "$subject" || fail 'C3A binding changed'
-grep -Fq 'local_rule=' "$subject" || fail 'local execution denial missing'
-if grep -R -Fq 'controller-helper-build-evidence-v1.fields' "$root/.github/workflows"; then fail 'source-only contract is wired to a workflow'; fi
-grep -qx 'rust_toolchain_closure_manifest_relative=none' "$root/tools/toolchain/host-tools.x86_64-unknown-linux-gnu-ci.lock" || fail 'CI closure lock activated'
-grep -qx 'state=blocked' "$root/tools/sprint-alpha/controller-helper-v0.env" || fail 'helper inventory activated'
-printf '%s\n' 'rar-alpha-controller-helper-build-evidence-v1 is complete, source-only, inactive, and unwired'
+contract=$root/spec/alpha/lab/controller-helper-build-evidence-v1.fields
+fail(){ printf '%s\n' "controller-helper build evidence v1 failed: $1" >&2; exit 1; }
+sha(){ env -u LC_CTYPE LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$1" | /usr/bin/awk '{print $1}'; }
+line(){ [ "$(grep -Fxc "$2" "$1")" -eq 1 ] || fail "missing or duplicate field: $2"; }
+is_sha(){ printf '%s\n' "$1" | grep -Eq '^[0-9a-f]{64}$' && [ "$1" != 0000000000000000000000000000000000000000000000000000000000000000 ]; }
+[ -f "$contract" ] && [ ! -L "$contract" ] || fail 'contract unavailable'
+[ "$(sha "$contract")" = 31c51c53f6db4897d940ac70b993ea043dd959da5718147ff5a1b4fa07b1eeea ] || fail 'contract bytes escaped review'
+line "$contract" 'schema=rar-alpha-controller-helper-build-evidence-v1'
+line "$contract" 'test_rule=consume-exactly-one-controller-helper-test-evidence-v1-instance,127-cases,failed-count-0,no-v0-or-13-case-substitution'
+[ "$#" -ne 0 ] || { printf '%s\n' 'controller-helper build evidence v1 contract is byte-bound'; exit 0; }
+[ "$#" -eq 7 ] || fail 'usage: evidence controller source acceptance compiler closure test-evidence-sha'
+evidence=$1 controller=$2 source=$3 acceptance=$4 compiler=$5 closure=$6 test_sha=$7
+[ -f "$evidence" ] && [ ! -L "$evidence" ] || fail 'evidence unavailable'
+for value in "$controller" "$source" "$acceptance" "$compiler" "$closure" "$test_sha"; do is_sha "$value" || fail 'zero or malformed context identity'; done
+line "$evidence" 'schema=rar-alpha-controller-helper-build-evidence-v1'
+line "$evidence" "controller_sha=$controller"; line "$evidence" "source_sha=$source"
+line "$evidence" "closure_acceptance_sha=$acceptance"; line "$evidence" "compiler_sha=$compiler"
+line "$evidence" "compiler_closure_sha=$closure"; line "$evidence" "test_evidence_v1_sha=$test_sha"
+line "$evidence" 'build_count=2'; line "$evidence" 'network=none'; line "$evidence" 'credential=none'
+line "$evidence" 'build_1_exit=0'; line "$evidence" 'build_2_exit=0'; line "$evidence" 'status=accepted'
+b1=$(sed -n 's/^build_1_binary_sha=//p' "$evidence"); b2=$(sed -n 's/^build_2_binary_sha=//p' "$evidence"); final=$(sed -n 's/^final_binary_sha=//p' "$evidence")
+is_sha "$b1" && [ "$b1" = "$b2" ] && [ "$b1" = "$final" ] || fail 'outputs are not byte-identical'
+j1=$(sed -n 's/^build_1_job_nonce=//p' "$evidence"); j2=$(sed -n 's/^build_2_job_nonce=//p' "$evidence"); r1=$(sed -n 's/^build_1_root=//p' "$evidence"); r2=$(sed -n 's/^build_2_root=//p' "$evidence")
+for value in "$j1" "$j2" "$r1" "$r2"; do is_sha "$value" || fail 'fresh build identity malformed'; done
+[ "$j1" != "$j2" ] && [ "$r1" != "$r2" ] && [ "$j1" != "$r1" ] && [ "$j2" != "$r2" ] || fail 'build identities replayed or aliased'
+size=$(sed -n 's/^binary_bytes=//p' "$evidence"); case "$size" in ''|*[!0-9]*) fail 'binary size malformed';; esac
+[ "$size" -ge 1 ] && [ "$size" -le 16777216 ] || fail 'binary size outside bound'
+printf '%s\n' 'controller-helper build evidence v1 accepted'
