@@ -15,9 +15,11 @@ precondition in `sprint-alpha-vertical.md` passes. In particular:
 
 - GitHub Actions must run real steps at the exact PR head;
 - PR #7 must be green, reviewed, merged, and remotely verified;
-- ADRs 0023, 0024, and 0026 must be unambiguously accepted;
-- the Alpha boot, private platform-envelope, fixed Core-bootstrap, and four
-  immutable-source contracts must be reviewed and marked `ready`;
+- ADRs 0023, 0024, and 0026–0029 must be unambiguously accepted;
+- the exact P0 contract-set manifest must be reviewed, merged, exact-main
+  validated, and bound as a whole; caller-selected individual contracts reject;
+- retained cloud evidence must exactly match the pending q35/AHCI inventory
+  before the machine profile can activate;
 - the v2 Lab profile, controller, and helper evidence must be genuinely ready;
 - the SSD confinement profile and capacity gates must have retained evidence.
 
@@ -186,7 +188,7 @@ exit status, frozen-artifact identity, and immutable checkpoint.
 
 ## Mandatory case coverage
 
-The implementation must cover all 41 rows in `spec/alpha/boot/cases.v0`; the
+The implementation must cover all 50 rows in `spec/alpha/boot/cases.v0`; the
 table below is a completeness map, not a replacement fixture.
 
 | Stage | Cases | Owning packet |
@@ -201,7 +203,8 @@ table below is a completeness map, not a replacement fixture.
 | Firmware-map conversion | 4 | A4 |
 | R0 production/authority | 5 | A4 |
 | Nucleus R0 rejection | 1 | A5 |
-| **Total** | **41** | |
+| Machine closure contract | 9 | A2/A4 |
+| **Total** | **50** | |
 
 Every reject case must prove the forbidden next-stage effect did not occur.
 The integration row requires a real cloud boot and cannot be satisfied by a

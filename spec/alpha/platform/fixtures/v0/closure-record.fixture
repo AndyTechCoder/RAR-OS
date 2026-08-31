@@ -1,0 +1,12 @@
+schema=rar-alpha-machine-closure-record-fixture-v0
+total_bytes=512
+inventory=q35-inventory.fixture
+disabled_vector=ahci-closure.fixture
+compact_bdf_vectors=compact-bdf-vectors.fixture
+disabled_vector_preimage_bytes=136
+disabled_vector_sha256=737e6ec5fc50a8f9ee92ece3c3ecb699459efd53f42edf05c21bc0691a9e913f
+ahci_compact_bdf=0x00fa
+source_set=platform-entry.fixture
+flags=0
+reserved=zero
+expected=accept

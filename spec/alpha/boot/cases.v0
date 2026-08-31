@@ -41,3 +41,12 @@ missing-dma-revocation|recovery-r0|reject
 wrong-apic-authority|recovery-r0|reject
 wrong-serial-authority|recovery-r0|reject
 malformed-r0-entry|nucleus-r0|reject-no-authority
+compact-bdf-canonical-vectors|closure-contract|accept
+compact-bdf-out-of-range|closure-contract|reject-no-authority
+compact-bdf-negative-input|closure-contract|reject-no-authority
+compact-bdf-overflow-or-truncation|closure-contract|reject-no-authority
+compact-bdf-endian-reversal|closure-contract|reject-no-authority
+compact-bdf-inventory-formula|closure-contract|reject-no-authority
+compact-bdf-missing-extra-duplicate-reordered|closure-contract|reject-no-authority
+compact-bdf-collision|closure-contract|reject-no-authority
+compact-bdf-ahci-mismatch|closure-contract|reject-no-authority
