@@ -34,7 +34,7 @@ checks, stale revisions, missing identities, mutable inputs, or unresolved
 findings stop progression.
 
 D0 is the only phase that grants paths directly. Every later description below
-is scope guidance, not ownership. Before C1, C2, C3, H1, H1C, H2, I1, or I2
+is scope guidance, not ownership. Before C1, C2, C3V, C3A, H1, H1C, H2, I1, or I2
 starts, a separately reviewed child packet must list every exact path, with no
 glob or directory ownership, and must itself merge and pass distinct exact-main
 validation. Architecture, correctness, and security reviews are required for
@@ -68,7 +68,8 @@ registration, but it must name every selected path literally:
 - `spec/alpha/lab/controller-helper-closure-verifier-evidence-v0.fields`
 - `spec/alpha/lab/controller-helper-closure-acceptance-v0.fields`
 - `spec/alpha/lab/controller-helper-test-evidence-v1.fields`
-- individually named matching source-only checker files under `tools/ci/`
+- `spec/alpha/lab/controller-helper-build-evidence-v1.fields`
+- individually named matching source-only and contextual validator files under `tools/ci/`
 
 The runtime contract fixes a sealed inherited-FD table, canonical basenames,
 `O_NOFOLLOW|O_EXCL|O_CLOEXEC`, UID/GID/mode/link/device/inode attestation,
@@ -83,14 +84,17 @@ precedence oracle, phase mutation, injected command/read/write/close/tool/
 resource failure, immutable fixture identity, canonical evidence, normalized
 verdict, replay binding, and no-success-effect rules.
 
-Versioned helper evidence covers the 97 attempt cases plus process/FD failures
-and every durable-boundary fault. The legacy 13 cases cannot prove readiness
-after runtime behavior exists.
+Versioned helper test evidence covers the 97 attempt cases plus process/FD
+failures and every durable-boundary fault. A versioned aggregate build-evidence
+contract and contextual validator must consume that exact v1 test evidence and
+closure-acceptance identity. The legacy v0 aggregate and 13-case evidence cannot
+prove readiness after runtime behavior exists.
 
 A closure-acceptance record binds observation and verification receipts,
 complete manifest, tool pins, compiler identity, licenses, provenance,
-authenticated acquisition, retained bytes, source revision, and controller
-revision. Mechanical exact-set equality grants no compiler-use authority.
+authenticated acquisition, retained bytes, source revision, controller
+revision, and the complete observer/verifier runtime fault verdict and evidence.
+Mechanical exact-set equality grants no compiler-use authority.
 
 C1 is source-only: no workflow, harness, compiler use, or ready identity.
 
@@ -109,23 +113,33 @@ The manifest and 23-line receipt remain
 `observed-not-reviewed-not-ready`. C2 compiles or executes no helper or target
 and changes no lock, inventory, profile, gate report, or readiness.
 
-## C3 - Exact-set verification and closure acceptance
+## C3V - Exact-set verification execution
 
-The C3 child packet must literally name its single trusted-main verifier
-workflow, bounded controller/harness and test files, every reviewed pin and
-fixture, and the one closure-acceptance instance. This paragraph grants no
-directory ownership.
+The C3V child packet must literally name its single trusted-main verifier
+workflow, bounded controller/harness and test files, and every reviewed pin and
+fixture. It must not contain or modify a closure-acceptance instance.
 
-Observation receipts bind current exact main. C3 therefore re-runs the observer
-at the exact C3 merge revision immediately before verification; an earlier C2
-receipt cannot be reused.
+Observation receipts bind current exact main. C3V therefore re-runs the
+observer at the exact C3V merge revision immediately before verification; an
+earlier C2 receipt cannot be reused.
 
 The verifier performs two stable topology/manifest passes and the full success,
 mutation, fault, precedence, resource, and confinement matrix. It retains the
-canonical 31-line receipt and case evidence. Separate architecture,
-correctness, security, license, provenance, and acquisition review binds the
-closure-acceptance record. Only that record authorizes later compiler use. C3
-compiles or executes no helper or target.
+canonical 31-line receipt, normalized verdict, and complete case evidence. C3V
+compiles or executes no helper or target and grants no compiler-use authority.
+
+## C3A - Closure-acceptance integration
+
+Only after the C3V exact-main evidence exists may a separate C3A child packet
+literally name the closure-acceptance instance, every retained C3V input, its
+validator, and documentation. Architecture, correctness, security, license,
+provenance, and acquisition review must bind the exact C3V revision, observer
+and verifier receipts, manifest, tool/compiler pins, retained bytes, and runtime
+fault verdict/evidence.
+
+C3A merges separately and must pass distinct exact-main validation and mutation.
+Only that merged record authorizes later compiler use. H1 and H1C are forbidden
+before C3A closure.
 
 ## H1 - Descriptor-only helper source
 
@@ -136,7 +150,7 @@ paragraph grants no directory ownership.
 The dependency-free host helper accepts only the sealed descriptor protocol and
 implements bounded stop/open/copy/recheck plus watchdog/journal recovery. It has
 no ambient path, shell, network, cloud, credential, GitHub, publication, or
-target authority. H1 remains source-only until C3 acceptance merges. No local
+target authority. H1 remains source-only until C3A acceptance merges. No local
 compilation or execution is allowed.
 
 ## H1C - Trusted build/test controller source
@@ -152,10 +166,11 @@ exact-main controller may execute H2.
 
 ## H2 - Reproducible cloud evidence
 
-The H2 child packet must literally name every workflow, controller input,
-fixture, evidence destination, validator, and documentation path it consumes or
-changes. It cannot edit the H1C controller. The exact-main H1C controller
-verifies C3 closure acceptance, then makes two
+The H2 child packet must literally name every immutable input, evidence
+destination, validator, and documentation path it adds or consumes. It cannot
+change any H1C executable-authority byte, including its workflow, wrapper,
+controller, harness, static policy, or refusal tests. The exact-main H1C
+controller verifies C3A closure acceptance, then makes two
 distinct fresh bounded network-disabled builds from identical controller SHA,
 source, plan, compiler, and closure. Producers stop before descriptor-safe copy.
 Size, hash, and byte equality are mandatory.
@@ -165,7 +180,7 @@ kills, process/FD failures, watchdog timeout/cancel/kill/reap, restart/takeover,
 stale/replay/cross-attempt rejection, cleanup uncertainty, attempt ceiling,
 root/identity/alias rejection, authority denial, and output bounds.
 
-Evidence binds distinct job/root nonces, exact source and closure acceptance,
+Evidence binds distinct job/root nonces, exact source, C3A closure acceptance, and versioned aggregate/test evidence,
 controller-observed exits, canonical results, logs, both build receipts, test
 evidence, and aggregate evidence. Failure emits no ready or success record.
 
