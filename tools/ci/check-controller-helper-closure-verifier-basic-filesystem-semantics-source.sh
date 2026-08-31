@@ -23,14 +23,14 @@ sha_file() {
 for file in "$semantics" "$templates" "$inventory" "$domain" "$scalar"; do
     [ -f "$file" ] && [ ! -L "$file" ] || fail "required regular source is unavailable: $file"
 done
-[ "$(sha_file "$semantics")" = a9b7f46ecba449192f10cd3e01a1a57a3457db921335fc7ba8249d2d800c7c91 ] || fail 'basic filesystem semantics bytes escaped review'
-[ "$(sha_file "$templates")" = 443d30414ec3cc8542755006ada9a40d52e0f5efe3b26de7fdc5f82dc1152be4 ] || fail 'case-template bytes escaped review'
-[ "$(sha_file "$inventory")" = ea2aef334d7c6b612635ea5237926df1a459a255c61c73a9e5b998e1cc244a80 ] || fail 'operator inventory bytes escaped review'
+[ "$(sha_file "$semantics")" = 5f524c4077d99547466fb46ca4b80bff7944bbd9bcf5c85ed636a08aab397854 ] || fail 'basic filesystem semantics bytes escaped review'
+[ "$(sha_file "$templates")" = 4950a2c5cbe5cddaca5bd5a829d889310585a6197630e87e9afdb48ce778ae20 ] || fail 'case-template bytes escaped review'
+[ "$(sha_file "$inventory")" = 422950c5a3973399a6e5b7da903be0f8cd8855dd6edeb37f1cb5924115197051 ] || fail 'operator inventory bytes escaped review'
 [ "$(sha_file "$domain")" = 67555f2d565569e95b44a247dda630c9b98d293ba0773880f248d69d802ac66c ] || fail 'input domain bytes escaped review'
-[ "$(sha_file "$scalar")" = fedf6b24d1b9356ebbcaf2c27f011358937a05671a06021d083c2c874ceaca10 ] || fail 'scalar semantics bytes escaped review'
+[ "$(sha_file "$scalar")" = 42442ffa4306fbcc83acd95a138ee4f6f5d059a671b206c4de6452ff64776ddb ] || fail 'scalar semantics bytes escaped review'
 
 for required in \
-    'status=experimental-incomplete-inactive-source-only' \
+    'status=experimental-complete-source-only-inactive' \
     'execution_authority=none' \
     'semantic_row_count=5' \
     'family_coverage=4-complete-families+hex-absent-file-creation-subdomain-only' \
