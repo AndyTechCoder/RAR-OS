@@ -51,8 +51,9 @@ and cannot increase the implementation count.
   satisfy the separate retained-machine, controller/helper, SSD, build, or
   launch gates.
 - Accepted ADRs 0027–0029 select the reviewed B/A/B boot-retirement, identity,
-  and state-authority directions; dependent contracts remain blocked until the
-  decision integration merges and exact-main validates.
+  and state-authority directions; their P0 contracts are merged and exact-main
+  validated. Target source remains blocked on the separate controller/helper,
+  retained-machine-evidence, SSD-confinement, and fresh-worktree gates.
 - Their byte-pinned integration packet is merged through PR #55 and separates
   decision, contract, source, pre-build, and post-build launch gates. It grants
   no implementation or execution authority before those gates pass.

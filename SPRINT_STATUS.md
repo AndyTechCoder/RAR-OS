@@ -163,8 +163,10 @@
   non-authoritative integration packet for then-proposed ADRs 0027–0029. It separates
   owner decision, contract, cumulative source-start, source-only merge,
   pre-build, and post-build launch/acceptance gates; exact-main run `33306580918`
-  passed. Canonical ADRs 0027–0029 now record B/A/B; their contracts remain
-  blocked and no target source is authorized
+  passed. Canonical ADRs 0027–0029 record B/A/B, and their P0 contracts are
+  merged and exact-main validated. Target source remains blocked on the
+  separate controller/helper, retained-machine-evidence, SSD-confinement, and
+  fresh-worktree gates
 - Milestones B–G preparation: one non-authoritative dependency/evidence map now
   organizes the existing sequential ownership, contract-before-code boundaries,
   all 40 later acceptance rows, cloud-only evidence, and stop conditions. It
