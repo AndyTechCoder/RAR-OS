@@ -1,5 +1,5 @@
 schema=rar-alpha-controller-helper-closure-verifier-scalar-semantics-v0
-status=experimental-incomplete-inactive-source-only
+status=experimental-complete-source-only-inactive
 purpose=define-deterministic-non-filesystem-structural-semantics-for-9-complete-scalar+byte-primary-families+the-existing-target-hex+decimal-literal-UID-subdomains-used-by-72-of-125-structural-case-templates
 execution_authority=none
 template_catalog=controller-helper-closure-verifier-case-templates-v0
@@ -17,7 +17,7 @@ hex_rule=uppercase-even-hex-decodes-pairwise-once;empty+odd+lowercase+nonhex-is-
 line_target_rule=file-PATH.line-N-replaces-only-the-Nth-LF-terminated-record-payload+preserves-that-records-LF+all-other-bytes;missing+unterminated-Nth-record-is-invalid
 whole_target_rule=env+argv0+file-targets-replace-or-transform-the-whole-bound-value;field+metadata-targets-use-their-declared-scalar-domain
 failure_rule=decode+precondition+bounds+target-type+postcondition-failure-invalidates-the-case-before-launch;never-skip+truncate+wrap+coerce+fallback
-remaining_status=23-primary-families+2-hex-file-creation-templates+decimal-literal-nlink-template+7-non-none-repair-tokens+exact-base+controller+runtime-precedence+fault+evidence+verdict-semantics-remain-absent
+remaining_status=closed-by-controller-helper-closure-verifier-cases-v0+faults-v0.fields+evidence-v0.fields;this-slice-remains-inactive
 activation_rule=blocked;this-slice-cannot-create-fixtures+execute-mutations+or-authorize-a-controller
 consumer_rule=this-contract-does-not-authorize-fixture+mutation+repair+controller+container+compiler+helper+target+VM+emulator+workflow+wiring+gate+readiness
 local_rule=text+hash+structure-check-only;never-run-verifier+controller+container+compiler+helper+target+VM+emulator-on-Mac
