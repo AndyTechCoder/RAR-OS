@@ -21,7 +21,7 @@ sha_file() {
 for file in "$inventory" "$templates" "$readme"; do
     [ -f "$file" ] && [ ! -L "$file" ] || fail "required regular source is unavailable: $file"
 done
-[ "$(sha_file "$inventory")" = 422950c5a3973399a6e5b7da903be0f8cd8855dd6edeb37f1cb5924115197051 ] || fail 'operator inventory bytes escaped review'
+[ "$(sha_file "$inventory")" = 8440a105896b8e038fd6548187b53b2af2466760ace40678fe276cdc0af146e8 ] || fail 'operator inventory bytes escaped review'
 [ "$(sha_file "$templates")" = 4950a2c5cbe5cddaca5bd5a829d889310585a6197630e87e9afdb48ce778ae20 ] || fail 'case-template bytes escaped review'
 
 for required in \
@@ -30,9 +30,9 @@ for required in \
     'primary_family_count=34' \
     'repair_token_count=8' \
     'coverage_rule=every-template-primary-normalizes-to-exactly-one-listed-family+every-template-repair-equals-one-listed-token+no-unlisted-family-or-repair-is-permitted' \
-    'parameter_rule=shape-checking-is-lexical-only;it-does-not-decode+apply+or-prove-a-mutation' \
+    'parameter_rule=lexical-shape-check-precedes-one-pass-decode;semantic-rows-fix-target+precondition+operation+postcondition+bound' \
     'semantic_status=exact-target+precondition+postcondition+deterministic-derivation+resource-feasibility+repair-independence-are-bound-by-owned-semantics-contract-set' \
-    'activation_rule=blocked;separate-reviewed-semantics+base-binding+controller+runtime-precedence+fault+evidence+verdict-contracts-remain-required' \
+    'activation_rule=blocked;base-instance+controller+runtime-evidence+C3V+C3A+workflow-wiring-remain-required' \
     'consumer_rule=this-inventory-does-not-authorize-fixture+mutation+repair+controller+container+compiler+helper+target+VM+emulator+workflow+wiring+gate+readiness' \
     'local_rule=text+hash+lexical-structure-check-only;never-run-verifier+controller+container+compiler+helper+target+VM+emulator-on-Mac'; do
     grep -Fqx "$required" "$inventory" || fail "required invariant is missing: $required"
@@ -41,8 +41,37 @@ done
 [ "$(tail -c 1 "$inventory" | /usr/bin/od -An -tuC | /usr/bin/tr -d ' ')" = 10 ] || fail 'inventory lacks one terminal LF'
 if LC_ALL=C grep -n '[^ -~]' "$inventory" >/dev/null; then fail 'inventory contains a non-ASCII byte'; fi
 if grep -n "$(printf '\r')" "$inventory" >/dev/null; then fail 'inventory contains CR'; fi
-[ "$(grep -Ec '^P[0-9][0-9][0-9]\|[a-z0-9-]+\|[A-Za-z0-9+-]+\|opaque$' "$inventory")" -eq 34 ] || fail 'primary-family rows are malformed'
-[ "$(grep -Ec '^R[0-9][0-9][0-9]\|[^| ]+\|(opaque|no-repair)$' "$inventory")" -eq 8 ] || fail 'repair-token rows are malformed'
+/usr/bin/awk -F '|' '
+    /^P[0-9][0-9][0-9]\\|/ {
+        if (NF != 4 || $4 != "defined:" $1 || primary[$1]++) exit 1
+        primary_family[$1]=$2
+        primary_count++
+    }
+    /^semantic\\|P[0-9][0-9][0-9]\\|/ {
+        if (NF != 7 || semantics[$2]++) exit 1
+        semantic_count++
+    }
+    END {
+        if (primary_count != 34 || semantic_count != 34) exit 1
+        for (id in primary_family) if (!(id in semantics)) exit 1
+    }
+' "$inventory" || fail 'primary-family or semantic rows are malformed, duplicated, or incomplete'
+/usr/bin/awk -F '|' '
+    /^R[0-9][0-9][0-9]\\|/ {
+        expected=($1 == "R002" ? "no-repair" : "defined:" $1)
+        if (NF != 3 || $3 != expected || repair[$1]++) exit 1
+        repair_token[$1]=$2
+        repair_count++
+    }
+    /^repair_semantic\\|R[0-9][0-9][0-9]\\|/ {
+        if (NF != 7 || repair_semantics[$2]++ || !($2 in repair_token) || $3 != repair_token[$2]) exit 1
+        repair_semantic_count++
+    }
+    END {
+        if (repair_count != 8 || repair_semantic_count != 8) exit 1
+        for (id in repair_token) if (!(id in repair_semantics)) exit 1
+    }
+' "$inventory" || fail 'repair-token or repair-semantic rows are malformed, duplicated, mismatched, or incomplete'
 
 number=1
 while [ "$number" -le 34 ]; do
