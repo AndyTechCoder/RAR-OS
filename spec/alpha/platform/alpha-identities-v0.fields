@@ -23,9 +23,9 @@ role|7|preserved-state-service|RAR-ALPHA-PRESERVE-SVC-ID-V0
 role|8|system-state-source|RAR-ALPHA-SYSTEM-STATE-SRC-V0
 role|9|preserved-state-source|RAR-ALPHA-PRESERVE-STATE-SRC-V0
 contract_identity=SHA-256-over-exact-canonical-contract-file-bytes
-contract_literal|root|170b2533444cf153f4c301d71405e5afc2e6747fafab256776031d1cc2ddf082|spec/alpha/boot/alpha-boot-v0.fields
-contract_literal|recovery|170b2533444cf153f4c301d71405e5afc2e6747fafab256776031d1cc2ddf082|spec/alpha/boot/alpha-boot-v0.fields
-contract_literal|nucleus|170b2533444cf153f4c301d71405e5afc2e6747fafab256776031d1cc2ddf082|spec/alpha/boot/alpha-boot-v0.fields
+contract_literal|root|e2cd6322456224ac93cce70719f99f8d226bc73359786d1294115a27cb0d06fe|spec/alpha/boot/alpha-boot-v0.fields
+contract_literal|recovery|e2cd6322456224ac93cce70719f99f8d226bc73359786d1294115a27cb0d06fe|spec/alpha/boot/alpha-boot-v0.fields
+contract_literal|nucleus|e2cd6322456224ac93cce70719f99f8d226bc73359786d1294115a27cb0d06fe|spec/alpha/boot/alpha-boot-v0.fields
 contract_literal|core-bootstrap|0e7ccc13a21a9a4ec2fa081eedb3e36f0b14eb9b2c4b02423edc6a59cce869b8|spec/alpha/platform/alpha-core-bootstrap-v0.fields
 contract_literal|component|9b619ff1192e4030f0231e24074ef82631a902efad2d1b8fb21d800f54009bcd|spec/alpha/platform/alpha-component-bundle-v0.fields
 contract_literal|system-state-service|e0d936bf526d23517c5c3f89569f4f6154e32f2ff8e54f0eefb5d56c121cbe1f|literal-SHA256-of-RAR-ALPHA-SYSTEM-STATE-SERVICE-CONTRACT-V0

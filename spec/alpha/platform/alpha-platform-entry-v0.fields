@@ -42,6 +42,17 @@ wire_field|AlphaSourceRecordV0|24|source_sha256|bytes:32|post-closure-exact-byte
 wire_field|AlphaSourceRecordV0|56|artifact_identity|bytes:32|ADR-0028-domain-separated
 wire_field|AlphaSourceRecordV0|88|contract_identity|bytes:32|exact-contract-file
 wire_field|AlphaSourceRecordV0|120|reserved|bytes:8|zero
+source_right|0x00000001|read|same-semantics-as-R0-RIGHT_READ
+source_right|0x00000002|write|known-but-forbidden-in-every-Alpha-source-record
+source_right|0x00000004|execute|known-but-forbidden-in-every-Alpha-source-record
+source_right|0x00000008|device|known-but-forbidden-in-every-Alpha-source-record
+source_right|0x00000010|map-read|derive-only-read-only-NX-mapping,no-write+execute+device
+source_right_known_mask=0x0000001f
+source_role_rights|1|core-bootstrap|0x00000011
+source_role_rights|2|component-bundle|0x00000011
+source_role_rights|3|system-state|0x00000001
+source_role_rights|4|preserved-state|0x00000001
+source_rights_rule=exact-role-value-only,all-other-values-reject
 source_role|1|core-bootstrap|slot:0x03800000..0x03c00000|maximum:4194304|rights:read+map-read,immutable,nonexecutable|consumer:Nucleus
 source_role|2|component-bundle|slot:0x04000000..0x05000000|maximum:16777216|rights:read+map-read,immutable,nonexecutable|consumer:Core-loader
 source_role|3|system-state|slot:0x05000000..0x05800000|maximum:8388608|rights:Nucleus-slot-source-read,immutable,nonexecutable|consumer:system-state-service
