@@ -105,7 +105,7 @@ source_set_preimage_rule=552-exact-bytes,exact-final-RootPlatformSourceRecordV0-
 source_set_equality=RootRecoveryHeaderV0.platform_source_set_sha256==AlphaMachineClosureRecordV0.source_set_sha256==SHA256(exact-SourceSetPreimageV0)
 source_set_recovery_rule=records-byte-identical-Root-to-Alpha,recompute-each-bounded-source-digest,reconstruct-preimage,verify-both-aggregate-fields-before-inner-parse-or-authority
 closure_record_rights=Root-write-during-closure,Recovery-read-only-after-entry,Nucleus-none,Core-none,applications-none
-rehash_source_order=BOOTX64.EFI,RECOVERY.ELF,NUCLEUS.ELF,CORE.IMG,COMPONENTS.RAC,SYSTEM.RAS,PRESERVED.RAP
+rehash_source_order=BOOTX64.EFI,RECOVERY.ELF,NUCLEUS.ELF,CORE.IMG,COMPONEN.RAC,SYSTEM.RAS,PRESERVED.RAP
 recheck_rule=all-AHCI-engines-idle,all-declared-bus-master-bits-zero,inventory-byte-identical,immediately-before-Recovery-entry
 failure_rule=first-global-predicate,empty-map+thread+capability+device-effect-log,serial-one-line,halt
 authority_transfer=pci:none,ahci:none,boot-device:none,DMA:none,closure-record:Recovery-read-only
