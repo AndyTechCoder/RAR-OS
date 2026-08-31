@@ -16,6 +16,9 @@ grep -Fqx 'total_case_count=209' "$subject" || fail 'case count declaration chan
 [ "$(grep -Ec '^case\|X[0-9][0-9][0-9]\|' "$subject")" -eq 12 ] || fail 'fault cases incomplete'
 [ "$(awk -F '|' '/^case\|V/ { print $4 }' "$subject" | sort -u | wc -l | tr -d ' ')" -eq 147 ] || fail 'disposition IDs duplicate'
 grep -Fqx 'unrepresentable_rule=source-proof+source-dominated+cryptographic-residual+domain-extension-remain-explicit-rows,never-silently-skipped' "$subject" || fail 'residual rule changed'
+awk -F '|' '/^case\\|Q/ { if (NF != 8 || $5 !~ /^left=.+:.+:.+$/ || $6 !~ /^right=.+:.+:.+$/ || $8 !~ /^first-error-E[0-9][0-9][0-9]$/) exit 1 }' "$subject" || fail 'precedence instance lacks two exact mutation/repair bindings'
+awk -F '|' '/^case\\|X/ { if (NF != 8 || $7 == "" || $8 == "") exit 1 }' "$subject" || fail 'fault instance lacks target or oracle'
+if grep -Eq '^case\\|[QX].*\\|opaque(\\||$)' "$subject"; then fail 'executable instance retains opaque semantics'; fi
 grep -Fq 'local_rule=' "$subject" || fail 'local execution denial missing'
 if grep -R -Fq 'controller-helper-closure-verifier-cases-v0' "$root/.github/workflows"; then fail 'source-only contract is wired to a workflow'; fi
 grep -qx 'rust_toolchain_closure_manifest_relative=none' "$root/tools/toolchain/host-tools.x86_64-unknown-linux-gnu-ci.lock" || fail 'CI closure lock activated'
