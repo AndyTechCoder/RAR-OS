@@ -179,7 +179,7 @@ case "$fixture_identity:$contract_identity" in
         topology=p0-wire
         require_line "$fixture_manifest" 'fixture_count=26'
         ;;
-    4b1d78c05e64ef15fff1b0edf4497bb01ebb70d38c05eb879357f09eddd26e42:014576ef79667274ecc4c6777d6f0c47380432941a27c99e7158358d6eeacf06)
+    4b1d78c05e64ef15fff1b0edf4497bb01ebb70d38c05eb879357f09eddd26e42:290a4c0c1274b913b68bb77eeb7eb0938f04ada2e79fdcae500fcda53b66bbac)
         topology=p0-compact-bdf
         require_line "$fixture_manifest" 'fixture_count=27'
         ;;
@@ -210,6 +210,9 @@ require_line "$closure" 'ahci_boot_device_binding=UEFI-device-path-controller-BD
 [ "$(/usr/bin/grep -c '^ahci_stop_step|' "$closure")" -eq 5 ] || fail 'AHCI stop sequence is incomplete'
 require_line "$closure" 'authority_transfer=pci:none,ahci:none,boot-device:none,DMA:none,closure-record:Recovery-read-only'
 if [ "$topology" = p0-compact-bdf ]; then
+    require_line "$boot_contract" 'component_bundle_path=\RAR\ALPHA\COMPONEN.RAC'
+    require_line "$closure" 'rehash_source_order=BOOTX64.EFI,RECOVERY.ELF,NUCLEUS.ELF,CORE.IMG,COMPONEN.RAC,SYSTEM.RAS,PRESERVED.RAP'
+    require_line "$identities" 'identity_flow|component-bundle-source|bundle-packer+Root|COMPONEN.RAC|AlphaSourceRecordV0|Recovery+Core-loader|after-bundle-parse'
     require_line "$closure" 'compact_bdf_formula=bitwise-or(bus<<8,device<<3,function)'
     require_line "$closure" 'compact_bdf_input_range=bus:0..255,device:0..31,function:0..7,checked-before-shift'
     require_line "$closure" 'compact_bdf_encoding=little-endian-u16'
