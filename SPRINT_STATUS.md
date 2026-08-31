@@ -124,9 +124,11 @@
   it after ADR 0020
 - Controller-helper build trust: accepted ADR 0024 Alternative A selects two
   builds from a fully pinned compiler closure on the approved Linux runner for
-  Alpha. Real compiler/helper identities and runtime evidence remain absent; C1 now
-  supplies complete source-only runtime, verifier, acceptance, and v1 evidence
-  contracts. No helper compilation, cloud provisioning, or execution is authorized.
+  Alpha. Real compiler/helper identities and runtime evidence remain absent. Draft PR
+  #101 proposes the source-only C1 runtime, verifier, acceptance, and v1
+  evidence contracts; architecture, correctness, security, merge, and exact-main
+  validation are still pending. No helper compilation, cloud provisioning, or
+  execution is authorized.
   PR #57 merged a byte-pinned, inactive source observer and exact candidate
   output contract at `65ae7aedd11298c8f15ed96cd94166e2afa03e2a`;
   exact-main run `33308569835` passed. The observer is not wired or executed,
@@ -145,9 +147,10 @@
   against their actual selected inputs. They reject aliases, hardlinks when the
   host filesystem supports exercising them, path escape, stale logs, reused
   job/root nonces, missing/duplicate cases, and self-declared results without
-  controller context. Immutable and static checks pass locally without
-  compiling or running the helper. Mutation-based policy tests skip locally
-  before writing and require a dedicated pinned validation container with
+  controller context. The source-attestation check passes in cloud CI without compiling or running
+  the helper. Real validation and mutation evidence remain pending until the
+  reviewed merge receives an exact-main run. Mutation-based policy tests skip
+  locally before writing and require a dedicated pinned validation container with
   an independent clean exact-revision checkout mounted read-only and a bounded
   `nosuid,nodev` tmpfs as their only approved scratch; they are explicitly
   non-activating and are not helper build/test or cloud execution evidence
