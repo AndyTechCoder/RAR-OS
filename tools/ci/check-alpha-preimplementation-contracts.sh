@@ -180,7 +180,7 @@ require_digest "$lab/controller-helper-cases.v0" 08e36412d104cc5c41169faf5d5e4dd
 require_digest "$lab/reference-evidence-v0.fields" 2edbb270323d5fd074d3adc2929c695e0bb7ca957464ea814627ea82fc0c259e
 require_digest "$lab/cases.v0" 966d84739240b871d2dd22e362ce07ec0e82706cbde32dfd4e493c0bd9758342
 if [ "$p0_active" -eq 1 ]; then
-    require_digest "$boot/alpha-boot-v0.fields" 170b2533444cf153f4c301d71405e5afc2e6747fafab256776031d1cc2ddf082
+    require_digest "$boot/alpha-boot-v0.fields" e2cd6322456224ac93cce70719f99f8d226bc73359786d1294115a27cb0d06fe
 else
     require_digest "$boot/alpha-boot-v0.fields" 8a97440b2366e3554cca8948c47d0df8e3146230a1d049ead48a105612623e0e
 fi
