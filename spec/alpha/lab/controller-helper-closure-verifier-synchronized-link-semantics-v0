@@ -1,5 +1,5 @@
 schema=rar-alpha-controller-helper-closure-verifier-synchronized-link-semantics-v0
-status=experimental-incomplete-inactive-source-only
+status=experimental-complete-source-only-inactive
 purpose=define-deterministic-synchronized-closure-link-semantics-for-two-no-repair-primary-subdomains-used-by-6-of-125-structural-case-templates
 execution_authority=none
 template_catalog=controller-helper-closure-verifier-case-templates-v0
@@ -20,7 +20,7 @@ parent_rule=closure-parent-device+inode+nlink+uid+gid+mode-are-preserved;kernel-
 hardlink_rule=source-is-declared-single-link-regular-closure/a+destination-closure/hidden-a-is-absent;link-operation-produces-two-names-with-identical-device+inode+bytes+size+mode+uid+gid+mtime+link-count-exactly-2;source-ctime+parent-permitted-fields-recorded-before-ack
 symlink_rule=source-is-declared-single-link-regular-closure/a;atomic-same-filesystem-rename-replaces-it-with-one-symlink-whose-link-payload-is-exact-ASCII-a;old-regular-entry-has-no-visible-alias;new-symlink-device-equals-base-closure-device+inode-is-fresh+distinct-from-replaced-inode+every-other-live-entry+nlink-is-1+Linux-permission-mode-is-0777+uid-is-1000+gid-is-base-controller_gid+size-is-1-byte;mtime+ctime+complete-post-state-are-recorded+validated-before-ack
 failure_rule=trigger+atomicity+source+destination+device+inode+link-count+payload+staging+parent+confinement+postcondition-failure-invalidates-case-before-ack;never-skip+retry+fallback+cross-device-copy
-remaining_status=pre-start+repair-coupled-link-cases+required-path-symlinks+raw-name+path-alias+mount+tree+manifest-specific-primary-families+all-non-none-repair-semantics+exact-base+controller+runtime-precedence+fault+evidence+verdict-remain-absent
+remaining_status=closed-by-controller-helper-closure-verifier-cases-v0+faults-v0.fields+evidence-v0.fields;this-slice-remains-inactive
 activation_rule=blocked;this-slice-cannot-create-fixtures+execute-mutations+or-authorize-a-controller
 consumer_rule=this-contract-does-not-authorize-fixture+mutation+repair+controller+container+compiler+helper+target+VM+emulator+workflow+wiring+gate+readiness
 local_rule=text+hash+structure-check-only;never-run-verifier+controller+container+compiler+helper+target+VM+emulator-on-Mac
