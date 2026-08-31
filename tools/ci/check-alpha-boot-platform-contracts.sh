@@ -362,12 +362,11 @@ if [ "$ephemeral" != disabled ]; then
         "$platform/fixtures/v0/preserved-state.fixture" <<'PERL'
 use strict;
 use warnings;
-use Digest::SHA qw(sha256_hex);
+use Digest::SHA ();
 
 sub u16 { pack('v', $_[0]) }
 sub u32 { pack('V', $_[0]) }
 sub u64 { pack('Q<', $_[0]) }
-sub put { substr($_[0], $_[1], length($_[2]), $_[2]) }
 sub crc32 {
     my ($bytes) = @_;
     my $crc = 0xffffffff;
@@ -404,11 +403,16 @@ sub directory {
 my $output_path = shift @ARGV;
 my @payload = map { read_exact($_) } @ARGV;
 my @short = ('BOOTX64 EFI', 'RECOVERYELF', 'NUCLEUS ELF', 'CORE    IMG', 'COMPONENRAC', 'SYSTEM  RAS', 'PRESERVERAP');
-my $image = "\0" x 67108864;
+my @segments;
+my $add = sub {
+    my ($offset, $bytes) = @_;
+    die 'empty image segment' unless length($bytes) > 0;
+    push @segments, [$offset, $bytes];
+};
 
 # Protective MBR.
-put($image, 446, pack('H*', '00000200eeffffff01000000ffff0100'));
-put($image, 510, "\x55\xaa");
+$add->(446, pack('H*', '00000200eeffffff01000000ffff0100'));
+$add->(510, "\x55\xaa");
 
 # One exact GPT entry and identical primary/backup arrays.
 my $type_guid = pack('H*', '28732ac11ff8d211ba4b00a0c93ec93b');
@@ -418,8 +422,8 @@ my $entry = $type_guid . $unique_guid . u64(2048) . u64(129023) . u64(0) . $name
 $entry .= "\0" x (128 - length($entry));
 my $entries = $entry . "\0" x (16384 - 128);
 my $entries_crc = crc32($entries);
-put($image, 2 * 512, $entries);
-put($image, 131039 * 512, $entries);
+$add->(2 * 512, $entries);
+$add->(131039 * 512, $entries);
 my $disk_guid = pack('H*', '30524152000000408000000000000001');
 sub gpt_header {
     my ($current, $backup, $entry_lba, $entries_crc, $disk_guid) = @_;
@@ -430,8 +434,8 @@ sub gpt_header {
     substr($header, 16, 4, u32(crc32($header)));
     return $header . "\0" x (512 - 92);
 }
-put($image, 1 * 512, gpt_header(1, 131071, 2, $entries_crc, $disk_guid));
-put($image, 131071 * 512, gpt_header(131071, 1, 131039, $entries_crc, $disk_guid));
+$add->(1 * 512, gpt_header(1, 131071, 2, $entries_crc, $disk_guid));
+$add->(131071 * 512, gpt_header(131071, 1, 131039, $entries_crc, $disk_guid));
 
 # FAT32 boot, FSInfo, backup, two identical FATs.
 my $esp = 2048 * 512;
@@ -441,56 +445,70 @@ my $boot = pack('H*', 'eb5890') . 'RAROSV0 ' . u16(512) . pack('C', 1) . u16(32)
     u32(2) . u16(1) . u16(6) . "\0" x 12 . pack('C', 0x80) . "\0" .
     pack('C', 0x29) . u32(0x52415230) . 'RARALPHA   ' . 'FAT32   ';
 $boot .= "\0" x (510 - length($boot)) . "\x55\xaa";
-put($image, $esp, $boot);
+$add->($esp, $boot);
 my $fsinfo = u32(0x41615252) . "\0" x 480 . u32(0x61417272) .
     u32(124978) . u32(14) . "\0" x 12 . u32(0xaa550000);
 die 'FSInfo size' unless length($fsinfo) == 512;
-put($image, $esp + 512, $fsinfo);
-put($image, $esp + 6 * 512, $boot);
-put($image, $esp + 7 * 512, $fsinfo);
+$add->($esp + 512, $fsinfo);
+$add->($esp + 6 * 512, $boot);
+$add->($esp + 7 * 512, $fsinfo);
 my $fat = "\0" x (977 * 512);
 substr($fat, 0, 4, u32(0x0ffffff8));
 substr($fat, 4, 4, u32(0x0fffffff));
 for my $cluster (2 .. 13) { substr($fat, $cluster * 4, 4, u32(0x0fffffff)) }
-put($image, $esp + 32 * 512, $fat);
-put($image, $esp + (32 + 977) * 512, $fat);
+$add->($esp + 32 * 512, $fat);
+$add->($esp + (32 + 977) * 512, $fat);
 
 # Fixed directory tree and seven one-cluster synthetic payloads.
 my $data = $esp + (32 + 2 * 977) * 512;
 my $dot = '.          ';
 my $dotdot = '..         ';
-put($image, $data + 0 * 512, directory(
+$add->($data + 0 * 512, directory(
     short_entry('RARALPHA   ', 0x08, 0, 0), short_entry('EFI        ', 0x10, 3, 0), short_entry('RAR        ', 0x10, 5, 0)));
-put($image, $data + 1 * 512, directory(short_entry($dot, 0x10, 3, 0), short_entry($dotdot, 0x10, 2, 0), short_entry('BOOT       ', 0x10, 4, 0)));
-put($image, $data + 2 * 512, directory(short_entry($dot, 0x10, 4, 0), short_entry($dotdot, 0x10, 3, 0), short_entry($short[0], 0x20, 7, length($payload[0]))));
-put($image, $data + 3 * 512, directory(short_entry($dot, 0x10, 5, 0), short_entry($dotdot, 0x10, 2, 0), short_entry('ALPHA      ', 0x10, 6, 0)));
+$add->($data + 1 * 512, directory(short_entry($dot, 0x10, 3, 0), short_entry($dotdot, 0x10, 2, 0), short_entry('BOOT       ', 0x10, 4, 0)));
+$add->($data + 2 * 512, directory(short_entry($dot, 0x10, 4, 0), short_entry($dotdot, 0x10, 3, 0), short_entry($short[0], 0x20, 7, length($payload[0]))));
+$add->($data + 3 * 512, directory(short_entry($dot, 0x10, 5, 0), short_entry($dotdot, 0x10, 2, 0), short_entry('ALPHA      ', 0x10, 6, 0)));
 my @alpha_entries = (short_entry($dot, 0x10, 6, 0), short_entry($dotdot, 0x10, 5, 0));
 for my $i (4, 3, 2, 6, 1, 5) { push @alpha_entries, short_entry($short[$i], 0x20, 7 + $i, length($payload[$i])) }
-put($image, $data + 4 * 512, directory(@alpha_entries));
+$add->($data + 4 * 512, directory(@alpha_entries));
 for my $i (0 .. 6) {
     die 'fixture payload exceeds one cluster' if length($payload[$i]) > 512;
-    put($image, $data + (5 + $i) * 512, $payload[$i] . "\0" x (512 - length($payload[$i])));
+    $add->($data + (5 + $i) * 512, $payload[$i] . "\0" x (512 - length($payload[$i])));
 }
 
-# Independent inspector path: reopen every authoritative region from the final bytes.
-die 'image length' unless length($image) == 67108864;
-die 'MBR signature' unless substr($image, 510, 2) eq "\x55\xaa";
-die 'primary GPT signature' unless substr($image, 512, 8) eq 'EFI PART';
-die 'backup GPT signature' unless substr($image, 131071 * 512, 8) eq 'EFI PART';
-die 'GPT array mismatch' unless substr($image, 2 * 512, 16384) eq substr($image, 131039 * 512, 16384);
-die 'FAT mismatch' unless substr($image, $esp + 32 * 512, 977 * 512) eq substr($image, $esp + (32 + 977) * 512, 977 * 512);
-die 'backup BPB mismatch' unless substr($image, $esp, 512) eq substr($image, $esp + 6 * 512, 512);
-die 'backup FSInfo mismatch' unless substr($image, $esp + 512, 512) eq substr($image, $esp + 7 * 512, 512);
-for my $i (0 .. 6) {
-    die 'payload mismatch' unless substr($image, $data + (5 + $i) * 512, length($payload[$i])) eq $payload[$i];
-}
+# Bounded sequential emission: segments are small metadata/fixture buffers and all
+# intervening bytes are streamed as fixed-size zero chunks.
 open my $output, '>', $output_path or die "open image output: $!";
 binmode $output;
-print {$output} $image or die "write image output: $!";
+my $sha = Digest::SHA->new(256);
+my $cursor = 0;
+my $image_bytes = 67108864;
+my $zero_chunk = "\0" x 65536;
+my $emit = sub {
+    my ($bytes) = @_;
+    print {$output} $bytes or die "write image output: $!";
+    $sha->add($bytes);
+    $cursor += length($bytes);
+};
+for my $segment (sort { $a->[0] <=> $b->[0] } @segments) {
+    my ($offset, $bytes) = @$segment;
+    die 'overlapping image segment' if $offset < $cursor;
+    die 'image segment exceeds ceiling' if $offset + length($bytes) > $image_bytes;
+    while ($cursor < $offset) {
+        my $remaining = $offset - $cursor;
+        $emit->($remaining >= length($zero_chunk) ? $zero_chunk : substr($zero_chunk, 0, $remaining));
+    }
+    $emit->($bytes);
+}
+while ($cursor < $image_bytes) {
+    my $remaining = $image_bytes - $cursor;
+    $emit->($remaining >= length($zero_chunk) ? $zero_chunk : substr($zero_chunk, 0, $remaining));
+}
+die 'streamed image length' unless $cursor == $image_bytes;
 close $output or die "close image output: $!";
-print sha256_hex($image), "\n";
+print $sha->hexdigest, "\n";
 PERL
-    ) || fail 'independent golden image pack/inspect derivation failed'
+    ) || fail 'streaming golden image derivation failed'
     inspected=$(env LC_ALL=C LANG=C /usr/bin/perl - \
         "$image_file" \
         "$platform/fixtures/v0/root.artifact" \
