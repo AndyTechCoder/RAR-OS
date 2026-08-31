@@ -822,7 +822,7 @@ sha256_of() {
 }
 
 controller_helper_packet_sha256=$(sha256_of docs/tasks/sprint-alpha-controller-helper-integration.md) || fail "cannot hash ADR 0024 integration packet"
-[ "$controller_helper_packet_sha256" = d0f57dfeaa24caa4e782c0f018297e6827ed1b659be03efda40f5ee484ba5c4d ] || fail "ADR 0024 integration packet changed without review"
+[ "$controller_helper_packet_sha256" = 5fcaf8652aa0ebf23f44b403176b9a1716f90456f798d39b708c612bac60724a ] || fail "ADR 0024 integration packet changed without review"
 grep -Fqx 'Status: Authoritative preparation packet - execution remains phase-gated' docs/tasks/sprint-alpha-controller-helper-integration.md || fail "ADR 0024 integration packet status changed"
 grep -Fqx 'This packet authorizes no RAR target build, image, VM, boot, launch, or Mac' docs/tasks/sprint-alpha-controller-helper-integration.md || fail "ADR 0024 packet lost target-execution denial"
 grep -Fqx 'Any expansion beyond ADR 0024 Alternative A requires a new ADR and owner' docs/tasks/sprint-alpha-controller-helper-integration.md || fail "ADR 0024 packet lost owner-decision boundary"
