@@ -89,13 +89,12 @@ receipt cannot update a lock, inventory, controller, profile, gate, build, or
 readiness state; provenance, licenses, acquisition, tool pins, retained bytes,
 and runtime evidence still require separate review.
 
-`controller-helper-closure-verifier-test-plan-v0.fields` records an initial,
-explicitly incomplete controller-owned validation, mutation, and confinement
-design. It contains no harness or execution authority. Exact error/precedence
-coverage, injected runtime faults, canonical evidence/verdict schemas, fixtures,
-controller source, and wiring remain required separate reviews. Static checks
-bind only these draft bytes and confirm that no directly named future harness or
-plan reference is wired; they do not claim transitive workflow-call proof.
+`controller-helper-closure-verifier-test-plan-v0.fields` now binds the complete
+source-only C1 validation design. The 147 disposition cases, 50 executable
+precedence oracles, 12 injected-fault cases, canonical evidence schema, closure-
+acceptance schema, and 127-case helper runtime/test contract remain inactive and
+unwired. C3V must still supply reviewed fixtures, pins, controller code, retained
+runtime evidence, and exact-main proof; C3A alone may later accept that evidence.
 
 `controller-helper-closure-verifier-validation-v0.fields` and its error and
 precedence catalogs bind the inactive verifier's exact source hash, 32 ordered
@@ -143,13 +142,11 @@ separately reviewed fault contract.
 
 `controller-helper-closure-verifier-case-templates-v0` enumerates one structural
 base-relative primary token, phase window, repair token, and error oracle for
-each of the 125 currently constructible class-and-stage occurrences. Its base
-fixture and operator/repair semantics are intentionally absent, so the tokens
-are opaque identifiers and these are inactive templates rather than executable
-instances, fixtures, results, or acceptance evidence. A reviewed versioned
-operator/repair semantics contract, immutable base descriptor, fixture-image
-identity, controller, phase instrumentation, fault contract, evidence/verdict
-contracts, and exact-main validation remain blocking prerequisites.
+each of the 125 constructible class-and-stage occurrences. C1 now binds the
+operator/repair semantics, exhaustive case/fault catalogs, and evidence grammar.
+These remain inactive templates rather than executable instances or evidence;
+C3V still must bind the immutable base, fixture image, controller, phase
+instrumentation, tool pins, retained results, and exact-main validation.
 
 `controller-helper-closure-verifier-operator-inventory-v0` closes the lexical vocabulary used by those templates to 34 primary families and eight repair tokens.
 It checks parameter shapes and exact coverage mechanically, but does
