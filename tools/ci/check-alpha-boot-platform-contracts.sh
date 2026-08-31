@@ -175,6 +175,7 @@ require_line "$slots" 'core_forbidden_authority=state-read,state-map,state-write
 
 /usr/bin/awk -F '|' '
     FNR == NR && /^predicate\|/ { error[$2] = $4; next }
+    FNR == NR { next }
     FNR == 1 { if ($0 != "schema=rar-alpha-boot-platform-cases-v0") bad = 1; next }
     FNR == 2 { if ($0 != "id|predicate|expected_error|effect_log") bad = 1; next }
     FNR > 2 {
