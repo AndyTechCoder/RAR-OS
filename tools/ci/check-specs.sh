@@ -831,7 +831,7 @@ grep -Fqx -- '- [Sprint Alpha ADR 0024 controller/helper integration packet](tas
 c1_packet_sha256=$(sha256_of docs/tasks/sprint-alpha-controller-helper-c1-contracts.md) || fail "cannot hash ADR 0024 C1 packet"
 [ "$c1_packet_sha256" = d3c323ab5ddda959e7c7cda4d0ced3e3e7fe77ae0ba589b2b47ec0a109db78e5 ] || fail "ADR 0024 C1 packet changed without review"
 grep -Fqx 'Status: Authoritative source-only child packet - implementation requires exact-main validation' docs/tasks/sprint-alpha-controller-helper-c1-contracts.md || fail "ADR 0024 C1 packet status changed"
-grep -Fqx 'This child packet grants no' docs/tasks/sprint-alpha-controller-helper-c1-contracts.md || fail "ADR 0024 C1 packet lost authority denial"
+grep -Fqx '`sprint-alpha-controller-helper-integration.md`. This child packet grants no' docs/tasks/sprint-alpha-controller-helper-c1-contracts.md || fail "ADR 0024 C1 packet lost authority denial"
 grep -Fqx -- '- [Sprint Alpha ADR 0024 C1 contract-closure packet](tasks/sprint-alpha-controller-helper-c1-contracts.md)' docs/README.md || fail "ADR 0024 C1 packet is not indexed"
 local_lock_sha256=$(sha256_of tools/toolchain/host-tools.lock) || fail "cannot hash local tool lock"
 ci_lock_sha256=$(sha256_of tools/toolchain/host-tools.x86_64-unknown-linux-gnu-ci.lock) || fail "cannot hash CI tool lock"
