@@ -12,13 +12,10 @@ authoritative.
   publication/recovery is a separate pre-Milestone B gate.
 - Preparation is tracked by the discrete authoritative gates below, not a
   percentage. Overall readiness remains blocked.
-- Latest recorded implementation checkpoint:
-  `65ae7aedd11298c8f15ed96cd94166e2afa03e2a`; Specifications run
-  `33308569835` passed full validation and mutation tests.
-- Status rebaseline evidence: docs-only PR #58 merged at
-  `2765128406210040bc0f16de586e9ccc8d39a452`; exact-main Specifications
-  run `33309132199` passed. Later documentation commits do not invalidate
-  the recorded implementation checkpoint.
+- Latest merged foundation checkpoint: P0 PR #79 merged at
+  `acfd70c9646209f71376d0d03c20d68d2c610746`; exact-main Specifications run
+  `33436244747` passed full validation and mutation tests. This is contract and
+  checker evidence, not target implementation evidence.
 - Target implementation: 0 of 7 milestones (A–G).
 - Working bootable GUI: does not exist yet.
 - Sprint Alpha completion evidence: none.
@@ -48,13 +45,15 @@ and cannot increase the implementation count.
   P0 candidate binds the explicit formula, vectors, 136-byte preimage,
   unchanged closure digest, trusted reconstruction, and complete P0-B checker
   set. Immutable checkpoint `e450f323a6a35a138499a585aed575c0c62ad85b`
-  remains in its ancestry, and predecessor integrated-head run `33429540579`
-  passed validation and mutation. Final PR-head evidence is supplied by the
-  live GitHub PR gate, not self-referentially recorded in these commit bytes.
-  Final reviews, merge, and exact-main validation remain.
+  remains in its ancestry. PR #79 merged at
+  `acfd70c9646209f71376d0d03c20d68d2c610746`, and exact-main run
+  `33436244747` passed validation and mutation. P0 is complete; this does not
+  satisfy the separate retained-machine, controller/helper, SSD, build, or
+  launch gates.
 - Accepted ADRs 0027–0029 select the reviewed B/A/B boot-retirement, identity,
-  and state-authority directions; dependent contracts remain blocked until the
-  decision integration merges and exact-main validates.
+  and state-authority directions; their P0 contracts are merged and exact-main
+  validated. Target source remains blocked on the separate controller/helper,
+  retained-machine-evidence, SSD-confinement, and fresh-worktree gates.
 - Their byte-pinned integration packet is merged through PR #55 and separates
   decision, contract, source, pre-build, and post-build launch gates. It grants
   no implementation or execution authority before those gates pass.
@@ -75,21 +74,18 @@ and cannot increase the implementation count.
   signed update path, target image, or retained target evidence exists.
 - ADRs 0022–0026 are accepted, but none of their dependent contracts or
   controller changes is ready merely from acceptance.
-- The exact Alpha boot/platform contracts are not yet authoritative. Their
-  integrated P0 candidate has passed its immutable-checkpoint, T0/P0-B,
-  exact-head validation, and mutation gates; final reviews, merge, and
-  exact-main validation remain.
-- The P0 compact PCI BDF encoding is decided by accepted ADR 0031, and its
-  candidate fixture/contract bytes and opaque checker binding are integrated,
-  but remain non-authoritative until P0 merges and exact-main validates.
+- The exact Alpha boot/platform contracts are merged and exact-main validated,
+  but their deterministic machine profile cannot activate until retained cloud
+  evidence exactly matches the fixed firmware, q35, PCI, and AHCI inventory.
 - The phase-8 accepted-evidence writer is not ready. Only its pure record codec
   is merged; the preserved publication scaffold remains unmerged, and naming,
   journal, cleanup, recovery, retry, semantic-verification, and activation
   behavior remain blocked on owner selection and reviewed contract integration
   of proposed ADR 0030.
-- Gate-report v2 therefore reports the platform envelope, Core bootstrap,
-  component bundle, initial system source, initial preserved source, and
-  fixture manifest as missing; Milestones A and B remain blocked.
+- Gate-report v2 reports the platform envelope, Core bootstrap, component
+  bundle, initial system source, initial preserved source, and fixture manifest
+  as `pending-review`; that orientation state grants no activation or target
+  authority. Milestones A and B remain blocked on their separate gates.
 - The Lab/controller/helper lacks real activating identities and reviewed cloud
   build/test evidence. The inactive observer has not run; no candidate compiler
   closure exists, and its tools, complete set, verifier, and retained output
