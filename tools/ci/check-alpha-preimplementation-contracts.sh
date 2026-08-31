@@ -180,8 +180,8 @@ require_digest "$lab/controller-helper-cases.v0" 08e36412d104cc5c41169faf5d5e4dd
 require_digest "$lab/controller-helper-runtime-v0.fields" 57620b332c0706ad2dd02a245593757ace511f2d9f58b49259c55346c6bd1b65
 require_digest "$lab/controller-helper-runtime-cases.v0" addc112fdd9c88f5dc99a0f31eef452fbe1a54f808d348d3d13b8731da3103c0
 require_digest "$lab/controller-helper-closure-observer-test-v0.fields" a4633dffa6727ace25cdd69705d3c006709a085726d93e6a2c42f287bccb1238
-require_digest "$lab/controller-helper-closure-verifier-faults-v0.fields" ef00c29771ec39e2f3b1d524a9091faf6f60f36a969c4725d38b065712c4aac1
-require_digest "$lab/controller-helper-closure-verifier-cases-v0" b9fd2e35316b999ac934b3aa7d6f5e49e9129f2fa13523e6a3972c8e5b6c4cce
+require_digest "$lab/controller-helper-closure-verifier-faults-v0.fields" 43f38cc2e75567a9e473c8f2c3d5f8ed6fffc03b8a33a70622bcdd1521901a00
+require_digest "$lab/controller-helper-closure-verifier-cases-v0" d85c82abbba507fa7cbdf9af9c7ce6846139f1d93f0aa35fc6e340ff99e8e707
 require_digest "$lab/controller-helper-closure-verifier-evidence-v0.fields" 0af4292b7eac63a7de68e34cd45e7cb4aa78bb81ecb0625f2d1aa47506cda009
 require_digest "$lab/controller-helper-closure-acceptance-v0.fields" 8793c0b837c3e4e611038f2dd81dbba9befafc67a934edda5a0c0522da7df06a
 require_digest "$lab/controller-helper-test-evidence-v1.fields" 62e0b135014a854d1187ef6ff9b24da9de07be50cd6e2e9b14cd9d59a0508ad7
