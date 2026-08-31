@@ -1,7 +1,10 @@
 # ADR 0031: Alpha Compact PCI BDF Encoding
 
-Status: Proposed — owner decision required
-Decision: Undecided
+Status: Historical proposal — superseded on 2026-08-31
+Decision: Undecided at proposal publication
+
+Canonical decision: [ADR 0031](../adr/0031-alpha-compact-pci-bdf-encoding.md).
+This file preserves the considered alternatives and is not an authority source.
 
 This proposal selects experimental Alpha specification bytes only. It grants no
 target build, image, launch, execution, provisioning, hardware, or production
@@ -68,11 +71,12 @@ functions, endian reversal, shifted-u32 truncation, and the fixed AHCI value
 A production machine-discovery contract may define a different versioned PCI
 identifier. It must migrate explicitly and never reinterpret Alpha v0 bytes.
 
-## Exact owner approval required
+## Historical approval prompt
 
 `I approve ADR 0031 Alternative A for experimental Alpha compact PCI BDF encoding under the documented safety limits.`
 
-Approval of that exact sentence is necessary but not sufficient for P0 merge.
-The selected rule must also be integrated into the canonical ADR, approval
-record, machine-closure contract, trusted reconstruction checker, affected
-digests, mutations, reviews, guarded validation, and exact-main evidence.
+The owner approved this immediately preceding exact sentence on 2026-08-31;
+the canonical ADR and approval record are the only authority sources. Approval
+does not by itself make P0 mergeable. The rule still requires contract/checker
+integration, affected digests, mutations, reviews, guarded validation, and
+exact-main evidence.

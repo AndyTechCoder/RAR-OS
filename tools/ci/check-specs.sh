@@ -55,6 +55,7 @@ docs/adr/0026-alpha-platform-payload-and-state-sources.md
 docs/adr/0027-alpha-bootstrap-retirement-and-dma-closure.md
 docs/adr/0028-alpha-artifact-and-service-identities.md
 docs/adr/0029-alpha-state-ticket-lifecycle.md
+docs/adr/0031-alpha-compact-pci-bdf-encoding.md
 docs/proposals/alpha-owner-choice-brief.md
 docs/proposals/0022-alpha-graphics-input-authority.md
 docs/proposals/0023-alpha-boot-determinism-and-entry-state.md
@@ -449,15 +450,27 @@ grep -Fqx '`I approve ADR 0027 Alternative B, ADR 0028 Alternative A, and ADR 00
     docs/proposals/0030-alpha-accepted-evidence-publication-recovery.md 0030 \
     docs/approval-record.md)" = owner-decision-required ] || fail "ADR 0030 proposal overstates authority"
 [ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
-    docs/proposals/0031-alpha-compact-pci-bdf-encoding.md 0031 \
-    docs/approval-record.md)" = owner-decision-required ] || fail "ADR 0031 proposal overstates authority"
+    docs/adr/0031-alpha-compact-pci-bdf-encoding.md 0031 \
+    docs/approval-record.md 'Alternative A')" = accepted ] || fail "ADR 0031 canonical decision is not accepted"
+grep -qx 'Status: Historical proposal — superseded on 2026-08-31' \
+    docs/proposals/0031-alpha-compact-pci-bdf-encoding.md || fail "ADR 0031 proposal regained non-historical status"
+grep -qx 'Decision: Undecided at proposal publication' \
+    docs/proposals/0031-alpha-compact-pci-bdf-encoding.md || fail "ADR 0031 proposal claims a retrospective decision"
+grep -Fqx 'Canonical decision: [ADR 0031](../adr/0031-alpha-compact-pci-bdf-encoding.md).' \
+    docs/proposals/0031-alpha-compact-pci-bdf-encoding.md || fail "ADR 0031 historical proposal lost its canonical link"
+grep -Fqx 'This file preserves the considered alternatives and is not an authority source.' \
+    docs/proposals/0031-alpha-compact-pci-bdf-encoding.md || fail "ADR 0031 proposal regained decision authority"
+historical_0031_sha=$(env LC_ALL=C LANG=C /usr/bin/shasum -a 256 \
+    docs/proposals/0031-alpha-compact-pci-bdf-encoding.md | /usr/bin/awk '{ print $1 }')
+[ "$historical_0031_sha" = e22b9fdc3b284fa4256922108572519bc547d4f8dd7a7f01b0aea3a82b2e13d3 ] || \
+    fail "ADR 0031 historical proposal escaped its immutable byte boundary"
 grep -Fqx '`I approve ADR 0031 Alternative A for experimental Alpha compact PCI BDF encoding under the documented safety limits.`' \
     docs/proposals/0031-alpha-compact-pci-bdf-encoding.md || fail "ADR 0031 exact owner-approval sentence drifted"
-grep -qx 'Status: Non-authoritative preparation — ADR 0031 owner decision required' \
+grep -qx 'Status: Owner-approved D0 integration — P0-A blocked until D0 exact-main validation' \
     docs/tasks/sprint-alpha-compact-bdf-integration.md || fail "ADR 0031 integration packet overstates authority"
 compact_bdf_packet_sha=$(env LC_ALL=C LANG=C /usr/bin/shasum -a 256 \
     docs/tasks/sprint-alpha-compact-bdf-integration.md | /usr/bin/awk '{ print $1 }')
-[ "$compact_bdf_packet_sha" = 9f98fa0b8ab8373271bfaf1c635ebfdbc4ee8dbb98989158f6031ebbf723c87b ] || \
+[ "$compact_bdf_packet_sha" = 6d85db4080166fb896874bf996cf0b8bbe5d147e267f26889fbaed71de531443 ] || \
     fail "ADR 0031 integration packet escaped its reviewed byte boundary"
 grep -qx 'Status: Non-authoritative preparation — implementation remains blocked' \
     docs/tasks/sprint-alpha-milestone-a-execution-map.md || fail "Milestone A execution map overstates authority"
@@ -611,7 +624,7 @@ duplicates=$(printf '%s\n' "$index_targets" | sort | uniq -d)
 
 adr_files=$(sed -n 's/^- \[ADR [^]]*\](\(adr\/[^)]*\.md\))$/docs\/\1/p' docs/README.md)
 adr_count=$(printf '%s\n' "$adr_files" | awk 'NF { count++ } END { print count + 0 }')
-[ "$adr_count" -eq 29 ] || fail "expected exactly 29 indexed ADRs"
+[ "$adr_count" -eq 30 ] || fail "expected exactly 30 indexed ADRs"
 
 approval_date=$(sed -n 's/^Date: //p' docs/approval-record.md)
 case "$approval_date" in
@@ -684,6 +697,7 @@ printf '%s\n' "$adr_files" | while IFS= read -r adr; do
         docs/adr/0019-* | docs/adr/0020-* | docs/adr/0021-*) adr_approval_date=2026-08-26 ;;
         docs/adr/0022-* | docs/adr/0023-* | docs/adr/0024-* | docs/adr/0025-* | docs/adr/0026-*) adr_approval_date=2026-08-29 ;;
         docs/adr/0027-* | docs/adr/0028-* | docs/adr/0029-*) adr_approval_date=2026-08-30 ;;
+        docs/adr/0031-*) adr_approval_date=2026-08-31 ;;
         *) adr_approval_date=$approval_date ;;
     esac
     grep -qx "Status: Accepted — $adr_approval_date" "$adr" || fail "ADR status mismatch: $adr"
