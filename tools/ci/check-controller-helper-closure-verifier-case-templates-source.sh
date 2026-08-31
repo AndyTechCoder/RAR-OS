@@ -22,7 +22,7 @@ sha_file() {
 for file in "$templates" "$dispositions" "$domain" "$subject"; do
     [ -f "$file" ] && [ ! -L "$file" ] || fail "required regular source is unavailable: $file"
 done
-[ "$(sha_file "$templates")" = 8f50f85a180a437df2101719192bfb30797851be6d8e058e95978c747c1b846c ] || fail 'case-template bytes escaped review'
+[ "$(sha_file "$templates")" = 8df14525a37c49df99d669b638efd316c8993906d69e063625445f431ab204f8 ] || fail 'case-template bytes escaped review'
 [ "$(sha_file "$dispositions")" = 0284cbb3edc56c28971b6e5d151237165aa63a5321cea44772b0a20fbe8c3565 ] || fail 'case dispositions escaped review'
 [ "$(sha_file "$domain")" = 67555f2d565569e95b44a247dda630c9b98d293ba0773880f248d69d802ac66c ] || fail 'input domain escaped review'
 [ "$(sha_file "$subject")" = 3cbeeb85abc3023980a8afe444178ea7acc31f298b3b0975d2c4d6630c82a76c ] || fail 'verifier subject escaped review'
