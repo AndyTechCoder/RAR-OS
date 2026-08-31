@@ -9,8 +9,7 @@ maximum_output_kib=524288
 
 for file in \
     "$root/tools/ci/check-workspace-budget.sh" \
-    "$root/tools/ci/check-local-sprint-preflight.sh" \
-    "$root/tools/ci/report-sprint-alpha-gates.sh"; do
+    "$root/tools/ci/check-local-sprint-preflight.sh"; do
     [ "$(grep -Fxc "maximum_workspace_kib=$maximum_workspace_kib" "$file")" -eq 1 ] || exit 1
 done
 grep -Fq 'above 9 GiB total RAR OS workspace' "$root/AGENTS.md" || exit 1

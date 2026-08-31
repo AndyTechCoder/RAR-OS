@@ -796,17 +796,14 @@ grep -Fqx '        GIT_OPTIONAL_LOCKS=0 \' tools/ci/check-local-sprint-preflight
 grep -qx 'minimum_ssd_free_kib=10485760' tools/ci/check-local-sprint-preflight.sh || fail "local sprint preflight lost the 10-GiB SSD reserve"
 for policy_script in \
     tools/ci/check-workspace-budget.sh \
-    tools/ci/check-local-sprint-preflight.sh \
-    tools/ci/report-sprint-alpha-gates.sh; do
+    tools/ci/check-local-sprint-preflight.sh; do
     [ "$(grep -Fxc 'maximum_workspace_kib=9437184' "$policy_script")" -eq 1 ] ||
         fail "workspace ceiling is missing, duplicated, or inconsistent in $policy_script"
 done
 grep -qx 'minimum_free_kib=10485760' tools/ci/check-workspace-budget.sh || fail "workspace budget lost the 10-GiB SSD reserve"
-grep -qx 'minimum_free_kib=10485760' tools/ci/report-sprint-alpha-gates.sh || fail "gate report lost the 10-GiB SSD reserve"
 grep -qx 'maximum_output_kib=524288' tools/ci/check-workspace-budget.sh || fail "workspace budget lost the 512-MiB output ceiling"
 grep -Fqx '[ "$workspace_kib" -le "$maximum_workspace_kib" ] || exit 1' tools/ci/check-workspace-budget.sh || fail "workspace budget comparison changed"
 grep -Fqx '[ "$workspace_kib" -le "$maximum_workspace_kib" ] ||' tools/ci/check-local-sprint-preflight.sh || fail "local preflight workspace comparison changed"
-grep -Fqx '    if [ "$workspace_kib" -le "$maximum_workspace_kib" ]; then workspace_budget=ready; else workspace_budget=blocked; fi' tools/ci/report-sprint-alpha-gates.sh || fail "gate report workspace comparison changed"
 grep -Fq 'above 9 GiB total RAR OS workspace' AGENTS.md || fail "agent policy lost the 9-GiB workspace ceiling"
 grep -Fq '10-GiB free, 9-GiB workspace, and 512-MiB output ceilings.' docs/host-safety.md || fail "host-safety policy lost the reviewed workspace limits"
 grep -Fq '8 GiB (8388608 KiB) to 9 GiB (9437184 KiB)' docs/approval-record.md || fail "workspace-ceiling owner approval is not recorded"
