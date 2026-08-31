@@ -12,7 +12,7 @@ fault|F007|close-error|receipt-staging|receipt|exit-1+no-valid-final-receipt
 fault|F008|tool-malformed-output|baseline-mount-topology|mountinfo|exit-1+no-receipt
 fault|F009|tool-oversized-output|enumeration|find|exit-1+no-receipt
 fault|F010|hash-command-failure|candidate-manifest|hasher|exit-1+no-receipt
-fault|F011|resource-exhaustion|closure-second-pass|memory-or-pids|nonzero+no-receipt
+fault|F011|resource-file-size|receipt-staging|RLIMIT_FSIZE=0+SIGXFSZ-unblocked|signal-25+controller-exit-map-153+no-valid-final-receipt
 fault|F012|phase-mutation|closure-stability|declared-fixture|exit-1+no-valid-final-receipt
 injection_rule=controller-owned-predeclared-one-shot-fault,exact-phase-trigger+ack,no-race+ambient-failure
 isolation_rule=one-fault-per-fresh-root+nonce,immutable-base-restored,subject+controller+tools-byte-identical
