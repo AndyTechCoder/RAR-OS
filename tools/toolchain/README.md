@@ -41,8 +41,9 @@ contracts rather than runtime proof; C3V controller implementation, fixtures,
 retained evidence, and wiring remain separate reviewed work. The diagnostic input domain is fixed by
 the separate inactive contract described next.
 
-The separate inactive input-domain contract now fixes the controller-owned
+The separate inactive input-domain contract fixes the controller-owned
 environment, mount, file, token, mutation-target, and isolation domains without
-creating fixtures or execution authority. Explicit field/value cases,
-constructible dual-invalid oracles, injected faults, evidence/verdicts,
-controller source, and workflow wiring remain blocked.
+creating fixtures or execution authority. The draft C1 contract set now binds
+the constructible cases, dual-invalid oracles, injected faults, and
+evidence/verdict grammar. Controller source, immutable fixtures, runtime
+evidence, and workflow wiring remain blocked behind C3V/C3A review.
