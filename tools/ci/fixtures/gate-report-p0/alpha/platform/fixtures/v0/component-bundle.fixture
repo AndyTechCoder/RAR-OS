@@ -1,0 +1,7 @@
+schema=rar-alpha-component-bundle-fixture-v0
+entry_count=2
+entry|1|state-service|system-state-service.artifact|rights:ipc-send+ipc-receive+log+clock
+entry|2|state-service|preserved-state-service.artifact|rights:ipc-send+ipc-receive+log+clock
+dependency_count=0
+payload_order=entry-1,entry-2
+expected=accept

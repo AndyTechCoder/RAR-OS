@@ -107,6 +107,63 @@ precedence=$platform/precedence.v0
 fixture_manifest=$platform/fixtures/manifest.v0
 contract_manifest=$platform/contract-set-v0.manifest
 
+/usr/bin/awk -F '|' '
+    NF == 1 {
+        separator = index($0, "=")
+        key = separator ? substr($0, 1, separator - 1) : ""
+        value = separator ? substr($0, separator + 1) : ""
+        if (key != "schema" && key != "status" && key != "fixture_count" &&
+            key != "manifest_rule" && key != "derivation_rule") bad = 1
+        if (value == "" || value ~ /[[:cntrl:]]/ || ++single[key] != 1) bad = 1
+        scalar_count++
+        next
+    }
+    NF == 4 && $1 == "fixture" {
+        if ($2 == "" || $2 ~ /[[:cntrl:]]/ || $3 !~ /^[0-9]+$/ ||
+            $4 !~ /^[0-9a-f]+$/ || length($4) != 64 || ++fixture[$2] != 1) bad = 1
+        fixture_count++
+        next
+    }
+    { bad = 1 }
+    END {
+        if (NR != 20 || scalar_count != 5 || fixture_count != 15 || length(single) != 5) bad = 1
+        exit bad ? 1 : 0
+    }
+' "$fixture_manifest" || fail 'fixture manifest grammar is not total and unique'
+
+/usr/bin/awk -F '|' '
+    NF == 1 {
+        separator = index($0, "=")
+        key = separator ? substr($0, 1, separator - 1) : ""
+        value = separator ? substr($0, separator + 1) : ""
+        if (key != "schema" && key != "status" && key != "readiness" &&
+            key != "contract_count" && key != "r0_handoff_contract_sha256" &&
+            key != "r0_hardware_contract_sha256" && key != "consumer_rule" &&
+            key != "machine_activation" && key != "authority_rule") bad = 1
+        if (value == "" || value ~ /[[:cntrl:]]/ || ++single[key] != 1) bad = 1
+        scalar_count++
+        next
+    }
+    NF == 4 && $1 == "contract" {
+        if ($2 == "" || $2 ~ /[[:cntrl:]]/ || $3 !~ /^[0-9]+$/ ||
+            $4 !~ /^[0-9a-f]+$/ || length($4) != 64 || ++contract[$2] != 1) bad = 1
+        contract_count++
+        next
+    }
+    NF == 3 && $1 == "dependency" {
+        if ($2 == "" || $3 == "" || $2 ~ /[[:cntrl:]]/ || $3 ~ /[[:cntrl:]]/ ||
+            ++dependency[$2] != 1) bad = 1
+        dependency_count++
+        next
+    }
+    { bad = 1 }
+    END {
+        if (NR != 34 || scalar_count != 9 || contract_count != 13 ||
+            dependency_count != 12 || length(single) != 9) bad = 1
+        exit bad ? 1 : 0
+    }
+' "$contract_manifest" || fail 'contract-set manifest grammar is not total and unique'
+
 require_line "$fixture_manifest" 'schema=rar-alpha-platform-fixture-manifest-v0'
 require_line "$fixture_manifest" 'status=experimental-pending-review'
 require_line "$fixture_manifest" 'fixture_count=15'
@@ -175,6 +232,7 @@ require_line "$slots" 'core_forbidden_authority=state-read,state-map,state-write
 
 /usr/bin/awk -F '|' '
     FNR == NR && /^predicate\|/ { error[$2] = $4; next }
+    FNR == NR { next }
     FNR == 1 { if ($0 != "schema=rar-alpha-boot-platform-cases-v0") bad = 1; next }
     FNR == 2 { if ($0 != "id|predicate|expected_error|effect_log") bad = 1; next }
     FNR > 2 {
