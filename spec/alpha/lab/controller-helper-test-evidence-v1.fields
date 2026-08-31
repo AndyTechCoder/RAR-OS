@@ -1,0 +1,13 @@
+schema=rar-alpha-controller-helper-test-evidence-v1
+status=experimental-schema-only-no-instance
+producer=trusted-outer-controller-after-helper-termination
+required_identities=controller_sha,source_sha,helper_sha,closure_acceptance_sha,runtime_contract_sha,attempt_contract_sha,cases_sha,fixture_sha,run_nonce,root_identity
+case_set=97-inherited-attempt-cases+30-runtime-cases,127-total,exactly-once,canonical-order
+case_fields=case_id,source,expected_disposition,forbidden_next_effect,observed_exit,observed_signal,stdout_sha256,stderr_sha256,journal_sha256,filesystem_delta_sha256,result
+runtime_coverage=descriptor-table+basename+open-flags+identity+exact-exec+FD-close+empty-env+process-handle+stop-ack+watchdog+cancel+TERM+KILL+wait+reap+ambiguous-exit+journal+restart+cleanup+attempt-ceiling+authority-denial
+identity_rule=all-SHA-256-nonzero-lowercase+exact-controller-selected,run-nonce+root-nonzero+fresh+distinct-from-builds
+log_rule=complete-stdout+stderr+controller-events,per-case-65536-bytes,total-8388608-bytes,canonical-LF,no-truncation
+result_rule=case-count-127,failed-count-0,network-none,credential-none,controller-observed-exits,status-accepted
+rejection_rule=v0-substitution+13-case+missing+extra+duplicate+reordered+malformed+stale+replay+self-attested+zero+oversized+unbounded-reject
+effect_rule=no-lock+inventory+profile+gate+readiness+workflow+GitHub-update
+local_rule=schema+validator+mutation-policy-only;never-run-helper+container+compiler+target+VM+emulator-on-Mac
