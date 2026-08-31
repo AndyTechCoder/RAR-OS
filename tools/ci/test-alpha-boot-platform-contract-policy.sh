@@ -71,6 +71,14 @@ mutate "$work/alpha/platform/alpha-identities-v0.fields" 's/RAR-ALPHA-SYSTEM-SVC
 reject identity-role-domain-alias
 
 reset_fixture
+mutate "$work/alpha/boot/alpha-machine-closure-v0.fields" 's/COMPONEN.RAC/COMPONENTS.RAC/'
+reject component-rehash-source-name-mismatch
+
+reset_fixture
+mutate "$work/alpha/platform/alpha-identities-v0.fields" 's/COMPONEN.RAC/COMPONENTS.RAC/'
+reject component-identity-source-name-mismatch
+
+reset_fixture
 mutate "$work/alpha/platform/alpha-state-image-v0.fields" 's/payload-exact-hex:616263/payload-exact-hex:00000000000000000000000000000000000000000000000000000000/'
 reject obsolete-preserved-fixture
 
@@ -140,7 +148,7 @@ wire_fixture_identity=ca7180e6a8aa6041cef872112b666d5c00621de138d1b968c1e6522978
 wire_contract_identity=3a0d670cccdca69f18defd6e109a17315744ecb03d4dc18903727f69177f3a05
 p0a_checkpoint_sha=e450f323a6a35a138499a585aed575c0c62ad85b
 p0a_compact_fixture_sha=1a038393071d1e75dda60b8766162832ff93833537e386b3a55a21ed244149e1
-p0a_machine_closure_sha=299fa5c6f3032d9d1336da2ad79ed5a5c9bad349e64f8667e11ebf815696d42d
+p0a_machine_closure_sha=b0f0b3d8ee14bf679865d44aed7de63ea0537fc867100e32054c196d3f3dcb5d
 file_digest() {
     if command -v sha256sum >/dev/null 2>&1; then
         digest_output=$(sha256sum "$1")
@@ -158,7 +166,7 @@ if [ -e "$source/platform/fixtures/v0/compact-bdf-vectors.fixture" ]; then
     source_fixture_identity=$(file_digest "$source_fixture_manifest")
     source_contract_identity=$(file_digest "$source_contract_manifest")
     [ "$source_fixture_identity" = 4b1d78c05e64ef15fff1b0edf4497bb01ebb70d38c05eb879357f09eddd26e42 ] &&
-        [ "$source_contract_identity" = 014576ef79667274ecc4c6777d6f0c47380432941a27c99e7158358d6eeacf06 ] &&
+        [ "$source_contract_identity" = 290a4c0c1274b913b68bb77eeb7eb0938f04ada2e79fdcae500fcda53b66bbac ] &&
         [ "$(file_digest "$source/platform/fixtures/v0/compact-bdf-vectors.fixture")" = "$p0a_compact_fixture_sha" ] &&
         /usr/bin/git -C "$root" cat-file -e "$p0a_checkpoint_sha^{commit}" &&
         /usr/bin/git -C "$root" merge-base --is-ancestor "$p0a_checkpoint_sha" HEAD || exit 1
@@ -172,7 +180,7 @@ prepare_wire_case() {
         "$wire_case/root/spec/fixtures/release-0/bin/valid-x86_64.bin"
     if [ "$compact_checkpoint" = 1 ]; then
         wire_fixture_identity=4b1d78c05e64ef15fff1b0edf4497bb01ebb70d38c05eb879357f09eddd26e42
-        wire_contract_identity=014576ef79667274ecc4c6777d6f0c47380432941a27c99e7158358d6eeacf06
+        wire_contract_identity=290a4c0c1274b913b68bb77eeb7eb0938f04ada2e79fdcae500fcda53b66bbac
     else
         wire_fixture_identity=ca7180e6a8aa6041cef872112b666d5c00621de138d1b968c1e6522978286ce5
         wire_contract_identity=3a0d670cccdca69f18defd6e109a17315744ecb03d4dc18903727f69177f3a05
