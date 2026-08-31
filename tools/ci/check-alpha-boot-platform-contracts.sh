@@ -127,7 +127,8 @@ contract_manifest=$platform/contract-set-v0.manifest
     { bad = 1 }
     END {
         if (scalar_count != 5 || length(single) != 5 ||
-            (fixture_count != 15 && fixture_count != 26) || NR != 5 + fixture_count) bad = 1
+            (fixture_count != 15 && fixture_count != 26 && fixture_count != 27) ||
+            NR != 5 + fixture_count) bad = 1
         exit bad ? 1 : 0
     }
 ' "$fixture_manifest" || fail 'fixture manifest grammar is not total and unique'
@@ -178,6 +179,10 @@ case "$fixture_identity:$contract_identity" in
         topology=p0-wire
         require_line "$fixture_manifest" 'fixture_count=26'
         ;;
+    4b1d78c05e64ef15fff1b0edf4497bb01ebb70d38c05eb879357f09eddd26e42:014576ef79667274ecc4c6777d6f0c47380432941a27c99e7158358d6eeacf06)
+        topology=p0-compact-bdf
+        require_line "$fixture_manifest" 'fixture_count=27'
+        ;;
     *) fail 'fixture and contract-set identities are not an approved exact topology' ;;
 esac
 require_line "$fixture_manifest" 'manifest_rule=paths-relative-to-fixtures-directory,ASCII-sorted,regular-nonsymbolic,exact-bytes,exact-SHA-256,no-extra-fixture'
@@ -204,6 +209,17 @@ require_line "$closure" 'bus_master_capable_count=10'
 require_line "$closure" 'ahci_boot_device_binding=UEFI-device-path-controller-BDF-equals-00:1f.2,port:0,duplicate-or-ambiguous-reject'
 [ "$(/usr/bin/grep -c '^ahci_stop_step|' "$closure")" -eq 5 ] || fail 'AHCI stop sequence is incomplete'
 require_line "$closure" 'authority_transfer=pci:none,ahci:none,boot-device:none,DMA:none,closure-record:Recovery-read-only'
+if [ "$topology" = p0-compact-bdf ]; then
+    require_line "$closure" 'compact_bdf_formula=bitwise-or(bus<<8,device<<3,function)'
+    require_line "$closure" 'compact_bdf_input_range=bus:0..255,device:0..31,function:0..7,checked-before-shift'
+    require_line "$closure" 'compact_bdf_encoding=little-endian-u16'
+    require_line "$closure" 'compact_bdf_scope=private-experimental-Alpha-v0-closure-framing-only,not-PCI-inventory-encoding,not-general-PCI-identifier,not-PCI-access-authority'
+    require_line "$closure" 'compact_bdf_rejection=out-of-range,negative,overflow,truncation,endian-reversal,inventory-formula,collision,missing,extra,duplicate,reordered,AHCI-mismatch'
+    require_line "$closure" 'disabled_function_order_values=0x0008,0x00d0,0x00d1,0x00d2,0x00d7,0x00e8,0x00e9,0x00ea,0x00ef,0x00fa'
+    require_line "$closure" 'disabled_function_order_little_endian_bytes=0800,d000,d100,d200,d700,e800,e900,ea00,ef00,fa00'
+    require_line "$closure" 'disabled_vector_preimage_sha256=737e6ec5fc50a8f9ee92ece3c3ecb699459efd53f42edf05c21bc0691a9e913f'
+    require_line "$closure" 'disabled_vector_preimage_rule=136-exact-bytes,ports-0..5-then-functions-declared-order,little-endian,independent-reconstruct+rehash-before-Recovery,byte+digest-disagreement-reject'
+fi
 
 require_line "$entry" 'source_count=4'
 [ "$(/usr/bin/grep -c '^source_role|' "$entry")" -eq 4 ] || fail 'platform source role set is incomplete'
@@ -222,6 +238,8 @@ require_line "$slots" 'slot_count=2'
 require_line "$slots" 'selector_count=2'
 require_line "$slots" 'core_forbidden_authority=state-read,state-map,state-write,token-possession,token-observation,redeem,clone,delegate,retarget,revoke,mutable-destination'
 [ "$(/usr/bin/grep -c '^transition|' "$slots")" -eq 44 ] || fail 'state-slot transition table must cover 4 states x 11 events'
+boot_case_count=41
+[ "$topology" != p0-compact-bdf ] || boot_case_count=50
 /usr/bin/awk -F '|' '
     /^transition\|/ {
         key = $2 SUBSEP $3
@@ -283,7 +301,7 @@ require_line "$slots" 'core_forbidden_authority=state-read,state-map,state-write
     }
 ' "$validation" "$precedence" || fail 'precedence cases do not cover every adjacent and sensitive pair'
 
-/usr/bin/awk -F '|' '
+/usr/bin/awk -F '|' -v expected_count="$boot_case_count" '
     NR == 1 { if ($0 != "schema=rar-alpha-boot-cases-v0") bad = 1; next }
     NR == 2 { if ($0 != "id|stage|expected") bad = 1; next }
     NR > 2 {
@@ -292,7 +310,7 @@ require_line "$slots" 'core_forbidden_authority=state-read,state-map,state-write
         count++
         if ($1 == "valid-root-recovery-nucleus" && $2 == "integration" && $3 == "accept") valid++
     }
-    END { if (count != 41 || valid != 1) bad = 1; exit bad ? 1 : 0 }
+    END { if (count != expected_count || valid != 1) bad = 1; exit bad ? 1 : 0 }
 ' "$boot/cases.v0" || fail 'legacy Alpha boot case catalog is incomplete or malformed'
 
 expected_fixtures=$(/usr/bin/sed -n 's/^fixture|\([^|]*\)|[^|]*|[^|]*$/\1/p' "$fixture_manifest")
@@ -309,7 +327,7 @@ while IFS='|' read -r kind path bytes sha extra; do
     fixture_count=$((fixture_count + 1))
 done < "$fixture_manifest"
 case "$topology:$fixture_count" in
-    legacy-report:15|p0-wire:26) ;;
+    legacy-report:15|p0-wire:26|p0-compact-bdf:27) ;;
     *) fail 'fixture manifest count does not match its exact topology' ;;
 esac
 
@@ -366,11 +384,12 @@ case "$topology" in
         [ ! -e "$platform/fixtures/v0/wire-authority.fixture" ] ||
             fail 'legacy reporter topology contains P0 wire authority'
         ;;
-    p0-wire)
+    p0-wire|p0-compact-bdf)
         [ -f "$platform/fixtures/v0/wire-authority.fixture" ] &&
             [ ! -L "$platform/fixtures/v0/wire-authority.fixture" ] ||
             fail 'P0 fixture topology lacks regular nonsymbolic wire authority'
-        /bin/sh "$root/tools/ci/check-alpha-wire-fixtures.sh" "$root" "$platform/fixtures/v0" "$alpha" ||
+        /bin/sh "$root/tools/ci/check-alpha-wire-fixtures.sh" "$root" "$platform/fixtures/v0" "$alpha" \
+            "$fixture_identity" "$contract_identity" ||
             fail 'non-BDF Alpha wire fixtures are invalid'
         ;;
 esac
