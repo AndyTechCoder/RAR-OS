@@ -1,10 +1,10 @@
 # Sprint Alpha 0.1 Status
 
 - Date: 2026-08-30
-- Current milestone: boot/platform and accepted-evidence post-approval packets
-  plus inactive compiler-closure observation source merged; owner decisions and
-  remaining pre-Milestone A controller/SSD authority remain blocked
-- Objective: record the exact boot/platform owner choices, finish their reviewed
+- Current milestone: boot/platform decision integration and accepted-evidence
+  post-approval packets plus inactive compiler-closure work; remaining
+  pre-Milestone A contracts, controller, and SSD authority remain blocked
+- Objective: integrate the approved boot/platform choices, finish their reviewed
   contracts and controller/SSD gates before Milestone A, and separately finish
   acceptance-v2 publication/controller closure before Milestone B
 - Status content baseline: verified implementation checkpoint at
@@ -157,10 +157,11 @@
   cases, fixes one-writer paths and stop conditions, and keeps every target
   build/boot/evidence action cloud-only. It changes no contract or readiness
   state and does not authorize implementation. PR #55 adds a byte-pinned,
-  non-authoritative integration packet for proposed ADRs 0027–0029. It separates
+  non-authoritative integration packet for then-proposed ADRs 0027–0029. It separates
   owner decision, contract, cumulative source-start, source-only merge,
   pre-build, and post-build launch/acceptance gates; exact-main run `33306580918`
-  passed. The proposals remain undecided and no target source is authorized
+  passed. Canonical ADRs 0027–0029 now record B/A/B; their contracts remain
+  blocked and no target source is authorized
 - Milestones B–G preparation: one non-authoritative dependency/evidence map now
   organizes the existing sequential ownership, contract-before-code boundaries,
   all 40 later acceptance rows, cloud-only evidence, and stop conditions. It
@@ -186,8 +187,9 @@
   remain closed gates. Proposed ADR 0030 now documents the required persistent
   transaction choice without selecting or authorizing it; PR #50 merged and its
   exact-main validation passed. Proposals 0027–0029 were normalized as explicit
-  owner-decision-required B/A/B recommendations in PR #42; their merge grants
-  no implementation authority. The independent record codec merged in PR #52,
+  B/A/B recommendations in PR #42 and are retained as history after the owner
+  accepted those choices; acceptance grants no implementation authority. The
+  independent record codec merged in PR #52,
   and the byte-pinned non-authoritative post-approval work packet merged in PR
   #53; exact-main Specifications runs `33304849966` and `33305373626` passed.
   The separate boot/platform integration packet merged in PR #55 at
@@ -196,7 +198,8 @@
   inactive compiler-closure observer source; exact-main run `33308569835`
   passed without activating it
 - Owner decisions: ADRs 0022 C, 0023 C, 0024 A, 0025 B, and 0026 C are recorded
-  as accepted on 2026-08-29. Acceptance alone leaves every dependent contract,
+  as accepted on 2026-08-29; ADRs 0027 B, 0028 A, and 0029 B are recorded as
+  accepted on 2026-08-30. Acceptance alone leaves every dependent contract,
   identity, evidence, controller, and readiness gate closed
 - Decision integration readiness: one non-authoritative plan now sequences the
   accepted decisions into pre-A boot/platform/controller, pre-B evidence-
@@ -220,8 +223,8 @@
   Sprint Alpha
 - Static enforcement: required-file, authority-status, ADR-classification, and
   exact approval-sentence checks now cover both execution maps, the owner brief,
-  canonical ADRs 0022–0026, all three decision-integration gates, and all eight
-  completion-proof items. Proposals 0027–0030 remain machine-classified as
+  canonical ADRs 0022–0029, all three decision-integration gates, and all eight
+  completion-proof items. Only proposal 0030 remains machine-classified as
   owner-decision-required, and the complete accepted-evidence publication task
   packet plus boot/platform integration packet are byte-pinned so preparation
   cannot silently become authoritative, incomplete, or disappear
@@ -287,9 +290,8 @@
   needs one-time owner-approved installation and confinement evidence in a
   fresh SSD-root task. The profile is now installed without replacing existing
   settings; effective confinement evidence remains a fresh-task pre-A gate
-- Next durable actions: record the exact informed ADR 0027 B / 0028 A / 0029 B
-  owner choice, then execute the reviewed P0 boot/platform contract packet;
-  those proposals remain undecided and non-authoritative until then.
+- Next durable actions: merge and exact-main validate canonical ADR 0027 B /
+  0028 A / 0029 B, then execute the reviewed P0 boot/platform contract packet.
   Separately obtain the exact owner choice for proposed ADR 0030, then integrate
   its reviewed contract through the merged task packet before Milestone B. The
   pure accepted-evidence record codec is already merged; publication, recovery,

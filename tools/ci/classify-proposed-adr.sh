@@ -7,7 +7,11 @@ export LC_ALL LANG
 record=${1-}
 expected_number=${2-}
 approval_record=${3-}
+expected_decision=${4-}
 expected_approver='Andy / RAR project owner'
+if [ -n "$expected_decision" ]; then
+    case "$expected_decision" in 'Alternative '[ABC]) ;; *) exit 1 ;; esac
+fi
 [ -f "$record" ] && [ ! -L "$record" ] || exit 1
 case "$expected_number" in
     [0-9][0-9][0-9][0-9]) ;;
@@ -26,6 +30,7 @@ esac
 status=$(/usr/bin/sed -n '3p' "$record")
 decision=$(/usr/bin/sed -n '4p' "$record")
 if [ "$status" = 'Status: Proposed — owner decision required' ] && [ "$decision" = 'Decision: Undecided' ]; then
+    [ -z "$expected_decision" ] || exit 1
     printf '%s\n' owner-decision-required
     exit 0
 fi
@@ -54,6 +59,9 @@ case "$month" in
 esac
 [ "$day_value" -ge 1 ] && [ "$day_value" -le "$maximum_day" ] || exit 1
 case "$decision" in 'Decision: Alternative '[ABC]) ;; *) exit 1 ;; esac
+if [ -n "$expected_decision" ]; then
+    [ "$decision" = "Decision: $expected_decision" ] || exit 1
+fi
 
 [ "$(/usr/bin/grep -c "^ADR $expected_number approval:" "$approval_record")" -eq 1 ] || exit 1
 [ "$(/usr/bin/sed -n "s/^ADR $expected_number approval: //p" "$approval_record")" = approved ] || exit 1

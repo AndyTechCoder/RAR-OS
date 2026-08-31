@@ -51,6 +51,9 @@ docs/adr/0023-alpha-boot-determinism-and-entry-state.md
 docs/adr/0024-alpha-controller-helper-build-trust.md
 docs/adr/0025-alpha-gui-continuity-evidence-sequencing.md
 docs/adr/0026-alpha-platform-payload-and-state-sources.md
+docs/adr/0027-alpha-bootstrap-retirement-and-dma-closure.md
+docs/adr/0028-alpha-artifact-and-service-identities.md
+docs/adr/0029-alpha-state-ticket-lifecycle.md
 docs/proposals/alpha-owner-choice-brief.md
 docs/proposals/0022-alpha-graphics-input-authority.md
 docs/proposals/0023-alpha-boot-determinism-and-entry-state.md
@@ -404,14 +407,40 @@ gate_report_v2=$(/bin/sh tools/ci/report-sprint-alpha-gates-v2.sh)
     docs/adr/0026-alpha-platform-payload-and-state-sources.md 0026 \
     docs/approval-record.md)" = accepted ] || fail "ADR 0026 decision state is inconsistent"
 [ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
-    docs/proposals/0027-alpha-bootstrap-retirement-and-dma-closure.md 0027 \
-    docs/approval-record.md)" = owner-decision-required ] || fail "ADR 0027 proposal overstates authority"
+    docs/adr/0027-alpha-bootstrap-retirement-and-dma-closure.md 0027 \
+    docs/approval-record.md 'Alternative B')" = accepted ] || fail "ADR 0027 decision state is inconsistent"
 [ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
-    docs/proposals/0028-alpha-artifact-and-service-identities.md 0028 \
-    docs/approval-record.md)" = owner-decision-required ] || fail "ADR 0028 proposal overstates authority"
+    docs/adr/0028-alpha-artifact-and-service-identities.md 0028 \
+    docs/approval-record.md 'Alternative A')" = accepted ] || fail "ADR 0028 decision state is inconsistent"
 [ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
-    docs/proposals/0029-alpha-state-ticket-lifecycle.md 0029 \
-    docs/approval-record.md)" = owner-decision-required ] || fail "ADR 0029 proposal overstates authority"
+    docs/adr/0029-alpha-state-ticket-lifecycle.md 0029 \
+    docs/approval-record.md 'Alternative B')" = accepted ] || fail "ADR 0029 decision state is inconsistent"
+for proposal in \
+    docs/proposals/0027-alpha-bootstrap-retirement-and-dma-closure.md \
+    docs/proposals/0028-alpha-artifact-and-service-identities.md \
+    docs/proposals/0029-alpha-state-ticket-lifecycle.md; do
+    case "$proposal" in
+        *0027-*) historical_sha=f6c9ac77a03cf4777698d21d2fdf4b8813c0bc6ac1a73e6c1af17e6ff35ef12e ;;
+        *0028-*) historical_sha=c548f7b263075b5b3645fd12adeb7b3e72615e18e939219fbfad52df28932307 ;;
+        *0029-*) historical_sha=ca5f797243b172eb1ea94e80a66e24a7ac430134eb1047e3c43e5b7ce5f1c864 ;;
+        *) fail "unexpected historical proposal path: $proposal" ;;
+    esac
+    actual_historical_sha=$(env LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$proposal" | /usr/bin/awk '{ print $1 }')
+    [ "$actual_historical_sha" = "$historical_sha" ] || \
+        fail "$proposal escaped its immutable historical byte boundary"
+    grep -qx 'Status: Historical proposal — superseded on 2026-08-30' "$proposal" || \
+        fail "$proposal regained non-historical status"
+    grep -qx 'Decision: Undecided at proposal publication' "$proposal" || \
+        fail "$proposal claims a retrospective proposal decision"
+    grep -Fqx 'This file preserves the considered alternatives and is not an authority source.' "$proposal" || \
+        fail "$proposal regained decision authority"
+done
+grep -Fqx 'Canonical decision: [ADR 0027](../adr/0027-alpha-bootstrap-retirement-and-dma-closure.md).' \
+    docs/proposals/0027-alpha-bootstrap-retirement-and-dma-closure.md || fail "ADR 0027 historical proposal lost its canonical link"
+grep -Fqx 'Canonical decision: [ADR 0028](../adr/0028-alpha-artifact-and-service-identities.md).' \
+    docs/proposals/0028-alpha-artifact-and-service-identities.md || fail "ADR 0028 historical proposal lost its canonical link"
+grep -Fqx 'Canonical decision: [ADR 0029](../adr/0029-alpha-state-ticket-lifecycle.md).' \
+    docs/proposals/0029-alpha-state-ticket-lifecycle.md || fail "ADR 0029 historical proposal lost its canonical link"
 grep -Fqx '`I approve ADR 0027 Alternative B, ADR 0028 Alternative A, and ADR 0029 Alternative B for experimental Alpha specification work under the documented safety limits.`' \
     docs/proposals/alpha-boot-followup-choice-brief.md || fail "Alpha boot follow-up exact owner-choice sentence drifted"
 [ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
@@ -427,11 +456,11 @@ publication_packet_sha=$(env LC_ALL=C LANG=C /usr/bin/shasum -a 256 \
     docs/tasks/sprint-alpha-accepted-evidence-publication.md | /usr/bin/awk '{ print $1 }')
 [ "$publication_packet_sha" = 1f3318b7d6df2fd31a918bada01ffcdad79b43515209f303df1e96af23a4a2d3 ] || \
     fail "accepted-evidence publication packet escaped its reviewed byte boundary"
-grep -qx 'Status: Non-authoritative preparation — ADRs 0027–0029 owner decisions required' \
+grep -qx 'Status: Owner-approved D0 integration — P0 blocked until exact-main validation' \
     docs/tasks/sprint-alpha-boot-platform-contract-integration.md || fail "boot/platform integration packet overstates authority"
 boot_platform_packet_sha=$(env LC_ALL=C LANG=C /usr/bin/shasum -a 256 \
     docs/tasks/sprint-alpha-boot-platform-contract-integration.md | /usr/bin/awk '{ print $1 }')
-[ "$boot_platform_packet_sha" = 603e50a6040a368510f2aba07858f9e5fea8752d6a69232ee41d01c4d025b451 ] || \
+[ "$boot_platform_packet_sha" = 89494696da7100d8397b25bd450675732ee8a0f540b2cfbb23381a1f63147e4e ] || \
     fail "boot/platform integration packet escaped its reviewed byte boundary"
 grep -qx 'Status: Non-authoritative integration plan — decisions accepted, activation gated' \
     docs/proposals/alpha-decision-integration-plan.md || fail "Alpha decision integration plan overstates authority"
@@ -569,7 +598,7 @@ duplicates=$(printf '%s\n' "$index_targets" | sort | uniq -d)
 
 adr_files=$(sed -n 's/^- \[ADR [^]]*\](\(adr\/[^)]*\.md\))$/docs\/\1/p' docs/README.md)
 adr_count=$(printf '%s\n' "$adr_files" | awk 'NF { count++ } END { print count + 0 }')
-[ "$adr_count" -eq 26 ] || fail "expected exactly 26 indexed ADRs"
+[ "$adr_count" -eq 29 ] || fail "expected exactly 29 indexed ADRs"
 
 approval_date=$(sed -n 's/^Date: //p' docs/approval-record.md)
 case "$approval_date" in
@@ -586,7 +615,7 @@ grep -q '^Approver: .\+' docs/approval-record.md || fail "approval record has no
 [ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
     docs/adr/0021-alpha-boot-payload-boundary.md 0021 \
     docs/approval-record.md)" = accepted ] || fail "ADR 0021 is not bound to owner approval"
-for accepted_adr in 0022 0023 0024 0025 0026; do
+for accepted_adr in 0022 0023 0024 0025 0026 0027 0028 0029; do
     accepted_path=$(printf 'docs/adr/%s-' "$accepted_adr")
     accepted_file=$(find docs/adr -maxdepth 1 -type f -name "${accepted_adr}-*.md")
     [ "$(printf '%s\n' "$accepted_file" | awk 'NF { count++ } END { print count + 0 }')" -eq 1 ] || fail "ADR $accepted_adr canonical file is not unique"
@@ -641,6 +670,7 @@ printf '%s\n' "$adr_files" | while IFS= read -r adr; do
         docs/adr/0018-*) adr_approval_date=2026-08-25 ;;
         docs/adr/0019-* | docs/adr/0020-* | docs/adr/0021-*) adr_approval_date=2026-08-26 ;;
         docs/adr/0022-* | docs/adr/0023-* | docs/adr/0024-* | docs/adr/0025-* | docs/adr/0026-*) adr_approval_date=2026-08-29 ;;
+        docs/adr/0027-* | docs/adr/0028-* | docs/adr/0029-*) adr_approval_date=2026-08-30 ;;
         *) adr_approval_date=$approval_date ;;
     esac
     grep -qx "Status: Accepted — $adr_approval_date" "$adr" || fail "ADR status mismatch: $adr"
