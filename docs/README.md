@@ -32,6 +32,7 @@ Status: Gate 0 approved on 2026-07-16
 - [Sprint Alpha Milestones B–G execution and evidence map](tasks/sprint-alpha-milestones-b-g-execution-map.md)
 - [Sprint Alpha accepted-evidence publication/recovery task packet](tasks/sprint-alpha-accepted-evidence-publication.md)
 - [Sprint Alpha boot/platform contract integration task packet](tasks/sprint-alpha-boot-platform-contract-integration.md)
+- [Sprint Alpha compact PCI BDF integration task packet](tasks/sprint-alpha-compact-bdf-integration.md)
 - [Initial Codex Handoff Prompt](handoff-prompt.md)
 - [V1 Alpha Codex Execution Runbook](v1-alpha-execution.md)
 - [GitHub Actions account-unblock runbook](runbooks/github-actions-account-unblock.md)
@@ -72,6 +73,7 @@ Status: Gate 0 approved on 2026-07-16
 - [ADR 0027: Alpha Bootstrap Retirement and DMA Closure](adr/0027-alpha-bootstrap-retirement-and-dma-closure.md)
 - [ADR 0028: Alpha Artifact and Service Identities](adr/0028-alpha-artifact-and-service-identities.md)
 - [ADR 0029: Alpha State Ticket Lifecycle](adr/0029-alpha-state-ticket-lifecycle.md)
+- [ADR 0031: Alpha Compact PCI BDF Encoding](adr/0031-alpha-compact-pci-bdf-encoding.md)
 
 Gate 0 approval covers ADRs 0001–0016 and the Release 0 task packet. Later
 indexed ADRs are authoritative only through their separately recorded approval
@@ -91,6 +93,6 @@ permanently irreplaceable.
 - [Historical proposal 0029](proposals/0029-alpha-state-ticket-lifecycle.md)
 - [Historical boot follow-up choice brief](proposals/alpha-boot-followup-choice-brief.md)
 - [Open proposal 0030: Alpha Accepted-Evidence Publication and Recovery](proposals/0030-alpha-accepted-evidence-publication-recovery.md)
-- [Open proposal 0031: Alpha Compact PCI BDF Encoding](proposals/0031-alpha-compact-pci-bdf-encoding.md)
+- [Historical proposal 0031](proposals/0031-alpha-compact-pci-bdf-encoding.md)
 - [Alpha Decision Integration Plan](proposals/alpha-decision-integration-plan.md)
 - [Sprint Alpha Completion Evidence Map](tasks/sprint-alpha-completion-evidence-map.md)
