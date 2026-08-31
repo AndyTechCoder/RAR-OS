@@ -1,11 +1,11 @@
 # Sprint Alpha 0.1 Status
 
-- Date: 2026-08-30
-- Current milestone: boot/platform decision integration and accepted-evidence
-  post-approval packets plus inactive compiler-closure work; remaining
-  pre-Milestone A contracts, controller, and SSD authority remain blocked
-- Objective: integrate the approved boot/platform choices, finish their reviewed
-  contracts and controller/SSD gates before Milestone A, and separately finish
+- Date: 2026-08-31
+- Current milestone: post-P0 pre-Milestone A controller, machine-evidence, and
+  SSD-confinement gates; acceptance-v2 publication/recovery remains a separate
+  pre-Milestone B gate
+- Objective: close the remaining controller/helper, retained-machine-evidence,
+  and SSD-confinement gates before Milestone A, and separately finish
   acceptance-v2 publication/controller closure before Milestone B
 - Status content baseline: verified implementation checkpoint at
   `65ae7aedd11298c8f15ed96cd94166e2afa03e2a`
@@ -14,9 +14,11 @@
   run `33309132199`, job `99250884902`, passed
 - PR #58 status worktree (historical, preserved): `/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/worktrees/alpha-status-after-closure`
 - PR #58 status branch (historical, preserved): `codex/alpha-status-after-closure`
-- Latest recorded implementation validation: Specifications run `33308569835`, job
-  `99249383222`, passed runner attestation, trusted-controller authority binding,
-  full pinned read-only-container validation, and all external mutation tests
+- Latest merged P0 contract validation: PR #79 merged at
+  `acfd70c9646209f71376d0d03c20d68d2c610746`; exact-main Specifications run
+  `33436244747`, job `99633274359`, passed runner attestation,
+  trusted-controller authority binding, full pinned read-only-container
+  validation, and all external mutation tests
 - Bootstrap pull request: [#13](https://github.com/AndyTechCoder/RAR-OS/pull/13),
   merged at `abd75bfccf4fcd2f197871225d1a78233c0d87dc`; exact post-merge trusted-
   controller run `33294557261` passed
@@ -148,12 +150,13 @@
   `nosuid,nodev` tmpfs as their only approved scratch; they are explicitly
   non-activating and are not helper build/test or cloud execution evidence
 - Boot implementation state: accepted ADR 0021 selects the Alpha boot-volume,
-  payload-loader, and Root-to-Recovery boundary. The candidate specification is
-  explicitly `draft-incomplete` and cannot authorize implementation until its
-  five review findings are fixed. Accepted ADR 0023 Alternative C selects the
-  deterministic private Alpha profile; no target implementation began
+  payload-loader, and Root-to-Recovery boundary. P0 now supplies the reviewed,
+  merged, exact-main-validated private Alpha boot/platform contract set.
+  Accepted ADR 0023 Alternative C selects the deterministic private Alpha
+  profile; its retained machine evidence and other cumulative start gates are
+  still absent, so no target implementation began
 - Milestone A preparation: a non-authoritative execution map now decomposes the
-  existing packet into eight ordered work packets, maps all 41 mandatory boot
+  existing packet into eight ordered work packets, maps all 50 mandatory boot
   cases, fixes one-writer paths and stop conditions, and keeps every target
   build/boot/evidence action cloud-only. It changes no contract or readiness
   state and does not authorize implementation. PR #55 adds a byte-pinned,
@@ -226,15 +229,15 @@
   canonical ADRs 0022–0029, all three decision-integration gates, and all eight
   completion-proof items. Proposal 0030 remains machine-classified as
   owner-decision-required. Accepted ADR 0031 records the compact-BDF decision
-  and D0 exact-main run `33415110465` passed. The integrated P0 candidate binds
+  and D0 exact-main run `33415110465` passed. The merged P0 contract set binds
   the formula, vectors, 136-byte preimage, unchanged closure digest, trusted
   reconstruction, and complete T0/P0-B contract/checker set. Immutable
   checkpoint `e450f323a6a35a138499a585aed575c0c62ad85b` is preserved in its
-  ancestry, and predecessor integrated-head run `33429540579` passed validation
-  and mutation. Final PR-head evidence is supplied by the live GitHub PR gate,
-  not self-referentially recorded in these commit bytes.
-  P0 remains non-authoritative until final reviews, merge, and exact-main
-  validation complete, while the complete accepted-evidence publication task
+  ancestry. PR #79 merged at
+  `acfd70c9646209f71376d0d03c20d68d2c610746`, and exact-main run
+  `33436244747` passed both validation and mutation. P0 is complete; machine
+  activation and Milestone A remain blocked on their separate cumulative
+  start gates, while the complete accepted-evidence publication task
   packet plus boot/platform integration packet are byte-pinned so preparation
   cannot silently become authoritative, incomplete, or disappear
 - Gate-report migration: schema v1 remains unchanged. The versioned v2 reporter
@@ -299,18 +302,16 @@
   needs one-time owner-approved installation and confinement evidence in a
   fresh SSD-root task. The profile is now installed without replacing existing
   settings; effective confinement evidence remains a fresh-task pre-A gate
-- Next durable actions: complete P0 final reviews, merge the integrated
-  boot/platform contract candidate, and require exact-main validation and
-  mutation evidence before Milestone A can begin. Separately,
+- Next durable actions: make the v2 controller/helper compiler,
+  twice-reproduced helper, isolated test, and real immutable-identity evidence
+  genuinely ready; retain matching firmware/q35/AHCI machine evidence; and
+  retain the SSD confinement proof before Milestone A can begin. Separately,
   obtain the ADR 0030 owner choice and integrate ADR 0030's
   accepted-evidence publication contract through its merged task packet before
   Milestone B. The
   pure accepted-evidence record codec is already merged; publication, recovery,
-  semantic verification, and activation are not. Independently, make the v2
-  controller/helper compiler,
-  twice-reproduced helper, isolated test, and real immutable-identity evidence
-  genuinely ready and pass the external Lab/PR/checkpoint gates before
-  Milestone A. Acceptance-v2 publication remains mandatory before Milestone B;
+  semantic verification, and activation are not. Acceptance-v2 publication
+  remains mandatory before Milestone B;
   ADR 0022's reviewed peripheral-grant contract remains mandatory before
   Milestone E. Canonical accepted approvals remain in `docs/approval-record.md`
 - Deadline: 2026-08-30 23:59 America/Los_Angeles
