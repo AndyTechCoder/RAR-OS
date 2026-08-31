@@ -226,11 +226,13 @@
   canonical ADRs 0022–0029, all three decision-integration gates, and all eight
   completion-proof items. Proposal 0030 remains machine-classified as
   owner-decision-required. Accepted ADR 0031 records the compact-BDF decision
-  and D0 exact-main run `33415110465` passed. The P0-A candidate binds the
-  formula, vectors, 136-byte preimage, and unchanged closure digest while P0
-  interpretation and merge remain blocked on preliminary review, immutable
-  checkpoint, and complete T0/P0-B contract/checker integration,
-  while the complete accepted-evidence publication task
+  and D0 exact-main run `33415110465` passed. The integrated P0 candidate binds
+  the formula, vectors, 136-byte preimage, unchanged closure digest, trusted
+  reconstruction, and complete T0/P0-B contract/checker set. Immutable
+  checkpoint `e450f323a6a35a138499a585aed575c0c62ad85b` is preserved in its
+  ancestry, and exact-head run `33428667377` passed validation and mutation.
+  P0 remains non-authoritative until final reviews, merge, and exact-main
+  validation complete, while the complete accepted-evidence publication task
   packet plus boot/platform integration packet are byte-pinned so preparation
   cannot silently become authoritative, incomplete, or disappear
 - Gate-report migration: schema v1 remains unchanged. The versioned v2 reporter
@@ -295,10 +297,9 @@
   needs one-time owner-approved installation and confinement evidence in a
   fresh SSD-root task. The profile is now installed without replacing existing
   settings; effective confinement evidence remains a fresh-task pre-A gate
-- Next durable actions: independently review and freeze the ADR 0031 P0-A
-  machine-closure contract/vector checkpoint, then integrate trusted
-  reconstruction, digest pins, mutations, guarded validation, final reviews,
-  and exact-main evidence and merge P0 before Milestone A can begin. Separately,
+- Next durable actions: complete P0 final reviews, merge the integrated
+  boot/platform contract candidate, and require exact-main validation and
+  mutation evidence before Milestone A can begin. Separately,
   obtain the ADR 0030 owner choice and integrate ADR 0030's
   accepted-evidence publication contract through its merged task packet before
   Milestone B. The

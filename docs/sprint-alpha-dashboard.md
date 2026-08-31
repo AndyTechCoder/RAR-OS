@@ -43,11 +43,13 @@ and cannot increase the implementation count.
   tests, independent reviews, merges, and exact-main validation are complete.
 - Proposed ADR 0030 precisely records the remaining accepted-evidence
   publication/recovery choice while granting no authority until owner approval.
-- Accepted ADR 0031 selects the experimental compact PCI BDF encoding for the
-  pending P0 closure candidate. D0 merged at `ce206f7`; exact-main run
-  `33415110465` passed. The P0-A candidate now binds the explicit formula,
-  vectors, 136-byte preimage, and unchanged closure digest, but remains blocked
-  on preliminary review, immutable checkpoint, and T0 trusted reconstruction.
+- Accepted ADR 0031 selects the experimental compact PCI BDF encoding for P0.
+  D0 merged at `ce206f7`; exact-main run `33415110465` passed. The integrated
+  P0 candidate binds the explicit formula, vectors, 136-byte preimage,
+  unchanged closure digest, trusted reconstruction, and complete P0-B checker
+  set. Immutable checkpoint `e450f323a6a35a138499a585aed575c0c62ad85b`
+  remains in its ancestry, and exact-head run `33428667377` passed validation
+  and mutation. Final reviews, merge, and exact-main validation remain.
 - Accepted ADRs 0027–0029 select the reviewed B/A/B boot-retirement, identity,
   and state-authority directions; dependent contracts remain blocked until the
   decision integration merges and exact-main validates.
@@ -71,13 +73,13 @@ and cannot increase the implementation count.
   signed update path, target image, or retained target evidence exists.
 - ADRs 0022–0026 are accepted, but none of their dependent contracts or
   controller changes is ready merely from acceptance.
-- The exact Alpha boot/platform contracts are not ready. P0-A contract work is
-  active only as a candidate; its immutable checkpoint and T0/P0-B gates have
-  not passed.
-- The P0 compact PCI BDF encoding is decided by accepted ADR 0031, but its
-  candidate fixture/contract bytes and opaque checker binding remain
-  non-authoritative until preliminary review and the separate T0/P0-B
-  integration gates pass.
+- The exact Alpha boot/platform contracts are not yet authoritative. Their
+  integrated P0 candidate has passed its immutable-checkpoint, T0/P0-B,
+  exact-head validation, and mutation gates; final reviews, merge, and
+  exact-main validation remain.
+- The P0 compact PCI BDF encoding is decided by accepted ADR 0031, and its
+  candidate fixture/contract bytes and opaque checker binding are integrated,
+  but remain non-authoritative until P0 merges and exact-main validates.
 - The phase-8 accepted-evidence writer is not ready. Only its pure record codec
   is merged; the preserved publication scaffold remains unmerged, and naming,
   journal, cleanup, recovery, retry, semantic-verification, and activation
