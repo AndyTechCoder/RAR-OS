@@ -51,6 +51,11 @@ predicate|045|r0-contract-hash-or-source-owner|E-R0-BOUNDARY|r0
 predicate|046|forbidden-device-or-Core-state-authority|E-AUTHORITY|all
 predicate|047|retirement-or-source-lifetime|E-LIFETIME|all
 predicate|048|final-effect-log-precondition|E-EFFECT|all
+compact_bdf_range_failure=predicate:007,E-OVERFLOW,effect-log-empty
+compact_bdf_set_or_order_failure=predicate:012,E-ORDER,effect-log-empty
+compact_bdf_formula_or_ahci_failure=predicate:018,E-PCI-INVENTORY,effect-log-empty
+compact_bdf_preimage_or_digest_failure=predicate:023,E-CLOSURE-RECHECK,effect-log-empty
+compact_bdf_commit_rule=no-authority-or-device-effect-until-formula+range+set+order+AHCI+preimage+digest-all-pass
 sensitive_nonadjacent_pair|014|030
 sensitive_nonadjacent_pair|018|046
 sensitive_nonadjacent_pair|022|027

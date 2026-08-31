@@ -1,9 +1,10 @@
 schema=rar-alpha-platform-fixture-manifest-v0
 status=experimental-pending-review
-fixture_count=26
+fixture_count=27
 fixture|v0/ahci-closure.fixture|271|a7a4bb20b07146536bd5d9399069af5e35645a47bb8682328e1225e90641f37c
-fixture|v0/closure-record.fixture|208|43b19d9b8511e6db02d70e1db2c1d7a1ca7cba4f4d84de943677eb34454594c6
+fixture|v0/closure-record.fixture|403|165b42dfb067951ae7b05eb60e3270c7416d826134dfcde305d053c7dc6a6681
 fixture|v0/closure-record.hex|1025|9ac63ace5565e02e5118ad719b737c22ecbb235578d51caa216b09c89686e5b7
+fixture|v0/compact-bdf-vectors.fixture|1910|1a038393071d1e75dda60b8766162832ff93833537e386b3a55a21ed244149e1
 fixture|v0/component-bundle.fixture|307|a431c0c0ca611fe08561deb5e6cd7ae24ae5900c91e73a019f05ff8e64b12107
 fixture|v0/component-bundle.hex|24751|5e591b0e6dfa894f0c0a5739f58b9a5b2894892d03146a9c3741bb91a0185cd8
 fixture|v0/core-bootstrap.artifact|36|8eeb233fa17773fb8eb3d654915b2b78e7e8e30df2c6bf34da404b3122fdc694
@@ -26,6 +27,6 @@ fixture|v0/system-state-service.artifact|42|52ec331e90b792d3750fdcf3b6690a731703
 fixture|v0/system-state-service.hex|8277|9af6c89dd7b5835259c89e4880edd6ba4848c8c4fbdc0c51da577378a5668836
 fixture|v0/system-state.fixture|176|4fa530daca19b9c902f4d91e96ee5ed7ff48c9caeb8a2db34119e05068878dd8
 fixture|v0/system-state.hex|8231|8d31842d795a60aa11fcff53a8ba6ed211b0625888866276cbb5d4d2e2f9c926
-fixture|v0/wire-authority.fixture|933|2898cd32b8151fa27c684e6ce30e8db933f20339f6dc5abebb9b866e733fc394
+fixture|v0/wire-authority.fixture|961|d27946f013b1c9c01ce2ddb61a99de6a20afe86d5d0c8e49229e5232232753a5
 manifest_rule=paths-relative-to-fixtures-directory,ASCII-sorted,regular-nonsymbolic,exact-bytes,exact-SHA-256,no-extra-fixture
 derivation_rule=packer-and-independent-inspector-both-recompute-size+digest+semantic-cross-references

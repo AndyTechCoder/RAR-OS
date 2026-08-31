@@ -3,6 +3,6 @@ authority=decoded-lowercase-hex-files-only
 boot_entry_source=spec/fixtures/release-0/bin/valid-x86_64.bin,offset:64,bytes:288,sha256:85209eb8d66968fa3dfd65884f5f67371aba14fe4afbfd7ad1b930cb9048c011,interpretation:existing-BootEntryV1-slice-unchanged
 normative=closure-record.hex,platform-header.hex,platform-source-table.hex,core-bootstrap.hex,system-state-service.hex,preserved-state-service.hex,component-bundle.hex,system-state.hex,preserved-state.hex,identity-vectors-wire.fixture
 payload_input=core-bootstrap.artifact,system-state-service.artifact,preserved-state-service.artifact,root.artifact,recovery.artifact,nucleus.artifact
-readable_non_authoritative=closure-record.fixture,component-bundle.fixture,identity-vectors.fixture,platform-entry.fixture,system-state.fixture,preserved-state.fixture
+readable_non_authoritative=closure-record.fixture,compact-bdf-vectors.fixture,component-bundle.fixture,identity-vectors.fixture,platform-entry.fixture,system-state.fixture,preserved-state.fixture
 rule=no-readable-description-or-payload-input-is-a-wire-byte-authority
 expected=accept

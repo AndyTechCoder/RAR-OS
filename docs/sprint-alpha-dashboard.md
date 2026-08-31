@@ -44,8 +44,10 @@ and cannot increase the implementation count.
 - Proposed ADR 0030 precisely records the remaining accepted-evidence
   publication/recovery choice while granting no authority until owner approval.
 - Accepted ADR 0031 selects the experimental compact PCI BDF encoding for the
-  pending P0 closure candidate. P0 remains blocked until D0 exact-main
-  validation and complete contract/checker integration pass.
+  pending P0 closure candidate. D0 merged at `ce206f7`; exact-main run
+  `33415110465` passed. The P0-A candidate now binds the explicit formula,
+  vectors, 136-byte preimage, and unchanged closure digest, but remains blocked
+  on preliminary review, immutable checkpoint, and T0 trusted reconstruction.
 - Accepted ADRs 0027–0029 select the reviewed B/A/B boot-retirement, identity,
   and state-authority directions; dependent contracts remain blocked until the
   decision integration merges and exact-main validates.
@@ -69,12 +71,13 @@ and cannot increase the implementation count.
   signed update path, target image, or retained target evidence exists.
 - ADRs 0022–0026 are accepted, but none of their dependent contracts or
   controller changes is ready merely from acceptance.
-- The exact Alpha boot/platform contracts are not ready. P0 contract work may
-  begin only after canonical ADR 0027–0029 decision integration is reviewed,
-  merged, and exact-main validated.
+- The exact Alpha boot/platform contracts are not ready. P0-A contract work is
+  active only as a candidate; its immutable checkpoint and T0/P0-B gates have
+  not passed.
 - The P0 compact PCI BDF encoding is decided by accepted ADR 0031, but its
-  candidate fixture bytes and opaque checker binding remain non-authoritative
-  until D0 exact-main validation and the separate P0 integration gates pass.
+  candidate fixture/contract bytes and opaque checker binding remain
+  non-authoritative until preliminary review and the separate T0/P0-B
+  integration gates pass.
 - The phase-8 accepted-evidence writer is not ready. Only its pure record codec
   is merged; the preserved publication scaffold remains unmerged, and naming,
   journal, cleanup, recovery, retry, semantic-verification, and activation
