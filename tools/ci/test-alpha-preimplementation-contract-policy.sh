@@ -37,7 +37,7 @@ expect_rejected() {
 reset_fixture() {
     /bin/rm -rf "$work/alpha"
     /bin/mkdir -p "$work/alpha"
-    /bin/cp -R "$source/lab" "$source/boot" "$work/alpha/"
+    /bin/cp -R "$source/lab" "$source/boot" "$source/evidence" "$work/alpha/"
     if [ -e "$source/platform" ] || [ -L "$source/platform" ]; then
         /bin/cp -R "$source/platform" "$work/alpha/"
     fi
