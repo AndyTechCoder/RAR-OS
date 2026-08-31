@@ -28,10 +28,23 @@ require_checker_line 'validate_case_file "$boot/cases.v0" '\''schema=rar-alpha-b
 
 expect_rejected() {
     label=$1
-    if /bin/sh "$checker" "$work/alpha" >/dev/null 2>&1; then
+    expected=$2
+    if /bin/sh "$checker" "$work/alpha" >"$work/rejection" 2>&1; then
         printf 'unsafe Alpha contract mutation unexpectedly passed: %s\n' "$label" >&2
         exit 1
     fi
+    /usr/bin/grep -Fqx -- "$expected" "$work/rejection" || {
+        printf 'Alpha contract mutation rejected for the wrong reason: %s\n' "$label" >&2
+        /bin/cat "$work/rejection" >&2
+        exit 1
+    }
+}
+
+verify_tree_copy() {
+    /usr/bin/diff -qr -- "$1" "$2" >/dev/null || {
+        printf 'Alpha contract policy test blocked: reset copy differs from source: %s\n' "$1" >&2
+        exit 1
+    }
 }
 
 reset_fixture() {
@@ -42,10 +55,12 @@ reset_fixture() {
         /bin/cp -R "$source/platform" "$work/alpha/"
     fi
     find "$work/alpha" -name '._*' -type f -exec /bin/rm -f {} \;
-    /bin/sh "$checker" "$work/alpha" >/dev/null || {
-        printf '%s\n' 'Alpha contract policy test blocked: reset fixture is not a valid baseline' >&2
-        exit 1
-    }
+    verify_tree_copy "$source/lab" "$work/alpha/lab"
+    verify_tree_copy "$source/boot" "$work/alpha/boot"
+    verify_tree_copy "$source/evidence" "$work/alpha/evidence"
+    if [ -e "$source/platform" ] || [ -L "$source/platform" ]; then
+        verify_tree_copy "$source/platform" "$work/alpha/platform"
+    fi
 }
 
 /bin/sh "$checker" >/dev/null
@@ -53,42 +68,42 @@ reset_fixture() {
 reset_fixture
 /usr/bin/sed '/^role_rule|reference|/d' "$work/alpha/lab/development-lab-profile-v2.fields" > "$work/bad"
 /bin/mv "$work/bad" "$work/alpha/lab/development-lab-profile-v2.fields"
-expect_rejected missing-reference-isolation
+expect_rejected missing-reference-isolation "Alpha preimplementation contract blocked: contract bytes changed without rebinding: $work/alpha/lab/development-lab-profile-v2.fields"
 
 reset_fixture
 /usr/bin/sed 's/controller,machine-profile/reference-binary,machine-profile/' "$work/alpha/lab/development-lab-profile-v2.fields" > "$work/bad"
 /bin/mv "$work/bad" "$work/alpha/lab/development-lab-profile-v2.fields"
-expect_rejected weakened-build-runtime-boundary
+expect_rejected weakened-build-runtime-boundary "Alpha preimplementation contract blocked: contract bytes changed without rebinding: $work/alpha/lab/development-lab-profile-v2.fields"
 
 reset_fixture
 /usr/bin/sed 's/^maximum_total_bytes=1048576$/maximum_total_bytes=unbounded/' "$work/alpha/lab/comparison-transcript-v0.fields" > "$work/bad"
 /bin/mv "$work/bad" "$work/alpha/lab/comparison-transcript-v0.fields"
-expect_rejected unbounded-transcript
+expect_rejected unbounded-transcript "Alpha preimplementation contract blocked: contract bytes changed without rebinding: $work/alpha/lab/comparison-transcript-v0.fields"
 
 reset_fixture
 /usr/bin/sed 's/^r0_source_producer=recovery-only$/r0_source_producer=root-or-recovery/' "$work/alpha/boot/alpha-boot-v0.fields" > "$work/bad"
 /bin/mv "$work/bad" "$work/alpha/boot/alpha-boot-v0.fields"
-expect_rejected mixed-r0-producer
+expect_rejected mixed-r0-producer "Alpha preimplementation contract blocked: contract bytes changed without rebinding: $work/alpha/boot/alpha-boot-v0.fields"
 
 reset_fixture
 /usr/bin/sed 's/^r0_handoff_contract_sha256=./r0_handoff_contract_sha256=f/' "$work/alpha/boot/alpha-boot-v0.fields" > "$work/bad"
 /bin/mv "$work/bad" "$work/alpha/boot/alpha-boot-v0.fields"
-expect_rejected stale-r0-binding
+expect_rejected stale-r0-binding "Alpha preimplementation contract blocked: contract bytes changed without rebinding: $work/alpha/boot/alpha-boot-v0.fields"
 
 reset_fixture
 /usr/bin/sed '$d' "$work/alpha/boot/cases.v0" > "$work/bad"
 /bin/mv "$work/bad" "$work/alpha/boot/cases.v0"
-expect_rejected missing-negative-case
+expect_rejected missing-negative-case "Alpha preimplementation contract blocked: contract bytes changed without rebinding: $work/alpha/boot/cases.v0"
 
 reset_fixture
 /usr/bin/sed 's/^missing-nucleus-path|/missing-recovery-path|/' "$work/alpha/boot/cases.v0" > "$work/bad"
 /bin/mv "$work/bad" "$work/alpha/boot/cases.v0"
-expect_rejected duplicate-case-id
+expect_rejected duplicate-case-id "Alpha preimplementation contract blocked: contract bytes changed without rebinding: $work/alpha/boot/cases.v0"
 
 reset_fixture
 /usr/bin/sed 's/^unknown-firmware-type|recovery-map|reject$/unknown-firmware-type|recovery-map|reject|extra/' "$work/alpha/boot/cases.v0" > "$work/bad"
 /bin/mv "$work/bad" "$work/alpha/boot/cases.v0"
-expect_rejected malformed-case-row
+expect_rejected malformed-case-row "Alpha preimplementation contract blocked: contract bytes changed without rebinding: $work/alpha/boot/cases.v0"
 
 reset_fixture
 if [ -e "$work/alpha/platform/contract-set-v0.manifest" ] ||
@@ -98,11 +113,11 @@ else
     /bin/mkdir -p "$work/alpha/platform"
     /usr/bin/printf '%s\n' partial-p0 > "$work/alpha/platform/partial.fixture"
 fi
-expect_rejected partial-p0-without-manifest
+expect_rejected partial-p0-without-manifest 'Alpha preimplementation contract blocked: partial P0 topology exists without its manifest'
 
 reset_fixture
 /bin/mv "$work/alpha/boot/alpha-boot-v0.fields" "$work/alpha/boot/real.fields"
 /bin/ln -s real.fields "$work/alpha/boot/alpha-boot-v0.fields"
-expect_rejected symbolic-contract
+expect_rejected symbolic-contract "Alpha preimplementation contract blocked: missing or symbolic file: $work/alpha/boot/alpha-boot-v0.fields"
 
 printf '%s\n' 'Alpha preimplementation contract negative checks passed'
