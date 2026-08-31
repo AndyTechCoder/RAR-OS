@@ -25,16 +25,16 @@ sha_file() {
 for file in "$semantics" "$templates" "$inventory" "$domain" "$scalar" "$observation" "$shared"; do
     [ -f "$file" ] && [ ! -L "$file" ] || fail "required regular source is unavailable: $file"
 done
-[ "$(sha_file "$semantics")" = 43a969d44d748e1a88107c6f5ac560f392162ef206e76c047b05284bc48b9ce0 ] || fail 'canonical rebuild semantics bytes escaped review'
-[ "$(sha_file "$templates")" = 443d30414ec3cc8542755006ada9a40d52e0f5efe3b26de7fdc5f82dc1152be4 ] || fail 'case-template bytes escaped review'
-[ "$(sha_file "$inventory")" = ea2aef334d7c6b612635ea5237926df1a459a255c61c73a9e5b998e1cc244a80 ] || fail 'operator inventory bytes escaped review'
+[ "$(sha_file "$semantics")" = 6fd29adccca34b081e8e9813fd41ab981a4825116b3b9614446ab60580dcbcbe ] || fail 'canonical rebuild semantics bytes escaped review'
+[ "$(sha_file "$templates")" = 4950a2c5cbe5cddaca5bd5a829d889310585a6197630e87e9afdb48ce778ae20 ] || fail 'case-template bytes escaped review'
+[ "$(sha_file "$inventory")" = 422950c5a3973399a6e5b7da903be0f8cd8855dd6edeb37f1cb5924115197051 ] || fail 'operator inventory bytes escaped review'
 [ "$(sha_file "$domain")" = 67555f2d565569e95b44a247dda630c9b98d293ba0773880f248d69d802ac66c ] || fail 'input domain bytes escaped review'
-[ "$(sha_file "$scalar")" = fedf6b24d1b9356ebbcaf2c27f011358937a05671a06021d083c2c874ceaca10 ] || fail 'scalar semantics bytes escaped review'
+[ "$(sha_file "$scalar")" = 42442ffa4306fbcc83acd95a138ee4f6f5d059a671b206c4de6452ff64776ddb ] || fail 'scalar semantics bytes escaped review'
 [ "$(sha_file "$observation")" = 944229644f0805876403cd858d0d8c3c993d73bf00baef4c3ffcbbc7a2522836 ] || fail 'observation schema bytes escaped review'
-[ "$(sha_file "$shared")" = f31acd357fc3e6889818697776155da6a2c49b0aea20a1180a8bf7089d70b4ad ] || fail 'shared observation repair semantics bytes escaped review'
+[ "$(sha_file "$shared")" = b8da645a5bcdacac0281c5adbec940f4d66f83c2088af6fc9d302d1db57ee8d2 ] || fail 'shared observation repair semantics bytes escaped review'
 
 for required in \
-    'status=experimental-incomplete-inactive-source-only' \
+    'status=experimental-complete-source-only-inactive' \
     'execution_authority=none' \
     'semantic_row_count=3' \
     'repair_token_coverage=rebuild-observation-canonical' \
