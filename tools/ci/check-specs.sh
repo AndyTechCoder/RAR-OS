@@ -130,20 +130,7 @@ spec/alpha/lab/fixtures/generate.sh
 spec/alpha/lab/cases.v0
 spec/alpha/boot/README.md
 spec/alpha/boot/alpha-boot-v0.fields
-spec/alpha/boot/alpha-machine-closure-v0.fields
 spec/alpha/boot/cases.v0
-spec/alpha/platform/README.md
-spec/alpha/platform/alpha-platform-entry-v0.fields
-spec/alpha/platform/alpha-core-bootstrap-v0.fields
-spec/alpha/platform/alpha-component-bundle-v0.fields
-spec/alpha/platform/alpha-state-image-v0.fields
-spec/alpha/platform/alpha-identities-v0.fields
-spec/alpha/platform/alpha-state-slots-v0.fields
-spec/alpha/platform/alpha-validation-v0.fields
-spec/alpha/platform/cases.v0
-spec/alpha/platform/precedence.v0
-spec/alpha/platform/fixtures/manifest.v0
-spec/alpha/platform/contract-set-v0.manifest
 spec/alpha/evidence/README.md
 spec/alpha/evidence/acceptance-v1.plan
 spec/alpha/evidence/acceptance-v2.plan
@@ -190,12 +177,10 @@ tools/ci/test-sprint-alpha-gate-report-v2-policy.sh
 tools/ci/classify-proposed-adr.sh
 tools/ci/test-proposed-adr-classifier-policy.sh
 tools/ci/check-alpha-preimplementation-contracts.sh
-tools/ci/check-alpha-boot-platform-contracts.sh
 tools/ci/check-acceptance-v2.sh
 tools/ci/verify-accepted-evidence-v0.sh
 tools/ci/test-accepted-evidence-v0-policy.sh
 tools/ci/test-alpha-preimplementation-contract-policy.sh
-tools/ci/test-alpha-boot-platform-contract-policy.sh
 tools/ci/check-remote-sprint-preflight.sh
 tools/ci/test-local-sprint-preflight-policy.sh
 tools/ci/check-development-lab-profile.sh
@@ -338,7 +323,7 @@ printf '%s\n' "$required_files" | while IFS= read -r file; do
     [ -s "$file" ] || fail "empty required file: $file"
 done
 
-for script in tools/ci/check-specs.sh tools/ci/check-specifications-authority.sh tools/ci/test-specifications-authority-policy.sh tools/ci/check-sprint-static.sh tools/ci/check-local-sprint-preflight.sh tools/ci/check-remote-sprint-preflight.sh tools/ci/test-local-sprint-preflight-policy.sh tools/ci/check-alpha-preimplementation-contracts.sh tools/ci/check-alpha-boot-platform-contracts.sh tools/ci/check-acceptance-v2.sh tools/ci/verify-accepted-evidence-v0.sh tools/ci/test-accepted-evidence-v0-policy.sh tools/ci/test-alpha-preimplementation-contract-policy.sh tools/ci/test-alpha-boot-platform-contract-policy.sh tools/ci/check-development-lab-profile-v2.sh tools/ci/test-development-lab-profile-v2-policy.sh tools/ci/check-development-controller-v2.sh tools/ci/test-development-controller-v2-policy.sh tools/ci/check-controller-handoff-core.sh tools/ci/check-controller-handoff-attempt-v0.sh tools/ci/test-controller-handoff-attempt-v0-policy.sh tools/ci/check-controller-helper-inventory-v0.sh tools/ci/observe-controller-helper-closure.sh tools/ci/check-controller-helper-closure-observer-source.sh tools/ci/verify-controller-helper-closure-candidate.sh tools/ci/check-controller-helper-closure-verifier-source.sh tools/ci/check-controller-helper-closure-verifier-test-plan-source.sh tools/ci/check-controller-helper-closure-verifier-validation-source.sh tools/ci/check-controller-helper-closure-verifier-case-dispositions-source.sh tools/ci/check-controller-helper-closure-verifier-case-templates-source.sh tools/ci/check-controller-helper-closure-verifier-operator-inventory-source.sh tools/ci/check-controller-helper-closure-verifier-scalar-semantics-source.sh tools/ci/check-controller-helper-closure-verifier-basic-filesystem-semantics-source.sh tools/ci/check-controller-helper-closure-verifier-synchronized-link-semantics-source.sh tools/ci/test-controller-helper-inventory-v0-policy.sh tools/ci/check-controller-helper-build-evidence-v0.sh tools/ci/check-controller-helper-build-receipt-v0.sh tools/ci/check-controller-helper-test-evidence-v0.sh tools/ci/test-controller-helper-evidence-v0-policy.sh tools/ci/check-reference-evidence-v0.sh tools/ci/test-reference-evidence-v0-policy.sh tools/ci/check-reference-verdict-v0.sh tools/ci/test-reference-verdict-v0-policy.sh tools/ci/test-release-0-reference-harness-policy.sh tools/ci/check-portable-stat-policy.sh tools/ci/test-portable-stat-policy.sh tools/ci/check-containerfile-static-policy.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/launch-cloud-target.sh tools/ci/prepare-launch-control.sh tools/ci/wait-for-launch-release.sh tools/ci/check-workspace-budget.sh tools/ci/check-workspace-budget-values.sh tools/ci/require-ephemeral-policy-test-root.sh tools/ci/check-ephemeral-policy-test-confinement.sh tools/ci/run-qmp-client-unit-tests.sh tools/ci/run-rootfs-proof-unit-tests.sh tools/ci/check-rootfs-proof-source.sh tools/ci/verify-cloud-target-tools.sh tools/ci/development-probe-status.sh tools/ci/test-development-probe-policy.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/alpha/lab/fixtures/generate.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
+for script in tools/ci/check-specs.sh tools/ci/check-specifications-authority.sh tools/ci/test-specifications-authority-policy.sh tools/ci/check-sprint-static.sh tools/ci/check-local-sprint-preflight.sh tools/ci/check-remote-sprint-preflight.sh tools/ci/test-local-sprint-preflight-policy.sh tools/ci/check-alpha-preimplementation-contracts.sh tools/ci/check-acceptance-v2.sh tools/ci/verify-accepted-evidence-v0.sh tools/ci/test-accepted-evidence-v0-policy.sh tools/ci/test-alpha-preimplementation-contract-policy.sh tools/ci/check-development-lab-profile-v2.sh tools/ci/test-development-lab-profile-v2-policy.sh tools/ci/check-development-controller-v2.sh tools/ci/test-development-controller-v2-policy.sh tools/ci/check-controller-handoff-core.sh tools/ci/check-controller-handoff-attempt-v0.sh tools/ci/test-controller-handoff-attempt-v0-policy.sh tools/ci/check-controller-helper-inventory-v0.sh tools/ci/observe-controller-helper-closure.sh tools/ci/check-controller-helper-closure-observer-source.sh tools/ci/verify-controller-helper-closure-candidate.sh tools/ci/check-controller-helper-closure-verifier-source.sh tools/ci/check-controller-helper-closure-verifier-test-plan-source.sh tools/ci/check-controller-helper-closure-verifier-validation-source.sh tools/ci/check-controller-helper-closure-verifier-case-dispositions-source.sh tools/ci/check-controller-helper-closure-verifier-case-templates-source.sh tools/ci/check-controller-helper-closure-verifier-operator-inventory-source.sh tools/ci/check-controller-helper-closure-verifier-scalar-semantics-source.sh tools/ci/check-controller-helper-closure-verifier-basic-filesystem-semantics-source.sh tools/ci/check-controller-helper-closure-verifier-synchronized-link-semantics-source.sh tools/ci/test-controller-helper-inventory-v0-policy.sh tools/ci/check-controller-helper-build-evidence-v0.sh tools/ci/check-controller-helper-build-receipt-v0.sh tools/ci/check-controller-helper-test-evidence-v0.sh tools/ci/test-controller-helper-evidence-v0-policy.sh tools/ci/check-reference-evidence-v0.sh tools/ci/test-reference-evidence-v0-policy.sh tools/ci/check-reference-verdict-v0.sh tools/ci/test-reference-verdict-v0-policy.sh tools/ci/test-release-0-reference-harness-policy.sh tools/ci/check-portable-stat-policy.sh tools/ci/test-portable-stat-policy.sh tools/ci/check-containerfile-static-policy.sh tools/ci/run-development-probe.sh tools/ci/run-cloud-target-probe.sh tools/ci/launch-cloud-target.sh tools/ci/prepare-launch-control.sh tools/ci/wait-for-launch-release.sh tools/ci/check-workspace-budget.sh tools/ci/check-workspace-budget-values.sh tools/ci/require-ephemeral-policy-test-root.sh tools/ci/check-ephemeral-policy-test-confinement.sh tools/ci/run-qmp-client-unit-tests.sh tools/ci/run-rootfs-proof-unit-tests.sh tools/ci/check-rootfs-proof-source.sh tools/ci/verify-cloud-target-tools.sh tools/ci/development-probe-status.sh tools/ci/test-development-probe-policy.sh tools/ci/check-host-policy.sh tools/ci/test-host-policy.sh spec/alpha/lab/fixtures/generate.sh spec/fixtures/release-0/generate.sh spec/fixtures/release-0/run.sh sdk/generated/release-0/generate.sh sdk/generated/release-0/check.sh; do
     [ -x "$script" ] || fail "required script is not executable: $script"
 done
 [ -x tools/ci/check-controller-helper-closure-verifier-scalar-repair-semantics-source.sh ] || \

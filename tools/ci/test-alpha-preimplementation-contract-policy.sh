@@ -23,7 +23,7 @@ expect_rejected() {
 reset_fixture() {
     /bin/rm -rf "$work/alpha"
     /bin/mkdir -p "$work/alpha"
-    /bin/cp -R "$source/lab" "$source/boot" "$source/platform" "$work/alpha/"
+    /bin/cp -R "$source/lab" "$source/boot" "$work/alpha/"
     find "$work/alpha" -name '._*' -type f -exec /bin/rm -f {} \;
 }
 
@@ -68,6 +68,11 @@ reset_fixture
 /usr/bin/sed 's/^unknown-firmware-type|recovery-map|reject$/unknown-firmware-type|recovery-map|reject|extra/' "$work/alpha/boot/cases.v0" > "$work/bad"
 /bin/mv "$work/bad" "$work/alpha/boot/cases.v0"
 expect_rejected malformed-case-row
+
+reset_fixture
+/bin/mkdir -p "$work/alpha/platform"
+/usr/bin/printf '%s\n' partial-p0 > "$work/alpha/platform/partial.fixture"
+expect_rejected partial-p0-without-manifest
 
 reset_fixture
 /bin/mv "$work/alpha/boot/alpha-boot-v0.fields" "$work/alpha/boot/real.fields"
