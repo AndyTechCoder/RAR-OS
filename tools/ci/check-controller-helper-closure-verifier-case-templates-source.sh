@@ -22,8 +22,8 @@ sha_file() {
 for file in "$templates" "$dispositions" "$domain" "$subject"; do
     [ -f "$file" ] && [ ! -L "$file" ] || fail "required regular source is unavailable: $file"
 done
-[ "$(sha_file "$templates")" = 4950a2c5cbe5cddaca5bd5a829d889310585a6197630e87e9afdb48ce778ae20 ] || fail 'case-template bytes escaped review'
-[ "$(sha_file "$dispositions")" = 3e693cf86851164cb07577e71b7ff256a17201df1a844c7b9355b135e0e0ba61 ] || fail 'case dispositions escaped review'
+[ "$(sha_file "$templates")" = 8f50f85a180a437df2101719192bfb30797851be6d8e058e95978c747c1b846c ] || fail 'case-template bytes escaped review'
+[ "$(sha_file "$dispositions")" = 0284cbb3edc56c28971b6e5d151237165aa63a5321cea44772b0a20fbe8c3565 ] || fail 'case dispositions escaped review'
 [ "$(sha_file "$domain")" = 67555f2d565569e95b44a247dda630c9b98d293ba0773880f248d69d802ac66c ] || fail 'input domain escaped review'
 [ "$(sha_file "$subject")" = 3cbeeb85abc3023980a8afe444178ea7acc31f298b3b0975d2c4d6630c82a76c ] || fail 'verifier subject escaped review'
 
@@ -31,7 +31,7 @@ for required in \
     'status=experimental-complete-source-only-inactive' \
     'execution_authority=none' \
     'base_fixture_status=specified-by-controller-helper-closure-verifier-cases-v0;instance-not-created-until-C3V' \
-    'template_count=125' \
+    'template_count=117' \
     'template_exactness=bound-to-owned-operator+repair-semantics-contract-set+controller-helper-closure-verifier-cases-v0' \
     'operator_semantics_status=complete-across-owned-semantics-contract-set' \
     'repair_semantics_status=complete-across-owned-semantics-contract-set' \
@@ -51,14 +51,13 @@ done
 [ "$(tail -c 1 "$templates" | /usr/bin/od -An -tuC | /usr/bin/tr -d ' ')" = 10 ] || fail 'templates lack one terminal LF'
 if LC_ALL=C grep -n '[^ -~]' "$templates" >/dev/null; then fail 'templates contain a non-ASCII byte'; fi
 if grep -n "$(printf '\r')" "$templates" >/dev/null; then fail 'templates contain CR'; fi
-[ "$(grep -Ec '^C[0-9][0-9][0-9]\|D[0-9][0-9][0-9]\|E[0-9][0-9][0-9]\|[a-z0-9-]+\|[a-z0-9-]+\|[^| ]+\|[^| ]+\|E[0-9][0-9][0-9]@[a-z0-9-]+\+normal-exit-status-1\+no-valid-final-receipt$' "$templates")" -eq 125 ] || fail 'template rows are incomplete or malformed'
+[ "$(grep -Ec '^C[0-9][0-9][0-9]\|D[0-9][0-9][0-9]\|E[0-9][0-9][0-9]\|[a-z0-9-]+\|[a-z0-9-]+\|[^| ]+\|[^| ]+\|E[0-9][0-9][0-9]@[a-z0-9-]+\+normal-exit-status-1\+no-valid-final-receipt$' "$templates")" -eq 117 ] || fail 'template rows are incomplete or malformed'
 
-number=1
-while [ "$number" -le 125 ]; do
-    id=$(printf 'C%03d' "$number")
-    [ "$(grep -c "^$id|" "$templates")" -eq 1 ] || fail "template ID is missing or duplicated: $id"
-    number=$((number + 1))
-done
+/usr/bin/awk -F '|' '/^C[0-9][0-9][0-9]\|/ { if (seen[$1]++) exit 1; count++ } END { if (count != 117) exit 1 }' "$templates" ||
+    fail 'template IDs are duplicated or the sparse reviewed set is incomplete'
+domain_extensions=$(/usr/bin/awk -F '|' '$4 == "domain-extension" { print $1 }' "$dispositions" | /usr/bin/paste -sd, -)
+[ "$domain_extensions" = 'D027,D028,D029,D055,D057,D104,D105,D112,D113,D114,D115,D133' ] ||
+    fail 'domain-extension disposition set changed'
 
 expected=$(/usr/bin/awk -F '|' '$4 == "fixture" || $4 == "synchronized-mutation" { print $1 "|" $2 "|" $3 }' "$dispositions" | /usr/bin/sort)
 actual=$(/usr/bin/awk -F '|' '/^C[0-9][0-9][0-9]\|/ { print $2 "|" $3 "|" $4 }' "$templates" | /usr/bin/sort)
@@ -77,16 +76,16 @@ while IFS='|' read -r id disposition class stage phase primary repairs oracle; d
     esac
     [ "$oracle" = "$class@$stage+normal-exit-status-1+no-valid-final-receipt" ] || fail "oracle differs from class occurrence: $id"
     case "$repairs" in
-        none | repair-tool-pin-env-sha256 | create-hidden-same-inode-link | \
+        none | repair-tool-pin-env-sha256 | \
         rebuild-observation-canonical | repair-observation-manifest-fields | repair-observation-manifest-digest-and-bytes | \
         repair-observation-manifest-digest | repair-manifest-if-pre-start) ;;
         *) fail "unreviewed repair token: $id:$repairs" ;;
     esac
 done
 
-[ "$(grep -c '|pre-start|' "$templates")" -eq 89 ] || fail 'fixture template count changed'
-[ "$(grep -c '|synchronized-mutation|' "$dispositions")" -eq 36 ] || fail 'synchronized disposition count changed'
-[ "$(grep -c '|pre-start|' "$templates")" -lt 125 ] || fail 'no synchronized phase templates exist'
+[ "$(grep -c '|pre-start|' "$templates")" -eq 83 ] || fail 'fixture template count changed'
+[ "$(grep -c '|synchronized-mutation|' "$dispositions")" -eq 34 ] || fail 'synchronized disposition count changed'
+[ "$(grep -c '|pre-start|' "$templates")" -lt 117 ] || fail 'no synchronized phase templates exist'
 grep -Fqx 'C055|D058|E053|input-identity|pre-start|file./verification/controller-helper-closure-verification.receipt=hex:58|none|E053@input-identity+normal-exit-status-1+no-valid-final-receipt' "$templates" || fail 'E053 collision oracle binding changed'
 if grep -R -Fq 'controller-helper-closure-verifier-case-templates-v0' "$root/.github/workflows"; then
     fail 'inactive case templates are wired to GitHub Actions'
