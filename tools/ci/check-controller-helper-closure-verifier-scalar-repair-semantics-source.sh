@@ -24,8 +24,8 @@ for file in "$semantics" "$templates" "$inventory" "$domain" "$scalar"; do
     [ -f "$file" ] && [ ! -L "$file" ] || fail "required regular source is unavailable: $file"
 done
 [ "$(sha_file "$semantics")" = 72bc43e9e14f2967e04fbec20452cba4a4c0c640d568265ebfdaaaba3f51293a ] || fail 'scalar repair semantics bytes escaped review'
-[ "$(sha_file "$templates")" = 8f50f85a180a437df2101719192bfb30797851be6d8e058e95978c747c1b846c ] || fail 'case-template bytes escaped review'
-[ "$(sha_file "$inventory")" = 39c80357911067bf2290ffe0b247fe2ee1bd8855352b26a5bc8b2d4c7d9e6d47 ] || fail 'operator inventory bytes escaped review'
+[ "$(sha_file "$templates")" = 8df14525a37c49df99d669b638efd316c8993906d69e063625445f431ab204f8 ] || fail 'case-template bytes escaped review'
+[ "$(sha_file "$inventory")" = c018c7fee8e1c70145a4c6adae852ef310ab20fd9d6b0cfad320521cdd76f062 ] || fail 'operator inventory bytes escaped review'
 [ "$(sha_file "$domain")" = 67555f2d565569e95b44a247dda630c9b98d293ba0773880f248d69d802ac66c ] || fail 'input domain bytes escaped review'
 [ "$(sha_file "$scalar")" = 42442ffa4306fbcc83acd95a138ee4f6f5d059a671b206c4de6452ff64776ddb ] || fail 'scalar semantics bytes escaped review'
 
