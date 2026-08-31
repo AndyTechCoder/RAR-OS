@@ -230,7 +230,8 @@
   the formula, vectors, 136-byte preimage, unchanged closure digest, trusted
   reconstruction, and complete T0/P0-B contract/checker set. Immutable
   checkpoint `e450f323a6a35a138499a585aed575c0c62ad85b` is preserved in its
-  ancestry, and exact-head run `33429540579` passed validation and mutation.
+  ancestry, and predecessor integrated-head run `33429540579` passed validation
+  and mutation. The current documentation-only head still requires its PR gate.
   P0 remains non-authoritative until final reviews, merge, and exact-main
   validation complete, while the complete accepted-evidence publication task
   packet plus boot/platform integration packet are byte-pinned so preparation

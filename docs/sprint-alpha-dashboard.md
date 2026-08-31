@@ -48,8 +48,9 @@ and cannot increase the implementation count.
   P0 candidate binds the explicit formula, vectors, 136-byte preimage,
   unchanged closure digest, trusted reconstruction, and complete P0-B checker
   set. Immutable checkpoint `e450f323a6a35a138499a585aed575c0c62ad85b`
-  remains in its ancestry, and exact-head run `33429540579` passed validation
-  and mutation. Final reviews, merge, and exact-main validation remain.
+  remains in its ancestry, and predecessor integrated-head run `33429540579`
+  passed validation and mutation. The current documentation-only head still
+  requires its PR gate. Final reviews, merge, and exact-main validation remain.
 - Accepted ADRs 0027–0029 select the reviewed B/A/B boot-retirement, identity,
   and state-authority directions; dependent contracts remain blocked until the
   decision integration merges and exact-main validates.
