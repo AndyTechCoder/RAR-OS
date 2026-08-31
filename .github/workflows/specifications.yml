@@ -84,7 +84,7 @@ jobs:
         with:
           repository: ${{ env.RAR_EXPECTED_SOURCE_REPOSITORY }}
           ref: ${{ env.RAR_EXPECTED_SOURCE_REVISION }}
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: false
           path: mutation-source
 
