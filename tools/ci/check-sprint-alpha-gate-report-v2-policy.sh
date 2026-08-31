@@ -113,20 +113,35 @@ overall'
 actual_keys=$(printf '%s\n' "$report" | /usr/bin/awk -F= 'NF >= 2 { print $1 }')
 [ "$actual_keys" = "$expected_keys" ] || fail 'report field order or names changed'
 
+if [ -f spec/alpha/platform/contract-set-v0.manifest ]; then
+    platform_state_expectations='platform_envelope_state=pending-review
+core_bootstrap_state=pending-review
+component_bundle_state=pending-review
+initial_system_state=pending-review
+initial_preserved_state=pending-review
+platform_fixture_manifest_state=pending-review'
+else
+    [ ! -e spec/alpha/platform ] && [ ! -L spec/alpha/platform ] ||
+        fail 'partial platform topology exists without its contract manifest'
+    platform_state_expectations='platform_envelope_state=missing
+core_bootstrap_state=missing
+component_bundle_state=missing
+initial_system_state=missing
+initial_preserved_state=missing
+platform_fixture_manifest_state=missing'
+fi
+
 for expected in \
     'adr_0026=accepted' \
-    'platform_envelope_state=missing' \
-    'core_bootstrap_state=missing' \
-    'component_bundle_state=missing' \
-    'initial_system_state=missing' \
-    'initial_preserved_state=missing' \
-    'platform_fixture_manifest_state=missing' \
     'platform_source_set=blocked' \
     'acceptance_protocol_v2=reviewed-implementation-required' \
     'acceptance_v2_plan_sha256=ffdb07b584abc94122b14a416593916cf18df439de042c97ff83fda9e4444ccd' \
     'milestone_a_readiness=blocked' \
     'milestone_b_readiness=blocked' \
     'overall=blocked'; do
+    [ "$(printf '%s\n' "$report" | /usr/bin/grep -Fxc -- "$expected")" -eq 1 ] || fail "current fail-closed state changed: $expected"
+done
+printf '%s\n' "$platform_state_expectations" | while IFS= read -r expected; do
     [ "$(printf '%s\n' "$report" | /usr/bin/grep -Fxc -- "$expected")" -eq 1 ] || fail "current fail-closed state changed: $expected"
 done
 
