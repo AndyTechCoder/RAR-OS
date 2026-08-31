@@ -6,6 +6,6 @@ machine_closure=../../../../boot/alpha-machine-closure-v0.fields
 platform_entry=platform-entry.fixture
 derivation=two-independent-RAR-owned-streaming-packer-and-inspector-required-in-ephemeral-CI
 retained_image=none
-golden_image_sha256=30cf9720f2bd0cbe68c3e34bf51932f93e421b67647f3c50ff2be6bb10485b42
+golden_image_sha256=d508bb3075f94fbb7fde60991564b7ac04e546b14ccce9ace60fa9f044ce24ab
 golden_rule=synthetic-source-fixture-only,full-67108864-byte-image,never-retained,not-a-target-artifact
 expected=packer-and-independent-inspector-byte-identical
