@@ -485,7 +485,7 @@ binmode $output;
 my @output_stat = stat($output);
 die 'image output is not regular' unless -f $output;
 die 'image output owner' unless $output_stat[4] == $<;
-die 'image output mode' unless ($output_stat[2] & 0777) == 0600;
+die 'image output mode' unless ($output_stat[2] & 07777) == 0600;
 die 'image output prior size' unless $output_stat[7] == 0 || $output_stat[7] == 67108864;
 seek($output, 0, 0) or die "seek image output: $!";
 my $sha = Digest::SHA->new(256);
