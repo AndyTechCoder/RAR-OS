@@ -12,6 +12,8 @@ actual=$(env -u LC_CTYPE LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$subject" | /us
 grep -Fqx 'schema=rar-alpha-controller-helper-closure-verifier-faults-v0' "$subject" || fail 'schema changed'
 grep -Fqx 'fault_count=12' "$subject" || fail 'fault count declaration changed'
 [ "$(grep -Ec '^fault\|F[0-9][0-9][0-9]\|' "$subject")" -eq 12 ] || fail 'fault rows incomplete'
+grep -Fqx 'fault|F011|resource-file-size|receipt-staging|RLIMIT_FSIZE=0+SIGXFSZ-unblocked|signal-25+controller-exit-map-153+no-valid-final-receipt' "$subject" || fail 'resource fault is not exact'
+if grep -Fq 'memory-or-pids' "$subject"; then fail 'ambiguous resource fault returned'; fi
 grep -Fqx 'no_success_effect=lock+inventory+profile+gate+readiness+workflow+GitHub+candidate-acceptance-unchanged' "$subject" || fail 'fault effect denial changed'
 grep -Fq 'local_rule=' "$subject" || fail 'local execution denial missing'
 if grep -R -Fq 'controller-helper-closure-verifier-faults-v0.fields' "$root/.github/workflows"; then fail 'source-only contract is wired to a workflow'; fi
