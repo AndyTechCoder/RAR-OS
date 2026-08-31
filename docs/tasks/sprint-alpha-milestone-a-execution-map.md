@@ -188,7 +188,7 @@ exit status, frozen-artifact identity, and immutable checkpoint.
 
 ## Mandatory case coverage
 
-The implementation must cover all 41 rows in `spec/alpha/boot/cases.v0`; the
+The implementation must cover all 50 rows in `spec/alpha/boot/cases.v0`; the
 table below is a completeness map, not a replacement fixture.
 
 | Stage | Cases | Owning packet |
@@ -203,7 +203,8 @@ table below is a completeness map, not a replacement fixture.
 | Firmware-map conversion | 4 | A4 |
 | R0 production/authority | 5 | A4 |
 | Nucleus R0 rejection | 1 | A5 |
-| **Total** | **41** | |
+| Machine closure contract | 9 | A2/A4 |
+| **Total** | **50** | |
 
 Every reject case must prove the forbidden next-stage effect did not occur.
 The integration row requires a real cloud boot and cannot be satisfied by a
