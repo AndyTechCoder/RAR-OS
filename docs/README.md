@@ -34,6 +34,7 @@ Status: Gate 0 approved on 2026-07-16
 - [Sprint Alpha boot/platform contract integration task packet](tasks/sprint-alpha-boot-platform-contract-integration.md)
 - [Sprint Alpha compact PCI BDF integration task packet](tasks/sprint-alpha-compact-bdf-integration.md)
 - [Sprint Alpha ADR 0024 controller/helper integration packet](tasks/sprint-alpha-controller-helper-integration.md)
+- [Sprint Alpha ADR 0024 C1 contract-closure packet](tasks/sprint-alpha-controller-helper-c1-contracts.md)
 - [Initial Codex Handoff Prompt](handoff-prompt.md)
 - [V1 Alpha Codex Execution Runbook](v1-alpha-execution.md)
 - [GitHub Actions account-unblock runbook](runbooks/github-actions-account-unblock.md)

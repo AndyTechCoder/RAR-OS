@@ -47,6 +47,7 @@ docs/tasks/sprint-alpha-milestones-b-g-execution-map.md
 docs/tasks/sprint-alpha-accepted-evidence-publication.md
 docs/tasks/sprint-alpha-compact-bdf-integration.md
 docs/tasks/sprint-alpha-controller-helper-integration.md
+docs/tasks/sprint-alpha-controller-helper-c1-contracts.md
 docs/tasks/sprint-alpha-boot-platform-contract-integration.md
 docs/adr/0022-alpha-graphics-input-authority.md
 docs/adr/0023-alpha-boot-determinism-and-entry-state.md
@@ -827,6 +828,11 @@ grep -Fqx 'Status: Authoritative preparation packet - execution remains phase-ga
 grep -Fqx 'This packet authorizes no RAR target build, image, VM, boot, launch, or Mac' docs/tasks/sprint-alpha-controller-helper-integration.md || fail "ADR 0024 packet lost target-execution denial"
 grep -Fqx 'Any expansion beyond ADR 0024 Alternative A requires a new ADR and owner' docs/tasks/sprint-alpha-controller-helper-integration.md || fail "ADR 0024 packet lost owner-decision boundary"
 grep -Fqx -- '- [Sprint Alpha ADR 0024 controller/helper integration packet](tasks/sprint-alpha-controller-helper-integration.md)' docs/README.md || fail "ADR 0024 integration packet is not indexed"
+c1_packet_sha256=$(sha256_of docs/tasks/sprint-alpha-controller-helper-c1-contracts.md) || fail "cannot hash ADR 0024 C1 packet"
+[ "$c1_packet_sha256" = d3c323ab5ddda959e7c7cda4d0ced3e3e7fe77ae0ba589b2b47ec0a109db78e5 ] || fail "ADR 0024 C1 packet changed without review"
+grep -Fqx 'Status: Authoritative source-only child packet - implementation requires exact-main validation' docs/tasks/sprint-alpha-controller-helper-c1-contracts.md || fail "ADR 0024 C1 packet status changed"
+grep -Fqx 'This child packet grants no' docs/tasks/sprint-alpha-controller-helper-c1-contracts.md || fail "ADR 0024 C1 packet lost authority denial"
+grep -Fqx -- '- [Sprint Alpha ADR 0024 C1 contract-closure packet](tasks/sprint-alpha-controller-helper-c1-contracts.md)' docs/README.md || fail "ADR 0024 C1 packet is not indexed"
 local_lock_sha256=$(sha256_of tools/toolchain/host-tools.lock) || fail "cannot hash local tool lock"
 ci_lock_sha256=$(sha256_of tools/toolchain/host-tools.x86_64-unknown-linux-gnu-ci.lock) || fail "cannot hash CI tool lock"
 readonly_gate_sha256=$(sha256_of tools/ci/check-local-readonly.sh) || fail "cannot hash local read-only gate"
