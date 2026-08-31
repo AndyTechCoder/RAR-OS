@@ -46,6 +46,7 @@ docs/tasks/sprint-alpha-milestone-a-execution-map.md
 docs/tasks/sprint-alpha-milestones-b-g-execution-map.md
 docs/tasks/sprint-alpha-accepted-evidence-publication.md
 docs/tasks/sprint-alpha-compact-bdf-integration.md
+docs/tasks/sprint-alpha-controller-helper-integration.md
 docs/tasks/sprint-alpha-boot-platform-contract-integration.md
 docs/adr/0022-alpha-graphics-input-authority.md
 docs/adr/0023-alpha-boot-determinism-and-entry-state.md
@@ -820,6 +821,12 @@ sha256_of() {
     printf '%s\n' "$digest"
 }
 
+controller_helper_packet_sha256=$(sha256_of docs/tasks/sprint-alpha-controller-helper-integration.md) || fail "cannot hash ADR 0024 integration packet"
+[ "$controller_helper_packet_sha256" = 292f73bf028500015df2bdabc23811225c1bc776b29bec29458a975ade051df1 ] || fail "ADR 0024 integration packet changed without review"
+grep -Fqx 'Status: Authoritative preparation packet - execution remains phase-gated' docs/tasks/sprint-alpha-controller-helper-integration.md || fail "ADR 0024 integration packet status changed"
+grep -Fqx 'This packet authorizes no RAR target build, image, VM, boot, launch, or Mac' docs/tasks/sprint-alpha-controller-helper-integration.md || fail "ADR 0024 packet lost target-execution denial"
+grep -Fqx 'Any expansion beyond ADR 0024 Alternative A requires a new ADR and owner' docs/tasks/sprint-alpha-controller-helper-integration.md || fail "ADR 0024 packet lost owner-decision boundary"
+grep -Fqx -- '- [Sprint Alpha ADR 0024 controller/helper integration packet](tasks/sprint-alpha-controller-helper-integration.md)' docs/README.md || fail "ADR 0024 integration packet is not indexed"
 local_lock_sha256=$(sha256_of tools/toolchain/host-tools.lock) || fail "cannot hash local tool lock"
 ci_lock_sha256=$(sha256_of tools/toolchain/host-tools.x86_64-unknown-linux-gnu-ci.lock) || fail "cannot hash CI tool lock"
 readonly_gate_sha256=$(sha256_of tools/ci/check-local-readonly.sh) || fail "cannot hash local read-only gate"
