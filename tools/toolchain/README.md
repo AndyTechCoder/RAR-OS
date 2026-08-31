@@ -28,21 +28,17 @@ instance or candidate input. A later controller-bound review must supply and
 pin those bytes before runtime testing; a mechanically matching candidate
 remains non-reviewed and non-ready and cannot activate the CI lock or helper.
 
-Its inactive controller test design records an initial fail-closed risk catalog
-without adding a harness, workflow, container launch, or execution authority.
-It is intentionally incomplete and cannot produce an acceptance verdict.
-Runtime testing remains blocked on separate complete error/precedence/fault and
-evidence contracts, fixtures, a reviewed controller, fixture image, tool pins,
-exact subject pins, and a later reviewed workflow change.
+Its C1 controller test design is source-complete without adding a harness,
+workflow, container launch, or execution authority. Exhaustive disposition,
+precedence, injected-fault, evidence, closure-acceptance, and v1 helper-evidence
+contracts are byte-bound. Runtime testing remains blocked on C3V fixtures, a
+reviewed controller, fixture image, tool pins, exact subject pins, and wiring.
 
-The representable deterministic predicate portion is now represented by
-inactive byte-pinned validation, occurrence-qualified error-template, and
-class-located source-order catalogs. Their 32-stage adjacent prefix is derived
-from the declared control-flow order, but it is not an executable dual-invalid
-oracle or fixture-reachability claim. The constructible runtime precedence and
-runtime fault injection, explicit field/value case instances, canonical
-evidence, and normalized verdicts remain absent and continue to block
-controller implementation or wiring. The diagnostic input domain is fixed by
+The deterministic predicate portion remains inactive and byte-pinned. C1 now
+adds explicit instances for all 147 dispositions, 50 dual-invalid precedence
+oracles, 12 fault injections, and canonical evidence/verdict schemas. Those are
+contracts rather than runtime proof; C3V controller implementation, fixtures,
+retained evidence, and wiring remain separate reviewed work. The diagnostic input domain is fixed by
 the separate inactive contract described next.
 
 The separate inactive input-domain contract now fixes the controller-owned
