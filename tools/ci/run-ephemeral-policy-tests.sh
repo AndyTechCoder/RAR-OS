@@ -12,6 +12,7 @@ ulimit -f 131072
 /bin/sh "$root/tools/ci/test-alpha-crypto-reference-policy.sh"
 /bin/sh "$root/tools/ci/test-alpha-dependency-policy.sh"
 /bin/sh "$root/tools/ci/test-alpha-preimplementation-contract-policy.sh"
+/bin/sh "$root/tools/ci/test-alpha-boot-platform-contract-policy.sh"
 /bin/sh "$root/tools/ci/test-controller-helper-evidence-v0-policy.sh"
 /bin/sh "$root/tools/ci/test-controller-helper-inventory-v0-policy.sh"
 /bin/sh "$root/tools/ci/test-development-controller-v2-policy.sh"
@@ -33,4 +34,4 @@ ulimit -f 131072
 /bin/sh "$root/tools/ci/test-sprint-alpha-gate-report-v2-policy.sh"
 /bin/sh "$root/tools/ci/test-trusted-launcher-policy.sh"
 
-printf '%s\n' 'Ephemeral policy tests passed: executed=24 source=read-only scratch=tmpfs'
+printf '%s\n' 'Ephemeral policy tests passed: executed=25 source=read-only scratch=tmpfs'
