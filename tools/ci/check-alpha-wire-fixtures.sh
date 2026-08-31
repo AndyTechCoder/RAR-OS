@@ -15,7 +15,7 @@ contract_identity=${5-}
 case "$fixture_identity:$contract_identity" in
     ca7180e6a8aa6041cef872112b666d5c00621de138d1b968c1e6522978286ce5:3a0d670cccdca69f18defd6e109a17315744ecb03d4dc18903727f69177f3a05)
         topology=p0-wire ;;
-    4b1d78c05e64ef15fff1b0edf4497bb01ebb70d38c05eb879357f09eddd26e42:014576ef79667274ecc4c6777d6f0c47380432941a27c99e7158358d6eeacf06)
+    4b1d78c05e64ef15fff1b0edf4497bb01ebb70d38c05eb879357f09eddd26e42:290a4c0c1274b913b68bb77eeb7eb0938f04ada2e79fdcae500fcda53b66bbac)
         topology=p0-compact-bdf ;;
     *) exit 64 ;;
 esac
