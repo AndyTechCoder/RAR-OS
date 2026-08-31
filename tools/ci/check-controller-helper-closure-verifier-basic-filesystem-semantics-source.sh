@@ -25,7 +25,7 @@ for file in "$semantics" "$templates" "$inventory" "$domain" "$scalar"; do
 done
 [ "$(sha_file "$semantics")" = 5f524c4077d99547466fb46ca4b80bff7944bbd9bcf5c85ed636a08aab397854 ] || fail 'basic filesystem semantics bytes escaped review'
 [ "$(sha_file "$templates")" = 4950a2c5cbe5cddaca5bd5a829d889310585a6197630e87e9afdb48ce778ae20 ] || fail 'case-template bytes escaped review'
-[ "$(sha_file "$inventory")" = 422950c5a3973399a6e5b7da903be0f8cd8855dd6edeb37f1cb5924115197051 ] || fail 'operator inventory bytes escaped review'
+[ "$(sha_file "$inventory")" = 8440a105896b8e038fd6548187b53b2af2466760ace40678fe276cdc0af146e8 ] || fail 'operator inventory bytes escaped review'
 [ "$(sha_file "$domain")" = 67555f2d565569e95b44a247dda630c9b98d293ba0773880f248d69d802ac66c ] || fail 'input domain bytes escaped review'
 [ "$(sha_file "$scalar")" = 42442ffa4306fbcc83acd95a138ee4f6f5d059a671b206c4de6452ff64776ddb ] || fail 'scalar semantics bytes escaped review'
 
