@@ -124,6 +124,36 @@ install_platform_fixture
 require_row 'platform_envelope_state=invalid'
 
 reset_fixture
+install_platform_fixture
+/usr/bin/printf '%s\n' 'status=approved' >> "$fixture/spec/alpha/platform/contract-set-v0.manifest"
+require_row 'platform_envelope_state=invalid'
+
+reset_fixture
+install_platform_fixture
+/usr/bin/printf '%s\n' 'status=experimental-pending-review' >> "$fixture/spec/alpha/platform/contract-set-v0.manifest"
+require_row 'platform_envelope_state=invalid'
+
+reset_fixture
+install_platform_fixture
+/usr/bin/printf '%s\n' 'unexpected_rule=not-authorized' >> "$fixture/spec/alpha/platform/contract-set-v0.manifest"
+require_row 'platform_envelope_state=invalid'
+
+reset_fixture
+install_platform_fixture
+/usr/bin/printf '%s\n' 'status=approved' >> "$fixture/spec/alpha/platform/fixtures/manifest.v0"
+require_row 'platform_envelope_state=invalid'
+
+reset_fixture
+install_platform_fixture
+/usr/bin/printf '%s\n' 'status=experimental-pending-review' >> "$fixture/spec/alpha/platform/fixtures/manifest.v0"
+require_row 'platform_envelope_state=invalid'
+
+reset_fixture
+install_platform_fixture
+/usr/bin/printf '%s\n' 'unexpected_rule=not-authorized' >> "$fixture/spec/alpha/platform/fixtures/manifest.v0"
+require_row 'platform_envelope_state=invalid'
+
+reset_fixture
 /usr/bin/printf '%s\n' 'CANARY' > "$work/canary"
 /bin/ln -s "$work/canary" "$fixture/spec/alpha/platform"
 require_row 'platform_envelope_state=invalid'
