@@ -126,7 +126,8 @@ contract_manifest=$platform/contract-set-v0.manifest
     }
     { bad = 1 }
     END {
-        if (NR != 20 || scalar_count != 5 || fixture_count != 15 || length(single) != 5) bad = 1
+        if (scalar_count != 5 || length(single) != 5 ||
+            (fixture_count != 15 && fixture_count != 26) || NR != 5 + fixture_count) bad = 1
         exit bad ? 1 : 0
     }
 ' "$fixture_manifest" || fail 'fixture manifest grammar is not total and unique'
@@ -166,7 +167,19 @@ contract_manifest=$platform/contract-set-v0.manifest
 
 require_line "$fixture_manifest" 'schema=rar-alpha-platform-fixture-manifest-v0'
 require_line "$fixture_manifest" 'status=experimental-pending-review'
-require_line "$fixture_manifest" 'fixture_count=15'
+fixture_identity=$(digest_file "$fixture_manifest")
+contract_identity=$(digest_file "$contract_manifest")
+case "$fixture_identity:$contract_identity" in
+    096cf2a707dfaa0da293e69a2e0771f1fcb87b5131fcf1892bc3178a34470f4b:843cf4855b8970dcd322a9b28bd4a53f685506d00e4dfbae37c522cdbdee1a73)
+        topology=legacy-report
+        require_line "$fixture_manifest" 'fixture_count=15'
+        ;;
+    ca7180e6a8aa6041cef872112b666d5c00621de138d1b968c1e6522978286ce5:3a0d670cccdca69f18defd6e109a17315744ecb03d4dc18903727f69177f3a05)
+        topology=p0-wire
+        require_line "$fixture_manifest" 'fixture_count=26'
+        ;;
+    *) fail 'fixture and contract-set identities are not an approved exact topology' ;;
+esac
 require_line "$fixture_manifest" 'manifest_rule=paths-relative-to-fixtures-directory,ASCII-sorted,regular-nonsymbolic,exact-bytes,exact-SHA-256,no-extra-fixture'
 require_line "$fixture_manifest" 'derivation_rule=packer-and-independent-inspector-both-recompute-size+digest+semantic-cross-references'
 require_line "$contract_manifest" 'schema=rar-alpha-boot-platform-contract-set-v0'
@@ -295,7 +308,10 @@ while IFS='|' read -r kind path bytes sha extra; do
     [ "$(digest_file "$file")" = "$sha" ] || fail "fixture digest drift: $path"
     fixture_count=$((fixture_count + 1))
 done < "$fixture_manifest"
-[ "$fixture_count" -eq 15 ] || fail 'fixture manifest count is incomplete'
+case "$topology:$fixture_count" in
+    legacy-report:15|p0-wire:26) ;;
+    *) fail 'fixture manifest count does not match its exact topology' ;;
+esac
 
 expected_contracts='spec/alpha/boot/alpha-boot-v0.fields
 spec/alpha/boot/alpha-machine-closure-v0.fields
@@ -344,6 +360,20 @@ hardware_expected=$(/usr/bin/sed -n 's/^r0_hardware_contract_sha256=//p' "$contr
 [ "$hardware_expected" = "$(digest_file "$root/spec/hardware/rhd-v1.fields")" ] || fail 'R0 hardware contract changed'
 require_line "$contract_manifest" 'machine_activation=blocked-until-retained-cloud-firmware+q35+PCI+AHCI-evidence-exactly-matches'
 require_line "$contract_manifest" 'authority_rule=contract-only,no-target-source,no-build,no-image,no-launch,no-execution'
+
+case "$topology" in
+    legacy-report)
+        [ ! -e "$platform/fixtures/v0/wire-authority.fixture" ] ||
+            fail 'legacy reporter topology contains P0 wire authority'
+        ;;
+    p0-wire)
+        [ -f "$platform/fixtures/v0/wire-authority.fixture" ] &&
+            [ ! -L "$platform/fixtures/v0/wire-authority.fixture" ] ||
+            fail 'P0 fixture topology lacks regular nonsymbolic wire authority'
+        /bin/sh "$root/tools/ci/check-alpha-wire-fixtures.sh" "$root" "$platform/fixtures/v0" "$alpha" ||
+            fail 'non-BDF Alpha wire fixtures are invalid'
+        ;;
+esac
 
 ephemeral=disabled
 if [ "${RAR_POLICY_MUTATION_TESTS-}" = 1 ]; then

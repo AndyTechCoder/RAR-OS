@@ -135,4 +135,166 @@ reset_fixture
 /bin/ln -s identities.real "$work/alpha/platform/alpha-identities-v0.fields"
 reject symbolic-contract
 
+wire_checker=$root/tools/ci/check-alpha-wire-fixtures.sh
+prepare_wire_case() {
+    wire_case=$(mktemp -d "$work/wire.XXXXXX")
+    /bin/mkdir -p "$wire_case/root/spec/fixtures/release-0/bin"
+    /bin/cp -R "$source/platform/fixtures/v0" "$wire_case/fixtures"
+    /bin/cp "$root/spec/fixtures/release-0/bin/valid-x86_64.bin" \
+        "$wire_case/root/spec/fixtures/release-0/bin/valid-x86_64.bin"
+}
+
+wire_reject() {
+    label=$1
+    if /bin/sh "$wire_checker" "$wire_case/root" "$wire_case/fixtures" "$source" >/dev/null 2>&1; then
+        printf 'unsafe direct wire mutation unexpectedly passed: %s\n' "$label" >&2
+        exit 1
+    fi
+}
+
+wire_hex_byte() {
+    file=$1
+    offset=$2
+    replacement=$3
+    /usr/bin/perl - "$file" "$offset" "$replacement" "$wire_case/rewritten" <<'PERL'
+use strict;
+use warnings;
+my ($path,$offset,$replacement,$output)=@ARGV;
+open my $in,'<',$path or die $!;
+local $/;
+my $hex=<$in>;
+close $in or die $!;
+die 'wire test input' unless $hex =~ /\A[0-9a-f]+\n\z/;
+die 'wire test replacement' unless $replacement =~ /\A[0-9a-f]{2}\z/;
+substr($hex,$offset*2,2,$replacement);
+open my $out,'>',$output or die $!;
+print {$out} $hex or die $!;
+close $out or die $!;
+PERL
+    /bin/mv "$wire_case/rewritten" "$file"
+}
+
+wire_binary_byte() {
+    file=$1
+    offset=$2
+    /usr/bin/perl - "$file" "$offset" "$wire_case/replaced" <<'PERL'
+use strict;
+use warnings;
+my ($path,$offset,$output)=@ARGV;
+open my $in,'<',$path or die $!;
+binmode $in;
+local $/;
+my $bytes=<$in>;
+close $in or die $!;
+substr($bytes,$offset,1,chr(ord(substr($bytes,$offset,1)) ^ 1));
+open my $out,'>',$output or die $!;
+binmode $out;
+print {$out} $bytes or die $!;
+close $out or die $!;
+PERL
+    /bin/mv "$wire_case/replaced" "$file"
+}
+
+prepare_wire_case
+/bin/sh "$wire_checker" "$wire_case/root" "$wire_case/fixtures" "$source" >/dev/null
+
+prepare_wire_case
+mutate "$wire_case/fixtures/core-bootstrap.hex" 's/..$//'
+wire_reject truncated-hex
+
+prepare_wire_case
+mutate "$wire_case/fixtures/core-bootstrap.hex" 's/.$//'
+wire_reject odd-hex
+
+prepare_wire_case
+mutate "$wire_case/fixtures/closure-record.hex" 's/^./A/'
+wire_reject uppercase-hex
+
+prepare_wire_case
+mutate "$wire_case/fixtures/closure-record.hex" 's/^./g/'
+wire_reject malformed-hex
+
+prepare_wire_case
+mutate "$wire_case/fixtures/closure-record.hex" 's/$/00/'
+wire_reject wrong-exact-hex-size
+
+prepare_wire_case
+/usr/bin/perl -e 'print "x" x 1048577' > "$wire_case/fixtures/wire-authority.fixture"
+wire_reject oversized-raw-input
+
+prepare_wire_case
+mutate "$wire_case/fixtures/wire-authority.fixture" 's/decoded-lowercase/changed-lowercase/'
+wire_reject altered-authority
+
+prepare_wire_case
+/usr/bin/perl - "$wire_case/fixtures/wire-authority.fixture" "$wire_case/reordered" <<'PERL'
+use strict;
+use warnings;
+my ($input,$output)=@ARGV;
+open my $in,'<',$input or die $!;
+my @line=<$in>;
+close $in or die $!;
+@line[0,1]=@line[1,0];
+open my $out,'>',$output or die $!;
+print {$out} @line or die $!;
+close $out or die $!;
+PERL
+/bin/mv "$wire_case/reordered" "$wire_case/fixtures/wire-authority.fixture"
+wire_reject reordered-authority
+
+prepare_wire_case
+wire_hex_byte "$wire_case/fixtures/core-bootstrap.hex" 8 01
+wire_reject bad-header
+
+prepare_wire_case
+wire_hex_byte "$wire_case/fixtures/core-bootstrap.hex" 16 00
+wire_reject bad-length
+
+prepare_wire_case
+wire_hex_byte "$wire_case/fixtures/core-bootstrap.hex" 168 01
+wire_reject bad-padding
+
+prepare_wire_case
+wire_hex_byte "$wire_case/fixtures/component-bundle.hex" 72 00
+wire_reject bad-digest
+
+prepare_wire_case
+wire_hex_byte "$wire_case/fixtures/core-bootstrap.hex" 48 00
+wire_reject bad-identity
+
+prepare_wire_case
+wire_hex_byte "$wire_case/fixtures/platform-source-table.hex" 4 00
+wire_reject bad-source-rights
+
+prepare_wire_case
+wire_hex_byte "$wire_case/fixtures/closure-record.hex" 113 00
+wire_reject bad-closure
+
+prepare_wire_case
+/bin/mv "$wire_case/fixtures/core-bootstrap.hex" "$wire_case/missing-core"
+wire_reject missing-wire
+
+prepare_wire_case
+/bin/mv "$wire_case/fixtures/core-bootstrap.hex" "$wire_case/nonregular-core"
+/bin/mkdir "$wire_case/fixtures/core-bootstrap.hex"
+wire_reject nonregular-wire
+
+prepare_wire_case
+/bin/mv "$wire_case/fixtures/core-bootstrap.hex" "$wire_case/core.real"
+/bin/ln -s "$wire_case/core.real" "$wire_case/fixtures/core-bootstrap.hex"
+wire_reject symbolic-wire
+
+prepare_wire_case
+/bin/mv "$wire_case/root/spec/fixtures/release-0/bin/valid-x86_64.bin" "$wire_case/missing-r0"
+wire_reject missing-canonical-r0
+
+prepare_wire_case
+/bin/mv "$wire_case/root/spec/fixtures/release-0/bin/valid-x86_64.bin" "$wire_case/r0.real"
+/bin/ln -s "$wire_case/r0.real" "$wire_case/root/spec/fixtures/release-0/bin/valid-x86_64.bin"
+wire_reject symbolic-canonical-r0
+
+prepare_wire_case
+wire_binary_byte "$wire_case/root/spec/fixtures/release-0/bin/valid-x86_64.bin" 64
+wire_reject altered-canonical-r0
+
 printf '%s\n' 'Alpha boot/platform contract mutation checks passed'
