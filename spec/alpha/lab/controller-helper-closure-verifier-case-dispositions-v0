@@ -139,10 +139,10 @@ D108|E085|closure-first-pass|source-dominated|unreachable-under-bound-subject
 D109|E085|closure-second-pass|source-dominated|unreachable-under-bound-subject
 D110|E086|closure-first-pass|synchronized-mutation|newline-duplicate-after-alphabet-check
 D111|E086|closure-second-pass|synchronized-mutation|newline-duplicate-after-alphabet-check
-D112|E123|closure-first-pass|fixture|pre-start-excess-descendants
-D113|E123|closure-second-pass|synchronized-mutation|add-excess-descendants-after-first-pass
-D114|E124|closure-first-pass|fixture|pre-start-bounded-long-path-set
-D115|E124|closure-second-pass|synchronized-mutation|add-bounded-long-path-set-after-first-pass
+D112|E123|closure-first-pass|domain-extension|resource-staging-trust-boundary-not-authorized
+D113|E123|closure-second-pass|domain-extension|resource-staging-trust-boundary-not-authorized
+D114|E124|closure-first-pass|domain-extension|resource-staging-trust-boundary-not-authorized
+D115|E124|closure-second-pass|domain-extension|resource-staging-trust-boundary-not-authorized
 D116|E087|closure-first-pass|synchronized-mutation|change-at-named-pass-window
 D117|E087|closure-second-pass|synchronized-mutation|change-at-named-pass-window
 D118|E088|closure-first-pass|synchronized-mutation|change-at-named-pass-window
