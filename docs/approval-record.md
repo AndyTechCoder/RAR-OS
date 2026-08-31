@@ -176,3 +176,33 @@ ADR 0026 approval: approved
 ADR 0026 approver: Andy / RAR project owner
 ADR 0026 date: 2026-08-29
 ADR 0026 decision: Alternative C
+
+## Sprint Alpha boot follow-up decisions
+
+Status: Approved
+
+On 2026-08-30, Codex presented the exact B/A/B decision sentence and then
+explained in plain language that Alternative B for ADR 0027 deterministically
+retires Root memory and disables the boot DMA path, Alternative A for ADR 0028
+binds authority to exact verified bytes, and Alternative B for ADR 0029 keeps
+state authority in Nucleus rather than readable by Core. The owner replied,
+"Sure thing, you can continue."
+
+The approval is limited to experimental Alpha specification work under every
+documented safety boundary. It does not make a dependent contract ready, grant
+credentials, authorize local target build or execution, permit a target launch,
+or establish production compatibility. P0 may begin only after this decision
+record is independently reviewed, merged, and exact-main validated.
+
+ADR 0027 approval: approved
+ADR 0027 approver: Andy / RAR project owner
+ADR 0027 date: 2026-08-30
+ADR 0027 decision: Alternative B
+ADR 0028 approval: approved
+ADR 0028 approver: Andy / RAR project owner
+ADR 0028 date: 2026-08-30
+ADR 0028 decision: Alternative A
+ADR 0029 approval: approved
+ADR 0029 approver: Andy / RAR project owner
+ADR 0029 date: 2026-08-30
+ADR 0029 decision: Alternative B

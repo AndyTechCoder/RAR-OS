@@ -43,8 +43,9 @@ and cannot increase the implementation count.
   tests, independent reviews, merges, and exact-main validation are complete.
 - Proposed ADR 0030 precisely records the remaining accepted-evidence
   publication/recovery choice while granting no authority until owner approval.
-- Proposals 0027–0029 are explicit, non-authoritative B/A/B recommendations;
-  their exact owner decision remains required before boot-contract integration.
+- Accepted ADRs 0027–0029 select the reviewed B/A/B boot-retirement, identity,
+  and state-authority directions; dependent contracts remain blocked until the
+  decision integration merges and exact-main validates.
 - Their byte-pinned integration packet is merged through PR #55 and separates
   decision, contract, source, pre-build, and post-build launch gates. It grants
   no implementation or execution authority before those gates pass.
@@ -65,9 +66,9 @@ and cannot increase the implementation count.
   signed update path, target image, or retained target evidence exists.
 - ADRs 0022–0026 are accepted, but none of their dependent contracts or
   controller changes is ready merely from acceptance.
-- The exact Alpha boot/platform contracts are not ready. Their implementation
-  cannot begin until the exact proposed ADR 0027 B / 0028 A / 0029 B owner
-  choice is recorded through the normal accepted-ADR process.
+- The exact Alpha boot/platform contracts are not ready. P0 contract work may
+  begin only after canonical ADR 0027–0029 decision integration is reviewed,
+  merged, and exact-main validated.
 - The phase-8 accepted-evidence writer is not ready. Only its pure record codec
   is merged; the preserved publication scaffold remains unmerged, and naming,
   journal, cleanup, recovery, retry, semantic-verification, and activation
@@ -90,8 +91,8 @@ and cannot increase the implementation count.
 
 Milestone A target files may be created only after all of these are true:
 
-1. ADRs 0027–0029 are explicitly accepted, and the selected ADR 0023/0026/0027–
-   0029 contracts are implemented, reviewed, exact-main validated, and ready.
+1. Accepted ADR 0023/0026/0027–0029 contracts are implemented, reviewed,
+   exact-main validated, and ready.
 2. The reviewed Lab profile, controller, compiler/helper identities, twice-
    reproduced helper evidence, and immutable cloud inputs are genuinely ready.
 3. PR #7 and every required real-step workflow are green, reviewed, merged to

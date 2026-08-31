@@ -1,11 +1,10 @@
 # ADR 0029: Alpha State Ticket Lifecycle
 
-Status: Proposed — owner decision required
-Decision: Undecided
+Status: Historical proposal — superseded on 2026-08-30
+Decision: Undecided at proposal publication
 
-Recommended alternative: B. This recommendation is not a decision and grants
-no implementation, build, execution, provisioning, merge, or activation
-authority. Exact owner approval and the normal accepted-ADR process are required.
+Canonical decision: [ADR 0029](../adr/0029-alpha-state-ticket-lifecycle.md).
+This file preserves the considered alternatives and is not an authority source.
 
 ## Context
 

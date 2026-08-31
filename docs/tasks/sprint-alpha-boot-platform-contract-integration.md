@@ -1,12 +1,12 @@
 # Sprint Alpha Boot and Platform Contract Integration Task Packet
 
-Status: Non-authoritative preparation — ADRs 0027–0029 owner decisions required
+Status: Owner-approved D0 integration — P0 blocked until exact-main validation
 
-This packet prepares the bounded path from proposed ADR 0027 Alternative B,
-ADR 0028 Alternative A, and ADR 0029 Alternative B to reviewed experimental
-Alpha contracts and, later, Milestone A source. It is not an ADR, approval,
-contract, readiness claim, build authorization, or permission to execute RAR
-OS. It may merge while remaining non-authoritative.
+This packet defines the bounded path from accepted ADR 0027 Alternative B, ADR
+0028 Alternative A, and ADR 0029 Alternative B to reviewed experimental Alpha
+contracts and, later, Milestone A source. The accepted decisions do not make a
+contract ready or authorize target source, build, launch, or execution. P0 may
+start only after the D0 decision integration merges and exact-main validates.
 
 The preserved `codex/alpha-boot-platform-contracts` worktree is historical
 draft material only. No commit, file, or fragment may be merged, rebased,
@@ -30,20 +30,18 @@ boot/platform contracts that:
 
 ## D0 — decision integration prerequisite
 
-Before contract work, a separate architecture/governance task must:
+This architecture/governance change must:
 
-1. receive the exact informed owner sentence selecting 0027 B, 0028 A, and
-   0029 B;
+1. record the informed owner approval selecting 0027 B, 0028 A, and 0029 B;
 2. convert each proposal through the normal canonical accepted-ADR process;
 3. add only the matching approval-record entries and update indexes/status; and
 4. pass architecture, correctness, security, required checks, merge, and
    exact-main validation.
 
-No contract or implementation writer owns an ADR, proposal-history file, or
-`docs/approval-record.md`. Generic approval, recommendation text, this packet,
-or passing CI cannot substitute for the exact owner decision. D0 authorizes
-contract work only; it does not authorize target source, build, image, launch,
-or execution.
+No later contract or implementation writer owns an ADR, proposal-history file,
+or `docs/approval-record.md`. D0 authorizes contract work only after its merge
+and exact-main validation; it does not authorize target source, build, image,
+launch, or execution.
 
 ## P0 — contract-writer start gate and ownership
 

@@ -31,8 +31,8 @@ for file in "$fixtures"/*.md; do
     /usr/bin/awk 'length($0) > 4096 { exit 1 }' "$file" || exit 1
 done
 
-classify() { /bin/sh "$checker" "$1" "$2" "$3"; }
-reject() { if classify "$1" "$2" "$3" >/dev/null 2>&1; then exit 1; fi; }
+classify() { /bin/sh "$checker" "$@"; }
+reject() { if classify "$@" >/dev/null 2>&1; then exit 1; fi; }
 
 [ "$(classify "$root/docs/adr/0020-alpha-reference-oracle-isolation.md" 0020 "$root/docs/approval-record.md")" = accepted ]
 [ "$(classify "$root/docs/adr/0021-alpha-boot-payload-boundary.md" 0021 "$root/docs/approval-record.md")" = accepted ]
@@ -46,6 +46,12 @@ reject() { if classify "$1" "$2" "$3" >/dev/null 2>&1; then exit 1; fi; }
 [ "$(classify "$fixtures/accepted-b.md" 9998 "$valid")" = accepted ]
 [ "$(classify "$fixtures/accepted-c-leap.md" 9999 "$valid")" = accepted ]
 [ "$(classify "$fixtures/proposed.md" 9994 "$valid")" = owner-decision-required ]
+[ "$(classify "$fixtures/accepted-a.md" 9997 "$valid" 'Alternative A')" = accepted ]
+reject "$fixtures/proposed.md" 9994 "$valid" 'Alternative A'
+reject "$fixtures/accepted-a.md" 9997 "$valid" 'Alternative D'
+reject "$fixtures/accepted-a.md" 9997 "$valid" 'Alternative B'
+reject "$fixtures/accepted-b.md" 9998 "$valid" 'Alternative A'
+reject "$fixtures/accepted-c-leap.md" 9999 "$valid" 'Alternative B'
 
 reject "$fixtures/accepted-invalid-date.md" 9996 "$valid"
 reject "$fixtures/duplicate-status.md" 9995 "$valid"
@@ -56,5 +62,12 @@ reject "$fixtures/accepted-a.md" 9997 "$fixtures/approval-owner-mismatch.md"
 reject "$fixtures/accepted-a.md" 9997 "$fixtures/approval-duplicate.md"
 reject "$fixtures/accepted-a.md" 9997 "$fixtures/approval-missing-approval.md"
 reject "$fixtures/accepted-a.md" 9997 "$fixtures/approval-missing-decision.md"
+
+[ "$(classify "$root/docs/adr/0027-alpha-bootstrap-retirement-and-dma-closure.md" 0027 "$root/docs/approval-record.md" 'Alternative B')" = accepted ]
+[ "$(classify "$root/docs/adr/0028-alpha-artifact-and-service-identities.md" 0028 "$root/docs/approval-record.md" 'Alternative A')" = accepted ]
+[ "$(classify "$root/docs/adr/0029-alpha-state-ticket-lifecycle.md" 0029 "$root/docs/approval-record.md" 'Alternative B')" = accepted ]
+reject "$root/docs/adr/0027-alpha-bootstrap-retirement-and-dma-closure.md" 0027 "$root/docs/approval-record.md" 'Alternative A'
+reject "$root/docs/adr/0028-alpha-artifact-and-service-identities.md" 0028 "$root/docs/approval-record.md" 'Alternative B'
+reject "$root/docs/adr/0029-alpha-state-ticket-lifecycle.md" 0029 "$root/docs/approval-record.md" 'Alternative A'
 
 printf '%s\n' 'Proposed ADR classifier immutable-fixture checks passed'

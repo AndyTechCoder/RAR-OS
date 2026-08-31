@@ -69,6 +69,9 @@ Status: Gate 0 approved on 2026-07-16
 - [ADR 0024: Alpha Controller Helper Build Trust](adr/0024-alpha-controller-helper-build-trust.md)
 - [ADR 0025: Alpha Pre-GUI Evidence Input and Continuity Sequencing](adr/0025-alpha-gui-continuity-evidence-sequencing.md)
 - [ADR 0026: Alpha Platform Payload and State Sources](adr/0026-alpha-platform-payload-and-state-sources.md)
+- [ADR 0027: Alpha Bootstrap Retirement and DMA Closure](adr/0027-alpha-bootstrap-retirement-and-dma-closure.md)
+- [ADR 0028: Alpha Artifact and Service Identities](adr/0028-alpha-artifact-and-service-identities.md)
+- [ADR 0029: Alpha State Ticket Lifecycle](adr/0029-alpha-state-ticket-lifecycle.md)
 
 Gate 0 approval covers ADRs 0001–0016 and the Release 0 task packet. Later
 indexed ADRs are authoritative only through their separately recorded approval
@@ -83,10 +86,10 @@ permanently irreplaceable.
 - [Historical proposal 0024](proposals/0024-alpha-controller-helper-build-trust.md)
 - [Historical proposal 0025](proposals/0025-alpha-gui-continuity-evidence-sequencing.md)
 - [Historical proposal 0026](proposals/0026-alpha-platform-payload-and-state-sources.md)
-- [Open proposal 0027: Alpha Bootstrap Retirement and DMA Closure](proposals/0027-alpha-bootstrap-retirement-and-dma-closure.md)
-- [Open proposal 0028: Alpha Artifact and Service Identities](proposals/0028-alpha-artifact-and-service-identities.md)
-- [Open proposal 0029: Alpha State Ticket Lifecycle](proposals/0029-alpha-state-ticket-lifecycle.md)
-- [Open boot follow-up choice brief](proposals/alpha-boot-followup-choice-brief.md)
+- [Historical proposal 0027](proposals/0027-alpha-bootstrap-retirement-and-dma-closure.md)
+- [Historical proposal 0028](proposals/0028-alpha-artifact-and-service-identities.md)
+- [Historical proposal 0029](proposals/0029-alpha-state-ticket-lifecycle.md)
+- [Historical boot follow-up choice brief](proposals/alpha-boot-followup-choice-brief.md)
 - [Open proposal 0030: Alpha Accepted-Evidence Publication and Recovery](proposals/0030-alpha-accepted-evidence-publication-recovery.md)
 - [Alpha Decision Integration Plan](proposals/alpha-decision-integration-plan.md)
 - [Sprint Alpha Completion Evidence Map](tasks/sprint-alpha-completion-evidence-map.md)
