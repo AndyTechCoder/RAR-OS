@@ -16,6 +16,11 @@ line "$contract" 'test_rule=consume-exactly-one-controller-helper-test-evidence-
 [ "$#" -eq 11 ] || fail 'usage: evidence controller source acceptance compiler closure test-evidence-sha build-plan golden receipt-1 receipt-2'
 evidence=$1 controller=$2 source=$3 acceptance=$4 compiler=$5 closure=$6 test_sha=$7 build_plan=$8 golden=$9 receipt_1=${10} receipt_2=${11}
 [ -f "$evidence" ] && [ ! -L "$evidence" ] || fail 'evidence unavailable'
+[ "$(wc -c < "$evidence" | tr -d ' ')" -le 65536 ] || fail 'evidence oversized'
+[ "$(wc -l < "$evidence" | tr -d ' ')" -eq 27 ] || fail 'evidence line count changed'
+expected_fields=$(printf '%s\n' schema controller_sha source_sha closure_acceptance_sha compiler_sha compiler_closure_sha test_evidence_v1_sha build_plan_sha golden_sha build_1_receipt_sha build_2_receipt_sha build_1_log_sha build_2_log_sha build_count network credential build_1_exit build_2_exit build_1_binary_sha build_2_binary_sha final_binary_sha build_1_job_nonce build_2_job_nonce build_1_root build_2_root binary_bytes status)
+actual_fields=$(/usr/bin/awk -F '=' '{ print $1 }' "$evidence")
+[ "$actual_fields" = "$expected_fields" ] || fail 'fields are missing, extra, duplicated, or reordered'
 for value in "$controller" "$source" "$acceptance" "$compiler" "$closure" "$test_sha" "$build_plan" "$golden" "$receipt_1" "$receipt_2"; do is_sha "$value" || fail 'zero or malformed context identity'; done
 line "$evidence" 'schema=rar-alpha-controller-helper-build-evidence-v1'
 line "$evidence" "controller_sha=$controller"; line "$evidence" "source_sha=$source"
