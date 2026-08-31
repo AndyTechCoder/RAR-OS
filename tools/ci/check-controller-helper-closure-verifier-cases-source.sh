@@ -8,7 +8,7 @@ subject=$root/spec/alpha/lab/controller-helper-closure-verifier-cases-v0
 fail() { printf '%s\n' 'rar-alpha-controller-helper-closure-verifier-cases-v0 source check failed: '"$1" >&2; exit 1; }
 [ -f "$subject" ] && [ ! -L "$subject" ] || fail 'subject unavailable'
 actual=$(env -u LC_CTYPE LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$subject" | /usr/bin/awk '{print $1}')
-[ "$actual" = b9fd2e35316b999ac934b3aa7d6f5e49e9129f2fa13523e6a3972c8e5b6c4cce ] || fail 'subject bytes escaped review'
+[ "$actual" = d85c82abbba507fa7cbdf9af9c7ce6846139f1d93f0aa35fc6e340ff99e8e707 ] || fail 'subject bytes escaped review'
 grep -Fqx 'schema=rar-alpha-controller-helper-closure-verifier-cases-v0' "$subject" || fail 'schema changed'
 grep -Fqx 'total_case_count=209' "$subject" || fail 'case count declaration changed'
 [ "$(grep -Ec '^case\|V[0-9][0-9][0-9]\|' "$subject")" -eq 147 ] || fail 'disposition cases incomplete'
