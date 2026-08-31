@@ -1,5 +1,5 @@
 schema=rar-alpha-controller-helper-closure-verifier-operator-inventory-v0
-status=experimental-incomplete-inactive-source-only
+status=experimental-complete-source-only-inactive
 purpose=close-the-primary-family+parameter-shape+repair-token-vocabulary-used-by-the-125-structural-case-templates-without-defining-executable-mutation-semantics
 execution_authority=none
 template_catalog=controller-helper-closure-verifier-case-templates-v0
@@ -9,7 +9,7 @@ repair_token_count=8
 coverage_rule=every-template-primary-normalizes-to-exactly-one-listed-family+every-template-repair-equals-one-listed-token+no-unlisted-family-or-repair-is-permitted
 normalization_rule=primary-RHS-of-ASCII-decimal-digits-normalizes-to-decimal-literal;otherwise-family-is-the-bytes-before-the-first-colon-or-the-whole-RHS-when-no-colon-exists
 parameter_rule=shape-checking-is-lexical-only;it-does-not-decode+apply+or-prove-a-mutation
-semantic_status=exact-target+precondition+postcondition+deterministic-derivation+resource-feasibility+repair-independence-are-absent
+semantic_status=exact-target+precondition+postcondition+deterministic-derivation+resource-feasibility+repair-independence-are-bound-by-owned-semantics-contract-set
 activation_rule=blocked;separate-reviewed-semantics+base-binding+controller+runtime-precedence+fault+evidence+verdict-contracts-remain-required
 consumer_rule=this-inventory-does-not-authorize-fixture+mutation+repair+controller+container+compiler+helper+target+VM+emulator+workflow+wiring+gate+readiness
 local_rule=text+hash+lexical-structure-check-only;never-run-verifier+controller+container+compiler+helper+target+VM+emulator-on-Mac
