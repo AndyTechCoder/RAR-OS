@@ -64,6 +64,7 @@ docs/proposals/0027-alpha-bootstrap-retirement-and-dma-closure.md
 docs/proposals/0028-alpha-artifact-and-service-identities.md
 docs/proposals/0029-alpha-state-ticket-lifecycle.md
 docs/proposals/0030-alpha-accepted-evidence-publication-recovery.md
+docs/proposals/0031-alpha-compact-pci-bdf-encoding.md
 docs/proposals/alpha-boot-followup-choice-brief.md
 docs/proposals/alpha-decision-integration-plan.md
 docs/tasks/sprint-alpha-completion-evidence-map.md
@@ -446,6 +447,11 @@ grep -Fqx '`I approve ADR 0027 Alternative B, ADR 0028 Alternative A, and ADR 00
 [ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
     docs/proposals/0030-alpha-accepted-evidence-publication-recovery.md 0030 \
     docs/approval-record.md)" = owner-decision-required ] || fail "ADR 0030 proposal overstates authority"
+[ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
+    docs/proposals/0031-alpha-compact-pci-bdf-encoding.md 0031 \
+    docs/approval-record.md)" = owner-decision-required ] || fail "ADR 0031 proposal overstates authority"
+grep -Fqx '`I approve ADR 0031 Alternative A for experimental Alpha compact PCI BDF encoding under the documented safety limits.`' \
+    docs/proposals/0031-alpha-compact-pci-bdf-encoding.md || fail "ADR 0031 exact owner-approval sentence drifted"
 grep -qx 'Status: Non-authoritative preparation — implementation remains blocked' \
     docs/tasks/sprint-alpha-milestone-a-execution-map.md || fail "Milestone A execution map overstates authority"
 grep -qx 'Status: Non-authoritative preparation — implementation remains sequential and gated' \

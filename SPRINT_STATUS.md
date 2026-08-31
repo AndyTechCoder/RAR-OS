@@ -224,8 +224,10 @@
 - Static enforcement: required-file, authority-status, ADR-classification, and
   exact approval-sentence checks now cover both execution maps, the owner brief,
   canonical ADRs 0022–0029, all three decision-integration gates, and all eight
-  completion-proof items. Only proposal 0030 remains machine-classified as
-  owner-decision-required, and the complete accepted-evidence publication task
+  completion-proof items. Proposals 0030 and 0031 remain machine-classified as
+  owner-decision-required. Proposal 0031 explicitly blocks P0 compact-BDF
+  interpretation and merge until owner approval plus canonical integration,
+  while the complete accepted-evidence publication task
   packet plus boot/platform integration packet are byte-pinned so preparation
   cannot silently become authoritative, incomplete, or disappear
 - Gate-report migration: schema v1 remains unchanged. The versioned v2 reporter
@@ -290,10 +292,13 @@
   needs one-time owner-approved installation and confinement evidence in a
   fresh SSD-root task. The profile is now installed without replacing existing
   settings; effective confinement evidence remains a fresh-task pre-A gate
-- Next durable actions: merge and exact-main validate canonical ADR 0027 B /
-  0028 A / 0029 B, then execute the reviewed P0 boot/platform contract packet.
-  Separately obtain the exact owner choice for proposed ADR 0030, then integrate
-  its reviewed contract through the merged task packet before Milestone B. The
+- Next durable actions: obtain the exact ADR 0031 owner approval, integrate it
+  into the canonical ADR and approval record, machine-closure contract, trusted
+  reconstruction, digest pins, mutations, reviews, guarded validation, and
+  exact-main evidence, then merge P0 before Milestone A can begin. Separately,
+  obtain the ADR 0030 owner choice and integrate ADR 0030's
+  accepted-evidence publication contract through its merged task packet before
+  Milestone B. The
   pure accepted-evidence record codec is already merged; publication, recovery,
   semantic verification, and activation are not. Independently, make the v2
   controller/helper compiler,
