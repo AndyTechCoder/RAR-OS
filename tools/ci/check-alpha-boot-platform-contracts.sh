@@ -350,7 +350,9 @@ if [ "${RAR_POLICY_MUTATION_TESTS-}" = 1 ]; then
     ephemeral=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
 fi
 if [ "$ephemeral" != disabled ]; then
+    image_file=$(mktemp "$ephemeral/alpha-golden-image.XXXXXX")
     golden=$(env LC_ALL=C LANG=C /usr/bin/perl - \
+        "$image_file" \
         "$platform/fixtures/v0/root.artifact" \
         "$platform/fixtures/v0/recovery.artifact" \
         "$platform/fixtures/v0/nucleus.artifact" \
@@ -399,6 +401,7 @@ sub directory {
     return $bytes . "\0" x (512 - length($bytes));
 }
 
+my $output_path = shift @ARGV;
 my @payload = map { read_exact($_) } @ARGV;
 my @short = ('BOOTX64 EFI', 'RECOVERYELF', 'NUCLEUS ELF', 'CORE    IMG', 'COMPONENRAC', 'SYSTEM  RAS', 'PRESERVERAP');
 my $image = "\0" x 67108864;
@@ -481,9 +484,104 @@ die 'backup FSInfo mismatch' unless substr($image, $esp + 512, 512) eq substr($i
 for my $i (0 .. 6) {
     die 'payload mismatch' unless substr($image, $data + (5 + $i) * 512, length($payload[$i])) eq $payload[$i];
 }
+open my $output, '>', $output_path or die "open image output: $!";
+binmode $output;
+print {$output} $image or die "write image output: $!";
+close $output or die "close image output: $!";
 print sha256_hex($image), "\n";
 PERL
     ) || fail 'independent golden image pack/inspect derivation failed'
+    inspected=$(env LC_ALL=C LANG=C /usr/bin/perl - \
+        "$image_file" \
+        "$platform/fixtures/v0/root.artifact" \
+        "$platform/fixtures/v0/recovery.artifact" \
+        "$platform/fixtures/v0/nucleus.artifact" \
+        "$platform/fixtures/v0/core-bootstrap.artifact" \
+        "$platform/fixtures/v0/component-bundle.fixture" \
+        "$platform/fixtures/v0/system-state.fixture" \
+        "$platform/fixtures/v0/preserved-state.fixture" <<'PERL'
+use strict;
+use warnings;
+use Digest::SHA qw(sha256_hex);
+
+sub read_all {
+    my ($path) = @_;
+    open my $fh, '<', $path or die "open $path: $!";
+    binmode $fh;
+    local $/;
+    my $bytes = <$fh>;
+    close $fh or die "close $path: $!";
+    return $bytes;
+}
+sub le16 { unpack('v', substr($_[0], $_[1], 2)) }
+sub le32 { unpack('V', substr($_[0], $_[1], 4)) }
+sub le64 { unpack('Q<', substr($_[0], $_[1], 8)) }
+sub crc32 {
+    my ($bytes) = @_;
+    my $crc = 0xffffffff;
+    for my $byte (unpack('C*', $bytes)) {
+        $crc ^= $byte;
+        for (1 .. 8) { $crc = ($crc >> 1) ^ (($crc & 1) ? 0xedb88320 : 0) }
+    }
+    return ($crc ^ 0xffffffff) & 0xffffffff;
+}
+sub verify_gpt_header {
+    my ($image, $offset, $current, $backup, $entry_lba) = @_;
+    my $sector = substr($image, $offset, 512);
+    die 'independent GPT signature' unless substr($sector, 0, 8) eq 'EFI PART';
+    die 'independent GPT revision' unless le32($sector, 8) == 0x00010000;
+    die 'independent GPT header size' unless le32($sector, 12) == 92;
+    die 'independent GPT reserved field' unless le32($sector, 20) == 0;
+    die 'independent GPT locations' unless le64($sector, 24) == $current && le64($sector, 32) == $backup;
+    die 'independent GPT usable range' unless le64($sector, 40) == 34 && le64($sector, 48) == 131038;
+    die 'independent GPT entry location' unless le64($sector, 72) == $entry_lba;
+    die 'independent GPT entry geometry' unless le32($sector, 80) == 128 && le32($sector, 84) == 128;
+    my $stored_crc = le32($sector, 16);
+    substr($sector, 16, 4, "\0" x 4);
+    die 'independent GPT header CRC' unless crc32(substr($sector, 0, 92)) == $stored_crc;
+}
+
+my $image = read_all(shift @ARGV);
+my @payload = map { read_all($_) } @ARGV;
+die 'independent image length' unless length($image) == 67108864;
+die 'independent MBR signature' unless substr($image, 510, 2) eq "\x55\xaa";
+die 'independent MBR partition type' unless unpack('C', substr($image, 450, 1)) == 0xee;
+die 'independent MBR start LBA' unless le32($image, 454) == 1;
+die 'independent MBR sector count' unless le32($image, 458) == 131071;
+verify_gpt_header($image, 512, 1, 131071, 2);
+verify_gpt_header($image, 131071 * 512, 131071, 1, 131039);
+die 'independent GPT arrays' unless substr($image, 2 * 512, 16384) eq substr($image, 131039 * 512, 16384);
+my $entries = substr($image, 2 * 512, 16384);
+die 'independent GPT entry CRC' unless crc32($entries) == le32($image, 512 + 88) && crc32($entries) == le32($image, 131071 * 512 + 88);
+die 'independent GPT partition range' unless le64($entries, 32) == 2048 && le64($entries, 40) == 129023;
+my $esp = 2048 * 512;
+die 'independent FAT boot signature' unless substr($image, $esp + 510, 2) eq "\x55\xaa";
+die 'independent FAT sector size' unless le16($image, $esp + 11) == 512;
+die 'independent FAT geometry' unless le32($image, $esp + 36) == 977 && le32($image, $esp + 44) == 2;
+die 'independent backup boot' unless substr($image, $esp, 512) eq substr($image, $esp + 6 * 512, 512);
+die 'independent backup FSInfo' unless substr($image, $esp + 512, 512) eq substr($image, $esp + 7 * 512, 512);
+die 'independent FAT copies' unless substr($image, $esp + 32 * 512, 977 * 512) eq substr($image, $esp + (32 + 977) * 512, 977 * 512);
+my $data = $esp + (32 + 2 * 977) * 512;
+my $fat = substr($image, $esp + 32 * 512, 977 * 512);
+for my $cluster (2 .. 13) {
+    die 'independent FAT chain' unless (le32($fat, $cluster * 4) & 0x0fffffff) == 0x0fffffff;
+}
+my @short = ('BOOTX64 EFI', 'RECOVERYELF', 'NUCLEUS ELF', 'CORE    IMG', 'COMPONENRAC', 'SYSTEM  RAS', 'PRESERVERAP');
+for my $i (0 .. 6) {
+    die 'independent payload ceiling' if length($payload[$i]) == 0 || length($payload[$i]) > 512;
+    die 'independent payload bytes' unless substr($image, $data + (5 + $i) * 512, length($payload[$i])) eq $payload[$i];
+    die 'independent payload padding' unless substr($image, $data + (5 + $i) * 512 + length($payload[$i]), 512 - length($payload[$i])) eq "\0" x (512 - length($payload[$i]));
+}
+die 'independent boot directory entry' unless substr($image, $data + 2 * 512 + 64, 11) eq $short[0] && le32($image, $data + 2 * 512 + 64 + 28) == length($payload[0]);
+for my $i (1 .. 6) {
+    my $entry = $data + 4 * 512 + (1 + $i) * 32;
+    die 'independent alpha directory name' unless substr($image, $entry, 11) eq $short[$i];
+    die 'independent alpha directory size' unless le32($image, $entry + 28) == length($payload[$i]);
+}
+print sha256_hex($image), "\n";
+PERL
+    ) || fail 'independent golden image inspection failed'
+    [ "$inspected" = "$golden" ] || fail 'independent golden packer and inspector disagree'
     golden_expected=$(/usr/bin/sed -n 's/^golden_image_sha256=//p' "$platform/fixtures/v0/image-golden.fixture")
     if [ "$golden_expected" = unavailable ]; then
         printf 'Alpha boot/platform observed golden image SHA-256: %s\n' "$golden" >&2
