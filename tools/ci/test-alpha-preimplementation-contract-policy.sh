@@ -12,6 +12,20 @@ trap '/bin/rm -rf "$work"' EXIT HUP INT TERM
 checker=$root/tools/ci/check-alpha-preimplementation-contracts.sh
 source=$root/spec/alpha
 
+require_checker_line() {
+    [ "$(/usr/bin/grep -Fxc -- "$1" "$checker")" -eq 1 ] || {
+        printf 'Alpha contract policy test blocked: missing or duplicate checker binding: %s\n' "$1" >&2
+        exit 1
+    }
+}
+
+require_checker_line '    boot_cases_digest=1a59e0d9135b018d46fbb70318f53ba79a876c580b8ef1ce174f0b5eeb7c7222'
+require_checker_line '    boot_case_count=50'
+require_checker_line '    boot_cases_digest=370f829f791681cb4c1fb96dbf850f9535751a7a64295534562ea47a9f84bee3'
+require_checker_line '    boot_case_count=41'
+require_checker_line 'require_digest "$boot/cases.v0" "$boot_cases_digest"'
+require_checker_line 'validate_case_file "$boot/cases.v0" '\''schema=rar-alpha-boot-cases-v0'\'' "$boot_case_count"'
+
 expect_rejected() {
     label=$1
     if /bin/sh "$checker" "$work/alpha" >/dev/null 2>&1; then
@@ -24,7 +38,14 @@ reset_fixture() {
     /bin/rm -rf "$work/alpha"
     /bin/mkdir -p "$work/alpha"
     /bin/cp -R "$source/lab" "$source/boot" "$work/alpha/"
+    if [ -e "$source/platform" ] || [ -L "$source/platform" ]; then
+        /bin/cp -R "$source/platform" "$work/alpha/"
+    fi
     find "$work/alpha" -name '._*' -type f -exec /bin/rm -f {} \;
+    /bin/sh "$checker" "$work/alpha" >/dev/null || {
+        printf '%s\n' 'Alpha contract policy test blocked: reset fixture is not a valid baseline' >&2
+        exit 1
+    }
 }
 
 /bin/sh "$checker" >/dev/null
@@ -70,8 +91,13 @@ reset_fixture
 expect_rejected malformed-case-row
 
 reset_fixture
-/bin/mkdir -p "$work/alpha/platform"
-/usr/bin/printf '%s\n' partial-p0 > "$work/alpha/platform/partial.fixture"
+if [ -e "$work/alpha/platform/contract-set-v0.manifest" ] ||
+    [ -L "$work/alpha/platform/contract-set-v0.manifest" ]; then
+    /bin/mv "$work/alpha/platform/contract-set-v0.manifest" "$work/removed-p0-manifest"
+else
+    /bin/mkdir -p "$work/alpha/platform"
+    /usr/bin/printf '%s\n' partial-p0 > "$work/alpha/platform/partial.fixture"
+fi
 expect_rejected partial-p0-without-manifest
 
 reset_fixture

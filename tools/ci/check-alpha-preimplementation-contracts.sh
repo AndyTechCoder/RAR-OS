@@ -181,10 +181,14 @@ require_digest "$lab/reference-evidence-v0.fields" 2edbb270323d5fd074d3adc2929c6
 require_digest "$lab/cases.v0" 966d84739240b871d2dd22e362ce07ec0e82706cbde32dfd4e493c0bd9758342
 if [ "$p0_active" -eq 1 ]; then
     require_digest "$boot/alpha-boot-v0.fields" e2cd6322456224ac93cce70719f99f8d226bc73359786d1294115a27cb0d06fe
+    boot_cases_digest=1a59e0d9135b018d46fbb70318f53ba79a876c580b8ef1ce174f0b5eeb7c7222
+    boot_case_count=50
 else
     require_digest "$boot/alpha-boot-v0.fields" 8a97440b2366e3554cca8948c47d0df8e3146230a1d049ead48a105612623e0e
+    boot_cases_digest=370f829f791681cb4c1fb96dbf850f9535751a7a64295534562ea47a9f84bee3
+    boot_case_count=41
 fi
-require_digest "$boot/cases.v0" 370f829f791681cb4c1fb96dbf850f9535751a7a64295534562ea47a9f84bee3
+require_digest "$boot/cases.v0" "$boot_cases_digest"
 require_digest "$evidence/acceptance-v2.plan" ffdb07b584abc94122b14a416593916cf18df439de042c97ff83fda9e4444ccd
 require_digest "$evidence/acceptance-v2.fields" 7a4416fb7429de5244694f985c3c62deaa91d9d441f746ece4cd675367ef6e15
 require_digest "$evidence/acceptance-v2-cases.v0" e62b40fa7707a1b6540710328c0d049572c2a1f8de1d0dbc6d03c6d1dd2b62bf
@@ -323,7 +327,7 @@ else
 fi
 [ "$(/usr/bin/grep -c '^wire_field|RootRecoveryMapRecordV0|' "$boot_contract")" -eq 7 ] || fail 'Root-to-Recovery map layout is incomplete'
 [ "$(/usr/bin/grep -c '^memory_type_rule|' "$boot_contract")" -eq 15 ] || fail 'UEFI memory mapping table is incomplete'
-validate_case_file "$boot/cases.v0" 'schema=rar-alpha-boot-cases-v0' 41
+validate_case_file "$boot/cases.v0" 'schema=rar-alpha-boot-cases-v0' "$boot_case_count"
 
 handoff_expected=$(/usr/bin/sed -n 's/^r0_handoff_contract_sha256=//p' "$boot_contract")
 hardware_expected=$(/usr/bin/sed -n 's/^r0_hardware_contract_sha256=//p' "$boot_contract")
