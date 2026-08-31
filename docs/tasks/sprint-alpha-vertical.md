@@ -49,10 +49,13 @@ Implementation does not start until all of these pass:
    machine profile, QMP client, and reference executables. The ready controller
    must be merged to `main` before a source-branch Development Probe can run.
 5. PR #7 is green, independently reviewed, merged, and verified on GitHub.
-6. ADRs 0021, 0023, and 0026 are accepted, and the resulting Alpha boot,
-   private platform-envelope, fixed Core-bootstrap, and immutable-source
-   contracts are marked `ready` after fresh architecture, correctness, and
-   security review, before Milestone A target files or image recipes are created.
+6. ADRs 0021, 0023, and 0026–0029 are accepted. The exact
+   `spec/alpha/platform/contract-set-v0.manifest` must bind the resulting Alpha
+   boot, q35/AHCI closure, identities, private platform envelope, fixed Core
+   bootstrap, component/state grammars, and Nucleus-held state slots. It becomes
+   source authority only after fresh architecture, correctness, and security
+   review, merge, and exact-main validation; the machine profile separately
+   remains blocked until retained cloud evidence matches its exact inventory.
 7. ADR 0024 is accepted and real twice-reproduced helper build/test evidence,
    the ready v2 Lab profile, and the reviewed runnable v2 controller are merged
    before any source-branch Development Probe or untrusted target build runs.

@@ -1,0 +1,11 @@
+schema=rar-alpha-image-golden-v0
+image_bytes=67108864
+sector_bytes=512
+boot_contract=../../../../boot/alpha-boot-v0.fields
+machine_closure=../../../../boot/alpha-machine-closure-v0.fields
+platform_entry=platform-entry.fixture
+derivation=two-independent-RAR-owned-streaming-packer-and-inspector-required-in-ephemeral-CI
+retained_image=none
+golden_image_sha256=d508bb3075f94fbb7fde60991564b7ac04e546b14ccce9ace60fa9f044ce24ab
+golden_rule=synthetic-source-fixture-only,full-67108864-byte-image,never-retained,not-a-target-artifact
+expected=packer-and-independent-inspector-byte-identical

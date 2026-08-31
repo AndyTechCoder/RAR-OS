@@ -7,18 +7,29 @@ export LC_ALL LANG
 root=${1-}
 fixtures=${2-}
 alpha=${3-}
+fixture_identity=${4-}
+contract_identity=${5-}
 [ -n "$root" ] && [ -d "$root" ] && [ -n "$fixtures" ] && [ -d "$fixtures" ] &&
-    [ -n "$alpha" ] && [ -d "$alpha" ] || exit 64
+    [ -n "$alpha" ] && [ -d "$alpha" ] && [ -n "$fixture_identity" ] &&
+    [ -n "$contract_identity" ] || exit 64
+case "$fixture_identity:$contract_identity" in
+    ca7180e6a8aa6041cef872112b666d5c00621de138d1b968c1e6522978286ce5:3a0d670cccdca69f18defd6e109a17315744ecb03d4dc18903727f69177f3a05)
+        topology=p0-wire ;;
+    4b1d78c05e64ef15fff1b0edf4497bb01ebb70d38c05eb879357f09eddd26e42:014576ef79667274ecc4c6777d6f0c47380432941a27c99e7158358d6eeacf06)
+        topology=p0-compact-bdf ;;
+    *) exit 64 ;;
+esac
 [ -f "$fixtures/wire-authority.fixture" ] && [ ! -L "$fixtures/wire-authority.fixture" ] || exit 1
 
-env LC_ALL=C LANG=C /usr/bin/perl - "$root" "$fixtures" "$alpha" <<'PERL'
+env LC_ALL=C LANG=C /usr/bin/perl - "$root" "$fixtures" "$alpha" "$topology" <<'PERL'
 use strict;
 use warnings;
 use Cwd qw(abs_path);
 use Digest::SHA qw(sha256 sha256_hex);
 use Fcntl qw(O_NOFOLLOW O_RDONLY :mode);
 
-my ($root, $f, $alpha) = @ARGV;
+my ($root, $f, $alpha, $topology) = @ARGV;
+die 'unknown trusted topology' unless $topology eq 'p0-wire' || $topology eq 'p0-compact-bdf';
 sub raw {
     my ($p) = @_;
     # This helper is restricted to trusted, read-only CI source trees. The metadata
@@ -128,6 +139,99 @@ sub frame {
         pack('Q<', length($artifact)) . $artifact;
 }
 sub identity { sha256(frame(@_)) }
+sub require_exact_line {
+    my ($text,$expected)=@_;
+    my $count=()=$text =~ /^\Q$expected\E$/mg;
+    die "missing or duplicate compact contract row: $expected" unless $count==1;
+}
+
+sub compact_bdf {
+    my ($bus,$device,$function)=@_;
+    die 'compact BDF nonnumeric input' unless $bus =~ /\A[0-9]+\z/ &&
+        $device =~ /\A[0-9]+\z/ && $function =~ /\A[0-9]+\z/;
+    die 'compact BDF range' if $bus > 255 || $device > 31 || $function > 7;
+    my $value=($bus << 8) | ($device << 3) | $function;
+    die 'compact BDF overflow' if $value > 0xffff;
+    return $value;
+}
+
+sub compact_preimage {
+    my ($path)=@_;
+    my $text=raw($path);
+    die 'compact fixture newline' unless $text =~ /\n\z/;
+    my (%scalar,@vector,@disabled);
+    for my $line (split /\n/,$text) {
+        next if $line eq '';
+        if ($line =~ /^vector\|/) {
+            my @field=split /\|/,$line,-1;
+            die 'compact vector grammar' unless @field==7;
+            push @vector,\@field;
+        } elsif ($line =~ /^disabled\|/) {
+            my @field=split /\|/,$line,-1;
+            die 'compact disabled grammar' unless @field==8;
+            push @disabled,\@field;
+        } else {
+            my ($key,$value)=split /=/,$line,2;
+            die 'compact scalar grammar' unless defined($value) && $key =~ /\A[a-z_]+\z/ &&
+                length($value) && !exists($scalar{$key});
+            $scalar{$key}=$value;
+        }
+    }
+    my %required=(
+        schema=>'rar-alpha-compact-pci-bdf-vectors-v0',
+        status=>'experimental-pending-review',
+        formula=>'(bus<<8)|(device<<3)|function',
+        input_range=>'bus:0..255,device:0..31,function:0..7,checked-before-shift',
+        encoding=>'little-endian-u16',
+        disabled_order=>'00:01.0,00:1a.0,00:1a.1,00:1a.2,00:1a.7,00:1d.0,00:1d.1,00:1d.2,00:1d.7,00:1f.2',
+        disabled_values=>'0x0008,0x00d0,0x00d1,0x00d2,0x00d7,0x00e8,0x00e9,0x00ea,0x00ef,0x00fa',
+        disabled_little_endian_bytes=>'0800,d000,d100,d200,d700,e800,e900,ea00,ef00,fa00',
+        preimage_domain=>'RAR-ALPHA-DISABLED-VECTOR-V0+NUL-right-padding-to-32',
+        preimage_header=>'version:0,header_bytes:48,port_record_bytes:8,port_count:6,function_record_bytes:4,function_count:10,ahci_bdf:0x00fa,reserved:0',
+        preimage_ports=>'0,1,2,3,4,5;ST+CR+FRE+FR+reserved-all-zero',
+        preimage_bytes=>'136',
+        preimage_hex=>'5241522d414c5048412d44495341424c45442d564543544f522d563000000000000030000800060004000a00fa00000000000000000000000100000000000000020000000000000003000000000000000400000000000000050000000000000008000000d0000000d1000000d2000000d7000000e8000000e9000000ea000000ef000000fa000000',
+        preimage_sha256=>'737e6ec5fc50a8f9ee92ece3c3ecb699459efd53f42edf05c21bc0691a9e913f',
+        negative=>'bus-256,device-32,function-8,negative-input,overflow,truncation,inventory-formula,endian-reversal,missing,extra,duplicate,reordered,collision,wrong-AHCI',
+        scope=>'private-experimental-Alpha-v0-closure-framing-only,no-PCI-access-authority',
+        expected=>'accept');
+    die 'compact scalar set' unless scalar(keys(%scalar))==scalar(keys(%required));
+    for my $key (keys %required) {
+        die "compact scalar $key" unless exists($scalar{$key}) && $scalar{$key} eq $required{$key};
+    }
+    my @expected_vector=(
+        ['minimum',0,0,0,0x0000],['maximum',255,31,7,0xffff],
+        ['bus-basis',1,0,0,0x0100],['device-basis',0,1,0,0x0008],
+        ['function-basis',0,0,1,0x0001],['fixed-ahci',0,31,2,0x00fa]);
+    die 'compact vector count' unless @vector==@expected_vector;
+    for my $i (0..$#vector) {
+        my ($tag,$name,$bus,$device,$function,$literal,$bytes)=@{$vector[$i]};
+        my ($expected_name,$eb,$ed,$ef,$expected_value)=@{$expected_vector[$i]};
+        my $value=compact_bdf($bus,$device,$function);
+        die 'compact vector identity' unless $tag eq 'vector' && $name eq $expected_name &&
+            $bus==$eb && $device==$ed && $function==$ef && $value==$expected_value &&
+            $literal eq sprintf('0x%04x',$value) && $bytes eq unpack('H*',pack('v',$value));
+    }
+    die 'compact disabled count' unless @disabled==10;
+    my (%tuple,%value);
+    my $pre=domain('RAR-ALPHA-DISABLED-VECTOR-V0').pack('v8',0,48,8,6,4,10,0x00fa,0);
+    for my $port (0..5) { $pre.=pack('C8',$port,0,0,0,0,0,0,0) }
+    for my $i (0..$#disabled) {
+        my ($tag,$index,$bus,$device,$function,$literal,$bytes)=@{$disabled[$i]};
+        my $compact=compact_bdf($bus,$device,$function);
+        my $tuple=join(':',$bus,$device,$function);
+        die 'compact disabled identity' unless $tag eq 'disabled' && $index==$i+1 &&
+            $literal eq sprintf('0x%04x',$compact) && $bytes eq unpack('H*',pack('v',$compact));
+        die 'compact disabled duplicate' if $tuple{$tuple}++ || $value{$compact}++;
+        $pre.=pack('vCC',$compact,0,0);
+    }
+    die 'compact fixed AHCI' unless $disabled[-1][2]==0 && $disabled[-1][3]==31 &&
+        $disabled[-1][4]==2 && compact_bdf(@{$disabled[-1]}[2..4])==0x00fa;
+    die 'compact preimage size' unless length($pre)==136 && length($pre)==$scalar{preimage_bytes};
+    die 'compact preimage bytes' unless unpack('H*',$pre) eq $scalar{preimage_hex};
+    die 'compact preimage digest' unless sha256_hex($pre) eq $scalar{preimage_sha256};
+    return ($pre,sha256($pre));
+}
 
 my $core_contract = contract('platform/alpha-core-bootstrap-v0.fields');
 my $bundle_contract = contract('platform/alpha-component-bundle-v0.fields');
@@ -137,7 +241,33 @@ my $system_contract = sha256('RAR-ALPHA-SYSTEM-STATE-SERVICE-CONTRACT-V0');
 my $preserved_contract = sha256('RAR-ALPHA-PRESERVED-STATE-SERVICE-CONTRACT-V0');
 
 my $authority = raw("$f/wire-authority.fixture");
-my $authority_expected = <<'AUTHORITY';
+my $authority_expected;
+if ($topology eq 'p0-compact-bdf') {
+    my $closure_contract=raw("$alpha/boot/alpha-machine-closure-v0.fields");
+    for my $row (
+        'compact_bdf_formula=bitwise-or(bus<<8,device<<3,function)',
+        'compact_bdf_input_range=bus:0..255,device:0..31,function:0..7,checked-before-shift',
+        'compact_bdf_encoding=little-endian-u16',
+        'compact_bdf_scope=private-experimental-Alpha-v0-closure-framing-only,not-PCI-inventory-encoding,not-general-PCI-identifier,not-PCI-access-authority',
+        'compact_bdf_rejection=out-of-range,negative,overflow,truncation,endian-reversal,inventory-formula,collision,missing,extra,duplicate,reordered,AHCI-mismatch',
+        'disabled_function_order_values=0x0008,0x00d0,0x00d1,0x00d2,0x00d7,0x00e8,0x00e9,0x00ea,0x00ef,0x00fa',
+        'disabled_function_order_little_endian_bytes=0800,d000,d100,d200,d700,e800,e900,ea00,ef00,fa00',
+        'disabled_vector_preimage_sha256=737e6ec5fc50a8f9ee92ece3c3ecb699459efd53f42edf05c21bc0691a9e913f',
+        'disabled_vector_preimage_rule=136-exact-bytes,ports-0..5-then-functions-declared-order,little-endian,independent-reconstruct+rehash-before-Recovery,byte+digest-disagreement-reject') {
+        require_exact_line($closure_contract,$row);
+    }
+    $authority_expected = <<'AUTHORITY';
+schema=rar-alpha-wire-fixture-authority-v0
+authority=decoded-lowercase-hex-files-only
+boot_entry_source=spec/fixtures/release-0/bin/valid-x86_64.bin,offset:64,bytes:288,sha256:85209eb8d66968fa3dfd65884f5f67371aba14fe4afbfd7ad1b930cb9048c011,interpretation:existing-BootEntryV1-slice-unchanged
+normative=closure-record.hex,platform-header.hex,platform-source-table.hex,core-bootstrap.hex,system-state-service.hex,preserved-state-service.hex,component-bundle.hex,system-state.hex,preserved-state.hex,identity-vectors-wire.fixture
+payload_input=core-bootstrap.artifact,system-state-service.artifact,preserved-state-service.artifact,root.artifact,recovery.artifact,nucleus.artifact
+readable_non_authoritative=closure-record.fixture,compact-bdf-vectors.fixture,component-bundle.fixture,identity-vectors.fixture,platform-entry.fixture,system-state.fixture,preserved-state.fixture
+rule=no-readable-description-or-payload-input-is-a-wire-byte-authority
+expected=accept
+AUTHORITY
+} else {
+    $authority_expected = <<'AUTHORITY';
 schema=rar-alpha-wire-fixture-authority-v0
 authority=decoded-lowercase-hex-files-only
 boot_entry_source=spec/fixtures/release-0/bin/valid-x86_64.bin,offset:64,bytes:288,sha256:85209eb8d66968fa3dfd65884f5f67371aba14fe4afbfd7ad1b930cb9048c011,interpretation:existing-BootEntryV1-slice-unchanged
@@ -147,7 +277,14 @@ readable_non_authoritative=closure-record.fixture,component-bundle.fixture,ident
 rule=no-readable-description-or-payload-input-is-a-wire-byte-authority
 expected=accept
 AUTHORITY
+}
 same($authority,$authority_expected,'wire authority');
+my $compact_path="$f/compact-bdf-vectors.fixture";
+if ($topology eq 'p0-wire') {
+    die 'unexpected compact fixture in historical topology' if -e $compact_path || -l $compact_path;
+} else {
+    die 'missing or symbolic compact fixture' unless -f $compact_path && !-l $compact_path;
+}
 
 my $core = wire('core-bootstrap.hex');
 die 'core length' unless length($core) == u64($core, 16) && length($core) == 4132;
@@ -275,12 +412,19 @@ for my $r (@pci) {
 }
 die 'PCI inventory preimage length' unless length($inventory)==248;
 same(substr($closure,16,32),sha256($inventory),'closure PCI inventory');
-same(substr($closure,48,32),pack('H*','737e6ec5fc50a8f9ee92ece3c3ecb699459efd53f42edf05c21bc0691a9e913f'),
-    'opaque disabled-vector candidate');
+if ($topology eq 'p0-compact-bdf') {
+    my ($disabled_preimage,$disabled_digest)=compact_preimage($compact_path);
+    die 'disabled preimage length' unless length($disabled_preimage)==136;
+    same(substr($closure,48,32),$disabled_digest,'reconstructed disabled-vector');
+} else {
+    same(substr($closure,48,32),pack('H*','737e6ec5fc50a8f9ee92ece3c3ecb699459efd53f42edf05c21bc0691a9e913f'),
+        'opaque disabled-vector candidate');
+}
 same(substr($closure,80,32),$source_set,'closure source set');
 die 'closure fixed AHCI' unless u32($closure,112)==0x0000fa00 && u32($closure,116)==0x3f && u32($closure,120)==0;
 zero($closure,124,388);
-# Bytes 48..79 are pinned as opaque candidate data; this checker does not interpret their preimage.
+# Compact topologies reconstruct bytes 48..79 from canonical checked BDF cases;
+# the historical reviewed topology retains its opaque candidate binding.
 
 my $platform=wire('platform-header.hex');
 die 'platform length' unless length($platform)==256;

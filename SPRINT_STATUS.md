@@ -226,8 +226,10 @@
   canonical ADRs 0022–0029, all three decision-integration gates, and all eight
   completion-proof items. Proposal 0030 remains machine-classified as
   owner-decision-required. Accepted ADR 0031 records the compact-BDF decision
-  while P0 interpretation and merge remain blocked until D0 exact-main
-  validation plus complete contract/checker integration,
+  and D0 exact-main run `33415110465` passed. The P0-A candidate binds the
+  formula, vectors, 136-byte preimage, and unchanged closure digest while P0
+  interpretation and merge remain blocked on preliminary review, immutable
+  checkpoint, and complete T0/P0-B contract/checker integration,
   while the complete accepted-evidence publication task
   packet plus boot/platform integration packet are byte-pinned so preparation
   cannot silently become authoritative, incomplete, or disappear
@@ -293,9 +295,9 @@
   needs one-time owner-approved installation and confinement evidence in a
   fresh SSD-root task. The profile is now installed without replacing existing
   settings; effective confinement evidence remains a fresh-task pre-A gate
-- Next durable actions: merge and exact-main validate the accepted ADR 0031 D0
-  decision integration, then integrate it into the machine-closure contract,
-  trusted reconstruction, digest pins, mutations, reviews, guarded validation,
+- Next durable actions: independently review and freeze the ADR 0031 P0-A
+  machine-closure contract/vector checkpoint, then integrate trusted
+  reconstruction, digest pins, mutations, guarded validation, final reviews,
   and exact-main evidence and merge P0 before Milestone A can begin. Separately,
   obtain the ADR 0030 owner choice and integrate ADR 0030's
   accepted-evidence publication contract through its merged task packet before

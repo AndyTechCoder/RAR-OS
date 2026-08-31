@@ -1,0 +1,10 @@
+schema=rar-alpha-platform-entry-fixture-v0
+total_bytes=4194304
+source_count=4
+source|1|core-bootstrap|0x03800000|core-bootstrap.artifact|read+map-read
+source|2|component-bundle|0x04000000|component-bundle.fixture|read+map-read
+source|3|system-state|0x05000000|system-state.fixture|Nucleus-slot-source-read
+source|4|preserved-state|0x05800000|preserved-state.fixture|Nucleus-slot-source-read
+peripheral_record=absent
+padding=zero
+expected=accept
