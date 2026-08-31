@@ -91,5 +91,6 @@ permanently irreplaceable.
 - [Historical proposal 0029](proposals/0029-alpha-state-ticket-lifecycle.md)
 - [Historical boot follow-up choice brief](proposals/alpha-boot-followup-choice-brief.md)
 - [Open proposal 0030: Alpha Accepted-Evidence Publication and Recovery](proposals/0030-alpha-accepted-evidence-publication-recovery.md)
+- [Open proposal 0031: Alpha Compact PCI BDF Encoding](proposals/0031-alpha-compact-pci-bdf-encoding.md)
 - [Alpha Decision Integration Plan](proposals/alpha-decision-integration-plan.md)
 - [Sprint Alpha Completion Evidence Map](tasks/sprint-alpha-completion-evidence-map.md)
