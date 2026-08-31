@@ -465,7 +465,7 @@ put($image, $data + 1 * 512, directory(short_entry($dot, 0x10, 3, 0), short_entr
 put($image, $data + 2 * 512, directory(short_entry($dot, 0x10, 4, 0), short_entry($dotdot, 0x10, 3, 0), short_entry($short[0], 0x20, 7, length($payload[0]))));
 put($image, $data + 3 * 512, directory(short_entry($dot, 0x10, 5, 0), short_entry($dotdot, 0x10, 2, 0), short_entry('ALPHA      ', 0x10, 6, 0)));
 my @alpha_entries = (short_entry($dot, 0x10, 6, 0), short_entry($dotdot, 0x10, 5, 0));
-for my $i (1 .. 6) { push @alpha_entries, short_entry($short[$i], 0x20, 7 + $i, length($payload[$i])) }
+for my $i (4, 3, 2, 6, 1, 5) { push @alpha_entries, short_entry($short[$i], 0x20, 7 + $i, length($payload[$i])) }
 put($image, $data + 4 * 512, directory(@alpha_entries));
 for my $i (0 .. 6) {
     die 'fixture payload exceeds one cluster' if length($payload[$i]) > 512;
@@ -516,6 +516,10 @@ sub read_all {
 sub le16 { unpack('v', substr($_[0], $_[1], 2)) }
 sub le32 { unpack('V', substr($_[0], $_[1], 4)) }
 sub le64 { unpack('Q<', substr($_[0], $_[1], 8)) }
+sub all_zero {
+    my ($bytes, $label) = @_;
+    die "independent nonzero $label" if $bytes =~ /[^\x00]/;
+}
 sub crc32 {
     my ($bytes) = @_;
     my $crc = 0xffffffff;
@@ -526,7 +530,7 @@ sub crc32 {
     return ($crc ^ 0xffffffff) & 0xffffffff;
 }
 sub verify_gpt_header {
-    my ($image, $offset, $current, $backup, $entry_lba) = @_;
+    my ($image, $offset, $current, $backup, $entry_lba, $entries_crc, $disk_guid) = @_;
     my $sector = substr($image, $offset, 512);
     die 'independent GPT signature' unless substr($sector, 0, 8) eq 'EFI PART';
     die 'independent GPT revision' unless le32($sector, 8) == 0x00010000;
@@ -534,50 +538,142 @@ sub verify_gpt_header {
     die 'independent GPT reserved field' unless le32($sector, 20) == 0;
     die 'independent GPT locations' unless le64($sector, 24) == $current && le64($sector, 32) == $backup;
     die 'independent GPT usable range' unless le64($sector, 40) == 34 && le64($sector, 48) == 131038;
+    die 'independent GPT disk GUID' unless substr($sector, 56, 16) eq $disk_guid;
     die 'independent GPT entry location' unless le64($sector, 72) == $entry_lba;
     die 'independent GPT entry geometry' unless le32($sector, 80) == 128 && le32($sector, 84) == 128;
+    die 'independent GPT entry digest' unless le32($sector, 88) == $entries_crc;
     my $stored_crc = le32($sector, 16);
     substr($sector, 16, 4, "\0" x 4);
     die 'independent GPT header CRC' unless crc32(substr($sector, 0, 92)) == $stored_crc;
+    all_zero(substr($sector, 92), 'GPT header padding');
+}
+sub verify_entry {
+    my ($image, $offset, $name, $attr, $cluster, $size) = @_;
+    die 'independent directory name' unless substr($image, $offset, 11) eq $name;
+    die 'independent directory attribute' unless unpack('C', substr($image, $offset + 11, 1)) == $attr;
+    all_zero(substr($image, $offset + 12, 2), 'directory NT/create-tenths');
+    die 'independent directory create time' unless le16($image, $offset + 14) == 0;
+    die 'independent directory create date' unless le16($image, $offset + 16) == 0x21;
+    die 'independent directory access date' unless le16($image, $offset + 18) == 0x21;
+    die 'independent directory cluster high' unless le16($image, $offset + 20) == (($cluster >> 16) & 0xffff);
+    die 'independent directory write time' unless le16($image, $offset + 22) == 0;
+    die 'independent directory write date' unless le16($image, $offset + 24) == 0x21;
+    die 'independent directory cluster low' unless le16($image, $offset + 26) == ($cluster & 0xffff);
+    die 'independent directory size' unless le32($image, $offset + 28) == $size;
+    return $cluster;
+}
+sub verify_directory_tail {
+    my ($image, $offset, $entry_count) = @_;
+    all_zero(substr($image, $offset + $entry_count * 32, 512 - $entry_count * 32), 'directory end marker and padding');
 }
 
 my $image = read_all(shift @ARGV);
 my @payload = map { read_all($_) } @ARGV;
 die 'independent image length' unless length($image) == 67108864;
+all_zero(substr($image, 0, 446), 'MBR bootstrap');
+die 'independent protective MBR entry' unless substr($image, 446, 16) eq pack('H*', '00000200eeffffff01000000ffff0100');
+all_zero(substr($image, 462, 48), 'unused MBR entries');
 die 'independent MBR signature' unless substr($image, 510, 2) eq "\x55\xaa";
-die 'independent MBR partition type' unless unpack('C', substr($image, 450, 1)) == 0xee;
-die 'independent MBR start LBA' unless le32($image, 454) == 1;
-die 'independent MBR sector count' unless le32($image, 458) == 131071;
-verify_gpt_header($image, 512, 1, 131071, 2);
-verify_gpt_header($image, 131071 * 512, 131071, 1, 131039);
 die 'independent GPT arrays' unless substr($image, 2 * 512, 16384) eq substr($image, 131039 * 512, 16384);
 my $entries = substr($image, 2 * 512, 16384);
-die 'independent GPT entry CRC' unless crc32($entries) == le32($image, 512 + 88) && crc32($entries) == le32($image, 131071 * 512 + 88);
+my $entries_crc = crc32($entries);
+my $disk_guid = pack('H*', '30524152000000408000000000000001');
+verify_gpt_header($image, 512, 1, 131071, 2, $entries_crc, $disk_guid);
+verify_gpt_header($image, 131071 * 512, 131071, 1, 131039, $entries_crc, $disk_guid);
+die 'independent GPT type GUID' unless substr($entries, 0, 16) eq pack('H*', '28732ac11ff8d211ba4b00a0c93ec93b');
+die 'independent GPT unique GUID' unless substr($entries, 16, 16) eq pack('H*', '30524152000000408000000000000002');
 die 'independent GPT partition range' unless le64($entries, 32) == 2048 && le64($entries, 40) == 129023;
+die 'independent GPT attributes' unless le64($entries, 48) == 0;
+my $partition_name = join('', map { pack('v', ord($_)) } split('', 'RAR-ALPHA-ESP'));
+die 'independent GPT partition name' unless substr($entries, 56, length($partition_name)) eq $partition_name;
+all_zero(substr($entries, 56 + length($partition_name)), 'GPT unused name and entries');
+all_zero(substr($image, 34 * 512, (2048 - 34) * 512), 'pre-partition gap');
 my $esp = 2048 * 512;
+die 'independent FAT jump' unless substr($image, $esp, 3) eq pack('H*', 'eb5890');
+die 'independent FAT OEM' unless substr($image, $esp + 3, 8) eq 'RAROSV0 ';
 die 'independent FAT boot signature' unless substr($image, $esp + 510, 2) eq "\x55\xaa";
 die 'independent FAT sector size' unless le16($image, $esp + 11) == 512;
-die 'independent FAT geometry' unless le32($image, $esp + 36) == 977 && le32($image, $esp + 44) == 2;
+die 'independent FAT sectors per cluster' unless unpack('C', substr($image, $esp + 13, 1)) == 1;
+die 'independent FAT reserved sectors' unless le16($image, $esp + 14) == 32;
+die 'independent FAT count' unless unpack('C', substr($image, $esp + 16, 1)) == 2;
+die 'independent FAT legacy geometry' unless le16($image, $esp + 17) == 0 && le16($image, $esp + 19) == 0 && le16($image, $esp + 22) == 0;
+die 'independent FAT media' unless unpack('C', substr($image, $esp + 21, 1)) == 0xf8;
+die 'independent FAT track geometry' unless le16($image, $esp + 24) == 63 && le16($image, $esp + 26) == 255;
+die 'independent FAT hidden sectors' unless le32($image, $esp + 28) == 2048;
+die 'independent FAT total sectors' unless le32($image, $esp + 32) == 126976;
+die 'independent FAT sectors each' unless le32($image, $esp + 36) == 977;
+die 'independent FAT flags/version' unless le16($image, $esp + 40) == 0 && le16($image, $esp + 42) == 0;
+die 'independent FAT root cluster' unless le32($image, $esp + 44) == 2;
+die 'independent FAT info/backup' unless le16($image, $esp + 48) == 1 && le16($image, $esp + 50) == 6;
+all_zero(substr($image, $esp + 52, 12), 'FAT BPB reserved bytes');
+die 'independent FAT drive/signature' unless unpack('C', substr($image, $esp + 64, 1)) == 0x80 && unpack('C', substr($image, $esp + 65, 1)) == 0 && unpack('C', substr($image, $esp + 66, 1)) == 0x29;
+die 'independent FAT volume ID' unless le32($image, $esp + 67) == 0x52415230;
+die 'independent FAT volume label' unless substr($image, $esp + 71, 11) eq 'RARALPHA   ';
+die 'independent FAT type label' unless substr($image, $esp + 82, 8) eq 'FAT32   ';
+all_zero(substr($image, $esp + 90, 420), 'FAT boot padding');
 die 'independent backup boot' unless substr($image, $esp, 512) eq substr($image, $esp + 6 * 512, 512);
+my $fsinfo = $esp + 512;
+die 'independent FSInfo lead signature' unless le32($image, $fsinfo) == 0x41615252;
+all_zero(substr($image, $fsinfo + 4, 480), 'FSInfo reserved one');
+die 'independent FSInfo structure signature' unless le32($image, $fsinfo + 484) == 0x61417272;
+die 'independent FSInfo free count' unless le32($image, $fsinfo + 488) == 124978;
+die 'independent FSInfo next free' unless le32($image, $fsinfo + 492) == 14;
+all_zero(substr($image, $fsinfo + 496, 12), 'FSInfo reserved two');
+die 'independent FSInfo trail signature' unless le32($image, $fsinfo + 508) == 0xaa550000;
 die 'independent backup FSInfo' unless substr($image, $esp + 512, 512) eq substr($image, $esp + 7 * 512, 512);
+all_zero(substr($image, $esp + 2 * 512, 4 * 512), 'reserved sectors before backup');
+all_zero(substr($image, $esp + 8 * 512, 24 * 512), 'reserved sectors after backup');
 die 'independent FAT copies' unless substr($image, $esp + 32 * 512, 977 * 512) eq substr($image, $esp + (32 + 977) * 512, 977 * 512);
 my $data = $esp + (32 + 2 * 977) * 512;
 my $fat = substr($image, $esp + 32 * 512, 977 * 512);
+die 'independent FAT reserved entry zero' unless le32($fat, 0) == 0x0ffffff8;
+die 'independent FAT reserved entry one' unless le32($fat, 4) == 0x0fffffff;
 for my $cluster (2 .. 13) {
     die 'independent FAT chain' unless (le32($fat, $cluster * 4) & 0x0fffffff) == 0x0fffffff;
 }
+all_zero(substr($fat, 14 * 4), 'unused FAT entries');
 my @short = ('BOOTX64 EFI', 'RECOVERYELF', 'NUCLEUS ELF', 'CORE    IMG', 'COMPONENRAC', 'SYSTEM  RAS', 'PRESERVERAP');
+my $dot = '.          ';
+my $dotdot = '..         ';
+verify_entry($image, $data, 'RARALPHA   ', 0x08, 0, 0);
+verify_entry($image, $data + 32, 'EFI        ', 0x10, 3, 0);
+verify_entry($image, $data + 64, 'RAR        ', 0x10, 5, 0);
+verify_directory_tail($image, $data, 3);
+verify_entry($image, $data + 512, $dot, 0x10, 3, 0);
+verify_entry($image, $data + 512 + 32, $dotdot, 0x10, 2, 0);
+verify_entry($image, $data + 512 + 64, 'BOOT       ', 0x10, 4, 0);
+verify_directory_tail($image, $data + 512, 3);
+verify_entry($image, $data + 2 * 512, $dot, 0x10, 4, 0);
+verify_entry($image, $data + 2 * 512 + 32, $dotdot, 0x10, 3, 0);
+my @file_entry;
+$file_entry[0] = $data + 2 * 512 + 64;
+verify_entry($image, $file_entry[0], $short[0], 0x20, 7, length($payload[0]));
+verify_directory_tail($image, $data + 2 * 512, 3);
+verify_entry($image, $data + 3 * 512, $dot, 0x10, 5, 0);
+verify_entry($image, $data + 3 * 512 + 32, $dotdot, 0x10, 2, 0);
+verify_entry($image, $data + 3 * 512 + 64, 'ALPHA      ', 0x10, 6, 0);
+verify_directory_tail($image, $data + 3 * 512, 3);
+verify_entry($image, $data + 4 * 512, $dot, 0x10, 6, 0);
+verify_entry($image, $data + 4 * 512 + 32, $dotdot, 0x10, 5, 0);
+my @alpha_order = (4, 3, 2, 6, 1, 5);
+for my $position (0 .. $#alpha_order) {
+    my $i = $alpha_order[$position];
+    $file_entry[$i] = $data + 4 * 512 + (2 + $position) * 32;
+    verify_entry($image, $file_entry[$i], $short[$i], 0x20, 7 + $i, length($payload[$i]));
+}
+verify_directory_tail($image, $data + 4 * 512, 8);
 for my $i (0 .. 6) {
     die 'independent payload ceiling' if length($payload[$i]) == 0 || length($payload[$i]) > 512;
-    die 'independent payload bytes' unless substr($image, $data + (5 + $i) * 512, length($payload[$i])) eq $payload[$i];
-    die 'independent payload padding' unless substr($image, $data + (5 + $i) * 512 + length($payload[$i]), 512 - length($payload[$i])) eq "\0" x (512 - length($payload[$i]));
+    my $cluster = (le16($image, $file_entry[$i] + 20) << 16) | le16($image, $file_entry[$i] + 26);
+    my $bytes = le32($image, $file_entry[$i] + 28);
+    die 'independent payload FAT termination' unless (le32($fat, $cluster * 4) & 0x0fffffff) == 0x0fffffff;
+    my $payload_offset = $data + ($cluster - 2) * 512;
+    die 'independent payload bytes' unless substr($image, $payload_offset, $bytes) eq $payload[$i];
+    all_zero(substr($image, $payload_offset + $bytes, 512 - $bytes), 'payload padding');
 }
-die 'independent boot directory entry' unless substr($image, $data + 2 * 512 + 64, 11) eq $short[0] && le32($image, $data + 2 * 512 + 64 + 28) == length($payload[0]);
-for my $i (1 .. 6) {
-    my $entry = $data + 4 * 512 + (1 + $i) * 32;
-    die 'independent alpha directory name' unless substr($image, $entry, 11) eq $short[$i];
-    die 'independent alpha directory size' unless le32($image, $entry + 28) == length($payload[$i]);
-}
+my $esp_end = $esp + 126976 * 512;
+all_zero(substr($image, $data + 12 * 512, $esp_end - ($data + 12 * 512)), 'unused FAT data region');
+all_zero(substr($image, $esp_end, 131039 * 512 - $esp_end), 'post-partition gap');
 print sha256_hex($image), "\n";
 PERL
     ) || fail 'independent golden image inspection failed'
