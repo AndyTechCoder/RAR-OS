@@ -22,27 +22,27 @@ sha_file() {
 for file in "$templates" "$dispositions" "$domain" "$subject"; do
     [ -f "$file" ] && [ ! -L "$file" ] || fail "required regular source is unavailable: $file"
 done
-[ "$(sha_file "$templates")" = 443d30414ec3cc8542755006ada9a40d52e0f5efe3b26de7fdc5f82dc1152be4 ] || fail 'case-template bytes escaped review'
+[ "$(sha_file "$templates")" = 4950a2c5cbe5cddaca5bd5a829d889310585a6197630e87e9afdb48ce778ae20 ] || fail 'case-template bytes escaped review'
 [ "$(sha_file "$dispositions")" = 3e693cf86851164cb07577e71b7ff256a17201df1a844c7b9355b135e0e0ba61 ] || fail 'case dispositions escaped review'
 [ "$(sha_file "$domain")" = 67555f2d565569e95b44a247dda630c9b98d293ba0773880f248d69d802ac66c ] || fail 'input domain escaped review'
 [ "$(sha_file "$subject")" = 3cbeeb85abc3023980a8afe444178ea7acc31f298b3b0975d2c4d6630c82a76c ] || fail 'verifier subject escaped review'
 
 for required in \
-    'status=experimental-incomplete-inactive-source-only' \
+    'status=experimental-complete-source-only-inactive' \
     'execution_authority=none' \
-    'base_fixture_status=absent' \
+    'base_fixture_status=specified-by-controller-helper-closure-verifier-cases-v0;instance-not-created-until-C3V' \
     'template_count=125' \
-    'template_exactness=structural-only;primary+repair-tokens-are-opaque-identifiers+not-yet-decodable-operators' \
-    'operator_semantics_status=absent' \
-    'repair_semantics_status=absent' \
+    'template_exactness=bound-to-owned-operator+repair-semantics-contract-set+controller-helper-closure-verifier-cases-v0' \
+    'operator_semantics_status=complete-across-owned-semantics-contract-set' \
+    'repair_semantics_status=complete-across-owned-semantics-contract-set' \
     'operator_binding_requirement=separate-reviewed-versioned-operator+repair-semantics-contract-must-define-every-token+exact-target+precondition+postcondition+derivation+bound+independence-before-base-binding' \
     'coverage_rule=exactly-one-template-for-every-disposition-row-marked-fixture-or-synchronized-mutation+no-template-for-fault-only+source-proof+source-dominated+cryptographic-residual+domain-extension' \
     'scratch_exclusion=controller-has-no-post-start-path+FD+backing+namespace+proc+ptrace+mutation+repair-access-to-/tmp-or-verifier-scratch' \
     'termination_oracle=normal-process-exit-status-exactly-1;signal+core+timeout+resource-limit+shell+tool+other-fault-termination-are-rejected+reserved-for-separate-fault-contract' \
-    'runtime_state=no-base-fixture+no-fixture-image+no-controller+no-harness+no-run+no-evidence+no-verdict' \
+    'runtime_state=contracts-complete;C3V-base+fixture-image+controller+harness+run+evidence+verdict-instances-not-created' \
     'ordinary_output_oracle=/verification-empty-except-E053-receipt-collision' \
     'E053_output_oracle=preexisting-/verification/controller-helper-closure-verification.receipt-bytes+device+inode+mode+uid+gid+size+mtime+ctime+link-count-remain-exactly-unchanged+no-other-verification-entry' \
-    'acceptance_rule=blocked;templates-are-not-executable-instances-until-the-operator+repair-semantics+exact-base+phase-instrumentation+controller+fault+evidence+verdict-contracts-are-reviewed' \
+    'acceptance_rule=blocked;templates-remain-nonexecuting-until-C3V-instances+controller+wiring+exact-main-validation-are-reviewed' \
     'consumer_rule=this-catalog-does-not-authorize-fixture-creation+controller-implementation+container+compiler+helper+target+VM+emulator+workflow+wiring+gate+readiness' \
     'local_rule=text+hash+structure-check-only;never-run-verifier+controller+container+compiler+helper+target+VM+emulator-on-Mac'; do
     grep -Fqx "$required" "$templates" || fail "required invariant is missing: $required"
@@ -94,4 +94,4 @@ fi
 grep -qx 'rust_toolchain_closure_manifest_relative=none' "$root/tools/toolchain/host-tools.x86_64-unknown-linux-gnu-ci.lock" || fail 'CI lock was activated'
 grep -qx 'state=blocked' "$root/tools/sprint-alpha/controller-helper-v0.env" || fail 'helper inventory is not blocked'
 
-printf '%s\n' 'controller-helper closure verifier case templates are complete relative to an absent base, inactive, and directly unwired'
+printf '%s\n' 'controller-helper closure verifier case templates are complete relative to the C1 case contract, inactive, and directly unwired'
