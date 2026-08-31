@@ -17,6 +17,23 @@ distinct exact-main Specifications run completes validation and mutation.
 The later C1 implementation writer owns only these paths:
 
 - `spec/alpha/lab/README.md`
+- `tools/toolchain/README.md`
+- `docs/sprint-alpha-dashboard.md`
+- `SPRINT_STATUS.md`
+- `spec/alpha/lab/controller-helper-closure-verifier-test-plan-v0.fields`
+- `spec/alpha/lab/controller-helper-closure-verifier-validation-v0.fields`
+- `spec/alpha/lab/controller-helper-closure-verifier-errors-v0`
+- `spec/alpha/lab/controller-helper-closure-verifier-precedence-v0`
+- `spec/alpha/lab/controller-helper-closure-verifier-input-domain-v0.fields`
+- `spec/alpha/lab/controller-helper-closure-verifier-case-dispositions-v0`
+- `spec/alpha/lab/controller-helper-closure-verifier-case-templates-v0`
+- `spec/alpha/lab/controller-helper-closure-verifier-operator-inventory-v0`
+- `spec/alpha/lab/controller-helper-closure-verifier-scalar-semantics-v0`
+- `spec/alpha/lab/controller-helper-closure-verifier-basic-filesystem-semantics-v0`
+- `spec/alpha/lab/controller-helper-closure-verifier-scalar-repair-semantics-v0`
+- `spec/alpha/lab/controller-helper-closure-verifier-synchronized-link-semantics-v0`
+- `spec/alpha/lab/controller-helper-closure-verifier-observation-repair-semantics-v0`
+- `spec/alpha/lab/controller-helper-closure-verifier-rebuild-observation-canonical-semantics-v0`
 - `spec/alpha/lab/controller-helper-runtime-v0.fields`
 - `spec/alpha/lab/controller-helper-runtime-cases.v0`
 - `spec/alpha/lab/controller-helper-closure-observer-test-v0.fields`
@@ -27,6 +44,18 @@ The later C1 implementation writer owns only these paths:
 - `spec/alpha/lab/controller-helper-test-evidence-v1.fields`
 - `spec/alpha/lab/controller-helper-build-evidence-v1.fields`
 - `tools/ci/check-controller-helper-runtime-source.sh`
+- `tools/ci/check-controller-helper-closure-verifier-test-plan-source.sh`
+- `tools/ci/check-controller-helper-closure-verifier-validation-source.sh`
+- `tools/ci/check-controller-helper-closure-verifier-input-domain-source.sh`
+- `tools/ci/check-controller-helper-closure-verifier-case-dispositions-source.sh`
+- `tools/ci/check-controller-helper-closure-verifier-case-templates-source.sh`
+- `tools/ci/check-controller-helper-closure-verifier-operator-inventory-source.sh`
+- `tools/ci/check-controller-helper-closure-verifier-scalar-semantics-source.sh`
+- `tools/ci/check-controller-helper-closure-verifier-basic-filesystem-semantics-source.sh`
+- `tools/ci/check-controller-helper-closure-verifier-scalar-repair-semantics-source.sh`
+- `tools/ci/check-controller-helper-closure-verifier-synchronized-link-semantics-source.sh`
+- `tools/ci/check-controller-helper-closure-verifier-observation-repair-semantics-source.sh`
+- `tools/ci/check-controller-helper-closure-verifier-rebuild-observation-canonical-semantics-source.sh`
 - `tools/ci/check-controller-helper-closure-observer-test-source.sh`
 - `tools/ci/check-controller-helper-closure-verifier-faults-source.sh`
 - `tools/ci/check-controller-helper-closure-verifier-cases-source.sh`
@@ -38,8 +67,10 @@ The later C1 implementation writer owns only these paths:
 - `tools/ci/check-alpha-preimplementation-contracts.sh`
 - `tools/ci/check-specs.sh`
 
-No glob, directory, workflow, existing v0 evidence schema, helper Rust source,
-profile, inventory instance, tool lock, or status file is owned. A need to
+No glob, directory, workflow, existing v0 build/test evidence schema, helper
+Rust source, profile, inventory instance, or tool lock is owned. Existing staged
+verifier contracts, their bound checkers, and the three named status documents
+are owned only to replace now-stale absence statements and rebind exact bytes. A need to
 touch any other path stops C1 and requires a separately reviewed packet change.
 
 ## Contract requirements
@@ -86,7 +117,10 @@ The verifier contracts must:
 - define exact result ordering, byte ceilings, exit mapping, evidence grammar,
   normalized verdict, revision/nonces, anti-replay, and no-success effect;
 - preserve unrepresentable cases as explicit source-proof or residual rows
-  rather than silently omitting them.
+  rather than silently omitting them;
+- update every owned staged verifier contract, checker digest, toolchain note,
+  dashboard, and sprint status so no authoritative text still says the new C1
+  contracts are absent, while continuing to say execution and wiring are absent.
 
 ### Closure acceptance
 
