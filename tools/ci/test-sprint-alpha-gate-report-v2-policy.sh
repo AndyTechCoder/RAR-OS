@@ -43,6 +43,7 @@ install_platform_fixture() {
     platform_fixture=$root/tools/ci/fixtures/gate-report-p0/alpha
     [ -f "$platform_fixture/platform/contract-set-v0.manifest" ] || return 1
     /bin/cp -R "$platform_fixture/platform" "$fixture/spec/alpha/"
+    /bin/cp "$platform_fixture/boot/README.md" "$fixture/spec/alpha/boot/"
     /bin/cp "$platform_fixture/boot/alpha-boot-v0.fields" "$fixture/spec/alpha/boot/"
     /bin/cp "$platform_fixture/boot/alpha-machine-closure-v0.fields" "$fixture/spec/alpha/boot/"
     /bin/cp "$platform_fixture/boot/cases.v0" "$fixture/spec/alpha/boot/"
