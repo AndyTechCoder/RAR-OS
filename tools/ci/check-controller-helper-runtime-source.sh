@@ -24,6 +24,10 @@ for line in \
  'process_rule=controller-owned-pidfd-or-equivalent-nonreusable-handle,bare-PID-never-authority,handle-closed-after-reap' \
  'recovery_rule=source-never-deleted,exclusive-attempt-roots,bounded-exact-enumeration,inventory-durable-before-delete,identity-match-before-each-delete' \
  'attempt_ceiling=3-normal-attempts+3-recovery-sessions,fourth-is-durable-blocked,no-reuse+loop'; do grep -Fqx "$line" "$subject" || fail "missing invariant: $line"; done
+cases=$root/spec/alpha/lab/controller-helper-runtime-cases.v0
+[ -f "$cases" ] && [ ! -L "$cases" ] || fail 'runtime cases unavailable'
+[ "$(env -u LC_CTYPE LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$cases" | /usr/bin/awk '{print $1}')" = addc112fdd9c88f5dc99a0f31eef452fbe1a54f808d348d3d13b8731da3103c0 ] || fail 'runtime case bytes escaped review'
+[ "$(grep -Ec '^[AR][0-9][0-9][0-9]\\|' "$cases")" -eq 127 ] || fail 'runtime case count changed'
 grep -Fq 'local_rule=' "$subject" || fail 'local execution denial missing'
 if grep -R -Fq 'controller-helper-runtime-v0.fields' "$root/.github/workflows"; then fail 'source-only contract is wired to a workflow'; fi
 grep -qx 'rust_toolchain_closure_manifest_relative=none' "$root/tools/toolchain/host-tools.x86_64-unknown-linux-gnu-ci.lock" || fail 'CI closure lock activated'
