@@ -9,7 +9,7 @@ sha(){ env -u LC_CTYPE LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$1" | /usr/bin/aw
 line(){ [ "$(grep -Fxc "$2" "$1")" -eq 1 ] || fail "missing or duplicate field: $2"; }
 is_sha(){ printf '%s\n' "$1" | grep -Eq '^[0-9a-f]{64}$' && [ "$1" != 0000000000000000000000000000000000000000000000000000000000000000 ]; }
 [ -f "$contract" ] && [ ! -L "$contract" ] || fail 'contract unavailable'
-[ "$(sha "$contract")" = 31c51c53f6db4897d940ac70b993ea043dd959da5718147ff5a1b4fa07b1eeea ] || fail 'contract bytes escaped review'
+[ "$(sha "$contract")" = c2d174bf2d793079f98a7467f4b7bd12ceddc00e0c67d247a4b0531f66999f97 ] || fail 'contract bytes escaped review'
 line "$contract" 'schema=rar-alpha-controller-helper-build-evidence-v1'
 line "$contract" 'test_rule=consume-exactly-one-controller-helper-test-evidence-v1-instance,127-cases,failed-count-0,no-v0-or-13-case-substitution'
 [ "$#" -ne 0 ] || { printf '%s\n' 'controller-helper build evidence v1 contract is byte-bound'; exit 0; }
