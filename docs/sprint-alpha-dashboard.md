@@ -82,9 +82,10 @@ and cannot increase the implementation count.
   journal, cleanup, recovery, retry, semantic-verification, and activation
   behavior remain blocked on owner selection and reviewed contract integration
   of proposed ADR 0030.
-- Gate-report v2 therefore reports the platform envelope, Core bootstrap,
-  component bundle, initial system source, initial preserved source, and
-  fixture manifest as missing; Milestones A and B remain blocked.
+- Gate-report v2 reports the platform envelope, Core bootstrap, component
+  bundle, initial system source, initial preserved source, and fixture manifest
+  as `pending-review`; that orientation state grants no activation or target
+  authority. Milestones A and B remain blocked on their separate gates.
 - The Lab/controller/helper lacks real activating identities and reviewed cloud
   build/test evidence. The inactive observer has not run; no candidate compiler
   closure exists, and its tools, complete set, verifier, and retained output
