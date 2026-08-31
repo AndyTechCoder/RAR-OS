@@ -44,7 +44,7 @@ pair|041|042|E-SLOT-STATE|empty
 pair|042|043|E-ALLOCATION|empty
 pair|043|044|E-CONCURRENCY|empty
 pair|044|045|E-REVOCATION|empty
-pair|045|046|E-R0-BOUNDARY|empty
+pair|045|047|E-R0-BOUNDARY|empty
 pair|046|047|E-AUTHORITY|empty
 pair|047|048|E-LIFETIME|empty
 pair|014|030|E-WX|empty
