@@ -89,10 +89,29 @@ adr_0025=$(classify 0025 alpha-gui-continuity-evidence-sequencing)
 adr_0026=$(classify 0026 alpha-platform-payload-and-state-sources)
 
 platform_contract_state=missing
+platform_envelope_identity=unavailable
+core_bootstrap_identity=unavailable
 if [ -e "$source_root/spec/alpha/platform" ] || [ -L "$source_root/spec/alpha/platform" ]; then
     platform_contract_state=invalid
+    platform_manifest=$source_root/spec/alpha/platform/contract-set-v0.manifest
+    if [ -f "$platform_manifest" ] && [ ! -L "$platform_manifest" ] && [ -s "$platform_manifest" ] &&
+        RAR_POLICY_MUTATION_TESTS= /bin/sh "$repository_root/tools/ci/check-alpha-boot-platform-contracts.sh" \
+            "$source_root/spec/alpha" >/dev/null 2>&1; then
+        platform_contract_state=pending-review
+        platform_envelope_identity=$(/usr/bin/sed -n \
+            's|^contract[|]spec/alpha/platform/alpha-platform-entry-v0.fields[|][0-9][0-9]*[|]\([0-9a-f]*\)$|\1|p' \
+            "$platform_manifest")
+        core_bootstrap_identity=$(/usr/bin/sed -n \
+            's|^contract[|]spec/alpha/platform/alpha-core-bootstrap-v0.fields[|][0-9][0-9]*[|]\([0-9a-f]*\)$|\1|p' \
+            "$platform_manifest")
+        if ! printf '%s\n%s\n' "$platform_envelope_identity" "$core_bootstrap_identity" |
+            /usr/bin/awk 'length($0) != 64 || $0 !~ /^[0-9a-f]+$/ { bad=1 } END { exit bad }'; then
+            platform_contract_state=invalid
+            platform_envelope_identity=unavailable
+            core_bootstrap_identity=unavailable
+        fi
+    fi
 fi
-platform_identity=unavailable
 
 acceptance_v2_state=invalid
 acceptance_v2_plan_sha256=unavailable
@@ -165,9 +184,9 @@ printf '%s\n' \
     "helper_state=$helper_state" \
     "controller_readiness=$controller_readiness" \
     "platform_envelope_state=$platform_contract_state" \
-    "platform_envelope_contract_sha256=$platform_identity" \
+    "platform_envelope_contract_sha256=$platform_envelope_identity" \
     "core_bootstrap_state=$platform_contract_state" \
-    "core_bootstrap_contract_sha256=$platform_identity" \
+    "core_bootstrap_contract_sha256=$core_bootstrap_identity" \
     "component_bundle_state=$platform_contract_state" \
     'component_bundle_fixture_path=unavailable' \
     'component_bundle_fixture_sha256=unavailable' \

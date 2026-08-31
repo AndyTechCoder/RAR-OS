@@ -1,0 +1,8 @@
+schema=rar-alpha-machine-closure-record-fixture-v0
+total_bytes=512
+inventory=q35-inventory.fixture
+disabled_vector=ahci-closure.fixture
+source_set=platform-entry.fixture
+flags=0
+reserved=zero
+expected=accept

@@ -39,6 +39,16 @@ reset_fixture() {
     /bin/cp "$root/spec/alpha/boot/alpha-boot-v0.fields" "$fixture/spec/alpha/boot/"
 }
 
+install_platform_fixture() {
+    platform_fixture=$root/tools/ci/fixtures/gate-report-p0/alpha
+    [ -f "$platform_fixture/platform/contract-set-v0.manifest" ] || return 1
+    /bin/cp -R "$platform_fixture/platform" "$fixture/spec/alpha/"
+    /bin/cp "$platform_fixture/boot/README.md" "$fixture/spec/alpha/boot/"
+    /bin/cp "$platform_fixture/boot/alpha-boot-v0.fields" "$fixture/spec/alpha/boot/"
+    /bin/cp "$platform_fixture/boot/alpha-machine-closure-v0.fields" "$fixture/spec/alpha/boot/"
+    /bin/cp "$platform_fixture/boot/cases.v0" "$fixture/spec/alpha/boot/"
+}
+
 report() {
     RAR_POLICY_MUTATION_TESTS=1 /bin/sh "$reporter" "$fixture"
 }
@@ -63,6 +73,10 @@ reset_fixture
 require_row 'platform_source_set=blocked'
 require_row 'acceptance_protocol_v2=reviewed-implementation-required'
 require_row 'milestone_a_readiness=blocked'
+require_row 'platform_envelope_state=missing'
+require_row 'core_bootstrap_state=missing'
+require_row 'platform_envelope_contract_sha256=unavailable'
+require_row 'core_bootstrap_contract_sha256=unavailable'
 
 reset_fixture
 /bin/rm -f "$fixture/tools/ci/contracts/sprint-alpha-gate-report-v2.fields"
@@ -81,6 +95,63 @@ reset_fixture
 /bin/mkdir -p "$fixture/spec/alpha/platform"
 require_row 'platform_envelope_state=invalid'
 require_row 'platform_source_set=blocked'
+
+reset_fixture
+install_platform_fixture
+require_row 'platform_envelope_state=pending-review'
+require_row 'core_bootstrap_state=pending-review'
+require_row 'platform_fixture_manifest_state=pending-review'
+platform_entry_sha=$(/usr/bin/sed -n \
+    's|^contract[|]spec/alpha/platform/alpha-platform-entry-v0.fields[|][0-9][0-9]*[|]\([0-9a-f]*\)$|\1|p' \
+    "$root/tools/ci/fixtures/gate-report-p0/alpha/platform/contract-set-v0.manifest")
+core_bootstrap_sha=$(/usr/bin/sed -n \
+    's|^contract[|]spec/alpha/platform/alpha-core-bootstrap-v0.fields[|][0-9][0-9]*[|]\([0-9a-f]*\)$|\1|p' \
+    "$root/tools/ci/fixtures/gate-report-p0/alpha/platform/contract-set-v0.manifest")
+require_row "platform_envelope_contract_sha256=$platform_entry_sha"
+require_row "core_bootstrap_contract_sha256=$core_bootstrap_sha"
+
+reset_fixture
+install_platform_fixture
+/bin/mv "$fixture/spec/alpha/platform/contract-set-v0.manifest" "$work/platform-manifest"
+/bin/ln -s "$work/platform-manifest" "$fixture/spec/alpha/platform/contract-set-v0.manifest"
+require_row 'platform_envelope_state=invalid'
+
+reset_fixture
+install_platform_fixture
+/usr/bin/sed 's/status=experimental-pending-review/status=ready/' \
+    "$fixture/spec/alpha/platform/contract-set-v0.manifest" > "$work/bad"
+/bin/mv "$work/bad" "$fixture/spec/alpha/platform/contract-set-v0.manifest"
+require_row 'platform_envelope_state=invalid'
+
+reset_fixture
+install_platform_fixture
+/usr/bin/printf '%s\n' 'status=approved' >> "$fixture/spec/alpha/platform/contract-set-v0.manifest"
+require_row 'platform_envelope_state=invalid'
+
+reset_fixture
+install_platform_fixture
+/usr/bin/printf '%s\n' 'status=experimental-pending-review' >> "$fixture/spec/alpha/platform/contract-set-v0.manifest"
+require_row 'platform_envelope_state=invalid'
+
+reset_fixture
+install_platform_fixture
+/usr/bin/printf '%s\n' 'unexpected_rule=not-authorized' >> "$fixture/spec/alpha/platform/contract-set-v0.manifest"
+require_row 'platform_envelope_state=invalid'
+
+reset_fixture
+install_platform_fixture
+/usr/bin/printf '%s\n' 'status=approved' >> "$fixture/spec/alpha/platform/fixtures/manifest.v0"
+require_row 'platform_envelope_state=invalid'
+
+reset_fixture
+install_platform_fixture
+/usr/bin/printf '%s\n' 'status=experimental-pending-review' >> "$fixture/spec/alpha/platform/fixtures/manifest.v0"
+require_row 'platform_envelope_state=invalid'
+
+reset_fixture
+install_platform_fixture
+/usr/bin/printf '%s\n' 'unexpected_rule=not-authorized' >> "$fixture/spec/alpha/platform/fixtures/manifest.v0"
+require_row 'platform_envelope_state=invalid'
 
 reset_fixture
 /usr/bin/printf '%s\n' 'CANARY' > "$work/canary"
