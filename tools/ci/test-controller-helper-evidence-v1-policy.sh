@@ -32,10 +32,49 @@ awk '$0 !~ /^case\|A050\|/' "$tmp/test.v1" > "$tmp/missing-case"
 if "$root/tools/ci/check-controller-helper-test-evidence-v1.sh" "$tmp/missing-case" $a $b $c $d $e $f $one $five $four $six >/dev/null 2>&1; then fail 'missing case accepted'; fi
 if "$root/tools/ci/check-controller-helper-test-evidence-v1.sh" "$tmp/test.v1" $four $b $c $d $e $f $one $five $four $six >/dev/null 2>&1; then fail 'stale identity accepted'; fi
 if "$root/tools/ci/check-controller-helper-test-evidence-v1.sh" "$tmp/test.v1" $a $b $c $d $e $f $one $five $two $six >/dev/null 2>&1; then fail 'replayed nonce accepted'; fi
+if "$root/tools/ci/check-controller-helper-test-evidence-v1.sh" "$tmp/test.v1" $a $b $c $d $e $f $one $eight $four $six >/dev/null 2>&1; then fail 'wrong fixture identity accepted'; fi
+if "$root/tools/ci/check-controller-helper-test-evidence-v1.sh" "$tmp/test.v1" $a $b $c $d $e $f $one $five $four $three >/dev/null 2>&1; then fail 'replayed root identity accepted'; fi
+awk -F '|' 'BEGIN{OFS="|"} $1=="case" && $2=="A001" {$5="wrong-effect"} {print}' "$tmp/test.v1" > "$tmp/bad-effect"
+if "$root/tools/ci/check-controller-helper-test-evidence-v1.sh" "$tmp/bad-effect" $a $b $c $d $e $f $one $five $four $six >/dev/null 2>&1; then fail 'wrong forbidden effect accepted'; fi
+awk -F '|' 'BEGIN{OFS="|";z="0000000000000000000000000000000000000000000000000000000000000000"} $1=="case" && $2=="A001" {$10=z} {print}' "$tmp/test.v1" > "$tmp/zero-journal"
+if "$root/tools/ci/check-controller-helper-test-evidence-v1.sh" "$tmp/zero-journal" $a $b $c $d $e $f $one $five $four $six >/dev/null 2>&1; then fail 'zero journal identity accepted'; fi
+awk -F '|' 'BEGIN{OFS="|";z="0000000000000000000000000000000000000000000000000000000000000000"} $1=="case" && $2=="A001" {$11=z} {print}' "$tmp/test.v1" > "$tmp/zero-filesystem-delta"
+if "$root/tools/ci/check-controller-helper-test-evidence-v1.sh" "$tmp/zero-filesystem-delta" $a $b $c $d $e $f $one $five $four $six >/dev/null 2>&1; then fail 'zero filesystem delta accepted'; fi
+sed 's/^case|A002|/case|A001|/' "$tmp/test.v1" > "$tmp/duplicate-case"
+if "$root/tools/ci/check-controller-helper-test-evidence-v1.sh" "$tmp/duplicate-case" $a $b $c $d $e $f $one $five $four $six >/dev/null 2>&1; then fail 'duplicate case accepted'; fi
+awk 'NR==17 {first=$0; next} NR==18 {print; print first; next} {print}' "$tmp/test.v1" > "$tmp/reordered-case"
+if "$root/tools/ci/check-controller-helper-test-evidence-v1.sh" "$tmp/reordered-case" $a $b $c $d $e $f $one $five $four $six >/dev/null 2>&1; then fail 'reordered case accepted'; fi
+sed 's/^case|A001|/case|V001|/' "$tmp/test.v1" > "$tmp/wrong-case-version"
+if "$root/tools/ci/check-controller-helper-test-evidence-v1.sh" "$tmp/wrong-case-version" $a $b $c $d $e $f $one $five $four $six >/dev/null 2>&1; then fail 'wrong case version accepted'; fi
+{ /bin/cat "$tmp/test.v1"; printf '%s\n' unexpected=field; } > "$tmp/extra-test-field"
+if "$root/tools/ci/check-controller-helper-test-evidence-v1.sh" "$tmp/extra-test-field" $a $b $c $d $e $f $one $five $four $six >/dev/null 2>&1; then fail 'extra test field accepted'; fi
 {
  printf '%s\n' schema=rar-alpha-controller-helper-build-evidence-v1 controller_sha=$a source_sha=$b closure_acceptance_sha=$c compiler_sha=$d compiler_closure_sha=$e test_evidence_v1_sha=$f build_plan_sha=$two golden_sha=$three build_1_receipt_sha=$four build_2_receipt_sha=$five build_1_log_sha=$six build_2_log_sha=$seven build_count=2 network=none credential=none build_1_exit=0 build_2_exit=0 build_1_binary_sha=$one build_2_binary_sha=$one final_binary_sha=$one build_1_job_nonce=$two build_2_job_nonce=$three build_1_root=$four build_2_root=$f binary_bytes=4096 status=accepted
 } > "$tmp/build.v1"
 "$root/tools/ci/check-controller-helper-build-evidence-v1.sh" "$tmp/build.v1" $a $b $c $d $e $f $two $three $four $five >/dev/null || fail 'valid build evidence rejected'
 sed "s/test_evidence_v1_sha=$f/test_evidence_v1_sha=$a/" "$tmp/build.v1" > "$tmp/bad-test"
 if "$root/tools/ci/check-controller-helper-build-evidence-v1.sh" "$tmp/bad-test" $a $b $c $d $e $f $two $three $four $five >/dev/null 2>&1; then fail 'wrong test identity accepted'; fi
+if "$root/tools/ci/check-controller-helper-build-evidence-v1.sh" "$tmp/build.v1" $a $b $c $d $e $f $eight $three $four $five >/dev/null 2>&1; then fail 'wrong build plan accepted'; fi
+if "$root/tools/ci/check-controller-helper-build-evidence-v1.sh" "$tmp/build.v1" $a $b $c $d $e $f $two $eight $four $five >/dev/null 2>&1; then fail 'wrong golden identity accepted'; fi
+if "$root/tools/ci/check-controller-helper-build-evidence-v1.sh" "$tmp/build.v1" $a $b $c $d $e $f $two $three $eight $five >/dev/null 2>&1; then fail 'wrong receipt identity accepted'; fi
+sed 's/schema=rar-alpha-controller-helper-build-evidence-v1/schema=rar-alpha-controller-helper-build-evidence-v0/' "$tmp/build.v1" > "$tmp/build-v0"
+if "$root/tools/ci/check-controller-helper-build-evidence-v1.sh" "$tmp/build-v0" $a $b $c $d $e $f $two $three $four $five >/dev/null 2>&1; then fail 'v0 build substitution accepted'; fi
+sed "s/^build_2_receipt_sha=$five$/build_2_receipt_sha=$four/" "$tmp/build.v1" > "$tmp/aliased-receipt"
+if "$root/tools/ci/check-controller-helper-build-evidence-v1.sh" "$tmp/aliased-receipt" $a $b $c $d $e $f $two $three $four $four >/dev/null 2>&1; then fail 'aliased build receipts accepted'; fi
+sed "s/^build_2_log_sha=$seven$/build_2_log_sha=$six/" "$tmp/build.v1" > "$tmp/aliased-log"
+if "$root/tools/ci/check-controller-helper-build-evidence-v1.sh" "$tmp/aliased-log" $a $b $c $d $e $f $two $three $four $five >/dev/null 2>&1; then fail 'aliased build logs accepted'; fi
+sed 's/^build_1_log_sha=.*/build_1_log_sha=0000000000000000000000000000000000000000000000000000000000000000/' "$tmp/build.v1" > "$tmp/zero-log"
+if "$root/tools/ci/check-controller-helper-build-evidence-v1.sh" "$tmp/zero-log" $a $b $c $d $e $f $two $three $four $five >/dev/null 2>&1; then fail 'zero build log accepted'; fi
+sed "s/^build_2_job_nonce=$three$/build_2_job_nonce=$two/" "$tmp/build.v1" > "$tmp/same-job"
+if "$root/tools/ci/check-controller-helper-build-evidence-v1.sh" "$tmp/same-job" $a $b $c $d $e $f $two $three $four $five >/dev/null 2>&1; then fail 'same build job accepted'; fi
+sed "s/^build_2_root=$f$/build_2_root=$four/" "$tmp/build.v1" > "$tmp/same-root"
+if "$root/tools/ci/check-controller-helper-build-evidence-v1.sh" "$tmp/same-root" $a $b $c $d $e $f $two $three $four $five >/dev/null 2>&1; then fail 'same build root accepted'; fi
+sed "s/^build_2_binary_sha=$one$/build_2_binary_sha=$eight/" "$tmp/build.v1" > "$tmp/binary-mismatch"
+if "$root/tools/ci/check-controller-helper-build-evidence-v1.sh" "$tmp/binary-mismatch" $a $b $c $d $e $f $two $three $four $five >/dev/null 2>&1; then fail 'binary mismatch accepted'; fi
+awk 'NR==1 {first=$0; next} NR==2 {print; print first; next} {print}' "$tmp/build.v1" > "$tmp/reordered-build"
+if "$root/tools/ci/check-controller-helper-build-evidence-v1.sh" "$tmp/reordered-build" $a $b $c $d $e $f $two $three $four $five >/dev/null 2>&1; then fail 'reordered build evidence accepted'; fi
+awk '$0 !~ /^golden_sha=/' "$tmp/build.v1" > "$tmp/missing-build-field"
+if "$root/tools/ci/check-controller-helper-build-evidence-v1.sh" "$tmp/missing-build-field" $a $b $c $d $e $f $two $three $four $five >/dev/null 2>&1; then fail 'missing build field accepted'; fi
+{ /bin/cat "$tmp/build.v1"; printf '%s\n' unexpected=field; } > "$tmp/extra-build-field"
+if "$root/tools/ci/check-controller-helper-build-evidence-v1.sh" "$tmp/extra-build-field" $a $b $c $d $e $f $two $three $four $five >/dev/null 2>&1; then fail 'extra build field accepted'; fi
 printf '%s\n' 'controller-helper evidence v1 mutation policy passed'
