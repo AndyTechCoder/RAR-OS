@@ -206,3 +206,23 @@ ADR 0029 approval: approved
 ADR 0029 approver: Andy / RAR project owner
 ADR 0029 date: 2026-08-30
 ADR 0029 decision: Alternative B
+
+## Sprint Alpha compact PCI BDF decision
+
+Status: Approved
+
+On 2026-08-31, Codex presented the exact ADR 0031 Alternative A approval
+sentence, confirmed it was safe within the documented experimental limits, and
+repeated it for explicit approval. The owner replied, "I approve." This record
+applies only to the exact immediately preceding sentence and Alternative A.
+
+Acceptance authorizes the separately gated experimental specification work. It
+does not make P0 ready, grant credentials, authorize a target build or local
+execution, permit VM/device launch, or establish production compatibility.
+P0-A may begin only after this D0 change is reviewed, merged, and exact-main
+validated.
+
+ADR 0031 approval: approved
+ADR 0031 approver: Andy / RAR project owner
+ADR 0031 date: 2026-08-31
+ADR 0031 decision: Alternative A

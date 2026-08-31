@@ -1,9 +1,9 @@
 # Sprint Alpha Compact PCI BDF Integration Task Packet
 
-Status: Non-authoritative preparation — ADR 0031 owner decision required
+Status: Owner-approved D0 integration — P0-A blocked until D0 exact-main validation
 
-This packet prepares the bounded work needed if the owner approves ADR 0031
-Alternative A. It is not an ADR, approval record, public-format authority,
+This packet defines the bounded work after owner approval of ADR 0031
+Alternative A. It is not an ADR, approval record, standalone public-format authority,
 implementation authorization, readiness claim, or permission to build, image,
 boot, launch, or execute RAR OS. The current P0 compact-BDF candidate remains
 opaque and PR #79 remains blocked until the complete sequence below passes.
@@ -14,24 +14,26 @@ After exact owner approval, make the disabled-function BDF encoding total,
 language-neutral, independently reconstructable by Root and Recovery, and
 covered by trusted positive, negative, mutation, and exact-main evidence.
 
-The intended Alternative A formula is recorded only as proposal content until
-approval:
+The selected Alternative A formula becomes authoritative only through the
+canonical ADR and this D0 change's reviewed merge and exact-main validation:
 
 `bdf_u16 = (bus << 8) | (device << 3) | function`
 
 with checked inputs `bus <= 255`, `device <= 31`, `function <= 7`, serialized
-as little-endian `u16`. This packet cannot select that formula.
+as little-endian `u16`. This packet does not independently select that formula.
 
-## Exact owner-decision gate
-
-No integration step may begin until the owner provides this exact sentence:
+## Recorded owner decision and D0 gate
 
 `I approve ADR 0031 Alternative A for experimental Alpha compact PCI BDF encoding under the documented safety limits.`
 
-Approval closes only the architecture choice. It does not authorize a writer,
+The owner approved this exact immediately preceding sentence on 2026-08-31.
+
+The canonical ADR and approval record preserve that decision. Approval closes
+only the architecture choice. It does not authorize a contract writer,
 merge, target source, build, VM, device, or execution. Generic approval,
 recommendation text, passing CI, existing candidate bytes, or this packet never
-substitutes for the exact decision.
+substitutes for the canonical D0 decision integration. P0-A remains blocked
+until D0 is reviewed, merged, and exact-main validated.
 
 ## Ordered ownership and trust boundaries
 
@@ -235,5 +237,6 @@ ADR 0031 integration is complete only when:
    the resulting `main`; and
 7. no build, launch, hardware, persistence, or production authority was added.
 
-Until then, the honest state is `owner-decision-required`, compact bytes are
-non-authoritative, PR #79 remains draft, and Milestone A cannot begin.
+Until D0 exact-main validation and the later P0-A/T0/P0-B gates pass, compact
+candidate bytes remain non-authoritative, PR #79 remains draft, and Milestone A
+cannot begin.

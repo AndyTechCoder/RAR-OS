@@ -43,9 +43,9 @@ and cannot increase the implementation count.
   tests, independent reviews, merges, and exact-main validation are complete.
 - Proposed ADR 0030 precisely records the remaining accepted-evidence
   publication/recovery choice while granting no authority until owner approval.
-- Proposed ADR 0031 records the remaining compact PCI BDF encoding choice for
-  the pending P0 closure candidate. Its bytes remain opaque and P0 remains
-  blocked until exact owner approval and complete contract/checker integration.
+- Accepted ADR 0031 selects the experimental compact PCI BDF encoding for the
+  pending P0 closure candidate. P0 remains blocked until D0 exact-main
+  validation and complete contract/checker integration pass.
 - Accepted ADRs 0027–0029 select the reviewed B/A/B boot-retirement, identity,
   and state-authority directions; dependent contracts remain blocked until the
   decision integration merges and exact-main validates.
@@ -72,8 +72,9 @@ and cannot increase the implementation count.
 - The exact Alpha boot/platform contracts are not ready. P0 contract work may
   begin only after canonical ADR 0027–0029 decision integration is reviewed,
   merged, and exact-main validated.
-- The P0 compact PCI BDF encoding is not decided. Proposal 0031, its candidate
-  fixture bytes, and the opaque checker binding grant no public-format authority.
+- The P0 compact PCI BDF encoding is decided by accepted ADR 0031, but its
+  candidate fixture bytes and opaque checker binding remain non-authoritative
+  until D0 exact-main validation and the separate P0 integration gates pass.
 - The phase-8 accepted-evidence writer is not ready. Only its pure record codec
   is merged; the preserved publication scaffold remains unmerged, and naming,
   journal, cleanup, recovery, retry, semantic-verification, and activation
