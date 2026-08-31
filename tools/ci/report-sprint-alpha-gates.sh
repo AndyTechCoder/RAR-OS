@@ -8,7 +8,7 @@ safe_root='/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha'
 identity_file=$safe_root/.rar-os-workspace-identity
 identity_sha256=f71483fc7335d5c0949541bad24143b437c379250c70e47dbe7a0b766decd496
 minimum_free_kib=10485760
-maximum_workspace_kib=8388608
+maximum_workspace_kib=9437184
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 case "$root" in "$safe_root/repository" | "$safe_root/worktrees/"*) ;; *) exit 1 ;; esac

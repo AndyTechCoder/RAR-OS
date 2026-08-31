@@ -11,7 +11,7 @@ identity_sha256=f71483fc7335d5c0949541bad24143b437c379250c70e47dbe7a0b766decd496
 canonical_https=https://github.com/AndyTechCoder/RAR-OS.git
 canonical_ssh=git@github.com:AndyTechCoder/RAR-OS.git
 minimum_ssd_free_kib=10485760
-maximum_workspace_kib=8388608
+maximum_workspace_kib=9437184
 git_bin=/usr/bin/git
 uname_bin=/usr/bin/uname
 uname_system=$("$uname_bin" -s)
@@ -107,7 +107,7 @@ case "$ssd_free_kib" in '' | *[!0-9]*) fail 'cannot determine SSD free space' ;;
 workspace_kib=$(/usr/bin/du -sk "$safe_root" | /usr/bin/awk 'NR == 1 { print $1 }')
 case "$workspace_kib" in '' | *[!0-9]*) fail 'cannot determine SSD workspace size' ;; esac
 [ "$workspace_kib" -le "$maximum_workspace_kib" ] ||
-    fail 'RAR OS SSD workspace exceeds the 8 GiB unattended-work ceiling'
+    fail 'RAR OS SSD workspace exceeds the 9 GiB unattended-work ceiling'
 
 printf 'sprint local preflight passed: branch=%s head=%s\n' \
     "$branch" "$(run_git rev-parse HEAD)"

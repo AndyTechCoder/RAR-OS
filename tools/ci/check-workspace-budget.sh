@@ -8,7 +8,7 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 safe_root='/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha'
 minimum_free_kib=10485760
-maximum_workspace_kib=8388608
+maximum_workspace_kib=9437184
 maximum_output_kib=524288
 [ -d "$safe_root" ] && [ ! -L "$safe_root" ] || exit 1
 

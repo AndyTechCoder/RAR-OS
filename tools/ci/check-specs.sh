@@ -773,7 +773,7 @@ local_preflight_policy_test_sha256=$(sha256_of tools/ci/test-local-sprint-prefli
 [ "$ci_lock_sha256" = 6752b1b21ac8fa93a671ff9444173e4c3bbc4cdcbe4cf5cd39820371dc79aa24 ] || fail "CI tool lock digest changed without bootstrap authority update"
 [ "$readonly_gate_sha256" = 3b6e3cb28802ea90e3b89760773c8ebe47acfc493669e076a7fcb1a72ad76666 ] || fail "local read-only gate changed without safety review"
 [ "$host_policy_checker_sha256" = fd2cdbd6886c0beb85492b842a40791861bff0c6a5bab01d1fba40ae183d6a0e ] || fail "local read-only gate dependency changed without safety review"
-[ "$local_preflight_sha256" = 85bb1022d7c303c9ff5c743eab100d9421b01dc20f6f5ba37179bdfb3192c904 ] || fail "local sprint preflight changed without safety review"
+[ "$local_preflight_sha256" = 6f18d4edfc1ccc35f62fa4702a5b877398f45e67c9acd67689949e2b41eb6334 ] || fail "local sprint preflight changed without safety review"
 [ "$local_preflight_policy_test_sha256" = acc9cfb08c580cc6ba468e06b4e40edebfe7aec29043bd79ba66ea48199065f8 ] || fail "local sprint preflight policy test changed without safety review"
 /bin/sh -n tools/ci/check-local-readonly.sh
 grep -qx 'PATH=/usr/bin:/bin' tools/ci/check-local-readonly.sh || fail "local read-only gate does not pin PATH"
@@ -794,6 +794,26 @@ grep -Fq 'rev-parse --path-format=absolute --git-common-dir' tools/ci/check-loca
 grep -Fqx '    /usr/bin/env -i \' tools/ci/check-local-sprint-preflight.sh || fail "local sprint preflight does not clear the Git environment"
 grep -Fqx '        GIT_OPTIONAL_LOCKS=0 \' tools/ci/check-local-sprint-preflight.sh || fail "local sprint preflight permits optional Git writes"
 grep -qx 'minimum_ssd_free_kib=10485760' tools/ci/check-local-sprint-preflight.sh || fail "local sprint preflight lost the 10-GiB SSD reserve"
+for policy_script in \
+    tools/ci/check-workspace-budget.sh \
+    tools/ci/check-local-sprint-preflight.sh \
+    tools/ci/report-sprint-alpha-gates.sh; do
+    [ "$(grep -Fxc 'maximum_workspace_kib=9437184' "$policy_script")" -eq 1 ] ||
+        fail "workspace ceiling is missing, duplicated, or inconsistent in $policy_script"
+done
+grep -qx 'minimum_free_kib=10485760' tools/ci/check-workspace-budget.sh || fail "workspace budget lost the 10-GiB SSD reserve"
+grep -qx 'minimum_free_kib=10485760' tools/ci/report-sprint-alpha-gates.sh || fail "gate report lost the 10-GiB SSD reserve"
+grep -qx 'maximum_output_kib=524288' tools/ci/check-workspace-budget.sh || fail "workspace budget lost the 512-MiB output ceiling"
+grep -Fqx '[ "$workspace_kib" -le "$maximum_workspace_kib" ] || exit 1' tools/ci/check-workspace-budget.sh || fail "workspace budget comparison changed"
+grep -Fqx '[ "$workspace_kib" -le "$maximum_workspace_kib" ] ||' tools/ci/check-local-sprint-preflight.sh || fail "local preflight workspace comparison changed"
+grep -Fqx '    if [ "$workspace_kib" -le "$maximum_workspace_kib" ]; then workspace_budget=ready; else workspace_budget=blocked; fi' tools/ci/report-sprint-alpha-gates.sh || fail "gate report workspace comparison changed"
+grep -Fq 'above 9 GiB total RAR OS workspace' AGENTS.md || fail "agent policy lost the 9-GiB workspace ceiling"
+grep -Fq '10-GiB free, 9-GiB workspace, and 512-MiB output ceilings.' docs/host-safety.md || fail "host-safety policy lost the reviewed workspace limits"
+grep -Fq '8 GiB (8388608 KiB) to 9 GiB (9437184 KiB)' docs/approval-record.md || fail "workspace-ceiling owner approval is not recorded"
+if grep -Fq 'above 8 GiB total RAR OS workspace' AGENTS.md ||
+    grep -Fq '10-GiB free, 8-GiB workspace' docs/host-safety.md; then
+    fail "stale 8-GiB workspace authority remains"
+fi
 grep -Fqx 'ssd_free_kib=$(/bin/df -Pk "$safe_root" | /usr/bin/awk '\''END { print $4 }'\'')' tools/ci/check-local-sprint-preflight.sh || fail "local sprint preflight SSD capacity probe changed"
 grep -Fqx 'workspace_kib=$(/usr/bin/du -sk "$safe_root" | /usr/bin/awk '\''NR == 1 { print $1 }'\'')' tools/ci/check-local-sprint-preflight.sh || fail "local sprint preflight workspace capacity probe changed"
 [ "$(grep -c 'df' tools/ci/check-local-sprint-preflight.sh)" -eq 1 ] || fail "local sprint preflight has an unreviewed capacity probe"

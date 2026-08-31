@@ -66,7 +66,7 @@ only RAR OS workspace is the exact subtree
   and host-policy checks without scratch or mutation. Its complete wrapper and
   sole executable policy dependency are digest-bound in CI.
 - The production workspace-budget check is fixed to this exact subtree and to
-  the reviewed 10-GiB free, 8-GiB workspace, and 512-MiB output ceilings. It
+  the reviewed 10-GiB free, 9-GiB workspace, and 512-MiB output ceilings. It
   rejects path arguments and environment overrides. Its numeric test helper
   accepts values only and performs no filesystem discovery.
 - If the volume is absent, renamed, unexpectedly mounted, or the resolved path
