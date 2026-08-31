@@ -1,0 +1,8 @@
+schema=rar-alpha-q35-inventory-fixture-v0
+source=alpha-machine-closure-v0.fields
+function_count=13
+boot_controller=00:1f.2
+boot_port=0
+extra_function=none
+missing_function=none
+expected=accept-pending-retained-cloud-evidence

@@ -23,7 +23,7 @@ expect_rejected() {
 reset_fixture() {
     /bin/rm -rf "$work/alpha"
     /bin/mkdir -p "$work/alpha"
-    /bin/cp -R "$source/lab" "$source/boot" "$work/alpha/"
+    /bin/cp -R "$source/lab" "$source/boot" "$source/platform" "$work/alpha/"
     find "$work/alpha" -name '._*' -type f -exec /bin/rm -f {} \;
 }
 

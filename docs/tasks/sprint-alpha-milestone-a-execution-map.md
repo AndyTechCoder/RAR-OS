@@ -15,9 +15,11 @@ precondition in `sprint-alpha-vertical.md` passes. In particular:
 
 - GitHub Actions must run real steps at the exact PR head;
 - PR #7 must be green, reviewed, merged, and remotely verified;
-- ADRs 0023, 0024, and 0026 must be unambiguously accepted;
-- the Alpha boot, private platform-envelope, fixed Core-bootstrap, and four
-  immutable-source contracts must be reviewed and marked `ready`;
+- ADRs 0023, 0024, and 0026–0029 must be unambiguously accepted;
+- the exact P0 contract-set manifest must be reviewed, merged, exact-main
+  validated, and bound as a whole; caller-selected individual contracts reject;
+- retained cloud evidence must exactly match the pending q35/AHCI inventory
+  before the machine profile can activate;
 - the v2 Lab profile, controller, and helper evidence must be genuinely ready;
 - the SSD confinement profile and capacity gates must have retained evidence.
 

@@ -1,0 +1,8 @@
+schema=rar-alpha-ahci-closure-fixture-v0
+implemented_ports=0,1,2,3,4,5
+engine_vector=ST:0,CR:0,FRE:0,FR:0
+bus_master_vector=all-declared-capable-functions-zero
+source_rehash=all-seven-sources-match
+preentry_recheck=match
+transferred_device_authority=none
+expected=accept

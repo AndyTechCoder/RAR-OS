@@ -22,10 +22,12 @@ tools/ci/check-specs.sh
     tools/ci/classify-proposed-adr.sh \
     tools/ci/test-proposed-adr-classifier-policy.sh \
     tools/ci/check-alpha-preimplementation-contracts.sh \
+    tools/ci/check-alpha-boot-platform-contracts.sh \
     tools/ci/check-acceptance-v2.sh \
     tools/ci/verify-accepted-evidence-v0.sh \
     tools/ci/test-accepted-evidence-v0-policy.sh \
     tools/ci/test-alpha-preimplementation-contract-policy.sh \
+    tools/ci/test-alpha-boot-platform-contract-policy.sh \
     tools/ci/check-remote-sprint-preflight.sh \
     tools/ci/test-local-sprint-preflight-policy.sh \
     tools/ci/check-development-lab-profile.sh \
@@ -121,6 +123,8 @@ tools/ci/test-development-probe-policy.sh
 /bin/sh tools/ci/check-sprint-alpha-gate-report-v2-policy.sh
 /bin/sh tools/ci/test-proposed-adr-classifier-policy.sh
 /bin/sh tools/ci/check-alpha-preimplementation-contracts.sh
+/bin/sh tools/ci/check-alpha-boot-platform-contracts.sh
+/bin/sh tools/ci/test-alpha-boot-platform-contract-policy.sh
 /bin/sh tools/ci/check-acceptance-v2.sh
 /bin/sh tools/ci/check-controller-helper-closure-observer-source.sh
 /bin/sh tools/ci/check-controller-helper-closure-verifier-source.sh

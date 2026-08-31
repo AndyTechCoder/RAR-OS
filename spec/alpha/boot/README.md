@@ -1,6 +1,6 @@
 # Experimental Alpha x86-64 Boot Contract v0
 
-Status: incomplete candidate under accepted ADR 0021; not implementation authority
+Status: experimental P0 contract pending independent review; not implementation authority
 
 ## Purpose
 
@@ -8,10 +8,11 @@ This draft is working toward the minimum authentic Alpha chain:
 
 `UEFI firmware → RAR Root → RAR Recovery → RAR Nucleus`
 
-It is deliberately blocked until a focused decision fixes the complete
-byte-producing GPT/FAT rules, final R0 source placement and ownership, total
-UEFI attribute conversion, authoritative timer provenance, and x86 NX/WP entry
-state. Implementers must not invent those details from this draft.
+Accepted ADRs 0023 and 0026–0029 fix the private Alpha choices. This P0 contract
+set remains blocked until architecture, correctness, security, mutation, merge,
+and exact-main validation pass, and the machine profile remains inactive until
+retained cloud evidence matches its exact firmware and topology. Implementers
+must not infer authority from pending-review bytes.
 
 Root is the only UEFI application. Recovery and Nucleus are separate
 freestanding RAR-owned ELF64 binaries. Root exits UEFI boot services exactly
@@ -30,14 +31,15 @@ The unsigned 64 MiB raw image uses a protective MBR, deterministic GPT, and one
 FAT32 EFI System Partition. Root is `\EFI\BOOT\BOOTX64.EFI`; Recovery is
 `\RAR\ALPHA\RECOVERY.ELF`; Nucleus is `\RAR\ALPHA\NUCLEUS.ELF`. Only ASCII 8.3
 directory entries are emitted. Allocation, directory ordering, timestamps,
-padding, GUIDs, and unused bytes must eventually be fully fixed by
-`alpha-boot-v0.fields`. The current zero-fill rule does not substitute for the
-missing required or computed standard fields.
+padding, GUIDs, and unused bytes are fixed by `alpha-boot-v0.fields` and its
+canonical fixture manifest.
 
-Root accepts only the listed paths. It bounds both payloads before allocation,
-fully validates and loads Recovery, stages Nucleus as inert bytes, hashes the
-exact Nucleus file bytes with RAR-owned SHA-256, obtains the final UEFI memory
-map, and exits boot services. Root does not parse Nucleus program headers.
+Root accepts only the seven fixed source paths. It reserves the complete
+bootstrap arena before the first read and stages every source into a distinct
+bounded slot. After the final read and `ExitBootServices`, Root switches to its
+private tables and stack, closes the exact q35/AHCI DMA path, re-hashes every
+source, and only then validates and loads Recovery. Root does not parse
+Nucleus, component, or state inner formats.
 
 ## Root-to-Recovery boundary
 
@@ -53,6 +55,18 @@ clear, known x87/SSE state, W^X page tables owned by Recovery, and a guarded
 16-byte-aligned stack. Initial mappings contain only Recovery code/data, its
 stack and page tables, the entry sections with their exact rights, and the
 serial/APIC windows required for bounded failure output. Recovery never returns.
+
+`alpha-machine-closure-v0.fields` is the sole private q35/AHCI closure
+authority. Root rejects topology drift, stops every implemented AHCI engine
+with bounded waits, disables and reads back every declared bus-master bit, and
+rechecks the complete disabled vector immediately before entry. No PCI, AHCI,
+boot-device, or DMA authority crosses into Recovery or later software.
+
+Recovery performs the independent post-entry Recovery identity check, retires
+the retained Recovery file source, then unmaps, invalidates, zeroes, and
+normalizes Root's private ranges in the fixed order. Firmware-global stack and
+table memory is not claimed or cleared; its descriptor follows the total UEFI
+normalization contract.
 
 Recovery validates entry framing and sections before interpreting Nucleus. It
 recomputes the Nucleus SHA-256, then validates every ELF header and segment,
@@ -78,6 +92,21 @@ source. It completes all writes, revokes producer/DMA writes, marks source
 descriptors immutable as required, and declares producer `Recovery` for every
 named source. Nucleus receives the unchanged `BootEntryV1` in RDI/RSI under the
 approved x86-64 adapter state. Root is never an implicit R0-002 producer.
+
+## Platform and state boundary
+
+The private `AlphaPlatformEntryV0` wraps the unchanged `BootEntryV1` and four
+fixed immutable sources. Recovery validates outer framing only. Nucleus maps
+one fixed Core bootstrap and creates two identity-bound state slots. Core gets
+one component-source capability and two opaque selectors; it never gets state
+readability or a redeem token. Core alone parses the component bundle, and each
+state service alone parses its matching source.
+
+Identity is SHA-256 over versioned, domain-separated, fixed-framed exact bytes.
+Root self-identity is descriptive. All validators share
+`../platform/alpha-validation-v0.fields` as their sole first-failure authority.
+A rejection commits no mapping, thread, capability, slot, device, or mutable-
+state effect.
 
 ## Failure and limits
 
