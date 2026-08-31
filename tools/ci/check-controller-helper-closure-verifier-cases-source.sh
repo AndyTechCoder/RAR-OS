@@ -8,7 +8,7 @@ subject=$root/spec/alpha/lab/controller-helper-closure-verifier-cases-v0
 fail() { printf '%s\n' 'rar-alpha-controller-helper-closure-verifier-cases-v0 source check failed: '"$1" >&2; exit 1; }
 [ -f "$subject" ] && [ ! -L "$subject" ] || fail 'subject unavailable'
 actual=$(env -u LC_CTYPE LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$subject" | /usr/bin/awk '{print $1}')
-[ "$actual" = 70d864cbc51a79e06dd0eb54366984d5dcb5032862dbb8d791230726f05b332e ] || fail 'subject bytes escaped review'
+[ "$actual" = 8a5564e07810f300d2a65bd0cd7a5c76513ef80f36f1ade4b87bf1f8a3b64897 ] || fail 'subject bytes escaped review'
 for required in \
     'schema=rar-alpha-controller-helper-closure-verifier-cases-v0' \
     'disposition_case_count=147' \
@@ -22,6 +22,7 @@ for required in \
     'residual_case_count=43' \
     'total_case_count=209' \
     'precedence_instance_rule=37-executable-runtime-relations+13-catalog-only-residual-relations;residual-relations-authorize-no-mutation+no-observed-runtime-result' \
+    'precedence_projection_rule=precedence-rows-bind-two-exact-primary+repair-tuples-on-one-fresh-base;precedence-residual-rows-bind-only-reviewed-catalog-sides+reason+no-runtime-mutation+no-observed-result' \
     'ordering_rule=logical-order-is-exactly-V001-through-V147+Q001-through-Q050+X001-through-X012;runtime+residual-projections-preserve-logical-order' \
     'unrepresentable_rule=source-proof+source-dominated+cryptographic-residual+domain-extension-remain-explicit-rows,never-silently-skipped'; do
     grep -Fqx "$required" "$subject" || fail "required invariant is missing: $required"
