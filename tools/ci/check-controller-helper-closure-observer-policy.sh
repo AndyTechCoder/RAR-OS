@@ -31,35 +31,50 @@ done
 for required in \
     'checkout_image=rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3' \
     'identity="rar-c2b-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"' \
-    'partial="$RUNNER_TEMP/controller-helper-closure-checkout-partial-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"' \
+    'workspace_parent=$(/usr/bin/dirname "$GITHUB_WORKSPACE")' \
+    'partial="$workspace_parent/.rar-c2b-checkout-partial-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"' \
+    'container_absent() {' 'volume_absent() {' 'remove_container() {' 'remove_volume() {' \
+    'trap cleanup EXIT' "trap 'exit 130' HUP INT TERM" \
+    'if [[ "$cleanup_failed" -ne 0 ]]; then exit 1; fi' \
     '/usr/bin/docker volume create --driver local' '--opt type=tmpfs --opt device=tmpfs' \
     'o=size=67108864,uid=$runner_uid,gid=$runner_gid,mode=0700,noexec,nosuid,nodev' \
+    'docker volume inspect --format '"'"'{{index .Options "o"}}'"'"'' \
     '/usr/bin/docker create --name "$acquisition" --read-only --network bridge' \
     '--mount "type=volume,source=$volume,target=/checkout"' \
     'GIT_CONFIG_NOSYSTEM=1' 'GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false' \
+    '356db14e102d68a1a37d8a1ac577dfd678d45d46e92f468bef8b7154e7bfdc60' \
     '/usr/bin/git init /checkout' \
     '/usr/bin/git -C /checkout remote add origin https://github.com/AndyTechCoder/RAR-OS.git' \
     '-c filter.lfs.smudge= -c filter.lfs.required=false' \
-    'fetch --no-tags --depth=1 origin "$1"' \
-    'checkout --detach FETCH_HEAD' \
-    '/usr/bin/timeout --signal=TERM --kill-after=10s 120s /usr/bin/docker start --attach "$acquisition"' \
-    '/usr/bin/timeout --kill-after=2s 10s /usr/bin/docker rm --force "$acquisition"' \
+    'fetch --no-tags --depth=1 origin "$1"' 'checkout --detach FETCH_HEAD' \
+    '/usr/bin/timeout --signal=KILL 120s /usr/bin/docker start --attach "$acquisition"' \
+    'remove_container "$acquisition"' 'container_absent "$transfer"' \
     '/usr/bin/docker create --name "$transfer" --read-only --network none' \
     '--mount "type=volume,source=$volume,target=/source,readonly"' \
     '--mount "type=bind,source=$partial,target=/destination"' \
     '/usr/bin/cp -a /source/. /destination/' \
-    '/usr/bin/timeout --signal=TERM --kill-after=10s 30s /usr/bin/docker start --attach "$transfer"' \
-    '/usr/bin/timeout --kill-after=2s 10s /usr/bin/docker volume rm "$volume"' \
-    '/usr/bin/chmod -R a-w "$partial"' \
-    '/usr/bin/rmdir "$GITHUB_WORKSPACE"' \
-    '/usr/bin/mv "$partial" "$GITHUB_WORKSPACE"'; do
+    '/usr/bin/timeout --signal=KILL 30s /usr/bin/docker start --attach "$transfer"' \
+    'remove_container "$transfer"' 'remove_volume "$volume"' \
+    '[[ "$partial_device" == "$parent_device" ]]' \
+    '[[ "$(/usr/bin/stat -c %d "$partial")" == "$partial_device" ]]' \
+    '[[ "$(/usr/bin/stat -c %i "$partial")" == "$partial_inode" ]]' \
+    '[[ "$(/usr/bin/stat -c %d "$workspace_parent")" == "$parent_device" ]]' \
+    '[[ "$(/usr/bin/stat -c %i "$workspace_parent")" == "$parent_inode" ]]' \
+    '/usr/bin/chmod -R a-w "$partial"' '/usr/bin/rmdir "$GITHUB_WORKSPACE"' \
+    '/usr/bin/mv -T "$partial" "$GITHUB_WORKSPACE"' \
+    '[[ "$(/usr/bin/stat -c %d "$GITHUB_WORKSPACE")" == "$partial_device" ]]' \
+    '[[ "$(/usr/bin/stat -c %i "$GITHUB_WORKSPACE")" == "$partial_inode" ]]'; do
     /usr/bin/grep -Fq -- "$required" "$workflow" || fail "bounded acquisition boundary missing: $required"
 done
 [ "$(/usr/bin/grep -Fc -- '--network bridge' "$workflow")" -eq 1 ] || fail 'acquisition network authority changed'
 [ "$(/usr/bin/grep -Fc -- '--network none' "$workflow")" -eq 1 ] || fail 'transfer network denial changed'
 [ "$(/usr/bin/grep -Fc '[ "$bytes" -le 67108864 ] && [ "$files" -le 8192 ] && [ "$objects" -le 32768 ]' "$workflow")" -eq 2 ] || fail 'checkout ceilings changed'
 [ "$(/usr/bin/grep -Fc '[ -z "$(/usr/bin/git -C /' "$workflow")" -ge 4 ] || fail 'checkout cleanliness and ref checks missing'
-/usr/bin/grep -Fq '"$RUNNER_TEMP"/controller-helper-closure-checkout-partial-"$GITHUB_RUN_ID"-"$GITHUB_RUN_ATTEMPT") /usr/bin/rm -rf -- "$partial"' "$workflow" || fail 'partial cleanup is not identity-bound'
+[ "$(/usr/bin/grep -Fc 'remove_container "$acquisition"' "$workflow")" -eq 2 ] || fail 'acquisition cleanup ordering changed'
+[ "$(/usr/bin/grep -Fc 'remove_container "$transfer"' "$workflow")" -eq 2 ] || fail 'transfer cleanup ordering changed'
+[ "$(/usr/bin/grep -Fc 'remove_volume "$volume"' "$workflow")" -eq 2 ] || fail 'volume cleanup ordering changed'
+/usr/bin/grep -Fq '"$workspace_parent"/.rar-c2b-checkout-partial-"$GITHUB_RUN_ID"-"$GITHUB_RUN_ATTEMPT")' "$workflow" || fail 'partial cleanup is not identity-bound'
+! /usr/bin/grep -Fq '|| true' "$workflow" || fail 'checkout cleanup failure is suppressed'
 ! /usr/bin/grep -Fq '/var/run/docker.sock' "$workflow" || fail 'checkout gains Docker socket'
 ! /usr/bin/grep -Eq '\$\{\{[[:space:]]*github\.token|GITHUB_TOKEN|ACTIONS_RUNTIME_TOKEN|PASSWORD|SECRET|CREDENTIAL' "$workflow" "$wrapper" "$harness" || fail 'credential value access present'
 [ "$(/usr/bin/grep -Fxc '          actual_sha=$(git rev-parse HEAD)' "$workflow")" -eq 1 ] || fail 'exact checkout verification missing'
