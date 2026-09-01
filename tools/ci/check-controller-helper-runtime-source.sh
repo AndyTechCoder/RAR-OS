@@ -32,7 +32,7 @@ cases=$root/spec/alpha/lab/controller-helper-runtime-cases.v0
 [ "$(env -u LC_CTYPE LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$cases" | /usr/bin/awk '{print $1}')" = df51cc29ce2ce905d9935a25f1ef9803a9cdf3706b2144b8de347fd324ba79f2 ] || fail 'runtime case bytes escaped review'
 grep -Fqx 'R001|descriptor-table-exact|accept|no-readiness-update' "$cases" || fail 'valid descriptor-table oracle changed'
 grep -Fqx 'R013|exact-descriptor-exec|accept|no-readiness-update' "$cases" || fail 'exact descriptor execution oracle changed'
-[ "$(grep -Ec '^[AR][0-9][0-9][0-9]\\|' "$cases")" -eq 127 ] || fail 'runtime case count changed'
+[ "$(grep -Ec '^[AR][0-9][0-9][0-9]\|' "$cases")" -eq 127 ] || fail 'runtime case count changed'
 grep -Fq 'local_rule=' "$subject" || fail 'local execution denial missing'
 if grep -R -Fq 'controller-helper-runtime-v0.fields' "$root/.github/workflows"; then fail 'source-only contract is wired to a workflow'; fi
 grep -qx 'rust_toolchain_closure_manifest_relative=none' "$root/tools/toolchain/host-tools.x86_64-unknown-linux-gnu-ci.lock" || fail 'CI closure lock activated'
