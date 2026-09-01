@@ -23,7 +23,7 @@ done
 [ "$(sha "$malformed")" = f94d7af08097852d06bc2c44b09a0862d4d569cc2b770e754ca8fcad12b2d21f ] || fail 'malformed fixture bytes escaped review'
 [ "$(sha "$cases")" = f4536ed872bcc3ca60ea335c2675fe38241dd66e45062013f2c315dfa0e52386 ] || fail 'case table bytes escaped review'
 [ "$(sha "$validator")" = f0e769c1fd17919f6e2634db071032a58e4c17f33ab33e5b4737fcd57336f510 ] || fail 'validator bytes escaped review'
-[ "$(sha "$policy")" = f65841d2d98be335630df544e095e02df37bdd423ea41cbb7cf91fcc7925781d ] || fail 'mutation policy bytes escaped review'
+[ "$(sha "$policy")" = f1d40ac202cba47486558da54e86ee9e1a2fc99d3e1659ccb57d1240829ee2e3 ] || fail 'mutation policy bytes escaped review'
 grep -Fqx 'status=experimental-complete-C2A-source-only-no-workflow' "$contract" || fail 'run-evidence status changed'
 grep -Fqx 'execution_authority=none;format-and-validator-only' "$contract" || fail 'run-evidence authority changed'
 grep -Fqx 'line_count=31' "$contract" || fail 'run-evidence line count changed'

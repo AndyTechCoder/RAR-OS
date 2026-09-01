@@ -64,7 +64,7 @@ rehash() {
     digest=$(/usr/bin/shasum -a 256 "$pre" | /usr/bin/awk '{ print $1 }')
     /bin/mv "$pre" "$record"
     /usr/bin/printf 'record_sha256=%s\n' "$digest" >> "$record"
-} 
+}
 bind_case_evidence() {
     file=$evidence/controller-helper-closure-observer.cases.v0
     digest=$(/usr/bin/shasum -a 256 "$file" | /usr/bin/awk '{ print $1 }')
