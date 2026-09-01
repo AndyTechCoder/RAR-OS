@@ -1,0 +1,8 @@
+schema=rar-alpha-controller-helper-closure-observer-base-fixture-v0
+status=synthetic-host-only-no-target
+root_rule=exclusive-private-tmpfs-child,regular-directories-and-files-only,no-symlink,no-hardlink,no-device
+file|bin/rustc|fixture-rustc-v0
+file|lib/rustlib/components|rustc-x86_64-unknown-linux-gnu
+file|share/doc/NOTICE|fixture-notice-v0
+mutation_rule=each-negative-case-receives-a-fresh-copy-and-may-change-only-its-declared-case-root
+effect_rule=never-touch-real-toolchain,checkout,retained-evidence,lock,inventory,profile,gate,readiness
