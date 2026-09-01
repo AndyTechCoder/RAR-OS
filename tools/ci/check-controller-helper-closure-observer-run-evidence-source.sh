@@ -17,25 +17,76 @@ sha() { /usr/bin/shasum -a 256 "$1" | /usr/bin/awk '{ print $1 }'; }
 for file in "$contract" "$case_contract" "$valid" "$malformed" "$cases" "$validator" "$policy"; do
     [ -f "$file" ] && [ ! -L "$file" ] && [ -s "$file" ] || fail "required file missing, symbolic, or empty: $file"
 done
-[ "$(sha "$contract")" = a480c927784adff7153ce8e0342db854186ac9da98aa5ce399de6ea9ba4c52f3 ] || fail 'run-evidence contract bytes escaped review'
-[ "$(sha "$case_contract")" = 7a8a8a2e0c81b4f65994014e2e0d54db5dc0ef0426f8fdbc30924318b666e042 ] || fail 'case-evidence contract bytes escaped review'
-[ "$(sha "$valid")" = 6affe5c08498084a5fe65b2f25f61a5528106252c8d76b621eb5cf5c8e0c89f3 ] || fail 'valid fixture bytes escaped review'
-[ "$(sha "$malformed")" = b72db26431fbac9ef5ce4967579d0bf994ff210802013ef5171f5f2394dd04c1 ] || fail 'malformed fixture bytes escaped review'
-[ "$(sha "$cases")" = b1af2c9f1a927c58d99b86a7ce4a118b36389a1408e533944d859b7bfa53156a ] || fail 'case table bytes escaped review'
-[ "$(sha "$validator")" = 8539bf9428e1e7f5871be9909de0fbfdc8e8780862bdb3349059cd79bc356e73 ] || fail 'validator bytes escaped review'
-[ "$(sha "$policy")" = b1ff5ea55b0bcdfcabd755d99bd54fe18fcb22e5ad5c24909553ee91e26e3752 ] || fail 'mutation policy bytes escaped review'
+[ "$(sha "$contract")" = perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LC_ALL = "C.UTF-8",
+	LC_CTYPE = "C.UTF-8",
+	LANG = "C.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+panic: locale.c: 4486: Could not change LC_CTYPE locale to C.UTF-8, errno=9 ] || fail 'run-evidence contract bytes escaped review'
+[ "$(sha "$case_contract")" = perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LC_ALL = "C.UTF-8",
+	LC_CTYPE = "C.UTF-8",
+	LANG = "C.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+panic: locale.c: 4486: Could not change LC_CTYPE locale to C.UTF-8, errno=9 ] || fail 'case-evidence contract bytes escaped review'
+[ "$(sha "$valid")" = perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LC_ALL = "C.UTF-8",
+	LC_CTYPE = "C.UTF-8",
+	LANG = "C.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+panic: locale.c: 4486: Could not change LC_CTYPE locale to C.UTF-8, errno=9 ] || fail 'valid fixture bytes escaped review'
+[ "$(sha "$malformed")" = perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LC_ALL = "C.UTF-8",
+	LC_CTYPE = "C.UTF-8",
+	LANG = "C.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+panic: locale.c: 4486: Could not change LC_CTYPE locale to C.UTF-8, errno=9 ] || fail 'malformed fixture bytes escaped review'
+[ "$(sha "$cases")" = perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LC_ALL = "C.UTF-8",
+	LC_CTYPE = "C.UTF-8",
+	LANG = "C.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+panic: locale.c: 4486: Could not change LC_CTYPE locale to C.UTF-8, errno=9 ] || fail 'case table bytes escaped review'
+[ "$(sha "$validator")" = perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LC_ALL = "C.UTF-8",
+	LC_CTYPE = "C.UTF-8",
+	LANG = "C.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+panic: locale.c: 4486: Could not change LC_CTYPE locale to C.UTF-8, errno=9 ] || fail 'validator bytes escaped review'
+[ "$(sha "$policy")" = perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LC_ALL = "C.UTF-8",
+	LC_CTYPE = "C.UTF-8",
+	LANG = "C.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+panic: locale.c: 4486: Could not change LC_CTYPE locale to C.UTF-8, errno=9 ] || fail 'mutation policy bytes escaped review'
 grep -Fqx 'status=experimental-complete-C2A-source-only-no-workflow' "$contract" || fail 'run-evidence status changed'
 grep -Fqx 'execution_authority=none;format-and-validator-only' "$contract" || fail 'run-evidence authority changed'
 grep -Fqx 'line_count=31' "$contract" || fail 'run-evidence line count changed'
+grep -Fqx 'record_digest_rule=record_sha256-is-SHA256-of-the-exact-first-30-lines-in-field-order-with-each-line-LF-terminated;line-31-is-excluded;no-alternate-serialization' "$contract" || fail 'record digest preimage changed'
 grep -Fqx 'output_set_rule=exactly-controller-helper-closure-observer.cases.v0+controller-helper-closure.sha256+controller-helper-closure.receipt+controller-helper-closure-observer-run-evidence.v0;regular+non-symlink+single-link+no-extra-entry' "$contract" || fail 'output-set rule changed'
 grep -Fqx 'case_set=O001-through-O021-exactly-once-in-numeric-order' "$case_contract" || fail 'case set changed'
+grep -Fqx 'exit_rule=O001:0;O002-through-O021:1-controller-normalized-rejection;no-other-value' "$case_contract" || fail 'case exit mapping changed'
 [ "$(/usr/bin/wc -l < "$valid" | /usr/bin/tr -d ' ')" -eq 31 ] || fail 'valid fixture line count changed'
 [ "$(/usr/bin/tail -c 1 "$valid" | /usr/bin/od -An -tx1 | /usr/bin/tr -d '[:space:]')" = 0a ] || fail 'valid fixture lacks terminal LF'
 record_sha=$(/usr/bin/sed -n '1,30p' "$valid" | /usr/bin/shasum -a 256 | /usr/bin/awk '{ print $1 }')
 [ "$(/usr/bin/sed -n '31p' "$valid")" = "record_sha256=$record_sha" ] || fail 'valid fixture record digest invalid'
-grep -Fqx 'status=ready' "$malformed" || fail 'malformed ready-substitution fixture changed'
-grep -Fqx 'case_count=20' "$cases" || fail 'case table count changed'
-[ "$(/usr/bin/grep -Ec '^V[0-9][0-9][0-9]\|' "$cases")" -eq 20 ] || fail 'case table incomplete'
+grep -Fqx 'run-id=12345' "$malformed" || fail 'malformed bad-key fixture changed'
+grep -Fqx 'case_count=40' "$cases" || fail 'case table count changed'
+[ "$(/usr/bin/grep -Ec '^V[0-9][0-9][0-9]\|' "$cases")" -eq 40 ] || fail 'case table incomplete'
 /bin/sh -n "$validator" "$policy"
 if /usr/bin/grep -R -Fq 'verify-controller-helper-closure-observer-run-evidence.sh' "$root/.github/workflows"; then fail 'C2A validator is wired to a workflow'; fi
 if /usr/bin/grep -R -Fq 'test-controller-helper-closure-observer-run-evidence-policy.sh' "$root/.github/workflows"; then fail 'C2A mutation policy is wired to a workflow'; fi
