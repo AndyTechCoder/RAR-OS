@@ -133,10 +133,17 @@
   absent; no helper compilation, cloud provisioning, target execution, or Lab
   activation is authorized. The inactive observer source from PR #57 remains
   unwired and unexecuted, the CI closure lock remains `none`, and the helper
-  inventory remains blocked. C2 now requires its separately reviewed
-  literal-path observer packet and exact-main gate; C3V must later bind the
-  current tools, complete file set, controller, fixtures, retained bytes, and
-  runtime fault/confinement evidence, followed by separate C3A review
+  inventory remains blocked. The authoritative literal-path C2 packet merged
+  through PRs #109-#110, and exact-main Specifications run `33469515632` at
+  `4137f3397590958490dff261ee617df5f40e7cad` passed validation and all 26
+  isolated mutation-policy tests. C2A now defines the source-only narrow
+  main-only observer-test authority, canonical outer evidence record,
+  contextual validator, fixtures, and isolated mutation policy. It adds no
+  workflow or runtime and remains incomplete until review, merge, and a
+  distinct exact-main validation/mutation run; C2B remains blocked until then.
+  C3V must later bind the current tools, complete file set, controller,
+  fixtures, retained bytes, and runtime fault/confinement evidence, followed
+  by separate C3A review
 - Controller-helper inventory: an option-neutral blocked instance now binds the
   required builder, compiler closure, trusted source, golden vector, twice-
   reproduced binary, and isolated test-evidence identities. All activating
