@@ -1,0 +1,102 @@
+name: Controller Helper Closure Observer
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: controller-helper-closure-observer-main
+  cancel-in-progress: false
+
+jobs:
+  observe:
+    name: observe-controller-helper-closure
+    if: github.repository == 'AndyTechCoder/RAR-OS'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      RAR_TRUSTED_CONTROLLER_SHA: ${{ github.sha }}
+      RAR_EXPECTED_SOURCE_REVISION: ${{ github.sha }}
+      RAR_CI_BOOTSTRAP_IMAGE: sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
+    steps:
+      - name: Attest exact main runner
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        run: |
+          [[ "$GITHUB_EVENT_NAME" == push ]]
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_SHA" == "$RAR_TRUSTED_CONTROLLER_SHA" ]]
+          [[ "$GITHUB_SHA" == "$RAR_EXPECTED_SOURCE_REVISION" ]]
+          [[ "${ImageOS-}" == ubuntu24 ]]
+          [[ "${RUNNER_OS-}" == Linux ]]
+          [[ "${RUNNER_ARCH-}" == X64 ]]
+          [[ "${ImageVersion-}" =~ ^[0-9]+(\.[0-9]+)+$ ]]
+
+      - name: Check out exact main source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Bind reviewed source identities
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        run: |
+          wrapper_sha=$(sha256sum tools/ci/run-controller-helper-closure-observer.sh | awk '{print $1}')
+          subject_sha=$(sha256sum tools/ci/observe-controller-helper-closure.sh | awk '{print $1}')
+          fixture_sha=$(sha256sum tools/ci/fixtures/controller-helper-closure-observer/base-closure.v0 | awk '{print $1}')
+          pins_sha=$(sha256sum tools/ci/fixtures/controller-helper-closure-observer/tool-pins.v0 | awk '{print $1}')
+          nonce=$(printf '%s' "$GITHUB_REPOSITORY|$GITHUB_SHA|$GITHUB_RUN_ID|$GITHUB_RUN_ATTEMPT|outer-record" | sha256sum | awk '{print $1}')
+          {
+            printf 'RAR_EXPECTED_WRAPPER_SHA256=%s\n' "$wrapper_sha"
+            printf 'RAR_EXPECTED_SUBJECT_SHA256=%s\n' "$subject_sha"
+            printf 'RAR_EXPECTED_FIXTURE_SHA256=%s\n' "$fixture_sha"
+            printf 'RAR_EXPECTED_TOOL_PINS_SHA256=%s\n' "$pins_sha"
+            printf 'RAR_EXPECTED_RECORD_NONCE=%s\n' "$nonce"
+            printf 'RAR_EXPECTED_ARTIFACT_NAME=controller-helper-closure-observer-%s-%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+            printf 'RAR_CI_RUNNER_IMAGE_OS=%s\n' "$ImageOS"
+            printf 'RAR_CI_RUNNER_IMAGE_VERSION=%s\n' "$ImageVersion"
+            printf 'RAR_CI_RUNNER_OS=%s\n' "$RUNNER_OS"
+            printf 'RAR_CI_RUNNER_ARCH=%s\n' "$RUNNER_ARCH"
+          } >> "$GITHUB_ENV"
+
+      - name: Prepare exclusive controller evidence root
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          EVIDENCE: ${{ runner.temp }}/controller-helper-closure-observer
+        run: install -d -m 700 "$EVIDENCE"
+
+      - name: Run isolated harness and one candidate observation
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          EVIDENCE: ${{ runner.temp }}/controller-helper-closure-observer
+        run: tools/ci/run-controller-helper-closure-observer.sh "$GITHUB_WORKSPACE" "$EVIDENCE"
+
+      - name: Independently validate exact candidate evidence
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          EVIDENCE: ${{ runner.temp }}/controller-helper-closure-observer
+          RAR_EXPECTED_REPOSITORY: AndyTechCoder/RAR-OS
+          RAR_EXPECTED_REF: refs/heads/main
+          RAR_EXPECTED_EVENT: push
+        run: |
+          tools/ci/verify-controller-helper-closure-observer-run-evidence.sh \
+            "$EVIDENCE" \
+            tools/ci/run-controller-helper-closure-observer.sh \
+            tools/ci/observe-controller-helper-closure.sh \
+            tools/ci/fixtures/controller-helper-closure-observer/base-closure.v0 \
+            tools/ci/fixtures/controller-helper-closure-observer/tool-pins.v0
+
+      - name: Retain four validated candidate files
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: controller-helper-closure-observer-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/controller-helper-closure-observer
+          if-no-files-found: error
+          retention-days: 14
+          overwrite: false
+          include-hidden-files: false
