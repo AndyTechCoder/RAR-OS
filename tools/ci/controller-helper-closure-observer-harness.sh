@@ -56,28 +56,28 @@ generate_subject() {
             'script=/workspace/tools/ci/observe-controller-helper-closure.sh') printf 'script=%s\n' "$case_subject" ;;
             'scratch=/tmp/rar-controller-helper-closure') printf 'scratch=%s\n' "$case_root/observer-scratch" ;;
             'evidence=/evidence') printf 'evidence=%s\n' "$case_evidence" ;;
-            '[ "$(hash_file "$rustc")" = bff349e72704ff70bc08a234a3847338e797065bbedde5e556808bc87b7bf7c6 ] || fail '\''rustc identity mismatch'\''')
-                printf '[ "$(hash_file "$rustc")" = %s ] || fail '\''rustc identity mismatch'\''\n' "$fixture_rustc_sha" ;;
-            '[ "$(hash_file "$shell")" = a6f559e00b69a4aa4d8cb607be18d9386c5aee55c509e2c075549dcf00e00fc7 ] || fail '\''shell identity mismatch'\''')
-                if [ "$id" = O004 ]; then printf '%s\n' '[ "$(hash_file "$shell")" = 0000000000000000000000000000000000000000000000000000000000000000 ] || fail '\''shell identity mismatch'\'''; else printf '%s\n' "$line"; fi ;;
-            'unexpected=$(/usr/bin/find -P "$root" ! \( -type d -o -type f \) -printf x -quit) || fail '\''cannot inspect closure topology'\''')
+            *'rustc identity mismatch'*)
+                printf '[ "$(hash_file "$rustc")" = %s ] || fail '"'"'rustc identity mismatch'"'"'\n' "$fixture_rustc_sha" ;;
+            *'shell identity mismatch'*)
+                if [ "$id" = O004 ]; then printf "%s\n" "[ \"\$(hash_file \"\$shell\")\" = 0000000000000000000000000000000000000000000000000000000000000000 ] || fail 'shell identity mismatch'"; else printf '%s\n' "$line"; fi ;;
+            unexpected=*'cannot inspect closure topology'*)
                 if [ "$id" = O005 ]; then printf '%s\n' 'unexpected=x'; else printf '%s\n' "$line"; fi ;;
-            'alias=$(/usr/bin/find -P "$root" -type f -links +1 -printf x -quit) || fail '\''cannot inspect closure aliases'\''')
+            alias=*'cannot inspect closure aliases'*)
                 if [ "$id" = O007 ]; then printf '%s\n' 'alias=x'; else printf '%s\n' "$line"; fi ;;
-            '/usr/bin/find -P "$root" -printf '\''%D\n'\'' > "$device_unsorted" || fail '\''cannot inspect closure devices'\''')
-                if [ "$id" = O010 ]; then printf '%s\n' 'false || fail '\''injected command failure'\'''; else printf '%s\n' "$line"; fi ;;
+            *'cannot inspect closure devices'*)
+                if [ "$id" = O010 ]; then printf "%s\n" "false || fail 'injected command failure'"; else printf '%s\n' "$line"; fi ;;
             '    digest=$(hash_file "$file")')
-                if [ "$id" = O011 ]; then printf '%s\n' '    fail '\''injected read failure'\'''; else printf '%s\n' "$line"; fi ;;
+                if [ "$id" = O011 ]; then printf "%s\n" "    fail 'injected read failure'"; else printf '%s\n' "$line"; fi ;;
             '    output=$(/usr/bin/sha256sum -- "$1") || fail "cannot hash $1"')
                 if [ "$id" = O014 ]; then printf '%s\n' '    output=not-a-canonical-digest'; else printf '%s\n' "$line"; fi ;;
-            'exec 3>&- || fail '\''cannot close candidate manifest'\''')
-                printf '%s\n' "$line"; if [ "$id" = O013 ]; then printf '%s\n' 'fail '\''injected close failure'\'''; fi ;;
-            'recorded_count=$(/usr/bin/wc -l < "$manifest") || fail '\''cannot count closure records'\''')
+            *'cannot close candidate manifest'*)
+                printf '%s\n' "$line"; if [ "$id" = O013 ]; then printf "%s\n" "fail 'injected close failure'"; fi ;;
+            *'cannot count closure records'*)
                 if [ "$id" = O015 ]; then printf '%s\n' 'recorded_count=0'; else printf '%s\n' "$line"; fi ;;
-            '/usr/bin/sort "$unsorted" > "$paths" || fail '\''cannot sort closure paths'\''')
+            *'cannot sort closure paths'*)
                 printf '%s\n' "$line"; if [ "$id" = O016 ]; then printf '%s\n' ': > "$root/phase-added-after-enumeration"'; fi ;;
-            '    [ "$manifest_bytes_expected" -le 1048576 ] || fail '\''closure manifest exceeds reviewed bounds'\''')
-                if [ "$id" = O017 ]; then printf '%s\n' '    [ "$manifest_bytes_expected" -le 1 ] || fail '\''closure manifest exceeds reviewed bounds'\'''; else printf '%s\n' "$line"; fi ;;
+            *'closure manifest exceeds reviewed bounds'*)
+                if [ "$id" = O017 ]; then printf "%s\n" "    [ \"\$manifest_bytes_expected\" -le 1 ] || fail 'closure manifest exceeds reviewed bounds'"; else printf '%s\n' "$line"; fi ;;
             *) printf '%s\n' "$line" ;;
         esac
     done < "$subject" > "$case_subject" || fail "cannot generate bound subject for $id"
