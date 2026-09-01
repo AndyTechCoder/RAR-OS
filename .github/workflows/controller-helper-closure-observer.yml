@@ -36,33 +36,114 @@ jobs:
           [[ "${RUNNER_ARCH-}" == X64 ]]
           [[ "${ImageVersion-}" =~ ^[0-9]+(\.[0-9]+)+$ ]]
 
-      - name: Check out exact main source anonymously
+      - name: Acquire exact main into bounded storage
         shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
         run: |
           checkout_image=rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
           runner_uid=$(/usr/bin/id -u)
           runner_gid=$(/usr/bin/id -g)
-          /usr/bin/docker run --rm --read-only --network bridge \
+          identity="rar-c2b-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          acquisition="$identity-acquire"
+          transfer="$identity-transfer"
+          volume="$identity-source"
+          partial="$RUNNER_TEMP/controller-helper-closure-checkout-partial-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          cleanup() {
+            /usr/bin/timeout --kill-after=2s 10s /usr/bin/docker rm --force "$acquisition" "$transfer" >/dev/null 2>&1 || true
+            /usr/bin/timeout --kill-after=2s 10s /usr/bin/docker volume rm --force "$volume" >/dev/null 2>&1 || true
+            if [[ -n "${partial-}" && -d "$partial" ]]; then
+              case "$partial" in
+                "$RUNNER_TEMP"/controller-helper-closure-checkout-partial-"$GITHUB_RUN_ID"-"$GITHUB_RUN_ATTEMPT") /usr/bin/rm -rf -- "$partial" ;;
+                *) return 1 ;;
+              esac
+            fi
+          }
+          trap cleanup EXIT HUP INT TERM
+          [[ -d "$GITHUB_WORKSPACE" && ! -L "$GITHUB_WORKSPACE" ]]
+          [[ -z "$(/usr/bin/find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -print -quit)" ]]
+          [[ ! -e "$partial" && ! -L "$partial" ]]
+          ! /usr/bin/docker inspect "$acquisition" >/dev/null 2>&1
+          ! /usr/bin/docker inspect "$transfer" >/dev/null 2>&1
+          ! /usr/bin/docker volume inspect "$volume" >/dev/null 2>&1
+          /usr/bin/install -d -m 700 "$partial"
+          /usr/bin/docker volume create --driver local \
+            --opt type=tmpfs --opt device=tmpfs \
+            --opt "o=size=67108864,uid=$runner_uid,gid=$runner_gid,mode=0700,noexec,nosuid,nodev" \
+            "$volume" >/dev/null
+          /usr/bin/docker create --name "$acquisition" --read-only --network bridge \
             --user "$runner_uid:$runner_gid" --cpus 1 --memory 512m --memory-swap 512m --pids-limit 64 \
             --security-opt no-new-privileges --cap-drop ALL \
             --tmpfs "/tmp:rw,noexec,nosuid,nodev,size=64m,uid=$runner_uid,gid=$runner_gid,mode=700" \
-            --mount "type=bind,source=$GITHUB_WORKSPACE,target=/workspace" \
+            --mount "type=volume,source=$volume,target=/checkout" \
             "$checkout_image" /usr/bin/env -i \
             HOME=/tmp PATH=/usr/bin:/bin LC_ALL=C LANG=C GIT_CONFIG_NOSYSTEM=1 \
             GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false \
             /usr/bin/dash -c '
-              /usr/bin/git init /workspace
-              /usr/bin/git -C /workspace remote add origin https://github.com/AndyTechCoder/RAR-OS.git
-              /usr/bin/git -C /workspace -c credential.helper= -c core.askPass= fetch --no-tags --depth=1 origin "$1"
-              /usr/bin/git -C /workspace checkout --detach FETCH_HEAD
-            ' rar-c2b-checkout "$GITHUB_SHA"
+              set -eu
+              /usr/bin/git init /checkout
+              /usr/bin/git -C /checkout remote add origin https://github.com/AndyTechCoder/RAR-OS.git
+              /usr/bin/git -C /checkout -c credential.helper= -c core.askPass= \
+                -c filter.lfs.smudge= -c filter.lfs.required=false \
+                fetch --no-tags --depth=1 origin "$1"
+              /usr/bin/git -C /checkout -c filter.lfs.smudge= -c filter.lfs.required=false \
+                checkout --detach FETCH_HEAD
+              [ "$(/usr/bin/git -C /checkout rev-parse HEAD)" = "$1" ]
+              [ -z "$(/usr/bin/git -C /checkout status --porcelain=v1 --untracked-files=all)" ]
+              [ -z "$(/usr/bin/git -C /checkout for-each-ref --format="%(refname)")" ]
+              bytes=$(/usr/bin/du -sb /checkout | /usr/bin/awk "{print \\$1}")
+              files=$(/usr/bin/find -P /checkout -xdev -type f -printf x | /usr/bin/wc -c)
+              set -- $(/usr/bin/git -C /checkout count-objects -v | /usr/bin/awk "/^(count|in-pack):/ {print \\$2}")
+              [ "$#" -eq 2 ]
+              objects=$(($1 + $2))
+              [ "$bytes" -le 67108864 ] && [ "$files" -le 8192 ] && [ "$objects" -le 32768 ]
+            ' rar-c2b-acquire "$GITHUB_SHA" >/dev/null
+          /usr/bin/timeout --signal=TERM --kill-after=10s 120s /usr/bin/docker start --attach "$acquisition"
+          [[ "$(/usr/bin/docker inspect --format '{{.State.ExitCode}}' "$acquisition")" -eq 0 ]]
+          /usr/bin/timeout --kill-after=2s 10s /usr/bin/docker rm --force "$acquisition" >/dev/null
+          acquisition=
+          /usr/bin/docker create --name "$transfer" --read-only --network none \
+            --user "$runner_uid:$runner_gid" --cpus 1 --memory 512m --memory-swap 512m --pids-limit 64 \
+            --security-opt no-new-privileges --cap-drop ALL \
+            --tmpfs "/tmp:rw,noexec,nosuid,nodev,size=64m,uid=$runner_uid,gid=$runner_gid,mode=700" \
+            --mount "type=volume,source=$volume,target=/source,readonly" \
+            --mount "type=bind,source=$partial,target=/destination" \
+            "$checkout_image" /usr/bin/env -i \
+            HOME=/tmp PATH=/usr/bin:/bin LC_ALL=C LANG=C GIT_CONFIG_NOSYSTEM=1 \
+            GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false \
+            /usr/bin/dash -c '
+              set -eu
+              /usr/bin/cp -a /source/. /destination/
+              [ "$(/usr/bin/git -C /destination rev-parse HEAD)" = "$1" ]
+              [ -z "$(/usr/bin/git -C /destination status --porcelain=v1 --untracked-files=all)" ]
+              [ -z "$(/usr/bin/git -C /destination for-each-ref --format="%(refname)")" ]
+              bytes=$(/usr/bin/du -sb /destination | /usr/bin/awk "{print \\$1}")
+              files=$(/usr/bin/find -P /destination -xdev -type f -printf x | /usr/bin/wc -c)
+              set -- $(/usr/bin/git -C /destination count-objects -v | /usr/bin/awk "/^(count|in-pack):/ {print \\$2}")
+              [ "$#" -eq 2 ]
+              objects=$(($1 + $2))
+              [ "$bytes" -le 67108864 ] && [ "$files" -le 8192 ] && [ "$objects" -le 32768 ]
+              [ "$(CDPATH= cd -- /destination && pwd -P)" = /destination ]
+            ' rar-c2b-transfer "$GITHUB_SHA" >/dev/null
+          /usr/bin/timeout --signal=TERM --kill-after=10s 30s /usr/bin/docker start --attach "$transfer"
+          [[ "$(/usr/bin/docker inspect --format '{{.State.ExitCode}}' "$transfer")" -eq 0 ]]
+          /usr/bin/timeout --kill-after=2s 10s /usr/bin/docker rm --force "$transfer" >/dev/null
+          transfer=
+          /usr/bin/timeout --kill-after=2s 10s /usr/bin/docker volume rm "$volume" >/dev/null
+          volume=
+          /usr/bin/chmod -R a-w "$partial"
+          /usr/bin/rmdir "$GITHUB_WORKSPACE"
+          /usr/bin/mv "$partial" "$GITHUB_WORKSPACE"
+          partial=
+          trap - EXIT HUP INT TERM
 
       - name: Verify exact immutable checkout
         shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          GIT_OPTIONAL_LOCKS: "0"
         run: |
           actual_sha=$(git rev-parse HEAD)
           [[ "$actual_sha" == "$GITHUB_SHA" ]]
           [[ -z "$(git status --porcelain=v1 --untracked-files=all)" ]]
+          [[ ! -w tools/ci/run-controller-helper-closure-observer.sh ]]
 
       - name: Bind reviewed source identities
         shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
