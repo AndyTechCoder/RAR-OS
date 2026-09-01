@@ -13,7 +13,9 @@ size_file() { /usr/bin/stat -c %s "$1"; }
 source_root=${1-}
 evidence=${2-}
 [ -d "$source_root" ] && [ ! -L "$source_root" ] || fail 'source root invalid'
+[ "$source_root" = "${GITHUB_WORKSPACE-}" ] || fail 'source root is not exact checkout'
 [ -d "$evidence" ] && [ ! -L "$evidence" ] || fail 'evidence root invalid'
+case "$evidence" in "${RUNNER_TEMP-}"/controller-helper-closure-observer) ;; *) fail 'evidence root is outside controller scratch' ;; esac
 [ -z "$(/usr/bin/find "$evidence" -mindepth 1 -maxdepth 1 -print -quit)" ] || fail 'evidence root not empty'
 [ "${GITHUB_ACTIONS-}" = true ] && [ "${CI-}" = true ] || fail 'CI boundary absent'
 [ "${GITHUB_EVENT_NAME-}" = push ] && [ "${GITHUB_REF-}" = refs/heads/main ] && [ "${GITHUB_REPOSITORY-}" = AndyTechCoder/RAR-OS ] || fail 'canonical context absent'
@@ -29,17 +31,18 @@ container=$(/usr/bin/docker create --read-only --network none --user 65532:65532
     --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,uid=65532,gid=65532,mode=700 \
     --tmpfs /evidence:rw,noexec,nosuid,nodev,size=4m,uid=65532,gid=65532,mode=700 \
     --mount "type=bind,source=$source_root,target=/workspace,readonly" \
-    --env GITHUB_ACTIONS=true --env CI=true --env GITHUB_EVENT_NAME=push \
-    --env GITHUB_REF=refs/heads/main --env GITHUB_REPOSITORY=AndyTechCoder/RAR-OS \
-    --env "GITHUB_SHA=$GITHUB_SHA" --env "GITHUB_RUN_ID=$GITHUB_RUN_ID" --env "GITHUB_RUN_ATTEMPT=$GITHUB_RUN_ATTEMPT" \
-    --env "RAR_TRUSTED_CONTROLLER_SHA=$RAR_TRUSTED_CONTROLLER_SHA" --env "RAR_EXPECTED_SOURCE_REVISION=$RAR_EXPECTED_SOURCE_REVISION" \
-    --env "RAR_CI_RUNNER_IMAGE_OS=$RAR_CI_RUNNER_IMAGE_OS" --env "RAR_CI_RUNNER_IMAGE_VERSION=$RAR_CI_RUNNER_IMAGE_VERSION" \
-    --env "RAR_CI_RUNNER_OS=$RAR_CI_RUNNER_OS" --env "RAR_CI_RUNNER_ARCH=$RAR_CI_RUNNER_ARCH" \
-    --env "RAR_CI_BOOTSTRAP_IMAGE=$RAR_CI_BOOTSTRAP_IMAGE" \
-    --env "RAR_EXPECTED_SUBJECT_SHA256=$RAR_EXPECTED_SUBJECT_SHA256" \
-    --env "RAR_EXPECTED_FIXTURE_SHA256=$RAR_EXPECTED_FIXTURE_SHA256" \
-    --env "RAR_EXPECTED_TOOL_PINS_SHA256=$RAR_EXPECTED_TOOL_PINS_SHA256" \
-    "$image" /usr/bin/dash /workspace/tools/ci/controller-helper-closure-observer-harness.sh)
+    "$image" /usr/bin/env -i \
+    PATH=/usr/bin:/bin LC_ALL=C LANG=C GITHUB_ACTIONS=true CI=true \
+    GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main GITHUB_REPOSITORY=AndyTechCoder/RAR-OS \
+    "GITHUB_SHA=$GITHUB_SHA" "GITHUB_RUN_ID=$GITHUB_RUN_ID" "GITHUB_RUN_ATTEMPT=$GITHUB_RUN_ATTEMPT" \
+    "RAR_TRUSTED_CONTROLLER_SHA=$RAR_TRUSTED_CONTROLLER_SHA" "RAR_EXPECTED_SOURCE_REVISION=$RAR_EXPECTED_SOURCE_REVISION" \
+    "RAR_CI_RUNNER_IMAGE_OS=$RAR_CI_RUNNER_IMAGE_OS" "RAR_CI_RUNNER_IMAGE_VERSION=$RAR_CI_RUNNER_IMAGE_VERSION" \
+    "RAR_CI_RUNNER_OS=$RAR_CI_RUNNER_OS" "RAR_CI_RUNNER_ARCH=$RAR_CI_RUNNER_ARCH" \
+    "RAR_CI_BOOTSTRAP_IMAGE=$RAR_CI_BOOTSTRAP_IMAGE" \
+    "RAR_EXPECTED_SUBJECT_SHA256=$RAR_EXPECTED_SUBJECT_SHA256" \
+    "RAR_EXPECTED_FIXTURE_SHA256=$RAR_EXPECTED_FIXTURE_SHA256" \
+    "RAR_EXPECTED_TOOL_PINS_SHA256=$RAR_EXPECTED_TOOL_PINS_SHA256" \
+    /usr/bin/dash /workspace/tools/ci/controller-helper-closure-observer-harness.sh)
 case "$container" in ''|*[!0-9a-f]*) fail 'container identity invalid' ;; esac
 /usr/bin/docker start --attach "$container"
 status=$(/usr/bin/docker inspect --format '{{.State.ExitCode}}' "$container")
