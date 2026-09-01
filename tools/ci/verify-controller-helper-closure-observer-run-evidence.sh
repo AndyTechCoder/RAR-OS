@@ -115,6 +115,14 @@ NR>2 {
 END { if (rows!=21 || bad) exit 1 }
 ' "$case_evidence" || fail 'case evidence grammar, identity, order, uniqueness, exit, result, or verdict invalid'
 
+case_evidence_sha=$(sha_file "$case_evidence")
+manifest_sha=$(sha_file "$manifest")
+receipt_sha=$(sha_file "$receipt")
+for derived_digest in "$case_evidence_sha" "$manifest_sha" "$receipt_sha"; do
+    case "$derived_digest" in '' | *[!0-9a-f]*) fail 'derived output digest malformed' ;; esac
+    [ "${#derived_digest}" -eq 64 ] && [ "$derived_digest" != "$zero" ] || fail 'derived output digest invalid or zero'
+done
+
 expected="schema=rar-alpha-controller-helper-closure-observer-run-evidence-v0
 status=candidate-not-reviewed-not-ready
 repository=$RAR_EXPECTED_REPOSITORY
@@ -133,9 +141,9 @@ wrapper_sha256=$RAR_EXPECTED_WRAPPER_SHA256
 subject_sha256=$RAR_EXPECTED_SUBJECT_SHA256
 fixture_sha256=$RAR_EXPECTED_FIXTURE_SHA256
 tool_pins_sha256=$RAR_EXPECTED_TOOL_PINS_SHA256
-case_evidence_sha256=$(sha_file "$case_evidence")
-manifest_sha256=$(sha_file "$manifest")
-receipt_sha256=$(sha_file "$receipt")
+case_evidence_sha256=$case_evidence_sha
+manifest_sha256=$manifest_sha
+receipt_sha256=$receipt_sha
 artifact_name=$RAR_EXPECTED_ARTIFACT_NAME
 retention_days=14
 observed_exit=0
@@ -147,5 +155,7 @@ verdict=candidate-not-reviewed-not-ready
 record_nonce=$RAR_EXPECTED_RECORD_NONCE"
 [ "$(/usr/bin/sed -n '1,30p' "$record")" = "$expected" ] || fail 'record binding, order, field set, or trusted context mismatch'
 record_sha=$(/usr/bin/sed -n '1,30p' "$record" | /usr/bin/shasum -a 256 | /usr/bin/awk '{ print $1 }')
+case "$record_sha" in '' | *[!0-9a-f]*) fail 'record digest computation malformed' ;; esac
+[ "${#record_sha}" -eq 64 ] && [ "$record_sha" != "$zero" ] || fail 'record digest computation invalid or zero'
 [ "$(/usr/bin/sed -n '31p' "$record")" = "record_sha256=$record_sha" ] || fail 'record digest mismatch'
 printf '%s\n' 'controller-helper observer run evidence validated: exact-main candidate-not-reviewed-not-ready'
