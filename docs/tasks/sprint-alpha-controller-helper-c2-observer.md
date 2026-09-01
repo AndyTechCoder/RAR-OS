@@ -73,6 +73,7 @@ After C2A closes, the C2B writer owns only these paths:
 - `tools/ci/fixtures/controller-helper-closure-observer/cases.v0`
 - `tools/ci/fixtures/controller-helper-closure-observer/expected-observation.receipt.v0`
 - `tools/toolchain/class-b-host-tools.v1`
+- `tools/toolchain/host-tools.manifest`
 - `tools/ci/check-alpha-preimplementation-contracts.sh`
 - `tools/ci/check-sprint-static.sh`
 - `tools/ci/check-specs.sh`
