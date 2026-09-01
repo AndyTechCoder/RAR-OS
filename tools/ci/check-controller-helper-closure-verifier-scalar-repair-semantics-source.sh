@@ -39,7 +39,7 @@ for required in \
     'noncancellation_rule=repair-never-restores+rewrites+aliases+replaces+or-changes-identity+bytes+metadata-of-the-primary-target;all-primary-postconditions-remain-true-through-launch' \
     'tool_pin_digest_rule=after-primary-post-state-recording+compute-SHA-256-over-the-exact-complete-mutated-tool-pin-regular-file-byte-string-with-the-future-byte-pinned-controller-hasher;encode-the-32-octet-digest-as-exactly-64-lowercase-ASCII-hex-bytes-with-no-prefix+separator+LF+NUL;set-only-RAR_REVIEWED_VERIFIER_TOOLS_SHA256-to-those-bytes' \
     'failure_rule=base-proof+ordering+read-scope+digest+encoding+environment+identity+noncancellation+combined-postcondition-failure-invalidates-before-launch;never-skip+retry+coerce+fallback+repair-the-primary-target' \
-    'remaining_status=6-non-none-repair-tokens+23-primary-families+pre-start+repair-coupled-links+required-path-symlinks+raw-name+path-alias+mount+tree+manifest-specific-primary-families+exact-base+controller+runtime-precedence+fault+evidence+verdict-remain-absent' \
+    'remaining_status=closed-by-controller-helper-closure-verifier-cases-v0+faults-v0.fields+evidence-v0.fields;this-slice-remains-inactive' \
     'activation_rule=blocked;this-slice-cannot-create-fixtures+execute-mutations+apply-repairs+or-authorize-a-controller' \
     'consumer_rule=this-contract-does-not-authorize-fixture+mutation+repair+controller+container+compiler+helper+target+VM+emulator+workflow+wiring+gate+readiness' \
     'local_rule=text+hash+structure-check-only;never-run-verifier+controller+container+compiler+helper+target+VM+emulator-on-Mac'; do
