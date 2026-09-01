@@ -3,7 +3,11 @@ set -eu
 LC_ALL=C
 LANG=C
 export LC_ALL LANG
-root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
+case $# in
+    0) root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P) ;;
+    1) root=$1 ;;
+    *) printf '%s\n' 'controller-helper observer run-evidence source check failed: expected zero or one repository root argument' >&2; exit 1 ;;
+esac
 contract=$root/spec/alpha/lab/controller-helper-closure-observer-run-evidence-v0.fields
 case_contract=$root/tools/ci/contracts/controller-helper-closure-observer-case-evidence-v0.fields
 fixtures=$root/tools/ci/fixtures/controller-helper-closure-observer

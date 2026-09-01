@@ -1,7 +1,7 @@
 schema=rar-host-tool-manifest-v4
 class_b_inventory=tools/toolchain/class-b-host-tools.v1
 class_b_inventory_schema=rar-class-b-host-tool-inventory-v1
-class_b_inventory_sha256=3af7af68c62007e89df2e8c026be1ece06c7b39a69d676a81c4a0a42255f2d1d
+class_b_inventory_sha256=ff2a95b138c6c30608cc3f563d27612fe2b2f76d7d7aeeeda6b62fa643d15953
 bootstrap_boundary=macos-diagnostic-closure-and-immutable-oci-ci-root
 bootstrap_shell=macos-bin-sh
 bootstrap_hasher=macos-usr-bin-shasum

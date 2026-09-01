@@ -32,7 +32,7 @@ done
 [ "$(sha "$wrapper")" = 70d7ce475553df5ce962ec45a6ac08bae776c70c04afd2ebeccfcba14a8a7ec0 ] || fail 'wrapper bytes escaped review'
 [ "$(sha "$harness")" = 459d44d23d0e4036d233ab9bf1ab70b0b665352d2d7646f30d59ef67ab8b8677 ] || fail 'harness bytes escaped review'
 [ "$(sha "$policy")" = b8095dc12f50243258832aa0a8ee90d5ebbb22265496be86251697420626780d ] || fail 'policy bytes escaped review'
-[ "$(sha "$policy_test")" = cc24fa8768b78d7768f8cf8f89a5443110f30eabea774a2868eb42aacedf5571 ] || fail 'policy_test bytes escaped review'
+[ "$(sha "$policy_test")" = 87f72f9e990250661644a1e24226cfc6e4c7c32d3702f92dc81e128f045ad27a ] || fail 'policy_test bytes escaped review'
 [ "$(sha "$catalog")" = 6b946f446d773389e924be0c8d35e88577b3e177f3da0d52af3f52cea398e289 ] || fail 'catalog bytes escaped review'
 [ "$(sha "$fixture")" = bbef536b8820f962d3ce529de904421b9aa8cf808ad29953321f2b1cdafd0314 ] || fail 'fixture bytes escaped review'
 [ "$(sha "$pins")" = c9cc0e778a0ee766d7e83286021c29aaff29ad55eea4431f921f4cc77972c3a9 ] || fail 'pins bytes escaped review'

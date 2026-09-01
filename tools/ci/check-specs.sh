@@ -806,7 +806,7 @@ grep -qx 'license_2=ISC' "$crypto_refs" || fail 'libsodium reference license mis
 class_b_inventory=tools/toolchain/class-b-host-tools.v1
 [ "$(sed -n '1p' "$class_b_inventory")" = 'schema=rar-class-b-host-tool-inventory-v1' ] || fail "Class B inventory schema is invalid"
 [ "$(sed -n '2p' "$class_b_inventory")" = 'id|platform|version|integrity|license|provenance|setup|status' ] || fail "Class B inventory header is invalid"
-[ "$(sed -n '3,$p' "$class_b_inventory" | awk 'END { print NR + 0 }')" -eq 15 ] || fail "Class B inventory entry count is invalid"
+[ "$(sed -n '3,$p' "$class_b_inventory" | awk 'END { print NR + 0 }')" -eq 16 ] || fail "Class B inventory entry count is invalid"
 
 class_b_ids='macos-sealed-bootstrap
 macos-apple-git
@@ -821,6 +821,7 @@ ci-gcc
 ci-git
 ci-linux-sysroot
 actions-checkout
+actions-upload-artifact
 github-hosted-runner
 github-runner-container-engine'
 printf '%s\n' "$class_b_ids" | while IFS= read -r id; do
@@ -838,9 +839,12 @@ done
 
 grep -qx 'schema=rar-host-tool-manifest-v4' tools/toolchain/host-tools.manifest || fail "host tool manifest schema is stale"
 grep -qx 'class_b_inventory=tools/toolchain/class-b-host-tools.v1' tools/toolchain/host-tools.manifest || fail "host tool manifest omits the Class B inventory"
+[ "$(grep -c '^class_b_inventory_sha256=' tools/toolchain/host-tools.manifest)" -eq 1 ] || fail "host tool manifest Class B inventory digest is missing or duplicated"
 grep -Eq '^class_b_inventory_sha256=[0-9a-f]{64}$' tools/toolchain/host-tools.manifest || fail "host tool manifest omits the Class B inventory digest"
 grep -q 'f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3' "$class_b_inventory" || fail "Class B inventory omits the OCI digest"
 grep -q '3d3c42e5aac5ba805825da76410c181273ba90b1' "$class_b_inventory" || fail "Class B inventory omits the checkout action commit"
+grep -Fqx 'actions-upload-artifact|github-actions|v4.6.2|git-sha1-ea165f8d65b6e75b540449e92b4886f43607fa02|MIT|https://github.com/actions/upload-artifact|pin-full-commit-in-controller-helper-closure-observer-workflow-candidate-retention-only|pinned-orchestrator' "$class_b_inventory" || fail "Class B inventory omits the exact candidate-retention upload action"
+grep -q 'ea165f8d65b6e75b540449e92b4886f43607fa02' "$class_b_inventory" || fail "Class B inventory omits the upload action commit"
 grep -q 'ubuntu-24.04-20260823.283.1' "$class_b_inventory" || fail "Class B inventory omits the runner image version"
 grep -qx 'ci_checkout=actions-checkout-v7.0.1-git-sha1-3d3c42e5aac5ba805825da76410c181273ba90b1' \
     tools/toolchain/host-tools.manifest || fail "host tool manifest checkout identity is stale"
@@ -858,6 +862,9 @@ sha256_of() {
     case "$digest" in *[!0-9a-f]*) return 1 ;; esac
     printf '%s\n' "$digest"
 }
+
+class_b_inventory_sha256=$(sha256_of "$class_b_inventory") || fail "cannot hash Class B inventory"
+grep -qx "class_b_inventory_sha256=$class_b_inventory_sha256" tools/toolchain/host-tools.manifest || fail "host tool manifest Class B inventory digest is stale"
 
 controller_helper_packet_sha256=$(sha256_of docs/tasks/sprint-alpha-controller-helper-integration.md) || fail "cannot hash ADR 0024 integration packet"
 [ "$controller_helper_packet_sha256" = 5fcaf8652aa0ebf23f44b403176b9a1716f90456f798d39b708c612bac60724a ] || fail "ADR 0024 integration packet changed without review"

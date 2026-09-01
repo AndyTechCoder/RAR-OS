@@ -9,12 +9,22 @@ scratch=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
 work=$(mktemp -d "$scratch/controller-helper-observer-policy.XXXXXX")
 trap '/bin/rm -rf "$work"' EXIT HUP INT TERM
 checker=$root/tools/ci/check-controller-helper-closure-observer-policy.sh
+binding_checker=$root/tools/ci/check-controller-helper-closure-observer-run-evidence-source.sh
 repo=$work/repo
 reset() {
     /bin/rm -rf "$repo"
-    /bin/mkdir -p "$repo/.github/workflows" "$repo/tools/ci/fixtures/controller-helper-closure-observer"
+    /bin/mkdir -p "$repo/.github/workflows" "$repo/spec/alpha/lab" "$repo/tools/ci/contracts" "$repo/tools/ci/fixtures/controller-helper-closure-observer" "$repo/tools/sprint-alpha" "$repo/tools/toolchain"
     for file_path in \
         .github/workflows/controller-helper-closure-observer.yml \
+        spec/alpha/lab/controller-helper-closure-observer-run-evidence-v0.fields \
+        tools/ci/contracts/controller-helper-closure-observer-case-evidence-v0.fields \
+        tools/ci/fixtures/controller-helper-closure-observer/run-evidence-valid.v0 \
+        tools/ci/fixtures/controller-helper-closure-observer/run-evidence-malformed.v0 \
+        tools/ci/fixtures/controller-helper-closure-observer/run-evidence-cases.v0 \
+        tools/ci/verify-controller-helper-closure-observer-run-evidence.sh \
+        tools/ci/test-controller-helper-closure-observer-run-evidence-policy.sh \
+        tools/sprint-alpha/controller-helper-v0.env \
+        tools/toolchain/host-tools.x86_64-unknown-linux-gnu-ci.lock \
         tools/ci/run-controller-helper-closure-observer.sh \
         tools/ci/controller-helper-closure-observer-harness.sh \
         tools/ci/observe-controller-helper-closure.sh \
@@ -27,9 +37,11 @@ reset() {
 }
 reject() { label=$1; shift; if "$@" >/dev/null 2>&1; then printf 'unsafe C2B policy passed: %s\n' "$label" >&2; exit 1; fi; }
 check() { /bin/sh "$checker" "$repo"; }
+binding_check() { /bin/sh "$binding_checker" "$repo"; }
 
 reset
 check >/dev/null
+binding_check >/dev/null
 reset
 /usr/bin/sed -i '/^on:/a\  workflow_dispatch:' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject workflow-dispatch check
@@ -162,4 +174,25 @@ reject cleanup-failure check
 reset
 /usr/bin/sed -i 's/force_remove_created_container "\$acquisition"/remove_container "$acquisition"/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject immediate-acquisition-removal check
-printf '%s\n' 'controller-helper observer policy mutations passed: cases=43'
+reset
+/bin/rm "$repo/.github/workflows/controller-helper-closure-observer.yml"
+binding_check >/dev/null
+reset
+/usr/bin/sed -i '\#^          tools/ci/verify-controller-helper-closure-observer-run-evidence\.sh \\$#d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject binding-missing binding_check
+reset
+/usr/bin/sed -i '\#^          tools/ci/verify-controller-helper-closure-observer-run-evidence\.sh \\$#a\          tools/ci/verify-controller-helper-closure-observer-run-evidence.sh \\' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject binding-duplicate-exact binding_check
+reset
+/usr/bin/printf '%s\n' '# verify-controller-helper-closure-observer-run-evidence-shadow' > "$repo/.github/workflows/foreign.yml"
+reject binding-partial-foreign binding_check
+reset
+/usr/bin/sed -i '\#^          tools/ci/verify-controller-helper-closure-observer-run-evidence\.sh \\$#d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+/usr/bin/printf '%s\n' '          tools/ci/verify-controller-helper-closure-observer-run-evidence.sh \' > "$repo/.github/workflows/foreign.yml"
+reject binding-exact-foreign binding_check
+reset
+/usr/bin/sed -i '\#^          tools/ci/verify-controller-helper-closure-observer-run-evidence\.sh \\$#d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+/usr/bin/sed -i '/^      - name: Run isolated harness and one candidate observation$/a\          tools/ci/verify-controller-helper-closure-observer-run-evidence.sh \\' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject binding-misplaced binding_check
+
+printf '%s\n' 'controller-helper observer policy mutations passed: cases=48'

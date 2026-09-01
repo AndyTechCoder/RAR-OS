@@ -91,7 +91,7 @@ mutation-policy tests at
 `c862e27771b999e593ae26ea12ef424613b67bac`. C2B now stages the main-only
 anonymous source acquisition, wrapper, O001-O021 harness, independent
 validator handoff, and exact four-file retention boundary. It remains
-candidate-only until its packet clarification, reviews, merge, distinct
+candidate-only until its reviews, merge, distinct
 exact-main Specifications run, and observer run pass; compiler, helper, target,
 lock, inventory, profile, gate, and readiness authority remain denied.
 
