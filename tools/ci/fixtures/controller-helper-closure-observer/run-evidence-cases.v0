@@ -1,5 +1,6 @@
 schema=rar-alpha-controller-helper-closure-observer-run-evidence-cases-v0
 case_count=40
+source_proof_count=2
 id|class|expected
 V001|valid|accept
 V002|malformed-bad-key-fixture|reject
@@ -41,3 +42,5 @@ V037|case-root-reuse|reject
 V038|case-wrong-result|reject
 V039|case-wrong-verdict|reject
 V040|case-exit-mismatch|reject
+S001|actual-derived-output-zero|reject-source-proof
+S002|actual-record-digest-zero|reject-source-proof
