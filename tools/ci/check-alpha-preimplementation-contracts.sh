@@ -177,7 +177,7 @@ require_digest "$lab/controller-helper-build-evidence-v0.fields" 2d48e4575c09619
 require_digest "$lab/controller-helper-build-receipt-v0.fields" 23800a09f0480211357c7c01e233fed605792d4000b93954a46b9f091de16a2f
 require_digest "$lab/controller-helper-test-evidence-v0.fields" bbef4dd6a0e343c8c9c1dae140cf65f4a24c7e80d1ceea9661c8d14706acb7fc
 require_digest "$lab/controller-helper-cases.v0" 08e36412d104cc5c41169faf5d5e4dd423eb7fbfb0dba0623911423c51238e59
-require_digest "$lab/controller-helper-runtime-v0.fields" 57620b332c0706ad2dd02a245593757ace511f2d9f58b49259c55346c6bd1b65
+require_digest "$lab/controller-helper-runtime-v0.fields" 7cd99e8f19229c2403add420b881d37a3a7d7b4c3cc7513d13938d691ead9d33
 require_digest "$lab/controller-helper-runtime-cases.v0" addc112fdd9c88f5dc99a0f31eef452fbe1a54f808d348d3d13b8731da3103c0
 require_digest "$lab/controller-helper-closure-observer-test-v0.fields" a4633dffa6727ace25cdd69705d3c006709a085726d93e6a2c42f287bccb1238
 require_digest "$lab/controller-helper-closure-verifier-faults-v0.fields" 43f38cc2e75567a9e473c8f2c3d5f8ed6fffc03b8a33a70622bcdd1521901a00
