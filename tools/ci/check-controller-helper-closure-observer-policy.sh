@@ -77,12 +77,32 @@ done
 /usr/bin/grep -Fq 'injected phase mutation failure' "$harness" || fail 'generated phase fault missing'
 /usr/bin/grep -Fq 'hardlinked=$(/usr/bin/find -P "$root" -type f -links +1 -printf x -quit)' "$observer" || fail 'production no-hardlink predicate missing'
 /usr/bin/grep -Fq "[ -z \"\$hardlinked\" ] || fail 'closure contains a hardlinked regular file'" "$observer" || fail 'production hardlink rejection missing'
+for marker in \
+    'RAR-C2B-BEGIN:cases' 'RAR-C2B-END:cases' \
+    'RAR-C2B-BEGIN:manifest' 'RAR-C2B-END:manifest' \
+    'RAR-C2B-BEGIN:receipt' 'RAR-C2B-END:receipt'; do
+    [ "$(/usr/bin/grep -Fc "$marker" "$wrapper")" -eq 1 ] || fail "stream marker changed: $marker"
+done
+[ "$(/usr/bin/grep -Fxc "    printf 'RAR-C2B-BEGIN:%s\\n' \"\$label\"" "$harness")" -eq 1 ] || fail 'stream begin emitter changed'
+[ "$(/usr/bin/grep -Fxc "    printf 'RAR-C2B-END:%s\\n' \"\$label\"" "$harness")" -eq 1 ] || fail 'stream end emitter changed'
 for emission in \
     'emit_file cases "$case_file"' \
     'emit_file manifest "$evidence/controller-helper-closure.sha256"' \
     'emit_file receipt "$evidence/controller-helper-closure.receipt"'; do
     [ "$(/usr/bin/grep -Fxc "$emission" "$harness")" -eq 1 ] || fail "stream emission changed: $emission"
 done
+/usr/bin/awk '
+    /emit_file cases "\$case_file"/ { cases=NR }
+    /emit_file manifest "\$evidence\/controller-helper-closure.sha256"/ { manifest=NR }
+    /emit_file receipt "\$evidence\/controller-helper-closure.receipt"/ { receipt=NR }
+    END { exit !(cases && manifest && receipt && cases < manifest && manifest < receipt) }
+' "$harness" || fail 'stream emission order changed'
+/usr/bin/awk '
+    /docker start --attach/ { start=NR }
+    /docker rm --force "\$container"/ { removed=NR }
+    /record=\$evidence\/controller-helper-closure-observer-run-evidence.v0/ { record=NR }
+    END { exit !(start && removed && record && start < removed && removed < record) }
+' "$wrapper" || fail 'producer revocation order changed'
 [ "$(/usr/bin/grep -Fxc 'case_count=21' "$catalog")" -eq 1 ] || fail 'runtime catalog count changed'
 [ "$(/usr/bin/grep -Ec '^O[0-9][0-9][0-9]\|' "$catalog")" -eq 21 ] || fail 'runtime catalog incomplete'
 /usr/bin/grep -Fq "'case_count=21'" "$harness" || fail 'case evidence count changed'
