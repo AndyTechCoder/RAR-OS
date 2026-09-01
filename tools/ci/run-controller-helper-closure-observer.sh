@@ -44,12 +44,73 @@ container=$(/usr/bin/docker create --read-only --network none --user 65532:65532
     "RAR_EXPECTED_TOOL_PINS_SHA256=$RAR_EXPECTED_TOOL_PINS_SHA256" \
     /usr/bin/dash /workspace/tools/ci/controller-helper-closure-observer-harness.sh)
 case "$container" in ''|*[!0-9a-f]*) fail 'container identity invalid' ;; esac
-/usr/bin/docker start --attach "$container"
+decode_stream() {
+    local root=$1 state=case-begin line bytes
+    local case_out=$root/controller-helper-closure-observer.cases.v0
+    local manifest_out=$root/controller-helper-closure.sha256
+    local receipt_out=$root/controller-helper-closure.receipt
+    local case_bytes=0 manifest_bytes=0 receipt_bytes=0
+    while IFS= read -r line; do
+        [ "${#line}" -le 1024 ] || return 1
+        case "$state" in
+            case-begin)
+                [ "$line" = 'RAR-C2B-BEGIN:cases' ] || return 1
+                set -C; exec 3> "$case_out" || return 1; set +C; state=cases
+                ;;
+            cases)
+                if [ "$line" = 'RAR-C2B-END:cases' ]; then
+                    exec 3>&- || return 1
+                    state=manifest-begin
+                else
+                    bytes=$((${#line} + 1)); case_bytes=$((case_bytes + bytes))
+                    [ "$case_bytes" -le 32768 ] || return 1
+                    printf '%s\n' "$line" >&3 || return 1
+                fi
+                ;;
+            manifest-begin)
+                [ "$line" = 'RAR-C2B-BEGIN:manifest' ] || return 1
+                set -C; exec 4> "$manifest_out" || return 1; set +C; state=manifest
+                ;;
+            manifest)
+                if [ "$line" = 'RAR-C2B-END:manifest' ]; then
+                    exec 4>&- || return 1
+                    state=receipt-begin
+                else
+                    bytes=$((${#line} + 1)); manifest_bytes=$((manifest_bytes + bytes))
+                    [ "$manifest_bytes" -le 1048576 ] || return 1
+                    printf '%s\n' "$line" >&4 || return 1
+                fi
+                ;;
+            receipt-begin)
+                [ "$line" = 'RAR-C2B-BEGIN:receipt' ] || return 1
+                set -C; exec 5> "$receipt_out" || return 1; set +C; state=receipt
+                ;;
+            receipt)
+                if [ "$line" = 'RAR-C2B-END:receipt' ]; then
+                    exec 5>&- || return 1
+                    state=done
+                else
+                    bytes=$((${#line} + 1)); receipt_bytes=$((receipt_bytes + bytes))
+                    [ "$receipt_bytes" -le 4096 ] || return 1
+                    printf '%s\n' "$line" >&5 || return 1
+                fi
+                ;;
+            done) return 1 ;;
+            *) return 1 ;;
+        esac
+    done
+    [ "$state" = done ] && [ "$case_bytes" -gt 0 ] && [ "$manifest_bytes" -gt 0 ] && [ "$receipt_bytes" -gt 0 ]
+}
+
+set +e
+/usr/bin/docker start --attach "$container" | decode_stream "$evidence"
+pipe_status=("${PIPESTATUS[@]}")
+set -e
+[ "${#pipe_status[@]}" -eq 2 ] || fail 'observer stream status missing'
+[ "${pipe_status[0]}" -eq 0 ] || fail 'isolated observer failed'
+[ "${pipe_status[1]}" -eq 0 ] || fail 'candidate evidence stream rejected'
 status=$(/usr/bin/docker inspect --format '{{.State.ExitCode}}' "$container")
-[ "$status" -eq 0 ] || fail 'isolated observer failed'
-for name in controller-helper-closure-observer.cases.v0 controller-helper-closure.sha256 controller-helper-closure.receipt; do
-    /usr/bin/docker cp "$container:/evidence/$name" "$evidence/$name"
-done
+[ "$status" -eq 0 ] || fail 'isolated observer exit mismatch'
 /usr/bin/docker rm --force "$container" >/dev/null
 container=
 
