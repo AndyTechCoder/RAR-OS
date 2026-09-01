@@ -133,12 +133,30 @@ reset
 /usr/bin/sed -i '/chmod -R a-w "\$partial"/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject writer-revocation check
 reset
-/usr/bin/sed -i '/controller-helper-closure-checkout-partial-.*rm -rf/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+/usr/bin/sed -i '/"\$workspace_parent"\/.rar-c2b-checkout-partial-.*)/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject partial-cleanup-identity check
 reset
-/usr/bin/sed -i '/docker volume rm "\$volume"/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+/usr/bin/sed -i '/remove_volume "\$volume"/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject volume-cleanup check
 reset
 /usr/bin/sed -i 's/--depth=1/--depth=0/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject shallow-exact-fetch check
-printf '%s\n' 'controller-helper observer policy mutations passed: cases=36'
+reset
+/usr/bin/sed -i 's/\[\[ "\$partial_device" == "\$parent_device" \]\]/[[ "$partial_device" != "$parent_device" ]]/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject promotion-device check
+reset
+/usr/bin/sed -i 's/partial_inode=\$(\/usr\/bin\/stat -c %i "\$partial")/partial_inode=0/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject promotion-identity check
+reset
+/usr/bin/sed -i 's#/usr/bin/mv -T#/usr/bin/mv#' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject rename-only check
+reset
+/usr/bin/sed -i '0,/remove_container "\$acquisition"/s//remove_container "$acquisition" || true/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject cleanup-suppression check
+reset
+/usr/bin/sed -i '/\/usr\/bin\/docker container ls -a/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject container-absence-query check
+reset
+/usr/bin/sed -i 's/if \[\[ "\$cleanup_failed" -ne 0 \]\]; then exit 1; fi/if [[ "$cleanup_failed" -ne 0 ]]; then exit 0; fi/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject cleanup-failure check
+printf '%s\n' 'controller-helper observer policy mutations passed: cases=42'
