@@ -37,7 +37,7 @@ printf '%s\n' "$ephemeral" | while IFS= read -r test; do
     ! /usr/bin/grep -Eq '\$root/out|output_root=|output=\$root/out' "$test" || exit 1
     ! /usr/bin/sed 's|/dev/null||g' "$test" | /usr/bin/grep -Eq '/(dev|proc|sys|run)/' || exit 1
     ! /usr/bin/grep -Eq "^(/bin/sh )?$test([[:space:]]|$)" tools/ci/check-sprint-static.sh || exit 1
-    ! /usr/bin/grep -Eq "^/bin/sh $test([[:space:]]|$)" tools/ci/check-specs.sh || exit 1
+    ! /usr/bin/grep -Eq "^[[:space:]]*/bin/sh[[:space:]]+$test([[:space:]]|$)" tools/ci/check-specs.sh || exit 1
 done
 
 local_immutable=$(/usr/bin/awk '
