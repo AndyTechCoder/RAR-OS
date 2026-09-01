@@ -63,6 +63,7 @@ After C2A closes, the C2B writer owns only these paths:
 - `tools/ci/check-controller-helper-closure-observer-source.sh`
 - `tools/ci/check-controller-helper-closure-observer-policy.sh`
 - `tools/ci/test-controller-helper-closure-observer-policy.sh`
+- `tools/ci/check-controller-helper-closure-observer-run-evidence-source.sh`
 - `tools/ci/policy-test-modes.v0`
 - `tools/ci/run-ephemeral-policy-tests.sh`
 - `tools/ci/check-ephemeral-policy-test-confinement.sh`
@@ -79,6 +80,17 @@ After C2A closes, the C2B writer owns only these paths:
 - `tools/toolchain/README.md`
 - `docs/sprint-alpha-dashboard.md`
 - `SPRINT_STATUS.md`
+
+Before the exact C2B workflow exists, the C2A source checker requires zero
+workflow references to the run-evidence validator and mutation policy. After
+C2A exact-main closure, the exact
+`.github/workflows/controller-helper-closure-observer.yml` may reference the
+validator exactly once, only after producer termination and before artifact
+retention. No other workflow may reference it; the mutation policy remains
+unwired from every workflow. Missing, duplicate, partial, or other-workflow
+binding fails closed. The frozen record schema, validator bytes, candidate
+verdict, and denial of compiler, helper, target, readiness, C3V, and C3A
+authority remain unchanged.
 
 No glob or directory ownership is granted. The controller integration packet,
 C1 schemas not explicitly named by C2A, existing Specifications workflow,
