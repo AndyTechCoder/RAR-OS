@@ -140,10 +140,22 @@ environment with prompting and credential helpers disabled, and receive no
 secret, token, Docker socket, or host mount except the exact initially empty
 checkout root. The acquisition container has a read-only root, non-root
 identity, bounded resources, no-new-privileges, all capabilities dropped, and a
-bounded noexec temporary mount. It may write only the checkout root, must
-detach-checkout and verify the requested exact SHA, and must be removed before
-repository code or validation starts. Fetch failure, revision drift, an
-unexpected checkout entry, or credential request fails closed. This exception
+bounded noexec temporary mount.
+
+The controller must track the acquisition container by an exclusive identity,
+enforce a 120-second wall-clock deadline followed by forced removal within 10
+seconds on timeout or any failure, and retain no networked container afterward.
+Git acquisition is a depth-one fetch of only the requested 40-byte commit
+identity into `FETCH_HEAD`; it fetches no tags, other refs, submodules, or LFS
+objects and disables LFS smudge behavior. Before success, the complete checkout
+including `.git` must contain at most 67,108,864 bytes, 8,192 regular files,
+and 32,768 loose-plus-packed Git objects. The controller then detach-checks out
+and verifies the requested exact SHA, a clean tree, the absence of retained
+unexpected refs, and every ceiling; removes the acquisition container; and
+revokes checkout-root write permission before any repository code, validator,
+or observation container can read the source through read-only mounts. Fetch
+failure, timeout, cleanup failure, revision drift, an unexpected checkout entry
+or ref, a ceiling breach, or credential request fails closed. This exception
 grants source transport only; it grants no observer, compiler, helper, target,
 publication, trust-state, or readiness authority.
 
