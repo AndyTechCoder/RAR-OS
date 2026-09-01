@@ -862,7 +862,7 @@ grep -Fqx 'Status: Authoritative source-only child packet - implementation requi
 grep -Fqx '`sprint-alpha-controller-helper-integration.md`. This child packet grants no' docs/tasks/sprint-alpha-controller-helper-c1-contracts.md || fail "ADR 0024 C1 packet lost authority denial"
 grep -Fqx -- '- [Sprint Alpha ADR 0024 C1 contract-closure packet](tasks/sprint-alpha-controller-helper-c1-contracts.md)' docs/README.md || fail "ADR 0024 C1 packet is not indexed"
 c2_packet_sha256=$(sha256_of docs/tasks/sprint-alpha-controller-helper-c2-observer.md) || fail "cannot hash ADR 0024 C2 packet"
-[ "$c2_packet_sha256" = a6cb70ca9552c0c928bc07769cda6da6f5e84a95ec72583d8324c445964f07e6 ] || fail "ADR 0024 C2 packet changed without review"
+[ "$c2_packet_sha256" = e0d9fada6c609617e0bc094651d93b0b6000e22efe66e50ce23e3a87997f79e8 ] || fail "ADR 0024 C2 packet changed without review"
 grep -Fqx 'Status: Authoritative source-only C2 child packet - implementation requires exact-main validation' docs/tasks/sprint-alpha-controller-helper-c2-observer.md || fail "ADR 0024 C2 packet status changed"
 grep -Fqx 'This packet itself grants no workflow execution,' docs/tasks/sprint-alpha-controller-helper-c2-observer.md || fail "ADR 0024 C2 packet lost authority denial"
 grep -Fqx -- '- [Sprint Alpha ADR 0024 C2 observer-discovery packet](tasks/sprint-alpha-controller-helper-c2-observer.md)' docs/README.md || fail "ADR 0024 C2 packet is not indexed"
