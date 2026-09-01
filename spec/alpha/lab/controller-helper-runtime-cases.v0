@@ -99,7 +99,7 @@ A094|attempt:command-field|reject|no-next-phase+no-publication+no-readiness
 A095|attempt:unbounded-evidence|reject|no-next-phase+no-publication+no-readiness
 A096|attempt:next-phase-after-discarded|reject|no-next-phase+no-publication+no-readiness
 A097|attempt:next-phase-after-blocked|reject|no-next-phase+no-publication+no-readiness
-R001|descriptor-table-exact|reject|no-spawn+no-next-phase
+R001|descriptor-table-exact|accept|no-readiness-update
 R002|descriptor-purpose-mismatch|reject|no-spawn+no-next-phase
 R003|unexpected-inherited-fd|reject|no-helper-code+no-next-phase
 R004|invalid-basename|reject|no-create+no-next-phase
