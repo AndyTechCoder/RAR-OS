@@ -22,7 +22,7 @@ done
 [ "$(sha "$valid")" = 0796af3de903218ea4b8def6d23291719f1d80bc023d94fa4e01374a82e15315 ] || fail 'valid fixture bytes escaped review'
 [ "$(sha "$malformed")" = f94d7af08097852d06bc2c44b09a0862d4d569cc2b770e754ca8fcad12b2d21f ] || fail 'malformed fixture bytes escaped review'
 [ "$(sha "$cases")" = 63c4ca7d62236a94459f788695d455ce8a7032c78bad21741ff66f6b16b2b6d2 ] || fail 'case table bytes escaped review'
-[ "$(sha "$validator")" = 0e16052df3d560417549a2bb8b1e329367f03a058c2577563bd8cea9b2177476 ] || fail 'validator bytes escaped review'
+[ "$(sha "$validator")" = 9ab95e8c059c6edeefa7f1bfa064d4fd830756f6d096e4bd25892bcb92b6cc14 ] || fail 'validator bytes escaped review'
 [ "$(sha "$policy")" = f65841d2d98be335630df544e095e02df37bdd423ea41cbb7cf91fcc7925781d ] || fail 'mutation policy bytes escaped review'
 grep -Fqx 'status=experimental-complete-C2A-source-only-no-workflow' "$contract" || fail 'run-evidence status changed'
 grep -Fqx 'execution_authority=none;format-and-validator-only' "$contract" || fail 'run-evidence authority changed'
