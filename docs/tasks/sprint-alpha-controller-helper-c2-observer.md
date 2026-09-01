@@ -132,23 +132,63 @@ The C2B workflow must:
 - produce exactly the candidate manifest, 23-line receipt, canonical O001-O021
   case evidence, and versioned outer run-evidence record.
 
-Repository code, checkout steps, wrapper, harness, observer, validators, and
-containers receive no secret, token, network, Docker socket, host path outside
-the exact checkout and controller-owned scratch/evidence roots, or mutable
-source mount. The sole bounded exception is the already pinned outer
-`actions/upload-artifact` step after independent validation succeeds. It may
-read only those four exact regular non-symlink evidence files, upload once
-under `controller-helper-closure-observer-<run-id>-<run-attempt>`, use a fixed
+The only source-acquisition network exception is an anonymous HTTPS fetch of the
+exact main-push SHA from the canonical public repository. It must run before
+repository code in the same immutable Rust 1.95.0 OCI image already pinned by
+digest, use that image's pinned Git executable, receive an empty allowlisted
+environment with prompting and credential helpers disabled, and receive no
+secret, token, Docker socket, or host bind mount. Its only writable source
+storage is an exclusive controller-created Docker volume backed by tmpfs with
+an enforced 67,108,864-byte capacity and mounted at `/checkout`. The
+acquisition container has a read-only root, non-root identity, bounded
+resources, no-new-privileges, all capabilities dropped, and a separate bounded
+noexec temporary mount.
+
+The controller must track the acquisition container and bounded volume by
+exclusive identities, enforce a 120-second wall-clock deadline followed by
+forced container removal within 10 seconds on timeout or any failure, and
+retain no networked container afterward. Git acquisition is a depth-one fetch
+of only the requested 40-byte commit identity into `FETCH_HEAD`; it fetches
+no tags, other refs, submodules, or LFS objects and disables LFS smudge
+behavior. Before success, the complete checkout including `.git` must contain
+at most 67,108,864 bytes, 8,192 regular files, and 32,768 loose-plus-packed Git
+objects, so both write-time capacity and accepted content are bounded.
+
+Only after the acquisition container is removed may a separate pinned,
+network-disabled transfer container mount the acquisition volume read-only and
+one exclusive, initially empty controller-owned partial checkout root writable.
+It copies the bounded checkout once, verifies the requested detached exact SHA,
+a clean tree, absence of retained unexpected refs, every byte/file/object
+ceiling, and exact output-root containment, then exits and is removed. The
+controller removes the bounded volume and revokes partial-root write permission
+before atomically promoting it to the exact checkout root. No repository code,
+validator, or observation container may read either root before promotion; all
+later source mounts are read-only. Any partial root is identity-checked and
+discarded on failure before repository use. Fetch or transfer failure, timeout,
+cleanup failure, revision drift, an unexpected checkout entry or ref, a ceiling
+breach, or credential request fails closed. This exception grants source
+transport only; it grants no observer, compiler, helper, target, publication,
+trust-state, or readiness authority.
+
+After source acquisition, repository code, wrapper, harness, observer,
+validators, and every observation container receive no secret, token, network,
+Docker socket, host path outside the exact checkout and controller-owned
+scratch/evidence roots, or mutable source mount. The sole token-bearing
+exception is the already pinned outer `actions/upload-artifact` step after
+independent validation succeeds. It may read only those four exact regular
+non-symlink evidence files, upload once under
+`controller-helper-closure-observer-<run-id>-<run-attempt>`, use a fixed
 14-day retention and no-overwrite behavior, and receive only GitHub's
 action-scoped artifact transport authority. It cannot write repository,
 workflow, release, lock, inventory, profile, gate, or readiness state.
 Artifact retention is candidate evidence storage, not publication or
 acceptance.
 
-The workflow and wrapper reject stale or non-main revisions, unexpected
-environment variables, missing/additional mounts, preexisting outputs,
-unbounded output, and any attempt to reach network, credentials, compiler,
-helper, target, profile, inventory, lock, gate, or publication state.
+Every post-acquisition workflow step and the wrapper reject stale or non-main
+revisions, unexpected environment variables, missing/additional mounts,
+preexisting outputs, unbounded output, and any attempt to reach network,
+credentials, compiler, helper, target, profile, inventory, lock, gate, or
+publication state.
 
 ## Observer and test requirements
 
@@ -206,6 +246,7 @@ Stop on non-main or proposal-controlled workflow authority; workflow wiring
 before C2A exact-main closure; changed role topology; mutable/unpinned tools;
 credential, network, owner data, Docker-socket, ambient path, source-write,
 compiler, helper, target, firmware, VM, repository publication, or readiness
-authority outside the single bounded artifact-retention exception; incomplete
+authority outside the bounded anonymous pre-source acquisition and token-bearing
+post-validation artifact-retention exceptions defined above; incomplete
 O001-O021 or outer-record mutation coverage; unbounded/unretained evidence;
 local execution; source deletion; or any ADR 0030 behavior.
