@@ -27,5 +27,5 @@ cleanup_rule=destination+manifest-entries-only,never-root-or-source,changed+alia
 uncertainty_rule=uncertain-commit+sync+cleanup+exit+identity+chain-is-blocked,no-next-effect
 attempt_ceiling=3-normal-attempts+3-recovery-sessions,fourth-is-durable-blocked,no-reuse+loop
 publication_rule=no-lock+inventory+profile+gate+readiness+GitHub-write
-target_rule=no-compiler+linker+helper+target+container+VM+emulator+firmware+network+credential
+phase_boundary_rule=C1-source-validation-must-not-invoke-compiler+linker+helper+target+container+VM+emulator+firmware+network+credential;exec_rule-is-a-future-H1C-runtime-requirement-only+grants-no-C1-execution-authority;helper-execution-remains-forbidden-until-separately-reviewed-H1C-activation
 local_rule=text+hash+structure-check-only;never-execute-on-Mac
