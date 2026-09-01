@@ -59,7 +59,7 @@ for artifact in \
     controller-helper-closure.sha256 \
     controller-helper-closure.receipt \
     controller-helper-closure-observer-run-evidence.v0; do
-    [ "$(/usr/bin/grep -Fxc "            ${{ runner.temp }}/controller-helper-closure-observer/$artifact" "$workflow")" -eq 1 ] || fail "artifact path changed: $artifact"
+    [ "$(/usr/bin/grep -Fxc "            \${{ runner.temp }}/controller-helper-closure-observer/$artifact" "$workflow")" -eq 1 ] || fail "artifact path changed: $artifact"
 done
 /usr/bin/grep -Fq 'Independently validate exact candidate evidence' "$workflow" || fail 'independent validation missing'
 /usr/bin/grep -Fq 'Retain four validated candidate files' "$workflow" || fail 'validated retention missing'
