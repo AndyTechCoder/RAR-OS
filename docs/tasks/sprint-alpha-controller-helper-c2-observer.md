@@ -223,6 +223,7 @@ Stop on non-main or proposal-controlled workflow authority; workflow wiring
 before C2A exact-main closure; changed role topology; mutable/unpinned tools;
 credential, network, owner data, Docker-socket, ambient path, source-write,
 compiler, helper, target, firmware, VM, repository publication, or readiness
-authority outside the single bounded artifact-retention exception; incomplete
+authority outside the bounded anonymous pre-source acquisition and token-bearing
+post-validation artifact-retention exceptions defined above; incomplete
 O001-O021 or outer-record mutation coverage; unbounded/unretained evidence;
 local execution; source deletion; or any ADR 0030 behavior.
