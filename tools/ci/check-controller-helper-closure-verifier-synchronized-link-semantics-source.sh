@@ -39,7 +39,7 @@ for required in \
     'trigger_rule=mutation-begins-only-after-exact-named-verifier-trigger;controller-ack-is-released-only-after-atomic-operation+all-postcondition+confinement+metadata-recording-complete;timeout+partial+early+late+second-mutation-invalidates-case' \
     'symlink_rule=source-is-declared-single-link-regular-closure/a;atomic-same-filesystem-rename-replaces-it-with-one-symlink-whose-link-payload-is-exact-ASCII-a;old-regular-entry-has-no-visible-alias;new-symlink-device-equals-base-closure-device+inode-is-fresh+distinct-from-replaced-inode+every-other-live-entry+nlink-is-1+Linux-permission-mode-is-0777+uid-is-1000+gid-is-base-controller_gid+size-is-1-byte;mtime+ctime+complete-post-state-are-recorded+validated-before-ack' \
     'failure_rule=trigger+atomicity+source+destination+device+inode+link-count+payload+staging+parent+confinement+postcondition-failure-invalidates-case-before-ack;never-skip+retry+fallback+cross-device-copy' \
-    'remaining_status=pre-start+repair-coupled-link-cases+required-path-symlinks+raw-name+path-alias+mount+tree+manifest-specific-primary-families+all-non-none-repair-semantics+exact-base+controller+runtime-precedence+fault+evidence+verdict-remain-absent' \
+    'remaining_status=closed-by-controller-helper-closure-verifier-cases-v0+faults-v0.fields+evidence-v0.fields;this-slice-remains-inactive' \
     'activation_rule=blocked;this-slice-cannot-create-fixtures+execute-mutations+or-authorize-a-controller' \
     'consumer_rule=this-contract-does-not-authorize-fixture+mutation+repair+controller+container+compiler+helper+target+VM+emulator+workflow+wiring+gate+readiness' \
     'local_rule=text+hash+structure-check-only;never-run-verifier+controller+container+compiler+helper+target+VM+emulator-on-Mac'; do

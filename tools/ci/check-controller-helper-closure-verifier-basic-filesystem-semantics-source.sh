@@ -38,7 +38,7 @@ for required in \
     'fixture_identity=controller_uid-is-mathematical-1000;controller_gid+mount-device+parent-identity+filesystem-capabilities-come-from-the-future-byte-pinned-base-descriptor' \
     'parent_rule=parent-device+inode+uid+gid+mode-are-preserved;file-create+file-remove+file-replace-preserve-parent-nlink;directory-create-increments-parent-nlink-by-exactly-1;kernel-derived-parent-size+mtime+ctime-are-permitted-only-when-recorded-before-launch-or-ack;all-other-entries-remain-byte+identity+metadata-base-equal' \
     'failure_rule=absence+type+ownership+mode+link+device+identity+atomicity+postcondition-failure-invalidates-case-before-launch-or-ack;never-skip+fallback+cross-device-copy+truncate+coerce' \
-    'remaining_status=symlink+hardlink+raw-name+path-alias+mount+tree+manifest-specific-primary-families+all-non-none-repair-semantics+exact-base+controller+runtime-precedence+fault+evidence+verdict-remain-absent' \
+    'remaining_status=closed-by-controller-helper-closure-verifier-cases-v0+faults-v0.fields+evidence-v0.fields;this-slice-remains-inactive' \
     'activation_rule=blocked;this-slice-cannot-create-fixtures+execute-mutations+or-authorize-a-controller' \
     'consumer_rule=this-contract-does-not-authorize-fixture+mutation+repair+controller+container+compiler+helper+target+VM+emulator+workflow+wiring+gate+readiness' \
     'local_rule=text+hash+structure-check-only;never-run-verifier+controller+container+compiler+helper+target+VM+emulator-on-Mac'; do

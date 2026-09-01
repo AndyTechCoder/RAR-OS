@@ -37,7 +37,7 @@ for required in \
     'byte_model=finite-raw-byte-string;offsets-are-zero-based;line-number-is-one-based;LF-is-byte-0A;no-locale+Unicode+normalization+shell-evaluation+escape-decoding' \
     'base_model=operator-input-is-the-exact-target-value-from-the-future-byte-pinned-base-descriptor-or-the-controller-recorded-value-at-the-named-phase;one-primary-never-reads-another-primarys-output' \
     'failure_rule=decode+precondition+bounds+target-type+postcondition-failure-invalidates-the-case-before-launch;never-skip+truncate+wrap+coerce+fallback' \
-    'remaining_status=23-primary-families+2-hex-file-creation-templates+decimal-literal-nlink-template+7-non-none-repair-tokens+exact-base+controller+runtime-precedence+fault+evidence+verdict-semantics-remain-absent' \
+    'remaining_status=closed-by-controller-helper-closure-verifier-cases-v0+faults-v0.fields+evidence-v0.fields;this-slice-remains-inactive' \
     'activation_rule=blocked;this-slice-cannot-create-fixtures+execute-mutations+or-authorize-a-controller' \
     'consumer_rule=this-contract-does-not-authorize-fixture+mutation+repair+controller+container+compiler+helper+target+VM+emulator+workflow+wiring+gate+readiness' \
     'local_rule=text+hash+structure-check-only;never-run-verifier+controller+container+compiler+helper+target+VM+emulator-on-Mac'; do
