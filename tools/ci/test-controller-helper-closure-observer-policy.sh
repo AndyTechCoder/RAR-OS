@@ -70,9 +70,21 @@ reset
 /usr/bin/sed -i '/--cap-drop ALL/a\    --privileged \\' "$repo/tools/ci/run-controller-helper-closure-observer.sh"
 reject privileged check
 reset
-/usr/bin/printf '%s\n' 'GITHUB_TOKEN' >> "$repo/tools/ci/controller-helper-closure-observer-harness.sh"
+/usr/bin/printf '%s\n' 'printf "%s\\n" "$GITHUB_TOKEN"' >> "$repo/tools/ci/controller-helper-closure-observer-harness.sh"
 reject credential check
 reset
 /usr/bin/sed -i 's/target_compiled=false/target_compiled=true/' "$repo/tools/ci/fixtures/controller-helper-closure-observer/expected-observation.receipt.v0"
 reject readiness-substitution check
-printf '%s\n' 'controller-helper observer policy mutations passed: cases=18'
+reset
+/usr/bin/sed -i 's/[[ "$actual_sha" == "$GITHUB_SHA" ]]/[[ "$actual_sha" != "$GITHUB_SHA" ]]/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject checkout-identity check
+reset
+/usr/bin/sed -i 's#/usr/bin/env -i#/usr/bin/env#' "$repo/tools/ci/run-controller-helper-closure-observer.sh"
+reject inherited-environment check
+reset
+/usr/bin/sed -i '/controller-helper-closure-observer-run-evidence.v0/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject artifact-set check
+reset
+/usr/bin/sed -i 's/done < "$subject" > "$case_subject"/done < "$fixture" > "$case_subject"/' "$repo/tools/ci/controller-helper-closure-observer-harness.sh"
+reject generated-subject-binding check
+printf '%s\n' 'controller-helper observer policy mutations passed: cases=22'
