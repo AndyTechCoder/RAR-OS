@@ -180,7 +180,14 @@ require_digest "$lab/controller-helper-cases.v0" 08e36412d104cc5c41169faf5d5e4dd
 require_digest "$lab/controller-helper-runtime-v0.fields" 20d85fcafc0b0fefd44adcef73303afc1e3232a91afcdcb8292498f2017b8ad1
 require_digest "$lab/controller-helper-runtime-cases.v0" df51cc29ce2ce905d9935a25f1ef9803a9cdf3706b2144b8de347fd324ba79f2
 require_digest "$lab/controller-helper-closure-observer-test-v0.fields" d2f8837b52bfd2f5c77bc527b7106e981a3ed3bd7dd7114953a83316870045d4
-require_digest "$lab/controller-helper-closure-observer-run-evidence-v0.fields" a480c927784adff7153ce8e0342db854186ac9da98aa5ce399de6ea9ba4c52f3
+require_digest "$lab/controller-helper-closure-observer-run-evidence-v0.fields" perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LC_ALL = "C.UTF-8",
+	LC_CTYPE = "C.UTF-8",
+	LANG = "C.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+panic: locale.c: 4486: Could not change LC_CTYPE locale to C.UTF-8, errno=9
 require_digest "$lab/controller-helper-closure-verifier-faults-v0.fields" 43f38cc2e75567a9e473c8f2c3d5f8ed6fffc03b8a33a70622bcdd1521901a00
 require_digest "$lab/controller-helper-closure-verifier-cases-v0" 8a5564e07810f300d2a65bd0cd7a5c76513ef80f36f1ade4b87bf1f8a3b64897
 require_digest "$lab/controller-helper-closure-verifier-evidence-v0.fields" 4de1353a2bc22af60e56f38f8139c925fffdcaca14e362521d570f79271ac175
