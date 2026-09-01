@@ -13,12 +13,21 @@ repo=$work/repo
 reset() {
     /bin/rm -rf "$repo"
     /bin/mkdir -p "$repo/.github/workflows" "$repo/tools/ci/fixtures/controller-helper-closure-observer"
-    for path in         .github/workflows/controller-helper-closure-observer.yml         tools/ci/run-controller-helper-closure-observer.sh         tools/ci/controller-helper-closure-observer-harness.sh         tools/ci/observe-controller-helper-closure.sh         tools/ci/fixtures/controller-helper-closure-observer/cases.v0         tools/ci/fixtures/controller-helper-closure-observer/base-closure.v0         tools/ci/fixtures/controller-helper-closure-observer/tool-pins.v0         tools/ci/fixtures/controller-helper-closure-observer/expected-observation.receipt.v0; do
-        /bin/cp "$root/$path" "$repo/$path"
+    for file_path in \
+        .github/workflows/controller-helper-closure-observer.yml \
+        tools/ci/run-controller-helper-closure-observer.sh \
+        tools/ci/controller-helper-closure-observer-harness.sh \
+        tools/ci/observe-controller-helper-closure.sh \
+        tools/ci/fixtures/controller-helper-closure-observer/cases.v0 \
+        tools/ci/fixtures/controller-helper-closure-observer/base-closure.v0 \
+        tools/ci/fixtures/controller-helper-closure-observer/tool-pins.v0 \
+        tools/ci/fixtures/controller-helper-closure-observer/expected-observation.receipt.v0; do
+        /bin/cp "$root/$file_path" "$repo/$file_path"
     done
 }
 reject() { label=$1; shift; if "$@" >/dev/null 2>&1; then printf 'unsafe C2B policy passed: %s\n' "$label" >&2; exit 1; fi; }
 check() { /bin/sh "$checker" "$repo"; }
+
 reset
 check >/dev/null
 reset
@@ -31,8 +40,14 @@ reset
 /usr/bin/sed -i 's/contents: read/contents: write/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject write-permission check
 reset
-/usr/bin/sed -i 's/actions\/checkout@[0-9a-f]*/actions\/checkout@main/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
-reject unpinned-checkout check
+/usr/bin/printf '%s\n' '          GITHUB_TOKEN: ${{ github.token }}' >> "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject token-bearing-checkout check
+reset
+/usr/bin/sed -i 's/f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3/0000000000000000000000000000000000000000000000000000000000000000/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject checkout-image-drift check
+reset
+/usr/bin/sed -i 's#https://github.com/AndyTechCoder/RAR-OS.git#https://example.invalid/RAR-OS.git#' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject checkout-origin-drift check
 reset
 /usr/bin/sed -i 's/--network none/--network bridge/' "$repo/tools/ci/run-controller-helper-closure-observer.sh"
 reject network check
@@ -58,7 +73,7 @@ reset
 /usr/bin/sed -i 's/case_count=21/case_count=20/' "$repo/tools/ci/fixtures/controller-helper-closure-observer/cases.v0"
 reject missing-case check
 reset
-/usr/bin/sed -i 's/exec \/usr\/bin\/dash "$subject"/\/usr\/bin\/dash "$subject"\nexec \/usr\/bin\/dash "$subject"/' "$repo/tools/ci/controller-helper-closure-observer-harness.sh"
+/usr/bin/sed -i 's#/usr/bin/dash "$subject" || fail '"'"'production observer failed'"'"'#/usr/bin/dash "$subject" || fail '"'"'production observer failed'"'"'\n/usr/bin/dash "$subject" || fail '"'"'production observer failed'"'"'#' "$repo/tools/ci/controller-helper-closure-observer-harness.sh"
 reject duplicate-observer check
 reset
 /usr/bin/sed -i 's/retention-days: 14/retention-days: 90/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
@@ -87,4 +102,19 @@ reject artifact-set check
 reset
 /usr/bin/sed -i 's/done < "$subject" > "$case_subject"/done < "$fixture" > "$case_subject"/' "$repo/tools/ci/controller-helper-closure-observer-harness.sh"
 reject generated-subject-binding check
-printf '%s\n' 'controller-helper observer policy mutations passed: cases=22'
+reset
+/usr/bin/sed -i '/hardlinked=.*cannot inspect closure hardlinks/d' "$repo/tools/ci/observe-controller-helper-closure.sh"
+reject hardlink-predicate check
+reset
+/usr/bin/sed -i 's/RAR-C2B-BEGIN:manifest/RAR-C2B-BEGIN:wrong/' "$repo/tools/ci/run-controller-helper-closure-observer.sh"
+reject stream-marker check
+reset
+/usr/bin/printf '%s\n' '/usr/bin/docker cp "$container:/evidence/." "$evidence"' >> "$repo/tools/ci/run-controller-helper-closure-observer.sh"
+reject stopped-tmpfs-copy check
+reset
+/usr/bin/sed -i '/pipe_status=("${PIPESTATUS\[@\]}")/d' "$repo/tools/ci/run-controller-helper-closure-observer.sh"
+reject stream-status check
+reset
+/usr/bin/sed -i 's/emit_file cases "$case_file"/emit_file receipt "$evidence\/controller-helper-closure.receipt"/' "$repo/tools/ci/controller-helper-closure-observer-harness.sh"
+reject stream-order check
+printf '%s\n' 'controller-helper observer policy mutations passed: cases=28'
