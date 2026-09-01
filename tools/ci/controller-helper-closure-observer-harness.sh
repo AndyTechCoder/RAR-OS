@@ -167,4 +167,16 @@ exec 3>&- || fail 'cannot close case evidence'
 
 RAR_CONTROLLER_HELPER_CLOSURE_DISCOVERY=1
 export RAR_CONTROLLER_HELPER_CLOSURE_DISCOVERY
-exec /usr/bin/dash "$subject"
+/usr/bin/dash "$subject" || fail 'production observer failed'
+
+emit_file() {
+    label=$1
+    file=$2
+    [ -f "$file" ] && [ ! -L "$file" ] && [ -s "$file" ] || fail "stream input missing: $label"
+    printf 'RAR-C2B-BEGIN:%s\n' "$label"
+    while IFS= read -r row; do printf '%s\n' "$row"; done < "$file"
+    printf 'RAR-C2B-END:%s\n' "$label"
+}
+emit_file cases "$case_file"
+emit_file manifest "$evidence/controller-helper-closure.sha256"
+emit_file receipt "$evidence/controller-helper-closure.receipt"
