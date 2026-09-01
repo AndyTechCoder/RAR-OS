@@ -30,6 +30,8 @@ done
 [ "${GITHUB_ACTIONS-}" = true ] && [ "${CI-}" = true ] || fail 'CI boundary absent'
 [ "${GITHUB_EVENT_NAME-}" = push ] && [ "${GITHUB_REF-}" = refs/heads/main ] && [ "${GITHUB_REPOSITORY-}" = AndyTechCoder/RAR-OS ] || fail 'canonical context absent'
 [ "${GITHUB_SHA-}" = "${RAR_TRUSTED_CONTROLLER_SHA-}" ] && [ "${GITHUB_SHA-}" = "${RAR_EXPECTED_SOURCE_REVISION-}" ] || fail 'exact-main mismatch'
+RAR_CONTROLLER_HELPER_CLOSURE_DISCOVERY=1
+export RAR_CONTROLLER_HELPER_CLOSURE_DISCOVERY
 [ "$(hash_file "$subject")" = "${RAR_EXPECTED_SUBJECT_SHA256-}" ] || fail 'subject identity mismatch'
 [ "$(hash_file "$fixture")" = "${RAR_EXPECTED_FIXTURE_SHA256-}" ] || fail 'fixture identity mismatch'
 [ "$(hash_file "$pins")" = "${RAR_EXPECTED_TOOL_PINS_SHA256-}" ] || fail 'tool-pin identity mismatch'
@@ -168,8 +170,6 @@ printf '%s\n' 'schema=rar-alpha-controller-helper-closure-observer-case-evidence
 while IFS= read -r row; do printf '%s\n' "$row" >&3; done < "$case_tmp"
 exec 3>&- || fail 'cannot close case evidence'
 
-RAR_CONTROLLER_HELPER_CLOSURE_DISCOVERY=1
-export RAR_CONTROLLER_HELPER_CLOSURE_DISCOVERY
 /usr/bin/dash "$subject" || fail 'production observer failed'
 
 emit_file() {
