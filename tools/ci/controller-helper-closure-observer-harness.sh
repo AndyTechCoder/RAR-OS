@@ -61,9 +61,11 @@ generate_subject() {
             *'shell identity mismatch'*)
                 if [ "$id" = O004 ]; then printf "%s\n" "[ \"\$(hash_file \"\$shell\")\" = 0000000000000000000000000000000000000000000000000000000000000000 ] || fail 'shell identity mismatch'"; else printf '%s\n' "$line"; fi ;;
             unexpected=*'cannot inspect closure topology'*)
-                if [ "$id" = O005 ]; then printf '%s\n' 'unexpected=x'; else printf '%s\n' "$line"; fi ;;
-            alias=*'cannot inspect closure aliases'*)
-                if [ "$id" = O007 ]; then printf '%s\n' 'alias=x'; else printf '%s\n' "$line"; fi ;;
+                if [ "$id" = O005 ]; then printf '%s\n' 'unexpected=x'; else printf '%s\n' "$line"; fi
+                if [ "$id" = O007 ]; then printf "%s\n" "fail 'injected alias failure'"; fi ;;
+            *'toolchain root is unavailable or symbolic'*)
+                printf '%s\n' "$line"
+                if [ "$id" = O021 ]; then printf "%s\n" "[ ! -e /proc/self/fd/9 ] || fail 'unexpected inherited descriptor: 9'"; fi ;;
             *'cannot inspect closure devices'*)
                 if [ "$id" = O010 ]; then printf "%s\n" "false || fail 'injected command failure'"; else printf '%s\n' "$line"; fi ;;
             '    digest=$(hash_file "$file")')
@@ -75,7 +77,11 @@ generate_subject() {
             *'cannot count closure records'*)
                 if [ "$id" = O015 ]; then printf '%s\n' 'recorded_count=0'; else printf '%s\n' "$line"; fi ;;
             *'cannot sort closure paths'*)
-                printf '%s\n' "$line"; if [ "$id" = O016 ]; then printf '%s\n' ': > "$root/phase-added-after-enumeration"'; fi ;;
+                printf '%s\n' "$line"
+                if [ "$id" = O016 ]; then
+                    printf '%s\n' ': > "$root/phase-added-after-enumeration"'
+                    printf "%s\n" "fail 'injected phase mutation failure'"
+                fi ;;
             *'closure manifest exceeds reviewed bounds'*)
                 if [ "$id" = O017 ]; then printf "%s\n" "    [ \"\$manifest_bytes_expected\" -le 1 ] || fail 'closure manifest exceeds reviewed bounds'"; else printf '%s\n' "$line"; fi ;;
             *) printf '%s\n' "$line" ;;
