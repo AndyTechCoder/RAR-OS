@@ -34,7 +34,7 @@ container may run, and the controller tree never enters build or reference.
 `reference-evidence-v0.fields` fixes the bounded binary evidence emitted by the
 isolated reference role and the 13-line controller-owned verdict. F/G verdicts
 require both references and the target output to match for every transcript
-record. Aºw^~)ÞwE verdicts explicitly say `not-required`, carry zero reference/evidence
+record. Aâ€“E verdicts explicitly say `not-required`, carry zero reference/evidence
 digests, and prove that no reference role ran. The final evidence set retains the
 verdict and its digest.
 
@@ -81,14 +81,13 @@ and pinning before any helper build or test can be considered.
 `controller-helper-closure-observer-test-v0.fields` and
 `controller-helper-closure-observer-run-evidence-v0.fields` define C2A's
 narrow main-only observer-test authority and the canonical 31-line outer
-candidate record. C2A merged through PRs #111-#112; exact-main Specifications
-run `33473648494` passed validation and all 27 isolated mutation-policy tests
-at `c862e27771b999e593ae26ea12ef424613b67bac`. C2B now stages the separately
-reviewed main-only wrapper, O001-O021 harness, independent validator handoff,
-and exact four-file retention boundary. It remains candidate-only until its
-reviews, merge, distinct exact-main Specifications run, and observer run pass;
-compiler, helper, target, lock, inventory, profile, gate, and readiness
-authority remain denied.
+candidate record. The contextual validator binds exact controller/source and
+run identity, immutable inputs, the four-file output set, byte counts, hashes,
+artifact name, retention, and anti-replay nonce. Its isolated mutation policy
+rejects stale, reordered, aliased, self-attested, oversized, incomplete, or
+ready-substituted evidence. C2A remains source-only: no workflow, wrapper,
+runtime harness, observation, compiler, helper, target, or readiness authority
+exists until the separately merged C2B gate.
 
 `controller-helper-closure-verification-v0.fields` defines the separate
 source-only exact-set verifier required after observation. It has no candidate
