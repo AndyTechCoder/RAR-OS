@@ -7,7 +7,8 @@ Status: Authoritative source-only C2 child packet - implementation requires exac
 Register only the contract-first activation and later trusted-main
 compiler-closure observer workflow required by C2. The bounded controller,
 complete O001-O021 harness, versioned outer evidence, and retained candidate
-bytes remain separate from compiler/helper/target authority. This packet itself grants no workflow execution,
+bytes remain separate from compiler/helper/target authority.
+This packet itself grants no workflow execution,
 compiler use, helper or target execution, Lab readiness, VM launch, local
 execution, or ADR 0030 authority.
 
