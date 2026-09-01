@@ -86,10 +86,13 @@ and cannot increase the implementation count.
   bundle, initial system source, initial preserved source, and fixture manifest
   as `pending-review`; that orientation state grants no activation or target
   authority. Milestones A and B remain blocked on their separate gates.
-- The Lab/controller/helper lacks real activating identities and reviewed cloud
-  build/test evidence. The inactive observer has not run; no candidate compiler
-  closure exists, and its tools, complete set, verifier, and retained output
-  still require separate review before any helper build or test.
+- Draft PR #101 proposes the source-only C1 runtime, observer-test,
+  exhaustive verifier-case/fault, closure-acceptance, and v1 helper-evidence
+  contracts. They remain under architecture/correctness/security review,
+  unwired, non-activating, unmerged, and without exact-main proof. C2/C3V must
+  still provide the reviewed controller, fixtures, candidate closure, tool pins,
+  and retained runtime evidence; C3A must separately accept that evidence before
+  any helper build or test.
 - PR #13 is merged at `abd75bfccf4fcd2f197871225d1a78233c0d87dc`;
   exact post-merge trusted-controller run `33294557261` passed. This closes only
   the controller bootstrap, not target implementation or Sprint completion.

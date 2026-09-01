@@ -1,5 +1,5 @@
 schema=rar-alpha-controller-helper-closure-verifier-observation-repair-semantics-v0
-status=experimental-incomplete-inactive-source-only
+status=experimental-complete-source-only-inactive
 purpose=define-deterministic-pre-start-observation-receipt-repairs-for-3-repair-tokens-used-by-8-of-125-structural-case-templates
 execution_authority=none
 template_catalog=controller-helper-closure-verifier-case-templates-v0
@@ -24,7 +24,7 @@ receipt_stability_rule=after-write-handle-close-open-exactly-one-controller-priv
 primary_preservation_rule=manifest-path+device+inode+nlink+uid+gid+mode+post-primary-bytes+size+mtime+ctime-remain-exactly-recorded+unchanged-through-repair+launch;repair-never-writes+aliases+replaces+normalizes+parses+sorts+or-truncates-the-primary-manifest
 independence_rule=repair-reads-only-the-byte-pinned-base-receipt+recorded-post-primary-manifest-bytes+future-byte-pinned-controller-SHA-256;no-verifier-output+scratch+another-case+ambient-host-state+unreviewed-path
 failure_rule=target+pre-bytes+ordering+derivation+bound+encoding+receipt-canonicality+identity+short-write+flush+close+route-revocation+post-close-verification+post-close-mutation+receipt-stability+primary-preservation+combined-postcondition-failure-invalidates-before-launch;never-skip+retry+wrap+truncate+coerce+fallback+repair-an-undeclared-field
-remaining_status=3-non-none-repair-tokens+23-primary-families+pre-start+repair-coupled-links+required-path-symlinks+raw-name+path-alias+mount+tree+manifest-specific-primary-families+exact-base+controller+runtime-precedence+fault+evidence+verdict-remain-absent
+remaining_status=closed-by-controller-helper-closure-verifier-cases-v0+faults-v0.fields+evidence-v0.fields;this-slice-remains-inactive
 activation_rule=blocked;this-slice-cannot-create-fixtures+execute-mutations+apply-repairs+or-authorize-a-controller
 consumer_rule=this-contract-does-not-authorize-fixture+mutation+repair+controller+container+compiler+helper+target+VM+emulator+workflow+wiring+gate+readiness
 local_rule=text+hash+structure-check-only;never-run-verifier+controller+container+compiler+helper+target+VM+emulator-on-Mac

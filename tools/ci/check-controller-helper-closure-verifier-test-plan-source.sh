@@ -11,24 +11,33 @@ fail() {
 
 [ -f "$plan" ] && [ ! -L "$plan" ] || fail 'test plan is unavailable'
 plan_sha=$(env -u LC_CTYPE LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$plan" | /usr/bin/awk '{ print $1 }')
-[ "$plan_sha" = df3578fd0206604b38bebb4a119d09ff708e5c0dc8e3098f051c2ed7c78d02be ] || fail 'test-plan bytes escaped review'
+[ "$plan_sha" = 93aebda0f60d8da3c68b59517758964feebd1471adce9e2523f9733d8ce44cc3 ] || fail 'test-plan bytes escaped review'
 
 for required in \
-    'status=experimental-incomplete-source-only' \
+    'status=experimental-complete-source-only-inactive' \
     'execution_authority=none' \
-    'coverage_status=incomplete,not-an-acceptance-matrix,not-ready-for-controller-implementation-or-workflow-wiring' \
-    'runtime_state=no-harness,no-run,no-fixture-image,no-tool-pin-instance,no-candidate,no-evidence' \
-    'case_count=42' \
+    'coverage_status=complete-via-117-constructible-dispositions+37-executable-precedence+12-faults+43-reviewed-residual-proofs-in-controller-helper-closure-verifier-cases-v0+faults-v0.fields+evidence-v0.fields,still-not-an-acceptance-instance+not-ready-for-wiring' \
+    'runtime_state=contracts-complete;C3V-harness+run+fixture-image+tool-pin+candidate+evidence-instances-not-created' \
+    'disposition_runtime_count=117' \
+    'disposition_residual_count=30' \
+    'precedence_runtime_count=37' \
+    'precedence_residual_count=13' \
+    'fault_runtime_count=12' \
+    'runtime_case_count=166' \
+    'residual_proof_count=43' \
+    'logical_relationship_count=209' \
+    'risk_note_case_count=42' \
+    'risk_note_rule=case_01-through-case_42-are-nonexecutable-risk-grouping-not-runtime-case-identities' \
     'target_rule=no-rustc,no-cargo,no-linker,no-helper,no-target-build,no-firmware,no-QEMU,no-guest' \
     'publication_rule=no-GitHub-write,no-lock+inventory+profile+controller+gate+readiness-update' \
     'success_oracle=exit-0+empty-stderr+exact-canonical-31-line-receipt+all-false-fields+not-ready-status+no-other-output' \
-    'acceptance_rule=blocked;this-incomplete-plan-cannot-produce-an-acceptance-verdict' \
+    'acceptance_rule=blocked;complete-source-contracts-cannot-produce-an-acceptance-instance' \
     'validation_catalog=controller-helper-closure-verifier-validation-v0.fields+controller-helper-closure-verifier-errors-v0+controller-helper-closure-verifier-precedence-v0,inactive-source-only' \
     'input_domain=controller-helper-closure-verifier-input-domain-v0.fields,inactive-source-only,no-fixtures+cases+controller+execution-authority' \
-    'coverage_gap=explicit-field+value-case-instance-catalog+constructible-dual-invalid-oracles+injected-runtime-command+read+write+close+tool-output+resource-exhaustion-fault-catalog-are-not-yet-specified' \
-    'precedence_status=source-order-only;constructible-dual-invalid-case+oracle-catalog-absent,not-runtime-tested,not-acceptance-evidence' \
-    'evidence_status=absent,separate-versioned-canonical-case-evidence+normalized-verdict-contract+fixtures-required-before-controller-implementation' \
-    'activation_rule=exact-reviewed-validation-catalog+input-domain+separate-complete-explicit-case+constructible-runtime-precedence+fault-contract,evidence+normalized-verdict-contract+fixtures,controller-source,fixture-image,tool-pins,subject-pins,workflow-wiring,and-exact-main-validation-required-before-first-run' \
+    'coverage_gap=closed-by-controller-helper-closure-verifier-cases-v0+faults-v0.fields' \
+    'precedence_status=37-executable-dual-invalid-oracles+13-catalog-only-residual-relations-bound-in-controller-helper-closure-verifier-cases-v0,not-runtime-tested+not-acceptance-evidence' \
+    'evidence_status=specified-by-controller-helper-closure-verifier-evidence-v0.fields;C3V-instance+fixtures-still-required' \
+    'activation_rule=exact-reviewed-validation-catalog+input-domain+117-constructible-disposition-cases+37-executable-runtime-precedence+12-fault-cases+43-reviewed-residual-proofs,evidence+normalized-verdict-contract+fixtures,controller-source,fixture-image,tool-pins,subject-pins,workflow-wiring,and-exact-main-validation-required-before-first-run' \
     'local_rule=plan-check-is-text+hash+limited-direct-nonwiring-only;never-run-verifier,test-controller,container,compiler,helper,target,VM,or-emulator-on-Mac'; do
     grep -Fqx "$required" "$plan" || fail "required invariant is missing: $required"
 done
@@ -57,4 +66,4 @@ grep -qx 'rust_toolchain_closure_manifest_relative=none' "$root/tools/toolchain/
 grep -qx 'rust_toolchain_closure_manifest_sha256=none' "$root/tools/toolchain/host-tools.x86_64-unknown-linux-gnu-ci.lock" || fail 'CI lock contains an unreviewed closure digest'
 grep -qx 'state=blocked' "$root/tools/sprint-alpha/controller-helper-v0.env" || fail 'helper inventory is not blocked'
 
-printf '%s\n' 'controller-helper closure verifier test design is incomplete, inactive, and directly unwired'
+printf '%s\n' 'controller-helper closure verifier test design is complete, source-only, inactive, and directly unwired'

@@ -23,7 +23,7 @@ sha_file() {
 for file in "$catalog" "$errors" "$validation" "$domain" "$subject"; do
     [ -f "$file" ] && [ ! -L "$file" ] || fail "required regular source is unavailable: $file"
 done
-[ "$(sha_file "$catalog")" = 3e693cf86851164cb07577e71b7ff256a17201df1a844c7b9355b135e0e0ba61 ] || fail 'case-disposition bytes escaped review'
+[ "$(sha_file "$catalog")" = 0284cbb3edc56c28971b6e5d151237165aa63a5321cea44772b0a20fbe8c3565 ] || fail 'case-disposition bytes escaped review'
 [ "$(sha_file "$errors")" = 9370f2e29e3932f42826441568baed629d2d2ab8fd107f50b6fb58e1d1637b4f ] || fail 'error catalog escaped review'
 [ "$(sha_file "$validation")" = 1958c06a458cca81d4c5914f2664d4e70e0575ef2d7e260407638485c1727f2f ] || fail 'validation contract escaped review'
 [ "$(sha_file "$domain")" = 67555f2d565569e95b44a247dda630c9b98d293ba0773880f248d69d802ac66c ] || fail 'input-domain contract escaped review'
@@ -70,12 +70,20 @@ actual=$(sed -n 's/^D[0-9][0-9][0-9]|\(E[0-9][0-9][0-9]|[a-z0-9-]*\)|[^|]*|[^|]*
 [ "$(grep -c '|source-proof|' "$catalog")" -eq 4 ] || fail 'source-proof occurrence count changed'
 [ "$(grep -c '|source-dominated|' "$catalog")" -eq 6 ] || fail 'source-dominated occurrence count changed'
 [ "$(grep -c '|cryptographic-residual|' "$catalog")" -eq 1 ] || fail 'cryptographic residual count changed'
-[ "$(grep -c '|domain-extension|' "$catalog")" -eq 4 ] || fail 'domain-extension count changed'
+[ "$(grep -c '|domain-extension|' "$catalog")" -eq 12 ] || fail 'domain-extension count changed'
 domain_extensions=$(grep '|domain-extension|' "$catalog" | sort)
 expected_domain_extensions=$(printf '%s\n' \
+    'D027|E025|required-paths|domain-extension|requires-evidence-mount-replacement-domain' \
+    'D028|E026|required-paths|domain-extension|requires-verification-mount-replacement-domain' \
+    'D029|E027|required-paths|domain-extension|requires-private-proc-absence-domain' \
+    'D055|E050|input-identity|domain-extension|requires-paired-visible-hidden-link-relocation-domain' \
     'D057|E052|input-identity|domain-extension|requires-reviewed-input-alias-mount-domain' \
     'D104|E083|closure-first-pass|domain-extension|requires-cross-device-mount-domain' \
     'D105|E083|closure-second-pass|domain-extension|requires-cross-device-mount-domain' \
+    'D112|E123|closure-first-pass|domain-extension|resource-staging-trust-boundary-not-authorized' \
+    'D113|E123|closure-second-pass|domain-extension|resource-staging-trust-boundary-not-authorized' \
+    'D114|E124|closure-first-pass|domain-extension|resource-staging-trust-boundary-not-authorized' \
+    'D115|E124|closure-second-pass|domain-extension|resource-staging-trust-boundary-not-authorized' \
     'D133|E098|closure-stability|domain-extension|requires-nonclosure-mountinfo-mutation-domain' | sort)
 [ "$domain_extensions" = "$expected_domain_extensions" ] || fail 'domain-extension occurrence set changed'
 source_proofs=$(grep '|source-proof|' "$catalog" | sort)

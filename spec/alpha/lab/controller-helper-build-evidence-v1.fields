@@ -1,0 +1,13 @@
+schema=rar-alpha-controller-helper-build-evidence-v1
+status=experimental-schema-only-no-instance
+producer=trusted-outer-controller-after-two-builders+test-helper-terminate
+required_identities=controller_sha,source_sha,closure_acceptance_sha,compiler_sha,compiler_closure_sha,build_plan_sha,golden_sha,test_evidence_v1_sha,build_1_receipt_sha,build_2_receipt_sha,build_1_binary_sha,build_2_binary_sha,final_binary_sha
+build_rule=exactly-two-builds,distinct-fresh-job-nonces+roots,network-none,credential-none,preexisting-output-no,controller-observed-exit-0
+reproducibility_rule=build-1-bytes-equal-build-2-bytes-equal-final-bytes,all-three-SHA-256-equal,binary-size-1..16777216
+test_rule=consume-exactly-one-controller-helper-test-evidence-v1-instance,127-cases,failed-count-0,no-v0-or-13-case-substitution
+closure_rule=consume-exactly-one-reviewed-C3A-closure-acceptance-identity,same-controller+source+compiler+closure
+receipt_rule=receipts-distinct+fresh+controller-produced+bind-builder-image+compiler+source+plan+output+complete-log
+anti_replay_rule=build-nonces+roots+receipts+test-evidence+closure-acceptance-tuple-never-reused
+rejection_rule=missing+extra+duplicate+reordered+malformed+zero+stale+replay+self-attested+same-root+same-job+build-mismatch+oversize+networked+nonzero+v0-substitution-reject
+effect_rule=schema-is-not-readiness;H2-reviewed-instance-required-before-inventory+profile+gate-change
+local_rule=schema+validator+mutation-policy-only;never-build+test+execute-on-Mac

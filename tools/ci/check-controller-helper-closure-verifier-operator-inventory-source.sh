@@ -21,18 +21,22 @@ sha_file() {
 for file in "$inventory" "$templates" "$readme"; do
     [ -f "$file" ] && [ ! -L "$file" ] || fail "required regular source is unavailable: $file"
 done
-[ "$(sha_file "$inventory")" = ea2aef334d7c6b612635ea5237926df1a459a255c61c73a9e5b998e1cc244a80 ] || fail 'operator inventory bytes escaped review'
-[ "$(sha_file "$templates")" = 443d30414ec3cc8542755006ada9a40d52e0f5efe3b26de7fdc5f82dc1152be4 ] || fail 'case-template bytes escaped review'
+[ "$(sha_file "$inventory")" = c018c7fee8e1c70145a4c6adae852ef310ab20fd9d6b0cfad320521cdd76f062 ] || fail 'operator inventory bytes escaped review'
+[ "$(sha_file "$templates")" = 8df14525a37c49df99d669b638efd316c8993906d69e063625445f431ab204f8 ] || fail 'case-template bytes escaped review'
 
 for required in \
-    'status=experimental-incomplete-inactive-source-only' \
+    'status=experimental-complete-source-only-inactive' \
     'execution_authority=none' \
     'primary_family_count=34' \
+    'active_primary_family_count=32' \
+    'deferred_primary_family_count=2' \
     'repair_token_count=8' \
-    'coverage_rule=every-template-primary-normalizes-to-exactly-one-listed-family+every-template-repair-equals-one-listed-token+no-unlisted-family-or-repair-is-permitted' \
-    'parameter_rule=shape-checking-is-lexical-only;it-does-not-decode+apply+or-prove-a-mutation' \
-    'semantic_status=exact-target+precondition+postcondition+deterministic-derivation+resource-feasibility+repair-independence-are-absent' \
-    'activation_rule=blocked;separate-reviewed-semantics+base-binding+controller+runtime-precedence+fault+evidence+verdict-contracts-remain-required' \
+    'active_repair_token_count=7' \
+    'deferred_repair_token_count=1' \
+    'coverage_rule=every-template-primary-normalizes-to-exactly-one-active-listed-family+every-template-repair-equals-one-active-listed-token+deferred-P015+P016+R001-are-unused-by-templates+preserved-only-for-explicit-residuals+no-unlisted-family-or-repair-is-permitted' \
+    'parameter_rule=lexical-shape-check-precedes-one-pass-decode;semantic-rows-fix-target+precondition+operation+postcondition+bound' \
+    'semantic_status=exact-target+precondition+postcondition+deterministic-derivation+resource-feasibility+repair-independence-are-bound-by-owned-semantics-contract-set' \
+    'activation_rule=blocked;base-instance+controller+runtime-evidence+C3V+C3A+workflow-wiring-remain-required' \
     'consumer_rule=this-inventory-does-not-authorize-fixture+mutation+repair+controller+container+compiler+helper+target+VM+emulator+workflow+wiring+gate+readiness' \
     'local_rule=text+hash+lexical-structure-check-only;never-run-verifier+controller+container+compiler+helper+target+VM+emulator-on-Mac'; do
     grep -Fqx "$required" "$inventory" || fail "required invariant is missing: $required"
@@ -41,8 +45,54 @@ done
 [ "$(tail -c 1 "$inventory" | /usr/bin/od -An -tuC | /usr/bin/tr -d ' ')" = 10 ] || fail 'inventory lacks one terminal LF'
 if LC_ALL=C grep -n '[^ -~]' "$inventory" >/dev/null; then fail 'inventory contains a non-ASCII byte'; fi
 if grep -n "$(printf '\r')" "$inventory" >/dev/null; then fail 'inventory contains CR'; fi
-[ "$(grep -Ec '^P[0-9][0-9][0-9]\|[a-z0-9-]+\|[A-Za-z0-9+-]+\|opaque$' "$inventory")" -eq 34 ] || fail 'primary-family rows are malformed'
-[ "$(grep -Ec '^R[0-9][0-9][0-9]\|[^| ]+\|(opaque|no-repair)$' "$inventory")" -eq 8 ] || fail 'repair-token rows are malformed'
+/usr/bin/awk -F '|' '
+    /^P[0-9][0-9][0-9]\\|/ {
+        expected=(($1 == "P015" || $1 == "P016") ? "deferred-domain-extension:" $1 : "defined:" $1)
+        if (NF != 4 || $4 != expected || primary[$1]++) exit 1
+        state[$1]=($4 ~ /^deferred-/ ? "deferred" : "active")
+        primary_family[$1]=$2
+        primary_count++
+    }
+    /^semantic\\|P[0-9][0-9][0-9]\\|/ {
+        if (NF != 7 || active_semantics[$2]++ || state[$2] != "active") exit 1
+        active_count++
+    }
+    /^semantic_residual\\|P[0-9][0-9][0-9]\\|/ {
+        if (NF != 7 || residual_semantics[$2]++ || state[$2] != "deferred") exit 1
+        residual_count++
+    }
+    END {
+        if (primary_count != 34 || active_count != 32 || residual_count != 2) exit 1
+        for (id in state) {
+            if (state[id] == "active" && !(id in active_semantics)) exit 1
+            if (state[id] == "deferred" && !(id in residual_semantics)) exit 1
+        }
+    }
+' "$inventory" || fail 'primary-family active/deferred semantic rows are malformed, duplicated, or incomplete'
+/usr/bin/awk -F '|' '
+    /^R[0-9][0-9][0-9]\\|/ {
+        expected=($1 == "R001" ? "deferred-domain-extension:R001" : ($1 == "R002" ? "no-repair" : "defined:" $1))
+        if (NF != 3 || $3 != expected || repair[$1]++) exit 1
+        state[$1]=($3 ~ /^deferred-/ ? "deferred" : "active")
+        repair_token[$1]=$2
+        repair_count++
+    }
+    /^repair_semantic\\|R[0-9][0-9][0-9]\\|/ {
+        if (NF != 7 || active_semantics[$2]++ || state[$2] != "active" || $3 != repair_token[$2]) exit 1
+        active_count++
+    }
+    /^repair_residual\\|R[0-9][0-9][0-9]\\|/ {
+        if (NF != 7 || residual_semantics[$2]++ || state[$2] != "deferred" || $3 != repair_token[$2]) exit 1
+        residual_count++
+    }
+    END {
+        if (repair_count != 8 || active_count != 7 || residual_count != 1) exit 1
+        for (id in state) {
+            if (state[id] == "active" && !(id in active_semantics)) exit 1
+            if (state[id] == "deferred" && !(id in residual_semantics)) exit 1
+        }
+    }
+' "$inventory" || fail 'repair-token active/deferred semantic rows are malformed, duplicated, mismatched, or incomplete'
 
 number=1
 while [ "$number" -le 34 ]; do
@@ -58,11 +108,11 @@ while [ "$number" -le 8 ]; do
 done
 
 expected_families=$(/usr/bin/awk -F '|' '/^C[0-9][0-9][0-9]\|/ { x=$6; sub(/^[^=]*=/,"",x); if (x ~ /^[0-9]+$/) x="decimal-literal"; else sub(/:.*/,"",x); print x }' "$templates" | /usr/bin/sort -u)
-actual_families=$(/usr/bin/awk -F '|' '/^P[0-9][0-9][0-9]\|/ { print $2 }' "$inventory" | /usr/bin/sort)
+actual_families=$(/usr/bin/awk -F '|' '/^P[0-9][0-9][0-9]\|/ && $4 !~ /^deferred-/ { print $2 }' "$inventory" | /usr/bin/sort)
 [ "$actual_families" = "$expected_families" ] || fail 'primary family inventory differs from templates'
 
 expected_repairs=$(/usr/bin/awk -F '|' '/^C[0-9][0-9][0-9]\|/ { print $7 }' "$templates" | /usr/bin/sort -u)
-actual_repairs=$(/usr/bin/awk -F '|' '/^R[0-9][0-9][0-9]\|/ { print $2 }' "$inventory" | /usr/bin/sort)
+actual_repairs=$(/usr/bin/awk -F '|' '/^R[0-9][0-9][0-9]\|/ && $3 !~ /^deferred-/ { print $2 }' "$inventory" | /usr/bin/sort)
 [ "$actual_repairs" = "$expected_repairs" ] || fail 'repair token inventory differs from templates'
 
 /usr/bin/awk -F '|' '/^C[0-9][0-9][0-9]\|/ { print $1 "|" $6 }' "$templates" |
@@ -85,7 +135,7 @@ while IFS='|' read -r id primary; do
             ;;
     esac
 done
-grep -Fqx '`controller-helper-closure-verifier-operator-inventory-v0` closes the lexical vocabulary used by those templates to 34 primary families and eight repair tokens.' "$readme" || fail 'README repair-token count is stale'
+grep -Fqx '`controller-helper-closure-verifier-operator-inventory-v0` records 32 active and two deferred primary families plus seven active and one deferred repair token.' "$readme" || fail 'README repair-token count is stale'
 
 if grep -R -Fq 'controller-helper-closure-verifier-operator-inventory-v0' "$root/.github/workflows"; then
     fail 'inactive operator inventory is wired to GitHub Actions'
@@ -93,4 +143,4 @@ fi
 grep -qx 'rust_toolchain_closure_manifest_relative=none' "$root/tools/toolchain/host-tools.x86_64-unknown-linux-gnu-ci.lock" || fail 'CI lock was activated'
 grep -qx 'state=blocked' "$root/tools/sprint-alpha/controller-helper-v0.env" || fail 'helper inventory is not blocked'
 
-printf '%s\n' 'controller-helper closure verifier operator vocabulary is closed, lexical-only, inactive, and directly unwired'
+printf '%s\n' 'controller-helper closure verifier operator vocabulary and semantics are closed, source-only, inactive, and directly unwired'

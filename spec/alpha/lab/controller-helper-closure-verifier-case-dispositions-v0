@@ -54,9 +54,9 @@ D023|E021|bootstrap-image|fixture|pre-start-single-primary
 D024|E022|required-paths|fixture|pre-start-single-primary
 D025|E023|required-paths|fixture|pre-start-single-primary
 D026|E024|required-paths|fixture|pre-start-single-primary
-D027|E025|required-paths|fixture|pre-start-single-primary
-D028|E026|required-paths|fixture|pre-start-single-primary
-D029|E027|required-paths|fixture|pre-start-single-primary
+D027|E025|required-paths|domain-extension|requires-evidence-mount-replacement-domain
+D028|E026|required-paths|domain-extension|requires-verification-mount-replacement-domain
+D029|E027|required-paths|domain-extension|requires-private-proc-absence-domain
 D030|E028|bootstrap-identities|fixture|pre-start-single-primary
 D031|E029|bootstrap-identities|fixture|pre-start-single-primary
 D032|E030|bootstrap-identities|fixture|pre-start-single-primary
@@ -82,7 +82,7 @@ D051|E046|controller-ownership|fixture|pre-start-single-primary
 D052|E047|controller-ownership|fixture|pre-start-single-primary
 D053|E048|input-identity|fixture|pre-start-single-primary
 D054|E049|input-identity|fault-only|requires-tool-output-or-resource-fault-contract
-D055|E050|input-identity|fixture|pre-start-single-primary
+D055|E050|input-identity|domain-extension|requires-paired-visible-hidden-link-relocation-domain
 D056|E051|input-identity|fixture|pre-start-single-primary
 D057|E052|input-identity|domain-extension|requires-reviewed-input-alias-mount-domain
 D058|E053|input-identity|fixture|pre-start-single-primary
@@ -139,10 +139,10 @@ D108|E085|closure-first-pass|source-dominated|unreachable-under-bound-subject
 D109|E085|closure-second-pass|source-dominated|unreachable-under-bound-subject
 D110|E086|closure-first-pass|synchronized-mutation|newline-duplicate-after-alphabet-check
 D111|E086|closure-second-pass|synchronized-mutation|newline-duplicate-after-alphabet-check
-D112|E123|closure-first-pass|fixture|pre-start-excess-descendants
-D113|E123|closure-second-pass|synchronized-mutation|add-excess-descendants-after-first-pass
-D114|E124|closure-first-pass|fixture|pre-start-bounded-long-path-set
-D115|E124|closure-second-pass|synchronized-mutation|add-bounded-long-path-set-after-first-pass
+D112|E123|closure-first-pass|domain-extension|resource-staging-trust-boundary-not-authorized
+D113|E123|closure-second-pass|domain-extension|resource-staging-trust-boundary-not-authorized
+D114|E124|closure-first-pass|domain-extension|resource-staging-trust-boundary-not-authorized
+D115|E124|closure-second-pass|domain-extension|resource-staging-trust-boundary-not-authorized
 D116|E087|closure-first-pass|synchronized-mutation|change-at-named-pass-window
 D117|E087|closure-second-pass|synchronized-mutation|change-at-named-pass-window
 D118|E088|closure-first-pass|synchronized-mutation|change-at-named-pass-window

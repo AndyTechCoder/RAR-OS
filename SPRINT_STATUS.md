@@ -124,28 +124,33 @@
   it after ADR 0020
 - Controller-helper build trust: accepted ADR 0024 Alternative A selects two
   builds from a fully pinned compiler closure on the approved Linux runner for
-  Alpha. Real compiler/helper identities and reviewed evidence remain absent;
-  no helper compilation, cloud provisioning, or execution is authorized.
+  Alpha. Real compiler/helper identities and runtime evidence remain absent. Draft PR
+  #101 proposes the source-only C1 runtime, verifier, acceptance, and v1
+  evidence contracts; architecture, correctness, security, merge, and exact-main
+  validation are still pending. No helper compilation, cloud provisioning, or
+  execution is authorized.
   PR #57 merged a byte-pinned, inactive source observer and exact candidate
   output contract at `65ae7aedd11298c8f15ed96cd94166e2afa03e2a`;
   exact-main run `33308569835` passed. The observer is not wired or executed,
   the CI closure lock remains `none`, the helper inventory remains blocked, and
-  any future candidate remains untrusted until its tools, complete file set,
-  exact-set verifier, retained bytes, and runtime fault/confinement evidence
-  receive separate review
+  any future candidate remains untrusted until C3V binds its tools, complete file
+  set, controller, fixtures, retained bytes, and runtime fault/confinement
+  evidence, followed by separate C3A review
 - Controller-helper inventory: an option-neutral blocked instance now binds the
   required builder, compiler closure, trusted source, golden vector, twice-
   reproduced binary, and isolated test-evidence identities. All activating
   values remain `unavailable`; 40 declarative cases and mutation tests prevent
   a ready claim before real reviewed cloud evidence.
   Strict contextual parsers now validate the future aggregate build record,
-  two distinct controller-owned build receipts, and a thirteen-case test receipt
+  two distinct controller-owned build receipts; the v1 validator now requires all
+  97 inherited attempt cases plus 30 runtime/authority cases and rejects the legacy 13-case receipt
   against their actual selected inputs. They reject aliases, hardlinks when the
   host filesystem supports exercising them, path escape, stale logs, reused
   job/root nonces, missing/duplicate cases, and self-declared results without
-  controller context. Immutable and static checks pass locally without
-  compiling or running the helper. Mutation-based policy tests skip locally
-  before writing and require a dedicated pinned validation container with
+  controller context. The source-attestation check passes in cloud CI without compiling or running
+  the helper. Real validation and mutation evidence remain pending until the
+  reviewed merge receives an exact-main run. Mutation-based policy tests skip
+  locally before writing and require a dedicated pinned validation container with
   an independent clean exact-revision checkout mounted read-only and a bounded
   `nosuid,nodev` tmpfs as their only approved scratch; they are explicitly
   non-activating and are not helper build/test or cloud execution evidence
