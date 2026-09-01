@@ -29,6 +29,9 @@ The C2A writer owns only these paths:
 - `tools/ci/check-controller-helper-closure-observer-run-evidence-source.sh`
 - `tools/ci/verify-controller-helper-closure-observer-run-evidence.sh`
 - `tools/ci/test-controller-helper-closure-observer-run-evidence-policy.sh`
+- `tools/ci/policy-test-modes.v0`
+- `tools/ci/run-ephemeral-policy-tests.sh`
+- `tools/ci/check-ephemeral-policy-test-confinement.sh`
 - `tools/ci/fixtures/controller-helper-closure-observer/run-evidence-valid.v0`
 - `tools/ci/fixtures/controller-helper-closure-observer/run-evidence-malformed.v0`
 - `tools/ci/fixtures/controller-helper-closure-observer/run-evidence-cases.v0`
@@ -59,6 +62,9 @@ After C2A closes, the C2B writer owns only these paths:
 - `tools/ci/check-controller-helper-closure-observer-source.sh`
 - `tools/ci/check-controller-helper-closure-observer-policy.sh`
 - `tools/ci/test-controller-helper-closure-observer-policy.sh`
+- `tools/ci/policy-test-modes.v0`
+- `tools/ci/run-ephemeral-policy-tests.sh`
+- `tools/ci/check-ephemeral-policy-test-confinement.sh`
 - `tools/ci/controller-helper-closure-observer-harness.sh`
 - `tools/ci/fixtures/controller-helper-closure-observer/base-closure.v0`
 - `tools/ci/fixtures/controller-helper-closure-observer/tool-pins.v0`
@@ -98,6 +104,15 @@ reject missing, extra, reordered, malformed, stale, cross-revision,
 self-attested, zero, aliased, oversized, wrong-output, wrong-artifact, and
 ready/success-substitution records. Valid and malformed fixtures are
 byte-pinned. Mechanical validation never grants readiness.
+
+Each subphase's new policy/mutation test must use the approved
+`require-ephemeral-policy-test-root.sh` boundary, remain skip-before-write
+outside the attested cloud mutation container, and appear exactly once in
+`policy-test-modes.v0` and the same canonical position in
+`run-ephemeral-policy-tests.sh`. The confinement checker must rebind total,
+ephemeral, and immutable counts, exact list equality, runner order, executed
+summary, and anti-drift assertions. No test may gain local scratch or execute
+from `check-specs.sh`.
 
 ## Trusted-main workflow boundary
 
