@@ -3,8 +3,11 @@ set -eu
 LC_ALL=C LANG=C
 export LC_ALL LANG
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-tmp=${TMPDIR:-/tmp}/rar-c1-evidence-policy-$$
-mkdir -m 700 "$tmp"
+scratch=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
+[ "$scratch" != disabled ] || { printf '%s\n' 'controller helper evidence v1 mutations skipped: ephemeral CI required'; exit 0; }
+work=$(mktemp -d "$scratch/controller-helper-evidence-v1.XXXXXX")
+trap '/bin/rm -rf "$work"' EXIT HUP INT TERM
+tmp=$work
 fail(){ printf '%s\n' "controller-helper evidence v1 policy failed: $1" >&2; exit 1; }
 a=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 b=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
