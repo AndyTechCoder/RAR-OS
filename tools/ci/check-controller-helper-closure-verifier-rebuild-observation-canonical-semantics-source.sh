@@ -46,7 +46,7 @@ for required in \
     'manifest_preservation_rule=manifest-path+device+inode+nlink+uid+gid+mode+bytes+size+mtime+ctime-remain-exactly-recorded+unchanged-through-primary+rebuild+launch;the-rebuild-never-writes+aliases+replaces+normalizes+parses+sorts+or-truncates-the-manifest' \
     'shared_receipt_safety_rule=apply-without-relaxation-the-pinned-shared-observation-repair-semantics-receipt_file_rule+receipt_stability_rule-to-the-rebuilt-receipt' \
     'independence_rule=rebuild-reads-only-the-byte-pinned-base-receipt+recorded-S008-or-S011-primary-post-bytes+recorded-unchanged-manifest-bytes+future-byte-pinned-controller-SHA-256;no-verifier-output+scratch+another-case+ambient-host-state+unreviewed-path' \
-    'remaining_status=2-non-none-repair-tokens+23-primary-families+pre-start+repair-coupled-links+required-path-symlinks+raw-name+path-alias+mount+tree+manifest-specific-primary-families+exact-base+controller+runtime-precedence+fault+evidence+verdict-remain-absent' \
+    'remaining_status=closed-by-controller-helper-closure-verifier-cases-v0+faults-v0.fields+evidence-v0.fields;this-slice-remains-inactive' \
     'activation_rule=blocked;this-slice-cannot-create-fixtures+execute-mutations+apply-repairs+or-authorize-a-controller' \
     'consumer_rule=this-contract-does-not-authorize-fixture+mutation+repair+controller+container+compiler+helper+target+VM+emulator+workflow+wiring+gate+readiness' \
     'local_rule=text+hash+structure-check-only;never-run-verifier+controller+container+compiler+helper+target+VM+emulator-on-Mac'; do
