@@ -71,6 +71,11 @@ jobs:
             fi
             container_absent "$name"
           }
+          force_remove_created_container() {
+            local name=$1
+            /usr/bin/timeout --signal=KILL 10s /usr/bin/docker rm --force "$name" >/dev/null || return 1
+            container_absent "$name"
+          }
           remove_volume() {
             local name=$1
             if ! volume_absent "$name"; then
@@ -165,7 +170,7 @@ jobs:
           if [[ "$acquisition_start" -eq 0 ]]; then
             acquisition_exit=$(/usr/bin/docker inspect --format '{{.State.ExitCode}}' "$acquisition")
           fi
-          remove_container "$acquisition"
+          force_remove_created_container "$acquisition"
           container_absent "$transfer"
           [[ "$acquisition_start" -eq 0 && "$acquisition_exit" -eq 0 ]]
           /usr/bin/docker create --name "$transfer" --read-only --network none \
