@@ -132,23 +132,40 @@ The C2B workflow must:
 - produce exactly the candidate manifest, 23-line receipt, canonical O001-O021
   case evidence, and versioned outer run-evidence record.
 
-Repository code, checkout steps, wrapper, harness, observer, validators, and
-containers receive no secret, token, network, Docker socket, host path outside
-the exact checkout and controller-owned scratch/evidence roots, or mutable
-source mount. The sole bounded exception is the already pinned outer
-`actions/upload-artifact` step after independent validation succeeds. It may
-read only those four exact regular non-symlink evidence files, upload once
-under `controller-helper-closure-observer-<run-id>-<run-attempt>`, use a fixed
+The only source-acquisition network exception is an anonymous HTTPS fetch of the
+exact main-push SHA from the canonical public repository. It must run before
+repository code in the same immutable Rust 1.95.0 OCI image already pinned by
+digest, use that image's pinned Git executable, receive an empty allowlisted
+environment with prompting and credential helpers disabled, and receive no
+secret, token, Docker socket, or host mount except the exact initially empty
+checkout root. The acquisition container has a read-only root, non-root
+identity, bounded resources, no-new-privileges, all capabilities dropped, and a
+bounded noexec temporary mount. It may write only the checkout root, must
+detach-checkout and verify the requested exact SHA, and must be removed before
+repository code or validation starts. Fetch failure, revision drift, an
+unexpected checkout entry, or credential request fails closed. This exception
+grants source transport only; it grants no observer, compiler, helper, target,
+publication, trust-state, or readiness authority.
+
+After source acquisition, repository code, wrapper, harness, observer,
+validators, and every observation container receive no secret, token, network,
+Docker socket, host path outside the exact checkout and controller-owned
+scratch/evidence roots, or mutable source mount. The sole token-bearing
+exception is the already pinned outer `actions/upload-artifact` step after
+independent validation succeeds. It may read only those four exact regular
+non-symlink evidence files, upload once under
+`controller-helper-closure-observer-<run-id>-<run-attempt>`, use a fixed
 14-day retention and no-overwrite behavior, and receive only GitHub's
 action-scoped artifact transport authority. It cannot write repository,
 workflow, release, lock, inventory, profile, gate, or readiness state.
 Artifact retention is candidate evidence storage, not publication or
 acceptance.
 
-The workflow and wrapper reject stale or non-main revisions, unexpected
-environment variables, missing/additional mounts, preexisting outputs,
-unbounded output, and any attempt to reach network, credentials, compiler,
-helper, target, profile, inventory, lock, gate, or publication state.
+Every post-acquisition workflow step and the wrapper reject stale or non-main
+revisions, unexpected environment variables, missing/additional mounts,
+preexisting outputs, unbounded output, and any attempt to reach network,
+credentials, compiler, helper, target, profile, inventory, lock, gate, or
+publication state.
 
 ## Observer and test requirements
 
