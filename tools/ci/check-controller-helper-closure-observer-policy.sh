@@ -60,12 +60,12 @@ done
 [ "$(/usr/bin/grep -Fxc '/usr/bin/docker start --attach "$container" | decode_stream "$evidence"' "$wrapper")" -eq 1 ] || fail 'exact stream handoff changed'
 [ "$(/usr/bin/grep -Fxc 'pipe_status=("${PIPESTATUS[@]}")' "$wrapper")" -eq 1 ] || fail 'stream status binding missing'
 for required in \
-    "[ \"${#pipe_status[@]}\" -eq 2 ]" \
-    "[ \"${pipe_status[0]}\" -eq 0 ]" \
-    "[ \"${pipe_status[1]}\" -eq 0 ]" \
-    "[ \"\$case_bytes\" -le 32768 ]" \
-    "[ \"\$manifest_bytes\" -le 1048576 ]" \
-    "[ \"\$receipt_bytes\" -le 4096 ]"; do
+    '[ "${#pipe_status[@]}" -eq 2 ]' \
+    '[ "${pipe_status[0]}" -eq 0 ]' \
+    '[ "${pipe_status[1]}" -eq 0 ]' \
+    '[ "$case_bytes" -le 32768 ]' \
+    '[ "$manifest_bytes" -le 1048576 ]' \
+    '[ "$receipt_bytes" -le 4096 ]'; do
     /usr/bin/grep -Fq -- "$required" "$wrapper" || fail "stream bound missing: $required"
 done
 [ "$(/usr/bin/grep -Fxc '/usr/bin/dash "$subject" || fail '"'"'production observer failed'"'"'' "$harness")" -eq 1 ] || fail 'production observer count changed'
