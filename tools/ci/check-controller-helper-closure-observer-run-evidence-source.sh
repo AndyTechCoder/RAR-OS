@@ -17,17 +17,18 @@ sha() { /usr/bin/shasum -a 256 "$1" | /usr/bin/awk '{ print $1 }'; }
 for file in "$contract" "$case_contract" "$valid" "$malformed" "$cases" "$validator" "$policy"; do
     [ -f "$file" ] && [ ! -L "$file" ] && [ -s "$file" ] || fail "required file missing, symbolic, or empty: $file"
 done
-[ "$(sha "$contract")" = 4f465e941b0a5ab1f85f3b7eb9e88038c0885629dfc1e52f1cec6f4e2a4e043d ] || fail 'run-evidence contract bytes escaped review'
+[ "$(sha "$contract")" = a0519b80bd85522b9119dcf6dc971f45d307b7d1b37cf0e04c84b93ae74e8978 ] || fail 'run-evidence contract bytes escaped review'
 [ "$(sha "$case_contract")" = 6f7dd9821bf4894960238a6daf46cbb1992dee487ce4e0981f8999cb5dcc9107 ] || fail 'case-evidence contract bytes escaped review'
 [ "$(sha "$valid")" = 0796af3de903218ea4b8def6d23291719f1d80bc023d94fa4e01374a82e15315 ] || fail 'valid fixture bytes escaped review'
 [ "$(sha "$malformed")" = f94d7af08097852d06bc2c44b09a0862d4d569cc2b770e754ca8fcad12b2d21f ] || fail 'malformed fixture bytes escaped review'
-[ "$(sha "$cases")" = 63c4ca7d62236a94459f788695d455ce8a7032c78bad21741ff66f6b16b2b6d2 ] || fail 'case table bytes escaped review'
-[ "$(sha "$validator")" = 9ab95e8c059c6edeefa7f1bfa064d4fd830756f6d096e4bd25892bcb92b6cc14 ] || fail 'validator bytes escaped review'
+[ "$(sha "$cases")" = f4536ed872bcc3ca60ea335c2675fe38241dd66e45062013f2c315dfa0e52386 ] || fail 'case table bytes escaped review'
+[ "$(sha "$validator")" = f0e769c1fd17919f6e2634db071032a58e4c17f33ab33e5b4737fcd57336f510 ] || fail 'validator bytes escaped review'
 [ "$(sha "$policy")" = f65841d2d98be335630df544e095e02df37bdd423ea41cbb7cf91fcc7925781d ] || fail 'mutation policy bytes escaped review'
 grep -Fqx 'status=experimental-complete-C2A-source-only-no-workflow' "$contract" || fail 'run-evidence status changed'
 grep -Fqx 'execution_authority=none;format-and-validator-only' "$contract" || fail 'run-evidence authority changed'
 grep -Fqx 'line_count=31' "$contract" || fail 'run-evidence line count changed'
 grep -Fqx 'record_digest_rule=record_sha256-is-SHA256-of-the-exact-first-30-lines-in-field-order-with-each-line-LF-terminated;line-31-is-excluded;no-alternate-serialization' "$contract" || fail 'record digest preimage changed'
+grep -Fqx 'cryptographic_residual_rule=actual-SHA256-zero-for-derived-output-or-record-digest-is-unconstructible-for-fixture-testing;validator-source-must-explicitly-reject;two-source-proofs-required' "$contract" || fail 'zero-digest residual rule changed'
 grep -Fqx 'output_set_rule=exactly-controller-helper-closure-observer.cases.v0+controller-helper-closure.sha256+controller-helper-closure.receipt+controller-helper-closure-observer-run-evidence.v0;regular+non-symlink+single-link+no-extra-entry' "$contract" || fail 'output-set rule changed'
 grep -Fqx 'case_set=O001-through-O021-exactly-once-in-numeric-order' "$case_contract" || fail 'case set changed'
 grep -Fqx 'exit_rule=O001:0;O002-through-O021:1-controller-normalized-rejection;no-other-value' "$case_contract" || fail 'case exit mapping changed'
