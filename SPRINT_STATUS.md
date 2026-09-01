@@ -124,18 +124,19 @@
   it after ADR 0020
 - Controller-helper build trust: accepted ADR 0024 Alternative A selects two
   builds from a fully pinned compiler closure on the approved Linux runner for
-  Alpha. Real compiler/helper identities and runtime evidence remain absent. Draft PR
-  #101 proposes the source-only C1 runtime, verifier, acceptance, and v1
-  evidence contracts; architecture, correctness, security, merge, and exact-main
-  validation are still pending. No helper compilation, cloud provisioning, or
-  execution is authorized.
-  PR #57 merged a byte-pinned, inactive source observer and exact candidate
-  output contract at `65ae7aedd11298c8f15ed96cd94166e2afa03e2a`;
-  exact-main run `33308569835` passed. The observer is not wired or executed,
-  the CI closure lock remains `none`, the helper inventory remains blocked, and
-  any future candidate remains untrusted until C3V binds its tools, complete file
-  set, controller, fixtures, retained bytes, and runtime fault/confinement
-  evidence, followed by separate C3A review
+  Alpha. The source-only C1 runtime, exhaustive verifier, closure-acceptance,
+  and v1 evidence contracts merged through PR #101 and bounded follow-up repairs
+  #102-#108. Exact-main Specifications run `33467136133` at
+  `10537d55003949797d7ca8ab7adcf0b1deab5331` passed runner attestation,
+  pinned read-only validation, and all 26 isolated mutation-policy tests.
+  C1 is complete. Real compiler/helper identities and runtime evidence remain
+  absent; no helper compilation, cloud provisioning, target execution, or Lab
+  activation is authorized. The inactive observer source from PR #57 remains
+  unwired and unexecuted, the CI closure lock remains `none`, and the helper
+  inventory remains blocked. C2 now requires its separately reviewed
+  literal-path observer packet and exact-main gate; C3V must later bind the
+  current tools, complete file set, controller, fixtures, retained bytes, and
+  runtime fault/confinement evidence, followed by separate C3A review
 - Controller-helper inventory: an option-neutral blocked instance now binds the
   required builder, compiler closure, trusted source, golden vector, twice-
   reproduced binary, and isolated test-evidence identities. All activating
