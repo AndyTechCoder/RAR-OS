@@ -40,8 +40,62 @@ grep -Fqx 'run-id=12345' "$malformed" || fail 'malformed bad-key fixture changed
 grep -Fqx 'case_count=40' "$cases" || fail 'case table count changed'
 [ "$(/usr/bin/grep -Ec '^V[0-9][0-9][0-9]\|' "$cases")" -eq 40 ] || fail 'case table incomplete'
 /bin/sh -n "$validator" "$policy"
-if /usr/bin/grep -R -Fq 'verify-controller-helper-closure-observer-run-evidence.sh' "$root/.github/workflows"; then fail 'C2A validator is wired to a workflow'; fi
-if /usr/bin/grep -R -Fq 'test-controller-helper-closure-observer-run-evidence-policy.sh' "$root/.github/workflows"; then fail 'C2A mutation policy is wired to a workflow'; fi
+workflows=$root/.github/workflows
+workflow=$workflows/controller-helper-closure-observer.yml
+validator_reference=tools/ci/verify-controller-helper-closure-observer-run-evidence.sh
+validator_stem=verify-controller-helper-closure-observer-run-evidence
+policy_reference=test-controller-helper-closure-observer-run-evidence-policy.sh
+policy_stem=test-controller-helper-closure-observer-run-evidence-policy
+count_workflow_references() {
+    needle=$1
+    /usr/bin/find "$workflows" -type f \( -name '*.yml' -o -name '*.yaml' \) \
+        -exec /usr/bin/awk -v needle="$needle" 'index($0, needle) { count++ } END { print count + 0 }' {} \; |
+        /usr/bin/awk '{ count += $1 } END { print count + 0 }'
+}
+validator_exact_count=$(count_workflow_references "$validator_reference")
+validator_stem_count=$(count_workflow_references "$validator_stem")
+policy_exact_count=$(count_workflow_references "$policy_reference")
+policy_stem_count=$(count_workflow_references "$policy_stem")
+[ "$policy_exact_count" -eq 0 ] || fail 'C2 mutation policy is wired to a workflow'
+[ "$policy_stem_count" -eq 0 ] || fail 'C2 mutation policy has a partial workflow binding'
+if [ -e "$workflow" ] || [ -L "$workflow" ]; then
+    [ -f "$workflow" ] && [ ! -L "$workflow" ] && [ -s "$workflow" ] ||
+        fail 'C2B workflow is missing, symbolic, or empty'
+    [ "$validator_exact_count" -eq 1 ] || fail 'C2B validator binding is missing or duplicated'
+    [ "$validator_stem_count" -eq 1 ] || fail 'C2B validator has a partial or duplicate workflow binding'
+    /usr/bin/awk '
+        $0 == "      - name: Run isolated harness and one candidate observation" {
+            producer_step = NR
+            producer_count++
+        }
+        $0 == "      - name: Independently validate exact candidate evidence" {
+            validator_step = NR
+            validator_step_count++
+        }
+        $0 == "          tools/ci/verify-controller-helper-closure-observer-run-evidence.sh \\" {
+            validator_reference = NR
+            validator_reference_count++
+        }
+        $0 == "      - name: Retain four validated candidate files" {
+            retention_step = NR
+            retention_count++
+        }
+        END {
+            if (producer_count != 1 ||
+                validator_step_count != 1 ||
+                validator_reference_count != 1 ||
+                retention_count != 1 ||
+                !(producer_step < validator_step &&
+                  validator_step < validator_reference &&
+                  validator_reference < retention_step)) exit 1
+        }
+    ' "$workflow" || fail 'C2B validator is not exactly between producer termination and retention'
+    phase=bound-to-one-reviewed-C2B-workflow
+else
+    [ "$validator_exact_count" -eq 0 ] || fail 'dormant C2 validator is wired to a workflow'
+    [ "$validator_stem_count" -eq 0 ] || fail 'dormant C2 validator has a partial workflow binding'
+    phase=dormant-with-zero-workflow-bindings
+fi
 grep -qx 'rust_toolchain_closure_manifest_relative=none' "$root/tools/toolchain/host-tools.x86_64-unknown-linux-gnu-ci.lock" || fail 'CI closure lock activated'
 grep -qx 'state=blocked' "$root/tools/sprint-alpha/controller-helper-v0.env" || fail 'helper inventory activated'
-printf '%s\n' 'controller-helper observer C2A contracts are complete, source-only, unwired, and candidate-only'
+printf 'controller-helper observer contracts are phase-aware, candidate-only, and %s\n' "$phase"
