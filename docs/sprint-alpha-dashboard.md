@@ -86,13 +86,16 @@ and cannot increase the implementation count.
   bundle, initial system source, initial preserved source, and fixture manifest
   as `pending-review`; that orientation state grants no activation or target
   authority. Milestones A and B remain blocked on their separate gates.
-- Draft PR #101 proposes the source-only C1 runtime, observer-test,
-  exhaustive verifier-case/fault, closure-acceptance, and v1 helper-evidence
-  contracts. They remain under architecture/correctness/security review,
-  unwired, non-activating, unmerged, and without exact-main proof. C2/C3V must
-  still provide the reviewed controller, fixtures, candidate closure, tool pins,
-  and retained runtime evidence; C3A must separately accept that evidence before
-  any helper build or test.
+- C1 is complete: PR #101 plus bounded repairs #102-#108 merged the
+  source-only runtime, observer-test, exhaustive verifier-case/fault,
+  closure-acceptance, and v1 helper-evidence contracts. Exact-main
+  Specifications run `33467136133` passed pinned read-only validation and all
+  26 isolated mutation-policy tests at
+  `10537d55003949797d7ca8ab7adcf0b1deab5331`. The contracts remain unwired
+  and non-activating. C2 must still provide the reviewed trusted-main observer,
+  fixtures, candidate closure, tool pins, and retained runtime evidence; C3V
+  independently verifies the current exact set, and C3A must separately accept
+  it before any helper build or test.
 - PR #13 is merged at `abd75bfccf4fcd2f197871225d1a78233c0d87dc`;
   exact post-merge trusted-controller run `33294557261` passed. This closes only
   the controller bootstrap, not target implementation or Sprint completion.
