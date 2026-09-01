@@ -37,7 +37,7 @@ for required in \
     'partial_inode=$(/usr/bin/stat -c %i "$partial")' \
     'parent_device=$(/usr/bin/stat -c %d "$workspace_parent")' \
     'parent_inode=$(/usr/bin/stat -c %i "$workspace_parent")' \
-    'container_absent() {' 'volume_absent() {' 'remove_container() {' 'remove_volume() {' \
+    'container_absent() {' 'volume_absent() {' 'remove_container() {' 'force_remove_created_container() {' 'remove_volume() {' \
     '/usr/bin/docker container ls -a' '/usr/bin/docker volume ls' \
     'trap cleanup EXIT' "trap 'exit 130' HUP INT TERM" \
     'if [[ "$cleanup_failed" -ne 0 ]]; then exit 1; fi' \
@@ -53,7 +53,7 @@ for required in \
     '-c filter.lfs.smudge= -c filter.lfs.required=false' \
     'fetch --no-tags --depth=1 origin "$1"' 'checkout --detach FETCH_HEAD' \
     '/usr/bin/timeout --signal=KILL 120s /usr/bin/docker start --attach "$acquisition"' \
-    'remove_container "$acquisition"' 'container_absent "$transfer"' \
+    'force_remove_created_container "$acquisition"' 'container_absent "$transfer"' \
     '/usr/bin/docker create --name "$transfer" --read-only --network none' \
     '--mount "type=volume,source=$volume,target=/source,readonly"' \
     '--mount "type=bind,source=$partial,target=/destination"' \
@@ -75,7 +75,8 @@ done
 [ "$(/usr/bin/grep -Fc -- '--network none' "$workflow")" -eq 1 ] || fail 'transfer network denial changed'
 [ "$(/usr/bin/grep -Fc '[ "$bytes" -le 67108864 ] && [ "$files" -le 8192 ] && [ "$objects" -le 32768 ]' "$workflow")" -eq 2 ] || fail 'checkout ceilings changed'
 [ "$(/usr/bin/grep -Fc '[ -z "$(/usr/bin/git -C /' "$workflow")" -ge 4 ] || fail 'checkout cleanliness and ref checks missing'
-[ "$(/usr/bin/grep -Fc 'remove_container "$acquisition"' "$workflow")" -eq 2 ] || fail 'acquisition cleanup ordering changed'
+[ "$(/usr/bin/grep -Fc 'remove_container "$acquisition"' "$workflow")" -eq 1 ] || fail 'acquisition fallback cleanup changed'
+[ "$(/usr/bin/grep -Fc 'force_remove_created_container "$acquisition"' "$workflow")" -eq 1 ] || fail 'immediate acquisition removal changed'
 [ "$(/usr/bin/grep -Fc 'remove_container "$transfer"' "$workflow")" -eq 2 ] || fail 'transfer cleanup ordering changed'
 [ "$(/usr/bin/grep -Fc 'remove_volume "$volume"' "$workflow")" -eq 2 ] || fail 'volume cleanup ordering changed'
 /usr/bin/grep -Fq '"$workspace_parent"/.rar-c2b-checkout-partial-"$GITHUB_RUN_ID"-"$GITHUB_RUN_ATTEMPT")' "$workflow" || fail 'partial cleanup is not identity-bound'
