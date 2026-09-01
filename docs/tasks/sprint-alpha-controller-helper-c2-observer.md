@@ -137,27 +137,38 @@ exact main-push SHA from the canonical public repository. It must run before
 repository code in the same immutable Rust 1.95.0 OCI image already pinned by
 digest, use that image's pinned Git executable, receive an empty allowlisted
 environment with prompting and credential helpers disabled, and receive no
-secret, token, Docker socket, or host mount except the exact initially empty
-checkout root. The acquisition container has a read-only root, non-root
-identity, bounded resources, no-new-privileges, all capabilities dropped, and a
-bounded noexec temporary mount.
+secret, token, Docker socket, or host bind mount. Its only writable source
+storage is an exclusive controller-created Docker volume backed by tmpfs with
+an enforced 67,108,864-byte capacity and mounted at `/checkout`. The
+acquisition container has a read-only root, non-root identity, bounded
+resources, no-new-privileges, all capabilities dropped, and a separate bounded
+noexec temporary mount.
 
-The controller must track the acquisition container by an exclusive identity,
-enforce a 120-second wall-clock deadline followed by forced removal within 10
-seconds on timeout or any failure, and retain no networked container afterward.
-Git acquisition is a depth-one fetch of only the requested 40-byte commit
-identity into `FETCH_HEAD`; it fetches no tags, other refs, submodules, or LFS
-objects and disables LFS smudge behavior. Before success, the complete checkout
-including `.git` must contain at most 67,108,864 bytes, 8,192 regular files,
-and 32,768 loose-plus-packed Git objects. The controller then detach-checks out
-and verifies the requested exact SHA, a clean tree, the absence of retained
-unexpected refs, and every ceiling; removes the acquisition container; and
-revokes checkout-root write permission before any repository code, validator,
-or observation container can read the source through read-only mounts. Fetch
-failure, timeout, cleanup failure, revision drift, an unexpected checkout entry
-or ref, a ceiling breach, or credential request fails closed. This exception
-grants source transport only; it grants no observer, compiler, helper, target,
-publication, trust-state, or readiness authority.
+The controller must track the acquisition container and bounded volume by
+exclusive identities, enforce a 120-second wall-clock deadline followed by
+forced container removal within 10 seconds on timeout or any failure, and
+retain no networked container afterward. Git acquisition is a depth-one fetch
+of only the requested 40-byte commit identity into `FETCH_HEAD`; it fetches
+no tags, other refs, submodules, or LFS objects and disables LFS smudge
+behavior. Before success, the complete checkout including `.git` must contain
+at most 67,108,864 bytes, 8,192 regular files, and 32,768 loose-plus-packed Git
+objects, so both write-time capacity and accepted content are bounded.
+
+Only after the acquisition container is removed may a separate pinned,
+network-disabled transfer container mount the acquisition volume read-only and
+one exclusive, initially empty controller-owned partial checkout root writable.
+It copies the bounded checkout once, verifies the requested detached exact SHA,
+a clean tree, absence of retained unexpected refs, every byte/file/object
+ceiling, and exact output-root containment, then exits and is removed. The
+controller removes the bounded volume and revokes partial-root write permission
+before atomically promoting it to the exact checkout root. No repository code,
+validator, or observation container may read either root before promotion; all
+later source mounts are read-only. Any partial root is identity-checked and
+discarded on failure before repository use. Fetch or transfer failure, timeout,
+cleanup failure, revision drift, an unexpected checkout entry or ref, a ceiling
+breach, or credential request fails closed. This exception grants source
+transport only; it grants no observer, compiler, helper, target, publication,
+trust-state, or readiness authority.
 
 After source acquisition, repository code, wrapper, harness, observer,
 validators, and every observation container receive no secret, token, network,
