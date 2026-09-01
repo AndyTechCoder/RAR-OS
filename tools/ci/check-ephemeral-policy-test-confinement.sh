@@ -53,6 +53,7 @@ done
 
 runner_tests=$(/usr/bin/sed -n 's|^/bin/sh "$root/\(tools/ci/test-[a-z0-9.-]*\.sh\)"$|\1|p' "$runner")
 [ "$runner_tests" = "$ephemeral" ] || exit 1
+[ "$(/usr/bin/grep -Fxc "printf '%s\\n' 'Ephemeral policy tests passed: executed=26 source=read-only scratch=tmpfs'" "$runner")" -eq 1 ] || exit 1
 [ "$(/usr/bin/grep -Fxc 'ulimit -f 131072' "$runner")" -eq 1 ] || exit 1
 [ "$(/usr/bin/grep -Fxc '          path: primary-source' "$workflow")" -eq 1 ] || exit 1
 [ "$(/usr/bin/grep -Fxc '          path: mutation-source' "$workflow")" -eq 1 ] || exit 1
