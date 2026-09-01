@@ -58,6 +58,8 @@ jobs:
             printf 'RAR_EXPECTED_TOOL_PINS_SHA256=%s\n' "$pins_sha"
             printf 'RAR_EXPECTED_RECORD_NONCE=%s\n' "$nonce"
             printf 'RAR_EXPECTED_ARTIFACT_NAME=controller-helper-closure-observer-%s-%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+            printf 'RAR_EXPECTED_RUN_ID=%s\n' "$GITHUB_RUN_ID"
+            printf 'RAR_EXPECTED_RUN_ATTEMPT=%s\n' "$GITHUB_RUN_ATTEMPT"
             printf 'RAR_CI_RUNNER_IMAGE_OS=%s\n' "$ImageOS"
             printf 'RAR_CI_RUNNER_IMAGE_VERSION=%s\n' "$ImageVersion"
             printf 'RAR_CI_RUNNER_OS=%s\n' "$RUNNER_OS"
