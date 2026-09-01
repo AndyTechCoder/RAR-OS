@@ -97,7 +97,8 @@ run_case() {
     closure=$case_root/closure
     case_evidence=$case_root/evidence
     case_subject=$case_root/observer-under-test.sh
-    case_log=$case_root/case.log
+    case_stdout=$case_root/stdout.log
+    case_stderr=$case_root/stderr.log
     /usr/bin/mkdir --mode=700 -- "$case_root" "$closure" "$closure/bin" "$closure/lib" \
         "$closure/lib/rustlib" "$closure/share" "$closure/share/doc" || fail "cannot create fixture root for $id"
     printf '%s\n' 'fixture-rustc-v0' > "$closure/bin/rustc"
@@ -117,16 +118,17 @@ run_case() {
         O018) case_evidence=$case_base/O018-outside; /usr/bin/mkdir --mode=700 -- "$case_evidence" ;;
     esac
     generate_subject "$id" "$case_root" "$closure" "$case_evidence" "$case_subject"
-    : > "$case_log"
+    : > "$case_stdout"
+    : > "$case_stderr"
     set +e
     case "$id" in
-        O002) GITHUB_EVENT_NAME=pull_request /usr/bin/dash "$case_subject" >"$case_log" 2>&1 ;;
-        O003) RAR_EXPECTED_SOURCE_REVISION=dddddddddddddddddddddddddddddddddddddddd /usr/bin/dash "$case_subject" >"$case_log" 2>&1 ;;
-        O018) case "$case_evidence" in "$case_root"/*) /usr/bin/dash "$case_subject" >"$case_log" 2>&1 ;; *) printf '%s\n' 'controller rejected out-of-root evidence' >"$case_log"; false ;; esac ;;
-        O019) if /usr/bin/grep -Eq 'curl|wget|nc |socket' "$case_subject"; then printf '%s\n' 'controller rejected network operation' >"$case_log"; false; else /usr/bin/dash "$case_subject" >"$case_log" 2>&1; fi ;;
-        O020) if /usr/bin/grep -Eq 'TOKEN|PASSWORD|SECRET|CREDENTIAL' "$case_subject"; then printf '%s\n' 'controller rejected credential access' >"$case_log"; false; else /usr/bin/dash "$case_subject" >"$case_log" 2>&1; fi ;;
-        O021) /usr/bin/dash "$case_subject" 9<"$fixture" >"$case_log" 2>&1 ;;
-        *) /usr/bin/dash "$case_subject" >"$case_log" 2>&1 ;;
+        O002) GITHUB_EVENT_NAME=pull_request /usr/bin/dash "$case_subject" >"$case_stdout" 2>"$case_stderr" ;;
+        O003) RAR_EXPECTED_SOURCE_REVISION=dddddddddddddddddddddddddddddddddddddddd /usr/bin/dash "$case_subject" >"$case_stdout" 2>"$case_stderr" ;;
+        O018) case "$case_evidence" in "$case_root"/*) /usr/bin/dash "$case_subject" >"$case_stdout" 2>"$case_stderr" ;; *) printf '%s\n' 'controller rejected out-of-root evidence' >"$case_stderr"; false ;; esac ;;
+        O019) if /usr/bin/grep -Eq 'curl|wget|nc |socket' "$case_subject"; then printf '%s\n' 'controller rejected network operation' >"$case_stderr"; false; else /usr/bin/dash "$case_subject" >"$case_stdout" 2>"$case_stderr"; fi ;;
+        O020) if /usr/bin/grep -Eq 'TOKEN|PASSWORD|SECRET|CREDENTIAL' "$case_subject"; then printf '%s\n' 'controller rejected credential access' >"$case_stderr"; false; else /usr/bin/dash "$case_subject" >"$case_stdout" 2>"$case_stderr"; fi ;;
+        O021) /usr/bin/dash "$case_subject" 9<"$fixture" >"$case_stdout" 2>"$case_stderr" ;;
+        *) /usr/bin/dash "$case_subject" >"$case_stdout" 2>"$case_stderr" ;;
     esac
     observed=$?
     set -e
@@ -143,12 +145,13 @@ run_case() {
         result=expected-rejection
         verdict=normalized-not-ready
     fi
-    log_bytes=$(/usr/bin/wc -c < "$case_log" | /usr/bin/tr -d ' ')
-    [ "$log_bytes" -le 4096 ] || fail "$id log exceeded bound"
+    stdout_bytes=$(/usr/bin/wc -c < "$case_stdout" | /usr/bin/tr -d ' ')
+    stderr_bytes=$(/usr/bin/wc -c < "$case_stderr" | /usr/bin/tr -d ' ')
+    [ "$stdout_bytes" -le 4096 ] && [ "$stderr_bytes" -le 4096 ] || fail "$id log exceeded bound"
     nonce=$(printf '%s' "$GITHUB_SHA|$GITHUB_RUN_ID|$GITHUB_RUN_ATTEMPT|$id|nonce" | hash_text)
     root_id=$(printf '%s' "$GITHUB_SHA|$GITHUB_RUN_ID|$GITHUB_RUN_ATTEMPT|$id|root" | hash_text)
-    stdout_sha=$(hash_file "$case_log")
-    stderr_sha=$stdout_sha
+    stdout_sha=$(hash_file "$case_stdout")
+    stderr_sha=$(hash_file "$case_stderr")
     printf 'case|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
         "$id" "$RAR_TRUSTED_CONTROLLER_SHA" "$RAR_EXPECTED_SOURCE_REVISION" \
         "$RAR_EXPECTED_SUBJECT_SHA256" "$RAR_EXPECTED_FIXTURE_SHA256" "$RAR_EXPECTED_TOOL_PINS_SHA256" \
