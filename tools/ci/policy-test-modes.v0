@@ -7,6 +7,7 @@ tools/ci/test-alpha-preimplementation-contract-policy.sh|ephemeral
 tools/ci/test-alpha-boot-platform-contract-policy.sh|ephemeral
 tools/ci/test-controller-handoff-attempt-v0-policy.sh|immutable
 tools/ci/test-controller-helper-evidence-v0-policy.sh|ephemeral
+tools/ci/test-controller-helper-evidence-v1-policy.sh|ephemeral
 tools/ci/test-controller-helper-inventory-v0-policy.sh|ephemeral
 tools/ci/test-development-controller-v2-policy.sh|ephemeral
 tools/ci/test-development-image-policy.sh|ephemeral
