@@ -25,14 +25,14 @@ done
 for script in "$observer" "$wrapper" "$harness" "$policy" "$policy_test"; do
     [ -x "$script" ] || fail "required C2B script is not executable: $script"
 done
-[ "$(sha "$observer")" = e3b4be670797d3f1bc84960d1d1207e470f87ba5a7fadc6327d86b7b61a7f320 ] || fail 'observer bytes escaped review'
+[ "$(sha "$observer")" = 6fa10b187698077bfa96a119c376aeecb2ed4db92a25af3aad0f5add46e3b6cb ] || fail 'observer bytes escaped review'
 [ "$(sha "$contract")" = 944229644f0805876403cd858d0d8c3c993d73bf00baef4c3ffcbbc7a2522836 ] || fail 'contract bytes escaped review'
 [ "$(sha "$test_contract")" = d2f8837b52bfd2f5c77bc527b7106e981a3ed3bd7dd7114953a83316870045d4 ] || fail 'test_contract bytes escaped review'
-[ "$(sha "$workflow")" = 37657af5346ac85bd26f6fffbc8df97c73eceab28cda6dd7eb321b50c468ce0f ] || fail 'workflow bytes escaped review'
-[ "$(sha "$wrapper")" = d154712d3677f370a138fa4fd91c8f81a36d266419569d742cdecb21dacfc198 ] || fail 'wrapper bytes escaped review'
-[ "$(sha "$harness")" = 0d07b24b4229f9f85141af2ce80baa1b21d0dfb9758a845f16ee46a463227391 ] || fail 'harness bytes escaped review'
-[ "$(sha "$policy")" = 635a07258cdc98d4d87405352beb9c9fd9f1069db9ef20ab8c080c4e1b626af7 ] || fail 'policy bytes escaped review'
-[ "$(sha "$policy_test")" = 5294df9cd23f00298b2fd44fab32b94f735b8365026c34e1129be649b9aa3939 ] || fail 'policy_test bytes escaped review'
+[ "$(sha "$workflow")" = a277e658849523c0ceb0774128089fbb405a5c95e7311acceba5346f6bb98c19 ] || fail 'workflow bytes escaped review'
+[ "$(sha "$wrapper")" = 70d7ce475553df5ce962ec45a6ac08bae776c70c04afd2ebeccfcba14a8a7ec0 ] || fail 'wrapper bytes escaped review'
+[ "$(sha "$harness")" = 459d44d23d0e4036d233ab9bf1ab70b0b665352d2d7646f30d59ef67ab8b8677 ] || fail 'harness bytes escaped review'
+[ "$(sha "$policy")" = 112e4f700e0427b429333b4d6fa13161b57d1a5963c66208bc0d69cbaa6df10f ] || fail 'policy bytes escaped review'
+[ "$(sha "$policy_test")" = f896fdf82c3e5b5eec70cb23bd64b5edf0b878e5f40c8d9dae1328008be1cafb ] || fail 'policy_test bytes escaped review'
 [ "$(sha "$catalog")" = 6b946f446d773389e924be0c8d35e88577b3e177f3da0d52af3f52cea398e289 ] || fail 'catalog bytes escaped review'
 [ "$(sha "$fixture")" = bbef536b8820f962d3ce529de904421b9aa8cf808ad29953321f2b1cdafd0314 ] || fail 'fixture bytes escaped review'
 [ "$(sha "$pins")" = c9cc0e778a0ee766d7e83286021c29aaff29ad55eea4431f921f4cc77972c3a9 ] || fail 'pins bytes escaped review'
@@ -41,9 +41,10 @@ done
 grep -Fqx 'execution_authority=C2-main-only-observer-harness-plus-one-candidate-observation-after-C2A-exact-main' "$test_contract" || fail 'C2 authority changed'
 grep -Fqx 'authority_scope=O001-through-O021-isolated-harness+one-production-observer;no-compiler+helper+target+VM+readiness+trust-state-authority' "$test_contract" || fail 'C2 scope changed'
 grep -Fqx '[ "${RAR_CONTROLLER_HELPER_CLOSURE_DISCOVERY-}" = 1 ] || fail '''explicit discovery mode is required'''' "$observer" || fail 'observer explicit mode missing'
+grep -Fqx 'hardlinked=$(/usr/bin/find -P "$root" -type f -links +1 -printf x -quit) || fail '''cannot inspect closure hardlinks'''' "$observer" || fail 'observer no-hardlink predicate missing'
 grep -Fqx '[ "$GITHUB_SHA" = "$RAR_TRUSTED_CONTROLLER_SHA" ] || fail '''controller is not exact main'''' "$observer" || fail 'controller identity check missing'
 grep -Fqx '[ "$GITHUB_SHA" = "$RAR_EXPECTED_SOURCE_REVISION" ] || fail '''source is not exact main'''' "$observer" || fail 'source identity check missing'
-grep -Fqx 'exec /usr/bin/dash "$subject"' "$harness" || fail 'single production observer handoff missing'
+grep -Fqx '/usr/bin/dash "$subject" || fail '''production observer failed'''' "$harness" || fail 'single production observer handoff missing'
 /bin/sh "$policy" "$root" >/dev/null || fail 'C2B workflow policy invalid'
 wired=$(/usr/bin/grep -Rl -F 'observe-controller-helper-closure.sh' "$root/.github/workflows" | /usr/bin/sort)
 [ "$wired" = "$workflow" ] || fail 'observer workflow wiring is missing or duplicated'
