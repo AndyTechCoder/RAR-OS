@@ -11,6 +11,7 @@ literal_values=schema:rar-alpha-controller-helper-closure-observer-run-evidence-
 revision_rule=controller_sha+source_sha:identical-nonzero-lowercase-hex-exactly-40
 decimal_rule=run_id+run_attempt+case_evidence_bytes+manifest_bytes+receipt_bytes:canonical-positive-decimal-1..20-digits,no-leading-zero
 digest_rule=oci-image-suffix+wrapper+subject+fixture+tool-pins+case-evidence+manifest+receipt+record-nonce+record-sha:nonzero-lowercase-hex-exactly-64
+cryptographic_residual_rule=actual-SHA256-zero-for-derived-output-or-record-digest-is-unconstructible-for-fixture-testing;validator-source-must-explicitly-reject;two-source-proofs-required
 runner_version_rule=ASCII-digits-and-dots-1..64,starts+ends-digit,no-adjacent-dot
 record_digest_rule=record_sha256-is-SHA256-of-the-exact-first-30-lines-in-field-order-with-each-line-LF-terminated;line-31-is-excluded;no-alternate-serialization
 file_binding_rule=validator-hashes-the-four-trusted-inputs+three-observer-outputs-and-binds-exact-byte-counts;producer-values-are-not-attestation
