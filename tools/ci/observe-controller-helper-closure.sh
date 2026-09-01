@@ -101,6 +101,8 @@ set +f
 
 unexpected=$(/usr/bin/find -P "$root" ! \( -type d -o -type f \) -printf x -quit) || fail 'cannot inspect closure topology'
 [ -z "$unexpected" ] || fail 'closure contains a non-directory or non-regular entry'
+hardlinked=$(/usr/bin/find -P "$root" -type f -links +1 -printf x -quit) || fail 'cannot inspect closure hardlinks'
+[ -z "$hardlinked" ] || fail 'closure contains a hardlinked regular file'
 
 evidence=/evidence
 [ -d "$evidence" ] && [ ! -L "$evidence" ] || fail 'controller evidence boundary is unavailable'
