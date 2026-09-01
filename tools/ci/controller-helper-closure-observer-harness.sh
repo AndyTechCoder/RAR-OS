@@ -63,8 +63,9 @@ generate_subject() {
             *'shell identity mismatch'*)
                 if [ "$id" = O004 ]; then printf "%s\n" "[ \"\$(hash_file \"\$shell\")\" = 0000000000000000000000000000000000000000000000000000000000000000 ] || fail 'shell identity mismatch'"; else printf '%s\n' "$line"; fi ;;
             unexpected=*'cannot inspect closure topology'*)
-                if [ "$id" = O005 ]; then printf '%s\n' 'unexpected=x'; else printf '%s\n' "$line"; fi
-                if [ "$id" = O007 ]; then printf "%s\n" "fail 'injected alias failure'"; fi ;;
+                if [ "$id" = O005 ]; then printf '%s\n' 'unexpected=x'; else printf '%s\n' "$line"; fi ;;
+            hardlinked=*'cannot inspect closure hardlinks'*)
+                if [ "$id" = O007 ]; then printf '%s\n' 'hardlinked=x'; else printf '%s\n' "$line"; fi ;;
             *'toolchain root is unavailable or symbolic'*)
                 printf '%s\n' "$line"
                 if [ "$id" = O021 ]; then printf "%s\n" "[ ! -e /proc/self/fd/9 ] || fail 'unexpected inherited descriptor: 9'"; fi ;;
