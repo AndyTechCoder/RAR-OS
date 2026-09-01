@@ -33,7 +33,12 @@ for required in \
     'identity="rar-c2b-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"' \
     'workspace_parent=$(/usr/bin/dirname "$GITHUB_WORKSPACE")' \
     'partial="$workspace_parent/.rar-c2b-checkout-partial-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"' \
+    'partial_device=$(/usr/bin/stat -c %d "$partial")' \
+    'partial_inode=$(/usr/bin/stat -c %i "$partial")' \
+    'parent_device=$(/usr/bin/stat -c %d "$workspace_parent")' \
+    'parent_inode=$(/usr/bin/stat -c %i "$workspace_parent")' \
     'container_absent() {' 'volume_absent() {' 'remove_container() {' 'remove_volume() {' \
+    '/usr/bin/docker container ls -a' '/usr/bin/docker volume ls' \
     'trap cleanup EXIT' "trap 'exit 130' HUP INT TERM" \
     'if [[ "$cleanup_failed" -ne 0 ]]; then exit 1; fi' \
     '/usr/bin/docker volume create --driver local' '--opt type=tmpfs --opt device=tmpfs' \
