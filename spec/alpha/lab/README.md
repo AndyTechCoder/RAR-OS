@@ -70,11 +70,11 @@ non-activating: it contains no compiler, builder, source, binary, or evidence
 identity and cannot become ready. The selected path must reproduce the same
 bounded helper twice and bind isolated test evidence before controller activation.
 
-`controller-helper-closure-observation-v0.fields` defines a source-only,
-inactive observer for a future separately authorized cloud run. The observer is
-not wired to automation, cannot compile or execute the helper or target, and
-cannot update any lock, inventory, profile, gate report, or readiness state. Its
-only permitted future output is a candidate closure manifest plus an
+`controller-helper-closure-observation-v0.fields` defines the bounded
+candidate observer used only by C2B's separately reviewed main-push workflow.
+The staged observer cannot compile or execute the helper or target and cannot
+update any lock, inventory, profile, gate report, or readiness state. It may
+emit only a candidate closure manifest plus an
 `observed-not-reviewed-not-ready` receipt; both still require exact-set review
 and pinning before any helper build or test can be considered.
 
@@ -85,9 +85,15 @@ candidate record. The contextual validator binds exact controller/source and
 run identity, immutable inputs, the four-file output set, byte counts, hashes,
 artifact name, retention, and anti-replay nonce. Its isolated mutation policy
 rejects stale, reordered, aliased, self-attested, oversized, incomplete, or
-ready-substituted evidence. C2A remains source-only: no workflow, wrapper,
-runtime harness, observation, compiler, helper, target, or readiness authority
-exists until the separately merged C2B gate.
+ready-substituted evidence. C2A merged through PRs #111-#112; exact-main
+Specifications run `33473648494` passed validation and all 27 isolated
+mutation-policy tests at
+`c862e27771b999e593ae26ea12ef424613b67bac`. C2B now stages the main-only
+anonymous source acquisition, wrapper, O001-O021 harness, independent
+validator handoff, and exact four-file retention boundary. It remains
+candidate-only until its packet clarification, reviews, merge, distinct
+exact-main Specifications run, and observer run pass; compiler, helper, target,
+lock, inventory, profile, gate, and readiness authority remain denied.
 
 `controller-helper-closure-verification-v0.fields` defines the separate
 source-only exact-set verifier required after observation. It has no candidate
