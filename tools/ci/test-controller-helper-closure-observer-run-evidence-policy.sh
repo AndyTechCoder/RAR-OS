@@ -35,6 +35,17 @@ export RAR_EXPECTED_TOOL_PINS_SHA256=95b0263551797fc809d29496560988cacefb639a824
 export RAR_EXPECTED_ARTIFACT_NAME=controller-helper-closure-observer-12345-1
 export RAR_EXPECTED_RECORD_NONCE=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
+write_case_evidence() {
+    file=$evidence/controller-helper-closure-observer.cases.v0
+    /usr/bin/printf '%s\n' 'schema=rar-alpha-controller-helper-closure-observer-case-evidence-v0' 'case_count=21' > "$file"
+    i=1
+    while [ "$i" -le 21 ]; do
+        id=$(/usr/bin/printf 'O%03d' "$i"); nonce=$(/usr/bin/printf '%064x' "$i"); root_id=$(/usr/bin/printf '%064x' "$((i + 100))")
+        if [ "$i" -eq 1 ]; then case_exit=0 result=pass verdict=observed-not-reviewed-not-ready; else case_exit=1 result=expected-rejection verdict=normalized-not-ready; fi
+        /usr/bin/printf 'case|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$id" "$RAR_TRUSTED_CONTROLLER_SHA" "$RAR_EXPECTED_SOURCE_REVISION" "$RAR_EXPECTED_SUBJECT_SHA256" "$RAR_EXPECTED_FIXTURE_SHA256" "$RAR_EXPECTED_TOOL_PINS_SHA256" "$nonce" "$root_id" "$case_exit" 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' "$result" "$verdict" >> "$file"
+        i=$((i + 1))
+    done
+}
 reset() {
     /bin/rm -rf "$evidence"
     /bin/mkdir -m 700 "$evidence"
@@ -42,17 +53,24 @@ reset() {
     /usr/bin/printf '%s\n' subject-v0 > "$subject"
     /usr/bin/printf '%s\n' fixture-v0 > "$fixture"
     /usr/bin/printf '%s\n' tool-pins-v0 > "$tool_pins"
-    /usr/bin/printf '%s\n' case-evidence-v0 > "$evidence/controller-helper-closure-observer.cases.v0"
+    write_case_evidence
     /usr/bin/printf '%s\n' manifest-v0 > "$evidence/controller-helper-closure.sha256"
     /usr/bin/printf '%s\n' receipt-v0 > "$evidence/controller-helper-closure.receipt"
     /bin/cp "$valid" "$record"
 }
 rehash() {
     pre=$work/record.pre
-    /usr/bin/sed -n '1,30p' "$record" > "$pre"
+    /usr/bin/sed '$d' "$record" > "$pre"
     digest=$(/usr/bin/shasum -a 256 "$pre" | /usr/bin/awk '{ print $1 }')
     /bin/mv "$pre" "$record"
     /usr/bin/printf 'record_sha256=%s\n' "$digest" >> "$record"
+} 
+bind_case_evidence() {
+    file=$evidence/controller-helper-closure-observer.cases.v0
+    digest=$(/usr/bin/shasum -a 256 "$file" | /usr/bin/awk '{ print $1 }')
+    size=$(/usr/bin/stat -c %s "$file")
+    /usr/bin/sed -i "s/case_evidence_sha256=.*/case_evidence_sha256=$digest/;s/case_evidence_bytes=.*/case_evidence_bytes=$size/" "$record"
+    rehash
 }
 reject() {
     label=$1
@@ -127,4 +145,66 @@ reject symbolic-record validate
 reset
 /bin/ln "$record" "$work/hardlink"
 reject hardlinked-record validate
-printf '%s\n' 'controller-helper observer run-evidence policy passed: cases=20 candidate-only'
+reset
+/usr/bin/sed -i '8d' "$record"; rehash
+reject missing-record-field validate
+reset
+/usr/bin/sed -i '30i extra_field=x' "$record"; rehash
+reject extra-record-field validate
+reset
+/usr/bin/sed -i '8p' "$record"; rehash
+reject duplicate-record-field validate
+reset
+/usr/bin/printf '\r\n' >> "$record"
+reject CR-record validate
+reset
+/usr/bin/printf '\000\n' >> "$record"
+reject NUL-record validate
+reset
+/usr/bin/printf '\377\n' >> "$record"
+reject non-ASCII-record validate
+reset
+/usr/bin/printf '\n' >> "$record"
+reject blank-record-line validate
+reset
+/usr/bin/sed -i 's/run_id=12345/run_id=01/' "$record"; rehash
+reject malformed-decimal validate
+reset
+/usr/bin/sed -i 's/wrapper_sha256=.*/wrapper_sha256=g/' "$record"; rehash
+reject malformed-digest validate
+reset
+/usr/bin/sed -i 's/runner_image_version=.*/runner_image_version=1..2/' "$record"; rehash
+reject malformed-runner-version validate
+reset
+/usr/bin/sed -i '$d' "$evidence/controller-helper-closure-observer.cases.v0"; bind_case_evidence
+reject missing-case validate
+reset
+/usr/bin/printf '%s\n' 'case|O022|cccccccccccccccccccccccccccccccccccccccc|cccccccccccccccccccccccccccccccccccccccc|fba77ade0af8c98bb8b09367c201a4645aaf7f8aa55fa2d6289bf55801d7161c|b185ff95d95be586f97e28f0038382021ceb3cb5c406b9c989b5b50dd6eb8c20|95b0263551797fc809d29496560988cacefb639a82436c69be514ab37fa11ba1|0000000000000000000000000000000000000000000000000000000000000016|000000000000000000000000000000000000000000000000000000000000007a|1|e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855|e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855|expected-rejection|normalized-not-ready' >> "$evidence/controller-helper-closure-observer.cases.v0"; bind_case_evidence
+reject extra-case validate
+reset
+/usr/bin/awk 'NR==4 { a=$0; next } NR==5 { print; print a; next } { print }' "$evidence/controller-helper-closure-observer.cases.v0" > "$work/cases"; /bin/mv "$work/cases" "$evidence/controller-helper-closure-observer.cases.v0"; bind_case_evidence
+reject reordered-case validate
+reset
+/usr/bin/sed -i '5s/case|O003|/case|O002|/' "$evidence/controller-helper-closure-observer.cases.v0"; bind_case_evidence
+reject duplicate-case validate
+reset
+/usr/bin/sed -i '4s/|cccccccccccccccccccccccccccccccccccccccc|/|dddddddddddddddddddddddddddddddddddddddd|/' "$evidence/controller-helper-closure-observer.cases.v0"; bind_case_evidence
+reject case-identity-mismatch validate
+reset
+nonce1=$(/usr/bin/awk -F '|' 'NR==3 { print $8 }' "$evidence/controller-helper-closure-observer.cases.v0")
+/usr/bin/awk -F '|' -v OFS='|' -v x="$nonce1" 'NR==4 { $8=x } { print }' "$evidence/controller-helper-closure-observer.cases.v0" > "$work/cases"; /bin/mv "$work/cases" "$evidence/controller-helper-closure-observer.cases.v0"; bind_case_evidence
+reject case-nonce-reuse validate
+reset
+root1=$(/usr/bin/awk -F '|' 'NR==3 { print $9 }' "$evidence/controller-helper-closure-observer.cases.v0")
+/usr/bin/awk -F '|' -v OFS='|' -v x="$root1" 'NR==4 { $9=x } { print }' "$evidence/controller-helper-closure-observer.cases.v0" > "$work/cases"; /bin/mv "$work/cases" "$evidence/controller-helper-closure-observer.cases.v0"; bind_case_evidence
+reject case-root-reuse validate
+reset
+/usr/bin/sed -i '4s/expected-rejection/pass/' "$evidence/controller-helper-closure-observer.cases.v0"; bind_case_evidence
+reject case-wrong-result validate
+reset
+/usr/bin/sed -i '4s/normalized-not-ready/observed-not-reviewed-not-ready/' "$evidence/controller-helper-closure-observer.cases.v0"; bind_case_evidence
+reject case-wrong-verdict validate
+reset
+/usr/bin/awk -F '|' -v OFS='|' 'NR==4 { $10=0 } { print }' "$evidence/controller-helper-closure-observer.cases.v0" > "$work/cases"; /bin/mv "$work/cases" "$evidence/controller-helper-closure-observer.cases.v0"; bind_case_evidence
+reject case-exit-mismatch validate
+printf '%s\n' 'controller-helper observer run-evidence policy passed: cases=40 candidate-only'
