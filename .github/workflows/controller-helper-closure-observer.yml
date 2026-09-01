@@ -46,29 +46,89 @@ jobs:
           acquisition="$identity-acquire"
           transfer="$identity-transfer"
           volume="$identity-source"
-          partial="$RUNNER_TEMP/controller-helper-closure-checkout-partial-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          workspace_parent=$(/usr/bin/dirname "$GITHUB_WORKSPACE")
+          partial="$workspace_parent/.rar-c2b-checkout-partial-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          partial_device=
+          partial_inode=
+          parent_device=
+          parent_inode=
+          container_absent() {
+            local found
+            found=$(/usr/bin/timeout --signal=KILL 10s /usr/bin/docker container ls -a \
+              --filter "name=^/$1$" --format '{{.Names}}') || return 1
+            [[ -z "$found" ]]
+          }
+          volume_absent() {
+            local found
+            found=$(/usr/bin/timeout --signal=KILL 10s /usr/bin/docker volume ls \
+              --filter "name=^$1$" --format '{{.Name}}') || return 1
+            [[ -z "$found" ]]
+          }
+          remove_container() {
+            local name=$1
+            if ! container_absent "$name"; then
+              /usr/bin/timeout --signal=KILL 10s /usr/bin/docker rm --force "$name" >/dev/null || return 1
+            fi
+            container_absent "$name"
+          }
+          remove_volume() {
+            local name=$1
+            if ! volume_absent "$name"; then
+              /usr/bin/timeout --signal=KILL 10s /usr/bin/docker volume rm --force "$name" >/dev/null || return 1
+            fi
+            volume_absent "$name"
+          }
           cleanup() {
-            /usr/bin/timeout --kill-after=2s 10s /usr/bin/docker rm --force "$acquisition" "$transfer" >/dev/null 2>&1 || true
-            /usr/bin/timeout --kill-after=2s 10s /usr/bin/docker volume rm --force "$volume" >/dev/null 2>&1 || true
-            if [[ -n "${partial-}" && -d "$partial" ]]; then
+            local status=$? cleanup_failed=0
+            trap - EXIT HUP INT TERM
+            remove_container "$acquisition" || cleanup_failed=1
+            remove_container "$transfer" || cleanup_failed=1
+            remove_volume "$volume" || cleanup_failed=1
+            if [[ -n "${partial-}" && (-e "$partial" || -L "$partial") ]]; then
               case "$partial" in
-                "$RUNNER_TEMP"/controller-helper-closure-checkout-partial-"$GITHUB_RUN_ID"-"$GITHUB_RUN_ATTEMPT") /usr/bin/rm -rf -- "$partial" ;;
-                *) return 1 ;;
+                "$workspace_parent"/.rar-c2b-checkout-partial-"$GITHUB_RUN_ID"-"$GITHUB_RUN_ATTEMPT")
+                  if [[ -d "$partial" && ! -L "$partial" &&
+                        "$(/usr/bin/stat -c %d "$partial")" == "$partial_device" &&
+                        "$(/usr/bin/stat -c %i "$partial")" == "$partial_inode" ]]; then
+                    /usr/bin/chmod -R u+w "$partial" || cleanup_failed=1
+                    /usr/bin/rm -rf -- "$partial" || cleanup_failed=1
+                    [[ ! -e "$partial" && ! -L "$partial" ]] || cleanup_failed=1
+                  else
+                    cleanup_failed=1
+                  fi
+                  ;;
+                *) cleanup_failed=1 ;;
               esac
             fi
+            container_absent "$acquisition" || cleanup_failed=1
+            container_absent "$transfer" || cleanup_failed=1
+            volume_absent "$volume" || cleanup_failed=1
+            if [[ "$cleanup_failed" -ne 0 ]]; then exit 1; fi
+            exit "$status"
           }
-          trap cleanup EXIT HUP INT TERM
+          trap cleanup EXIT
+          trap 'exit 130' HUP INT TERM
+          [[ -d "$workspace_parent" && ! -L "$workspace_parent" ]]
+          [[ "$(CDPATH= cd -- "$workspace_parent" && pwd -P)" == "$workspace_parent" ]]
+          parent_device=$(/usr/bin/stat -c %d "$workspace_parent")
+          parent_inode=$(/usr/bin/stat -c %i "$workspace_parent")
           [[ -d "$GITHUB_WORKSPACE" && ! -L "$GITHUB_WORKSPACE" ]]
           [[ -z "$(/usr/bin/find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -print -quit)" ]]
           [[ ! -e "$partial" && ! -L "$partial" ]]
-          ! /usr/bin/docker inspect "$acquisition" >/dev/null 2>&1
-          ! /usr/bin/docker inspect "$transfer" >/dev/null 2>&1
-          ! /usr/bin/docker volume inspect "$volume" >/dev/null 2>&1
+          container_absent "$acquisition"
+          container_absent "$transfer"
+          volume_absent "$volume"
           /usr/bin/install -d -m 700 "$partial"
+          partial_device=$(/usr/bin/stat -c %d "$partial")
+          partial_inode=$(/usr/bin/stat -c %i "$partial")
+          [[ "$partial_device" == "$parent_device" ]]
           /usr/bin/docker volume create --driver local \
             --opt type=tmpfs --opt device=tmpfs \
             --opt "o=size=67108864,uid=$runner_uid,gid=$runner_gid,mode=0700,noexec,nosuid,nodev" \
             "$volume" >/dev/null
+          [[ "$(/usr/bin/docker volume inspect --format '{{index .Options "type"}}' "$volume")" == tmpfs ]]
+          [[ "$(/usr/bin/docker volume inspect --format '{{index .Options "device"}}' "$volume")" == tmpfs ]]
+          [[ "$(/usr/bin/docker volume inspect --format '{{index .Options "o"}}' "$volume")" == "size=67108864,uid=$runner_uid,gid=$runner_gid,mode=0700,noexec,nosuid,nodev" ]]
           /usr/bin/docker create --name "$acquisition" --read-only --network bridge \
             --user "$runner_uid:$runner_gid" --cpus 1 --memory 512m --memory-swap 512m --pids-limit 64 \
             --security-opt no-new-privileges --cap-drop ALL \
@@ -79,6 +139,7 @@ jobs:
             GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false \
             /usr/bin/dash -c '
               set -eu
+              [ "$(/usr/bin/sha256sum /usr/bin/git | /usr/bin/awk "{print \\$1}")" = 356db14e102d68a1a37d8a1ac577dfd678d45d46e92f468bef8b7154e7bfdc60 ]
               /usr/bin/git init /checkout
               /usr/bin/git -C /checkout remote add origin https://github.com/AndyTechCoder/RAR-OS.git
               /usr/bin/git -C /checkout -c credential.helper= -c core.askPass= \
@@ -89,17 +150,24 @@ jobs:
               [ "$(/usr/bin/git -C /checkout rev-parse HEAD)" = "$1" ]
               [ -z "$(/usr/bin/git -C /checkout status --porcelain=v1 --untracked-files=all)" ]
               [ -z "$(/usr/bin/git -C /checkout for-each-ref --format="%(refname)")" ]
-              bytes=$(/usr/bin/du -sb /checkout | /usr/bin/awk "{print \$1}")
+              bytes=$(/usr/bin/du -sb /checkout | /usr/bin/awk "{print \\$1}")
               files=$(/usr/bin/find -P /checkout -xdev -type f -printf x | /usr/bin/wc -c)
-              set -- $(/usr/bin/git -C /checkout count-objects -v | /usr/bin/awk "/^(count|in-pack):/ {print \$2}")
+              set -- $(/usr/bin/git -C /checkout count-objects -v | /usr/bin/awk "/^(count|in-pack):/ {print \\$2}")
               [ "$#" -eq 2 ]
               objects=$(($1 + $2))
               [ "$bytes" -le 67108864 ] && [ "$files" -le 8192 ] && [ "$objects" -le 32768 ]
             ' rar-c2b-acquire "$GITHUB_SHA" >/dev/null
-          /usr/bin/timeout --signal=TERM --kill-after=10s 120s /usr/bin/docker start --attach "$acquisition"
-          [[ "$(/usr/bin/docker inspect --format '{{.State.ExitCode}}' "$acquisition")" -eq 0 ]]
-          /usr/bin/timeout --kill-after=2s 10s /usr/bin/docker rm --force "$acquisition" >/dev/null
-          acquisition=
+          set +e
+          /usr/bin/timeout --signal=KILL 120s /usr/bin/docker start --attach "$acquisition"
+          acquisition_start=$?
+          set -e
+          acquisition_exit=unavailable
+          if [[ "$acquisition_start" -eq 0 ]]; then
+            acquisition_exit=$(/usr/bin/docker inspect --format '{{.State.ExitCode}}' "$acquisition")
+          fi
+          remove_container "$acquisition"
+          container_absent "$transfer"
+          [[ "$acquisition_start" -eq 0 && "$acquisition_exit" -eq 0 ]]
           /usr/bin/docker create --name "$transfer" --read-only --network none \
             --user "$runner_uid:$runner_gid" --cpus 1 --memory 512m --memory-swap 512m --pids-limit 64 \
             --security-opt no-new-privileges --cap-drop ALL \
@@ -111,28 +179,49 @@ jobs:
             GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false \
             /usr/bin/dash -c '
               set -eu
+              [ "$(/usr/bin/sha256sum /usr/bin/git | /usr/bin/awk "{print \\$1}")" = 356db14e102d68a1a37d8a1ac577dfd678d45d46e92f468bef8b7154e7bfdc60 ]
               /usr/bin/cp -a /source/. /destination/
               [ "$(/usr/bin/git -C /destination rev-parse HEAD)" = "$1" ]
               [ -z "$(/usr/bin/git -C /destination status --porcelain=v1 --untracked-files=all)" ]
               [ -z "$(/usr/bin/git -C /destination for-each-ref --format="%(refname)")" ]
-              bytes=$(/usr/bin/du -sb /destination | /usr/bin/awk "{print \$1}")
+              bytes=$(/usr/bin/du -sb /destination | /usr/bin/awk "{print \\$1}")
               files=$(/usr/bin/find -P /destination -xdev -type f -printf x | /usr/bin/wc -c)
-              set -- $(/usr/bin/git -C /destination count-objects -v | /usr/bin/awk "/^(count|in-pack):/ {print \$2}")
+              set -- $(/usr/bin/git -C /destination count-objects -v | /usr/bin/awk "/^(count|in-pack):/ {print \\$2}")
               [ "$#" -eq 2 ]
               objects=$(($1 + $2))
               [ "$bytes" -le 67108864 ] && [ "$files" -le 8192 ] && [ "$objects" -le 32768 ]
               [ "$(CDPATH= cd -- /destination && pwd -P)" = /destination ]
             ' rar-c2b-transfer "$GITHUB_SHA" >/dev/null
-          /usr/bin/timeout --signal=TERM --kill-after=10s 30s /usr/bin/docker start --attach "$transfer"
-          [[ "$(/usr/bin/docker inspect --format '{{.State.ExitCode}}' "$transfer")" -eq 0 ]]
-          /usr/bin/timeout --kill-after=2s 10s /usr/bin/docker rm --force "$transfer" >/dev/null
-          transfer=
-          /usr/bin/timeout --kill-after=2s 10s /usr/bin/docker volume rm "$volume" >/dev/null
-          volume=
+          set +e
+          /usr/bin/timeout --signal=KILL 30s /usr/bin/docker start --attach "$transfer"
+          transfer_start=$?
+          set -e
+          transfer_exit=unavailable
+          if [[ "$transfer_start" -eq 0 ]]; then
+            transfer_exit=$(/usr/bin/docker inspect --format '{{.State.ExitCode}}' "$transfer")
+          fi
+          remove_container "$transfer"
+          [[ "$transfer_start" -eq 0 && "$transfer_exit" -eq 0 ]]
+          remove_volume "$volume"
+          container_absent "$acquisition"
+          container_absent "$transfer"
+          volume_absent "$volume"
+          [[ -d "$partial" && ! -L "$partial" ]]
+          [[ "$(/usr/bin/stat -c %d "$partial")" == "$partial_device" ]]
+          [[ "$(/usr/bin/stat -c %i "$partial")" == "$partial_inode" ]]
+          [[ "$(/usr/bin/stat -c %d "$workspace_parent")" == "$parent_device" ]]
+          [[ "$(/usr/bin/stat -c %i "$workspace_parent")" == "$parent_inode" ]]
+          [[ "$partial_device" == "$parent_device" ]]
           /usr/bin/chmod -R a-w "$partial"
           /usr/bin/rmdir "$GITHUB_WORKSPACE"
-          /usr/bin/mv "$partial" "$GITHUB_WORKSPACE"
+          /usr/bin/mv -T "$partial" "$GITHUB_WORKSPACE"
+          [[ -d "$GITHUB_WORKSPACE" && ! -L "$GITHUB_WORKSPACE" ]]
+          [[ "$(/usr/bin/stat -c %d "$GITHUB_WORKSPACE")" == "$partial_device" ]]
+          [[ "$(/usr/bin/stat -c %i "$GITHUB_WORKSPACE")" == "$partial_inode" ]]
           partial=
+          container_absent "$acquisition"
+          container_absent "$transfer"
+          volume_absent "$volume"
           trap - EXIT HUP INT TERM
 
       - name: Verify exact immutable checkout
