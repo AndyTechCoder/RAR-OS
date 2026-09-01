@@ -45,6 +45,7 @@ workflow=$workflows/controller-helper-closure-observer.yml
 validator_reference=tools/ci/verify-controller-helper-closure-observer-run-evidence.sh
 validator_stem=verify-controller-helper-closure-observer-run-evidence
 policy_reference=test-controller-helper-closure-observer-run-evidence-policy.sh
+policy_stem=test-controller-helper-closure-observer-run-evidence-policy
 count_workflow_references() {
     needle=$1
     /usr/bin/find "$workflows" -type f \( -name '*.yml' -o -name '*.yaml' \) \
@@ -53,8 +54,10 @@ count_workflow_references() {
 }
 validator_exact_count=$(count_workflow_references "$validator_reference")
 validator_stem_count=$(count_workflow_references "$validator_stem")
-policy_count=$(count_workflow_references "$policy_reference")
-[ "$policy_count" -eq 0 ] || fail 'C2 mutation policy is wired to a workflow'
+policy_exact_count=$(count_workflow_references "$policy_reference")
+policy_stem_count=$(count_workflow_references "$policy_stem")
+[ "$policy_exact_count" -eq 0 ] || fail 'C2 mutation policy is wired to a workflow'
+[ "$policy_stem_count" -eq 0 ] || fail 'C2 mutation policy has a partial workflow binding'
 if [ -e "$workflow" ] || [ -L "$workflow" ]; then
     [ -f "$workflow" ] && [ ! -L "$workflow" ] && [ -s "$workflow" ] ||
         fail 'C2B workflow is missing, symbolic, or empty'
