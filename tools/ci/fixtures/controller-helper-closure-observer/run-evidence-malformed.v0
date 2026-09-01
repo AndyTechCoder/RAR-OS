@@ -1,11 +1,11 @@
 schema=rar-alpha-controller-helper-closure-observer-run-evidence-v0
-status=ready
+status=candidate-not-reviewed-not-ready
 repository=AndyTechCoder/RAR-OS
 ref=refs/heads/main
 event=push
 controller_sha=cccccccccccccccccccccccccccccccccccccccc
 source_sha=cccccccccccccccccccccccccccccccccccccccc
-run_id=12345
+run-id=12345
 run_attempt=1
 runner_image_os=ubuntu24
 runner_image_version=20260823.283.1
@@ -16,16 +16,30 @@ wrapper_sha256=f2019e2db64239587dde889676bb202e51343713e3067b45880072803e944fb6
 subject_sha256=fba77ade0af8c98bb8b09367c201a4645aaf7f8aa55fa2d6289bf55801d7161c
 fixture_sha256=b185ff95d95be586f97e28f0038382021ceb3cb5c406b9c989b5b50dd6eb8c20
 tool_pins_sha256=95b0263551797fc809d29496560988cacefb639a82436c69be514ab37fa11ba1
-case_evidence_sha256=cce0a6be6bf64c43b48be31db25f0817666c899b440bb0e234beefcf976af7c5
+case_evidence_sha256=perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LC_ALL = "C.UTF-8",
+	LC_CTYPE = "C.UTF-8",
+	LANG = "C.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+panic: locale.c: 4486: Could not change LC_CTYPE locale to C.UTF-8, errno=9
 manifest_sha256=58deeab77623844dd6f35d2533ad4c28cf097ba083f1db994c50c306f25245b5
 receipt_sha256=58d7c68bffe38a881ec9f0dfcbfc95d5c0f0dfb31bcb505e3657d14c87baf42e
 artifact_name=controller-helper-closure-observer-12345-1
 retention_days=14
 observed_exit=0
-case_evidence_bytes=17
+case_evidence_bytes=12449
 manifest_bytes=12
 receipt_bytes=11
 output_count=4
 verdict=candidate-not-reviewed-not-ready
 record_nonce=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-record_sha256=3975b84f0a1456c5fdb731b15afaabf668f28782be902f8448324ce98cfb383f
+record_sha256=perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LC_ALL = "C.UTF-8",
+	LC_CTYPE = "C.UTF-8",
+	LANG = "C.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+panic: locale.c: 4486: Could not change LC_CTYPE locale to C.UTF-8, errno=9
