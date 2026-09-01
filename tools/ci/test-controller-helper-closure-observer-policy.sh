@@ -159,4 +159,7 @@ reject container-absence-query check
 reset
 /usr/bin/sed -i 's/if \[\[ "\$cleanup_failed" -ne 0 \]\]; then exit 1; fi/if [[ "$cleanup_failed" -ne 0 ]]; then exit 0; fi/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject cleanup-failure check
-printf '%s\n' 'controller-helper observer policy mutations passed: cases=42'
+reset
+/usr/bin/sed -i 's/force_remove_created_container "\$acquisition"/remove_container "$acquisition"/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject immediate-acquisition-removal check
+printf '%s\n' 'controller-helper observer policy mutations passed: cases=43'
