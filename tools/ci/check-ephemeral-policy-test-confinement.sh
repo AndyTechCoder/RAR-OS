@@ -16,7 +16,7 @@ workflow=.github/workflows/specifications.yml
 /usr/bin/awk -F '|' '
     NR <= 2 { next }
     NF != 2 || $1 !~ /^tools\/ci\/test-[a-z0-9.-]+\.sh$/ || $2 !~ /^(immutable|ephemeral)$/ || ++seen[$1] != 1 { bad=1 }
-    END { if (NR != 34 || bad) exit 1 }
+    END { if (NR != 35 || bad) exit 1 }
 ' "$manifest"
 
 declared=$(/usr/bin/sed -n '3,$s/|.*//p' "$manifest" | /usr/bin/sort)
@@ -24,7 +24,7 @@ actual=$(/usr/bin/printf '%s\n' tools/ci/test-*.sh | /usr/bin/sort)
 [ "$declared" = "$actual" ] || exit 1
 ephemeral=$(/usr/bin/awk -F '|' '$2 == "ephemeral" { print $1 }' "$manifest")
 immutable=$(/usr/bin/awk -F '|' '$2 == "immutable" { print $1 }' "$manifest")
-[ "$(/usr/bin/printf '%s\n' "$ephemeral" | /usr/bin/awk 'NF { count++ } END { print count + 0 }')" -eq 27 ] || exit 1
+[ "$(/usr/bin/printf '%s\n' "$ephemeral" | /usr/bin/awk 'NF { count++ } END { print count + 0 }')" -eq 28 ] || exit 1
 [ "$(/usr/bin/printf '%s\n' "$immutable" | /usr/bin/awk 'NF { count++ } END { print count + 0 }')" -eq 5 ] || exit 1
 
 printf '%s\n' "$ephemeral" | while IFS= read -r test; do
@@ -53,7 +53,7 @@ done
 
 runner_tests=$(/usr/bin/sed -n 's|^/bin/sh "$root/\(tools/ci/test-[a-z0-9.-]*\.sh\)"$|\1|p' "$runner")
 [ "$runner_tests" = "$ephemeral" ] || exit 1
-[ "$(/usr/bin/grep -Fxc "printf '%s\\n' 'Ephemeral policy tests passed: executed=27 source=read-only scratch=tmpfs'" "$runner")" -eq 1 ] || exit 1
+[ "$(/usr/bin/grep -Fxc "printf '%s\\n' 'Ephemeral policy tests passed: executed=28 source=read-only scratch=tmpfs'" "$runner")" -eq 1 ] || exit 1
 [ "$(/usr/bin/grep -Fxc 'ulimit -f 131072' "$runner")" -eq 1 ] || exit 1
 [ "$(/usr/bin/grep -Fxc '          path: primary-source' "$workflow")" -eq 1 ] || exit 1
 [ "$(/usr/bin/grep -Fxc '          path: mutation-source' "$workflow")" -eq 1 ] || exit 1
@@ -108,4 +108,4 @@ runner_tests=$(/usr/bin/sed -n 's|^/bin/sh "$root/\(tools/ci/test-[a-z0-9.-]*\.s
 [ "$(/usr/bin/grep -Fc 'tools/ci/run-qmp-client-unit-tests.sh' tools/ci/check-sprint-static.sh)" -eq 1 ] || exit 1
 [ "$(/usr/bin/grep -Fc 'tools/ci/run-qmp-client-unit-tests.sh' tools/ci/check-specs.sh)" -eq 2 ] || exit 1
 
-printf '%s\n' 'Ephemeral policy-test confinement passed: ephemeral=27 immutable=5 source=read-only'
+printf '%s\n' 'Ephemeral policy-test confinement passed: ephemeral=28 immutable=5 source=read-only'
