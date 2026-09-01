@@ -36,12 +36,26 @@ jobs:
           [[ "${RUNNER_ARCH-}" == X64 ]]
           [[ "${ImageVersion-}" =~ ^[0-9]+(\.[0-9]+)+$ ]]
 
-      - name: Check out exact main source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-          persist-credentials: false
+      - name: Check out exact main source anonymously
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        run: |
+          checkout_image=rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
+          runner_uid=$(/usr/bin/id -u)
+          runner_gid=$(/usr/bin/id -g)
+          /usr/bin/docker run --rm --read-only --network bridge \
+            --user "$runner_uid:$runner_gid" --cpus 1 --memory 512m --memory-swap 512m --pids-limit 64 \
+            --security-opt no-new-privileges --cap-drop ALL \
+            --tmpfs "/tmp:rw,noexec,nosuid,nodev,size=64m,uid=$runner_uid,gid=$runner_gid,mode=700" \
+            --mount "type=bind,source=$GITHUB_WORKSPACE,target=/workspace" \
+            "$checkout_image" /usr/bin/env -i \
+            HOME=/tmp PATH=/usr/bin:/bin LC_ALL=C LANG=C GIT_CONFIG_NOSYSTEM=1 \
+            GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false \
+            /usr/bin/dash -c '
+              /usr/bin/git init /workspace
+              /usr/bin/git -C /workspace remote add origin https://github.com/AndyTechCoder/RAR-OS.git
+              /usr/bin/git -C /workspace -c credential.helper= -c core.askPass= fetch --no-tags --depth=1 origin "$1"
+              /usr/bin/git -C /workspace checkout --detach FETCH_HEAD
+            ' rar-c2b-checkout "$GITHUB_SHA"
 
       - name: Verify exact immutable checkout
         shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
