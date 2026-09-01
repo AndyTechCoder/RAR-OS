@@ -14,6 +14,7 @@ ulimit -f 131072
 /bin/sh "$root/tools/ci/test-alpha-preimplementation-contract-policy.sh"
 /bin/sh "$root/tools/ci/test-alpha-boot-platform-contract-policy.sh"
 /bin/sh "$root/tools/ci/test-controller-helper-evidence-v0-policy.sh"
+/bin/sh "$root/tools/ci/test-controller-helper-evidence-v1-policy.sh"
 /bin/sh "$root/tools/ci/test-controller-helper-inventory-v0-policy.sh"
 /bin/sh "$root/tools/ci/test-development-controller-v2-policy.sh"
 /bin/sh "$root/tools/ci/test-development-image-policy.sh"
