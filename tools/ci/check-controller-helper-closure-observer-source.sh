@@ -31,7 +31,7 @@ done
 [ "$(sha "$workflow")" = a277e658849523c0ceb0774128089fbb405a5c95e7311acceba5346f6bb98c19 ] || fail 'workflow bytes escaped review'
 [ "$(sha "$wrapper")" = 70d7ce475553df5ce962ec45a6ac08bae776c70c04afd2ebeccfcba14a8a7ec0 ] || fail 'wrapper bytes escaped review'
 [ "$(sha "$harness")" = 459d44d23d0e4036d233ab9bf1ab70b0b665352d2d7646f30d59ef67ab8b8677 ] || fail 'harness bytes escaped review'
-[ "$(sha "$policy")" = 112e4f700e0427b429333b4d6fa13161b57d1a5963c66208bc0d69cbaa6df10f ] || fail 'policy bytes escaped review'
+[ "$(sha "$policy")" = b395e2b884bb96e945e8ae1b4495fa2ce6ff2536ed2ebf7dae15d0d1aab7a339 ] || fail 'policy bytes escaped review'
 [ "$(sha "$policy_test")" = f896fdf82c3e5b5eec70cb23bd64b5edf0b878e5f40c8d9dae1328008be1cafb ] || fail 'policy_test bytes escaped review'
 [ "$(sha "$catalog")" = 6b946f446d773389e924be0c8d35e88577b3e177f3da0d52af3f52cea398e289 ] || fail 'catalog bytes escaped review'
 [ "$(sha "$fixture")" = bbef536b8820f962d3ce529de904421b9aa8cf808ad29953321f2b1cdafd0314 ] || fail 'fixture bytes escaped review'
