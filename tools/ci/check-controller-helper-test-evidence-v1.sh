@@ -24,7 +24,7 @@ evidence=$1; shift
 expected_header=$(printf '%s\n' schema controller_sha source_sha helper_sha closure_acceptance_sha runtime_contract_sha attempt_contract_sha cases_sha fixture_sha run_nonce root_identity case_count failed_count network credential status)
 actual_header=$(/usr/bin/sed -n '1,16p' "$evidence" | /usr/bin/awk -F '=' '{ print $1 }')
 [ "$actual_header" = "$expected_header" ] || fail 'header fields are missing, extra, duplicated, or reordered'
-/usr/bin/awk 'NR > 16 && $0 !~ /^case\\|/ { exit 1 }' "$evidence" || fail 'non-case data follows the header'
+/usr/bin/awk 'NR > 16 && $0 !~ /^case\|/ { exit 1 }' "$evidence" || fail 'non-case data follows the header'
 for value in "$@"; do case "$value" in *[!0-9a-f]*|'') fail 'context identity malformed';; esac; done
 controller=$1 source=$2 helper=$3 acceptance=$4 runtime=$5 attempt=$6 case_sha=$7 fixture=$8 previous_nonce=$9 previous_root=${10}
 for value in "$controller" "$source" "$helper" "$acceptance" "$runtime" "$attempt" "$case_sha" "$fixture" "$previous_nonce" "$previous_root"; do is_sha "$value" || fail 'zero or malformed context identity'; done
