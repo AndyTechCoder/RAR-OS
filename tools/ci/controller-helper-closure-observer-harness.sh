@@ -57,7 +57,7 @@ generate_subject() {
             'scratch=/tmp/rar-controller-helper-closure') printf 'scratch=%s\n' "$case_root/observer-scratch" ;;
             'evidence=/evidence') printf 'evidence=%s\n' "$case_evidence" ;;
             *'rustc identity mismatch'*)
-                printf '[ "$(hash_file "$rustc")" = %s ] || fail '"'"'rustc identity mismatch'"'"'\n' "$fixture_rustc_sha" ;;
+                printf "%s\n" "[ \"\$(hash_file \"\$rustc\")\" = $fixture_rustc_sha ] || fail 'rustc identity mismatch'" ;;
             *'shell identity mismatch'*)
                 if [ "$id" = O004 ]; then printf "%s\n" "[ \"\$(hash_file \"\$shell\")\" = 0000000000000000000000000000000000000000000000000000000000000000 ] || fail 'shell identity mismatch'"; else printf '%s\n' "$line"; fi ;;
             unexpected=*'cannot inspect closure topology'*)
