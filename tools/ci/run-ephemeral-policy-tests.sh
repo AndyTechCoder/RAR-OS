@@ -16,6 +16,7 @@ ulimit -f 131072
 /bin/sh "$root/tools/ci/test-controller-helper-evidence-v0-policy.sh"
 /bin/sh "$root/tools/ci/test-controller-helper-evidence-v1-policy.sh"
 /bin/sh "$root/tools/ci/test-controller-helper-inventory-v0-policy.sh"
+/bin/sh "$root/tools/ci/test-controller-helper-closure-observer-run-evidence-policy.sh"
 /bin/sh "$root/tools/ci/test-development-controller-v2-policy.sh"
 /bin/sh "$root/tools/ci/test-development-image-policy.sh"
 /bin/sh "$root/tools/ci/test-development-lab-profile-policy.sh"
@@ -35,4 +36,4 @@ ulimit -f 131072
 /bin/sh "$root/tools/ci/test-sprint-alpha-gate-report-v2-policy.sh"
 /bin/sh "$root/tools/ci/test-trusted-launcher-policy.sh"
 
-printf '%s\n' 'Ephemeral policy tests passed: executed=26 source=read-only scratch=tmpfs'
+printf '%s\n' 'Ephemeral policy tests passed: executed=27 source=read-only scratch=tmpfs'

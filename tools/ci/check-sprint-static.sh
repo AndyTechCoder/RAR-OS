@@ -40,6 +40,9 @@ tools/ci/check-specs.sh
     tools/ci/check-controller-helper-inventory-v0.sh \
     tools/ci/observe-controller-helper-closure.sh \
     tools/ci/check-controller-helper-closure-observer-source.sh \
+    tools/ci/check-controller-helper-closure-observer-run-evidence-source.sh \
+    tools/ci/verify-controller-helper-closure-observer-run-evidence.sh \
+    tools/ci/test-controller-helper-closure-observer-run-evidence-policy.sh \
     tools/ci/verify-controller-helper-closure-candidate.sh \
     tools/ci/check-controller-helper-closure-verifier-source.sh \
     tools/ci/check-controller-helper-closure-verifier-test-plan-source.sh \
@@ -126,6 +129,7 @@ tools/ci/test-development-probe-policy.sh
 /bin/sh tools/ci/check-alpha-preimplementation-contracts.sh
 /bin/sh tools/ci/check-acceptance-v2.sh
 /bin/sh tools/ci/check-controller-helper-closure-observer-source.sh
+/bin/sh tools/ci/check-controller-helper-closure-observer-run-evidence-source.sh
 /bin/sh tools/ci/check-controller-helper-closure-verifier-source.sh
 /bin/sh tools/ci/check-controller-helper-closure-verifier-test-plan-source.sh
 /bin/sh tools/ci/check-controller-helper-closure-verifier-validation-source.sh

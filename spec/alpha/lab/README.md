@@ -78,6 +78,17 @@ only permitted future output is a candidate closure manifest plus an
 `observed-not-reviewed-not-ready` receipt; both still require exact-set review
 and pinning before any helper build or test can be considered.
 
+`controller-helper-closure-observer-test-v0.fields` and
+`controller-helper-closure-observer-run-evidence-v0.fields` define C2A's
+narrow main-only observer-test authority and the canonical 31-line outer
+candidate record. The contextual validator binds exact controller/source and
+run identity, immutable inputs, the four-file output set, byte counts, hashes,
+artifact name, retention, and anti-replay nonce. Its isolated mutation policy
+rejects stale, reordered, aliased, self-attested, oversized, incomplete, or
+ready-substituted evidence. C2A remains source-only: no workflow, wrapper,
+runtime harness, observation, compiler, helper, target, or readiness authority
+exists until the separately merged C2B gate.
+
 `controller-helper-closure-verification-v0.fields` defines the separate
 source-only exact-set verifier required after observation. It has no candidate
 manifest, reviewed verifier-tool pin file, runtime evidence, or execution

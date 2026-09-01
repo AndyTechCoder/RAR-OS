@@ -92,10 +92,16 @@ and cannot increase the implementation count.
   Specifications run `33467136133` passed pinned read-only validation and all
   26 isolated mutation-policy tests at
   `10537d55003949797d7ca8ab7adcf0b1deab5331`. The contracts remain unwired
-  and non-activating. C2 must still provide the reviewed trusted-main observer,
-  fixtures, candidate closure, tool pins, and retained runtime evidence; C3V
-  independently verifies the current exact set, and C3A must separately accept
-  it before any helper build or test.
+  and non-activating. The authoritative C2 packet merged through PRs #109-#110;
+  exact-main Specifications run `33469515632` passed validation and all 26
+  isolated mutation-policy tests at
+  `4137f3397590958490dff261ee617df5f40e7cad`. C2A now freezes the narrow
+  main-only observer-test authority, canonical outer evidence, contextual
+  validator, fixtures, and isolated mutation policy. This source-only change
+  adds no workflow or runtime and remains incomplete until review, merge, and
+  its own exact-main validation/mutation run. C2B stays blocked until then;
+  C3V independently verifies the current exact set, and C3A must separately
+  accept it before any helper build or test.
 - PR #13 is merged at `abd75bfccf4fcd2f197871225d1a78233c0d87dc`;
   exact post-merge trusted-controller run `33294557261` passed. This closes only
   the controller bootstrap, not target implementation or Sprint completion.

@@ -1,6 +1,9 @@
 schema=rar-alpha-controller-helper-closure-observer-test-v0
-status=experimental-complete-source-only-inactive
-execution_authority=none-until-C3V
+status=experimental-complete-C2A-contract-active-workflow-absent
+execution_authority=C2-main-only-observer-harness-plus-one-candidate-observation-after-C2A-exact-main
+authority_scope=O001-through-O021-isolated-harness+one-production-observer;no-compiler+helper+target+VM+readiness+trust-state-authority
+phase_rule=C2A-contracts-merge+distinct-exact-main-validation+mutation-before-C2B-workflow;C3V-must-reobserve;C3A-alone-may-authorize-compiler-use
+workflow_rule=no-observer-workflow-exists-in-C2A;runtime-entry-remains-unwired-until-reviewed-C2B
 subject=tools/ci/observe-controller-helper-closure.sh
 case_count=21
 evidence_schema=rar-alpha-controller-helper-closure-observer-case-evidence-v0
