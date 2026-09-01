@@ -1,0 +1,12 @@
+schema=rar-alpha-controller-helper-closure-observer-tool-pins-v0
+status=C2-candidate-tools-no-compiler-authority
+oci_image=sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
+tool|dash|/usr/bin/dash|a6f559e00b69a4aa4d8cb607be18d9386c5aee55c509e2c075549dcf00e00fc7|preverified
+tool|sha256sum|/usr/bin/sha256sum|89f8c1d1ba3c76138f3771e1a91e2796ade6180b1c1e4258c04698ff32787c97|preverified
+tool|wc|/usr/bin/wc|e8fe45a85ebdb0dade6dabf96f21dfd686c6414ff2a4a8980727076a5981d2af|preverified
+tool|grep|/usr/bin/grep|bd6686bf7a650a9717fd7e73fdb07dc63b70547a1da41bce093c56df937a66eb|preverified
+tool|mkdir|/usr/bin/mkdir|bd3d9b36a1cc1c63b8dca7967003f4e5b0bb8556c87cbb7c1916aa358bf3f053|preverified
+tool|rustc-bytes-only|/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc|bff349e72704ff70bc08a234a3847338e797065bbedde5e556808bc87b7bf7c6|never-execute
+tool|find|/usr/bin/find|record-in-candidate-receipt|candidate-only
+tool|sort|/usr/bin/sort|record-in-candidate-receipt|candidate-only
+authority_rule=no-tool-entry-authorizes-rustc,cargo,linker,helper,target,network,cloud,credential,or-readiness
