@@ -133,7 +133,7 @@ reset
 /usr/bin/sed -i 's/o=size=67108864/o=size=0/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject acquisition-capacity check
 reset
-/usr/bin/sed -i 's/120s \/usr\/bin\/docker start/0s \/usr\/bin\/docker start/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+/usr/bin/sed -i 's/120s \/usr\/bin\/docker --config "\$docker_config" --host unix:\/\/\/var\/run\/docker.sock start/0s \/usr\/bin\/docker --config "\$docker_config" --host unix:\/\/\/var\/run\/docker.sock start/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject acquisition-timeout check
 reset
 /usr/bin/sed -i '0,/--network none/s//--network bridge/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
@@ -166,7 +166,7 @@ reset
 /usr/bin/sed -i '0,/remove_container "\$acquisition"/s//remove_container "$acquisition" || true/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject cleanup-suppression check
 reset
-/usr/bin/sed -i '/\/usr\/bin\/docker container ls -a/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+/usr/bin/sed -i '/\/usr\/bin\/docker --config "\$docker_config" --host unix:\/\/\/var\/run\/docker.sock container ls -a/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject container-absence-query check
 reset
 /usr/bin/sed -i 's/if \[\[ "\$cleanup_failed" -ne 0 \]\]; then exit 1; fi/if [[ "$cleanup_failed" -ne 0 ]]; then exit 0; fi/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
@@ -194,5 +194,71 @@ reset
 /usr/bin/sed -i '\#^          tools/ci/verify-controller-helper-closure-observer-run-evidence\.sh \\$#d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 /usr/bin/sed -i '/^      - name: Run isolated harness and one candidate observation$/a\          tools/ci/verify-controller-helper-closure-observer-run-evidence.sh \\' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject binding-misplaced binding_check
+reset
+/usr/bin/sed -i 's/ --pull=never//g' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject workflow-pull-policy check
+reset
+/usr/bin/sed -i 's/ --pull=never//' "$repo/tools/ci/run-controller-helper-closure-observer.sh"
+reject wrapper-pull-policy check
+reset
+/usr/bin/sed -i 's/DOCKER_HOST DOCKER_CONTEXT/DOCKER_GHOST DOCKER_CONTEXT/' "$repo/tools/ci/run-controller-helper-closure-observer.sh"
+reject docker-endpoint-override-boundary check
+reset
+/usr/bin/sed -i 's/|| cleanup_failed=1/|| true/' "$repo/tools/ci/run-controller-helper-closure-observer.sh"
+reject wrapper-cleanup-suppression check
+reset
+/usr/bin/sed -i '/container_absent "\$container"/d' "$repo/tools/ci/run-controller-helper-closure-observer.sh"
+reject wrapper-residual-container-proof check
+reset
+/usr/bin/sed -i 's/|| rc=1/|| rc=0/' "$repo/tools/ci/run-controller-helper-closure-observer.sh"
+reject wrapper-cleanup-status-preservation check
+reset
+/usr/bin/sed -i '/docker --config "\$docker_config" --host unix:\/\/\/var\/run\/docker.sock container ls -a --no-trunc/d' "$repo/tools/ci/run-controller-helper-closure-observer.sh"
+reject wrapper-absence-query check
+reset
+/usr/bin/sed -i '0,/--host unix:\/\/\/var\/run\/docker.sock/s//--host tcp:\/\/127.0.0.1:2375/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject workflow-endpoint-binding check
+reset
+/usr/bin/sed -i '0,/--host unix:\/\/\/var\/run\/docker.sock/s//--host tcp:\/\/127.0.0.1:2375/' "$repo/tools/ci/run-controller-helper-closure-observer.sh"
+reject wrapper-endpoint-binding check
+reset
+/usr/bin/sed -i 's/DOCKER_CERT_PATH DOCKER_CONFIG/DOCKER_CERT_PATH DOCKER_GONFIG/g' "$repo/.github/workflows/controller-helper-closure-observer.yml" "$repo/tools/ci/run-controller-helper-closure-observer.sh"
+reject docker-config-selector-boundary check
+reset
+/usr/bin/printf '%s\n' '/usr/bin/docker --host unix:///var/run/docker.sock create --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock' >> "$repo/tools/ci/run-controller-helper-closure-observer.sh"
+reject docker-socket-propagation check
+reset
+/usr/bin/sed -i '/ pull --quiet --platform linux\/amd64 /d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject explicit-image-acquisition check
+reset
+/usr/bin/sed -i 's/180s \/usr\/bin\/docker/0s \/usr\/bin\/docker/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject image-acquisition-timeout check
+reset
+/usr/bin/sed -i '/image inspect --format/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject image-presence-proof check
+reset
+/usr/bin/sed -i '/\/usr\/bin\/rmdir "\$docker_config"/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject workflow-docker-config-cleanup check
+reset
+/usr/bin/sed -i '/\/usr\/bin\/rmdir "\$docker_config"/d' "$repo/tools/ci/run-controller-helper-closure-observer.sh"
+reject wrapper-docker-config-cleanup check
+reset
+/usr/bin/sed -i 's#if /usr/bin/grep -Fqx -- "\$checkout_repo_digest"#if ! /usr/bin/grep -Fqx -- "$checkout_repo_digest"#' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject image-inventory-branch-inversion check
+reset
+/usr/bin/sed -i 's/if \[\[ "\$needs_pull" -eq 1 \]\]; then/if [[ 1 -eq 1 ]]; then/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject unconditional-image-acquisition check
+reset
+/usr/bin/awk '
+    /if \[\[ "\$needs_pull" -eq 1 \]\]; then/ { print; print "          fi"; moving=1; next }
+    moving && / pull --quiet --platform linux\/amd64 / { pull=$0; next }
+    moving && $0 == "          fi" { print pull; moving=0; next }
+    { print }
+' "$repo/.github/workflows/controller-helper-closure-observer.yml" > "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated"
+/usr/bin/mv "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated" "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject pull-moved-outside-guard check
+reset
+/usr/bin/sed -i 's/^            needs_pull=1$/            needs_pull=0/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject absent-inventory-assignment check
 
-printf '%s\n' 'controller-helper observer policy mutations passed: cases=48'
+printf '%s\n' 'controller-helper observer policy mutations passed: cases=69'

@@ -20,12 +20,47 @@ case "$evidence" in "${RUNNER_TEMP-}"/controller-helper-closure-observer) ;; *) 
 [ "${GITHUB_ACTIONS-}" = true ] && [ "${CI-}" = true ] || fail 'CI boundary absent'
 [ "${GITHUB_EVENT_NAME-}" = push ] && [ "${GITHUB_REF-}" = refs/heads/main ] && [ "${GITHUB_REPOSITORY-}" = AndyTechCoder/RAR-OS ] || fail 'canonical context absent'
 [ "${GITHUB_SHA-}" = "${RAR_TRUSTED_CONTROLLER_SHA-}" ] && [ "${GITHUB_SHA-}" = "${RAR_EXPECTED_SOURCE_REVISION-}" ] || fail 'exact-main mismatch'
+for name in DOCKER_HOST DOCKER_CONTEXT DOCKER_TLS_VERIFY DOCKER_CERT_PATH DOCKER_CONFIG; do
+    [ -z "${!name-}" ] || fail 'Docker endpoint override present'
+done
 
 image=rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
+docker_config="${RUNNER_TEMP-}/controller-helper-closure-observer-docker-config-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+case "$docker_config" in
+    "${RUNNER_TEMP-}"/controller-helper-closure-observer-docker-config-"$GITHUB_RUN_ID"-"$GITHUB_RUN_ATTEMPT") ;;
+    *) fail 'Docker config root identity mismatch' ;;
+esac
+[ ! -e "$docker_config" ] && [ ! -L "$docker_config" ] || fail 'Docker config root preexists'
+/usr/bin/install -d -m 700 "$docker_config" || fail 'cannot create Docker config root'
+[ -z "$(/usr/bin/find "$docker_config" -mindepth 1 -maxdepth 1 -print -quit)" ] || fail 'Docker config root not empty'
 container=
-cleanup() { if [ -n "$container" ]; then /usr/bin/docker rm --force "$container" >/dev/null 2>&1 || true; fi; }
-trap cleanup EXIT HUP INT TERM
-container=$(/usr/bin/docker create --read-only --network none --user 65532:65532 \
+cleanup_failed=0
+container_absent() {
+    local id=$1 remaining
+    remaining=$(/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock container ls -a --no-trunc --filter "id=$id" --format '{{.ID}}') || return 1
+    [ -z "$remaining" ]
+}
+cleanup() {
+    local rc=$?
+    trap - EXIT HUP INT TERM
+    if [ -n "$container" ]; then
+        /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock rm --force "$container" >/dev/null 2>&1 || cleanup_failed=1
+        container_absent "$container" || cleanup_failed=1
+    fi
+    if [ -e "$docker_config" ] || [ -L "$docker_config" ]; then
+        if [ -d "$docker_config" ] && [ ! -L "$docker_config" ]; then
+            /usr/bin/rmdir "$docker_config" || cleanup_failed=1
+        else
+            cleanup_failed=1
+        fi
+    fi
+    [ ! -e "$docker_config" ] && [ ! -L "$docker_config" ] || cleanup_failed=1
+    [ "$cleanup_failed" -eq 0 ] || rc=1
+    exit "$rc"
+}
+trap cleanup EXIT
+trap 'exit 130' HUP INT TERM
+container=$(/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock create --pull=never --read-only --network none --user 65532:65532 \
     --cpus 1 --memory 512m --memory-swap 512m --pids-limit 64 \
     --security-opt no-new-privileges --cap-drop ALL \
     --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,uid=65532,gid=65532,mode=700 \
@@ -103,15 +138,16 @@ decode_stream() {
 }
 
 set +e
-/usr/bin/docker start --attach "$container" | decode_stream "$evidence"
+/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock start --attach "$container" | decode_stream "$evidence"
 pipe_status=("${PIPESTATUS[@]}")
 set -e
 [ "${#pipe_status[@]}" -eq 2 ] || fail 'observer stream status missing'
 [ "${pipe_status[0]}" -eq 0 ] || fail 'isolated observer failed'
 [ "${pipe_status[1]}" -eq 0 ] || fail 'candidate evidence stream rejected'
-status=$(/usr/bin/docker inspect --format '{{.State.ExitCode}}' "$container")
+status=$(/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock inspect --format '{{.State.ExitCode}}' "$container")
 [ "$status" -eq 0 ] || fail 'isolated observer exit mismatch'
-/usr/bin/docker rm --force "$container" >/dev/null
+/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock rm --force "$container" >/dev/null || fail 'cannot remove isolated observer'
+container_absent "$container" || fail 'isolated observer container remains'
 container=
 
 case_file=$evidence/controller-helper-closure-observer.cases.v0

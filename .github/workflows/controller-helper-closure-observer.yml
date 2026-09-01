@@ -43,6 +43,7 @@ jobs:
           runner_uid=$(/usr/bin/id -u)
           runner_gid=$(/usr/bin/id -g)
           identity="rar-c2b-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          docker_config="$RUNNER_TEMP/$identity-docker-config"
           acquisition="$identity-acquire"
           transfer="$identity-transfer"
           volume="$identity-source"
@@ -52,34 +53,37 @@ jobs:
           partial_inode=
           parent_device=
           parent_inode=
+          for name in DOCKER_HOST DOCKER_CONTEXT DOCKER_TLS_VERIFY DOCKER_CERT_PATH DOCKER_CONFIG; do
+            [[ -z "${!name-}" ]] || { printf 'Docker endpoint override present: %s\n' "$name" >&2; exit 1; }
+          done
           container_absent() {
             local found
-            found=$(/usr/bin/timeout --signal=KILL 10s /usr/bin/docker container ls -a \
+            found=$(/usr/bin/timeout --signal=KILL 10s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock container ls -a \
               --filter "name=^/$1$" --format '{{.Names}}') || return 1
             [[ -z "$found" ]]
           }
           volume_absent() {
             local found
-            found=$(/usr/bin/timeout --signal=KILL 10s /usr/bin/docker volume ls \
+            found=$(/usr/bin/timeout --signal=KILL 10s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume ls \
               --filter "name=^$1$" --format '{{.Name}}') || return 1
             [[ -z "$found" ]]
           }
           remove_container() {
             local name=$1
             if ! container_absent "$name"; then
-              /usr/bin/timeout --signal=KILL 10s /usr/bin/docker rm --force "$name" >/dev/null || return 1
+              /usr/bin/timeout --signal=KILL 10s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock rm --force "$name" >/dev/null || return 1
             fi
             container_absent "$name"
           }
           force_remove_created_container() {
             local name=$1
-            /usr/bin/timeout --signal=KILL 10s /usr/bin/docker rm --force "$name" >/dev/null || return 1
+            /usr/bin/timeout --signal=KILL 10s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock rm --force "$name" >/dev/null || return 1
             container_absent "$name"
           }
           remove_volume() {
             local name=$1
             if ! volume_absent "$name"; then
-              /usr/bin/timeout --signal=KILL 10s /usr/bin/docker volume rm --force "$name" >/dev/null || return 1
+              /usr/bin/timeout --signal=KILL 10s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume rm --force "$name" >/dev/null || return 1
             fi
             volume_absent "$name"
           }
@@ -108,6 +112,14 @@ jobs:
             container_absent "$acquisition" || cleanup_failed=1
             container_absent "$transfer" || cleanup_failed=1
             volume_absent "$volume" || cleanup_failed=1
+            if [[ -e "$docker_config" || -L "$docker_config" ]]; then
+              if [[ -d "$docker_config" && ! -L "$docker_config" ]]; then
+                /usr/bin/rmdir "$docker_config" || cleanup_failed=1
+              else
+                cleanup_failed=1
+              fi
+            fi
+            [[ ! -e "$docker_config" && ! -L "$docker_config" ]] || cleanup_failed=1
             if [[ "$cleanup_failed" -ne 0 ]]; then exit 1; fi
             exit "$status"
           }
@@ -120,6 +132,29 @@ jobs:
           [[ -d "$GITHUB_WORKSPACE" && ! -L "$GITHUB_WORKSPACE" ]]
           [[ -z "$(/usr/bin/find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -print -quit)" ]]
           [[ ! -e "$partial" && ! -L "$partial" ]]
+          case "$docker_config" in
+            "$RUNNER_TEMP"/rar-c2b-"$GITHUB_RUN_ID"-"$GITHUB_RUN_ATTEMPT"-docker-config) ;;
+            *) printf 'Docker config root identity mismatch\n' >&2; exit 1 ;;
+          esac
+          [[ ! -e "$docker_config" && ! -L "$docker_config" ]]
+          /usr/bin/install -d -m 700 "$docker_config"
+          [[ -d "$docker_config" && ! -L "$docker_config" ]]
+          [[ -z "$(/usr/bin/find "$docker_config" -mindepth 1 -maxdepth 1 -print -quit)" ]]
+          checkout_repo_digest=rust@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
+          needs_pull=0
+          image_inventory=$(/usr/bin/timeout --signal=KILL 10s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock image ls --no-trunc --digests --format '{{.Repository}}@{{.Digest}}')
+          if /usr/bin/grep -Fqx -- "$checkout_repo_digest" <<< "$image_inventory"; then
+            cached_platform=$(/usr/bin/timeout --signal=KILL 10s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock image inspect --format '{{.Os}}/{{.Architecture}}' "$checkout_image")
+            if [[ "$cached_platform" != linux/amd64 ]]; then needs_pull=1; fi
+          else
+            needs_pull=1
+          fi
+          if [[ "$needs_pull" -eq 1 ]]; then
+            /usr/bin/timeout --signal=KILL 180s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock pull --quiet --platform linux/amd64 "$checkout_image" >/dev/null
+          fi
+          platform=$(/usr/bin/timeout --signal=KILL 10s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock image inspect --format '{{.Os}}/{{.Architecture}}' "$checkout_image")
+          [[ "$platform" == linux/amd64 ]]
+          [[ -z "$(/usr/bin/find "$docker_config" -mindepth 1 -maxdepth 1 -print -quit)" ]]
           container_absent "$acquisition"
           container_absent "$transfer"
           volume_absent "$volume"
@@ -127,14 +162,14 @@ jobs:
           partial_device=$(/usr/bin/stat -c %d "$partial")
           partial_inode=$(/usr/bin/stat -c %i "$partial")
           [[ "$partial_device" == "$parent_device" ]]
-          /usr/bin/docker volume create --driver local \
+          /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume create --driver local \
             --opt type=tmpfs --opt device=tmpfs \
             --opt "o=size=67108864,uid=$runner_uid,gid=$runner_gid,mode=0700,noexec,nosuid,nodev" \
             "$volume" >/dev/null
-          [[ "$(/usr/bin/docker volume inspect --format '{{index .Options "type"}}' "$volume")" == tmpfs ]]
-          [[ "$(/usr/bin/docker volume inspect --format '{{index .Options "device"}}' "$volume")" == tmpfs ]]
-          [[ "$(/usr/bin/docker volume inspect --format '{{index .Options "o"}}' "$volume")" == "size=67108864,uid=$runner_uid,gid=$runner_gid,mode=0700,noexec,nosuid,nodev" ]]
-          /usr/bin/docker create --name "$acquisition" --read-only --network bridge \
+          [[ "$(/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume inspect --format '{{index .Options "type"}}' "$volume")" == tmpfs ]]
+          [[ "$(/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume inspect --format '{{index .Options "device"}}' "$volume")" == tmpfs ]]
+          [[ "$(/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume inspect --format '{{index .Options "o"}}' "$volume")" == "size=67108864,uid=$runner_uid,gid=$runner_gid,mode=0700,noexec,nosuid,nodev" ]]
+          /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock create --pull=never --name "$acquisition" --read-only --network bridge \
             --user "$runner_uid:$runner_gid" --cpus 1 --memory 512m --memory-swap 512m --pids-limit 64 \
             --security-opt no-new-privileges --cap-drop ALL \
             --tmpfs "/tmp:rw,noexec,nosuid,nodev,size=64m,uid=$runner_uid,gid=$runner_gid,mode=700" \
@@ -163,17 +198,17 @@ jobs:
               [ "$bytes" -le 67108864 ] && [ "$files" -le 8192 ] && [ "$objects" -le 32768 ]
             ' rar-c2b-acquire "$GITHUB_SHA" >/dev/null
           set +e
-          /usr/bin/timeout --signal=KILL 120s /usr/bin/docker start --attach "$acquisition"
+          /usr/bin/timeout --signal=KILL 120s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock start --attach "$acquisition"
           acquisition_start=$?
           set -e
           acquisition_exit=unavailable
           if [[ "$acquisition_start" -eq 0 ]]; then
-            acquisition_exit=$(/usr/bin/docker inspect --format '{{.State.ExitCode}}' "$acquisition")
+            acquisition_exit=$(/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock inspect --format '{{.State.ExitCode}}' "$acquisition")
           fi
           force_remove_created_container "$acquisition"
           container_absent "$transfer"
           [[ "$acquisition_start" -eq 0 && "$acquisition_exit" -eq 0 ]]
-          /usr/bin/docker create --name "$transfer" --read-only --network none \
+          /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock create --pull=never --name "$transfer" --read-only --network none \
             --user "$runner_uid:$runner_gid" --cpus 1 --memory 512m --memory-swap 512m --pids-limit 64 \
             --security-opt no-new-privileges --cap-drop ALL \
             --tmpfs "/tmp:rw,noexec,nosuid,nodev,size=64m,uid=$runner_uid,gid=$runner_gid,mode=700" \
@@ -198,12 +233,12 @@ jobs:
               [ "$(CDPATH= cd -- /destination && pwd -P)" = /destination ]
             ' rar-c2b-transfer "$GITHUB_SHA" >/dev/null
           set +e
-          /usr/bin/timeout --signal=KILL 30s /usr/bin/docker start --attach "$transfer"
+          /usr/bin/timeout --signal=KILL 30s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock start --attach "$transfer"
           transfer_start=$?
           set -e
           transfer_exit=unavailable
           if [[ "$transfer_start" -eq 0 ]]; then
-            transfer_exit=$(/usr/bin/docker inspect --format '{{.State.ExitCode}}' "$transfer")
+            transfer_exit=$(/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock inspect --format '{{.State.ExitCode}}' "$transfer")
           fi
           remove_container "$transfer"
           [[ "$transfer_start" -eq 0 && "$transfer_exit" -eq 0 ]]

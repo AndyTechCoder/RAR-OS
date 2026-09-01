@@ -31,6 +31,7 @@ done
 for required in \
     'checkout_image=rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3' \
     'identity="rar-c2b-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"' \
+    'docker_config="$RUNNER_TEMP/$identity-docker-config"' \
     'workspace_parent=$(/usr/bin/dirname "$GITHUB_WORKSPACE")' \
     'partial="$workspace_parent/.rar-c2b-checkout-partial-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"' \
     'partial_device=$(/usr/bin/stat -c %d "$partial")' \
@@ -38,13 +39,26 @@ for required in \
     'parent_device=$(/usr/bin/stat -c %d "$workspace_parent")' \
     'parent_inode=$(/usr/bin/stat -c %i "$workspace_parent")' \
     'container_absent() {' 'volume_absent() {' 'remove_container() {' 'force_remove_created_container() {' 'remove_volume() {' \
-    '/usr/bin/docker container ls -a' '/usr/bin/docker volume ls' \
+    '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock container ls -a' '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume ls' \
     'trap cleanup EXIT' "trap 'exit 130' HUP INT TERM" \
     'if [[ "$cleanup_failed" -ne 0 ]]; then exit 1; fi' \
-    '/usr/bin/docker volume create --driver local' '--opt type=tmpfs --opt device=tmpfs' \
+    '"$RUNNER_TEMP"/rar-c2b-"$GITHUB_RUN_ID"-"$GITHUB_RUN_ATTEMPT"-docker-config)' \
+    '/usr/bin/install -d -m 700 "$docker_config"' '/usr/bin/rmdir "$docker_config"' \
+    '[ -z "$(/usr/bin/find "$docker_config" -mindepth 1 -maxdepth 1 -print -quit)" ]' \
+    'checkout_repo_digest=rust@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3' \
+    'needs_pull=0' \
+    'image ls --no-trunc --digests --format '"'"'{{.Repository}}@{{.Digest}}'"'"'' \
+    'if /usr/bin/grep -Fqx -- "$checkout_repo_digest" <<< "$image_inventory"; then' \
+    'cached_platform=$(/usr/bin/timeout --signal=KILL 10s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock image inspect --format '"'"'{{.Os}}/{{.Architecture}}'"'"' "$checkout_image")' \
+    'if [[ "$cached_platform" != linux/amd64 ]]; then needs_pull=1; fi' \
+    'if [[ "$needs_pull" -eq 1 ]]; then' \
+    '/usr/bin/timeout --signal=KILL 180s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock pull --quiet --platform linux/amd64 "$checkout_image"' \
+    'platform=$(/usr/bin/timeout --signal=KILL 10s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock image inspect --format '"'"'{{.Os}}/{{.Architecture}}'"'"' "$checkout_image")' \
+    '[[ "$platform" == linux/amd64 ]]' \
+    '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume create --driver local' '--opt type=tmpfs --opt device=tmpfs' \
     'o=size=67108864,uid=$runner_uid,gid=$runner_gid,mode=0700,noexec,nosuid,nodev' \
     'docker volume inspect --format '"'"'{{index .Options "o"}}'"'"'' \
-    '/usr/bin/docker create --name "$acquisition" --read-only --network bridge' \
+    '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock create --pull=never --name "$acquisition" --read-only --network bridge' \
     '--mount "type=volume,source=$volume,target=/checkout"' \
     'GIT_CONFIG_NOSYSTEM=1' 'GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false' \
     '356db14e102d68a1a37d8a1ac577dfd678d45d46e92f468bef8b7154e7bfdc60' \
@@ -52,13 +66,13 @@ for required in \
     '/usr/bin/git -C /checkout remote add origin https://github.com/AndyTechCoder/RAR-OS.git' \
     '-c filter.lfs.smudge= -c filter.lfs.required=false' \
     'fetch --no-tags --depth=1 origin "$1"' 'checkout --detach FETCH_HEAD' \
-    '/usr/bin/timeout --signal=KILL 120s /usr/bin/docker start --attach "$acquisition"' \
+    '/usr/bin/timeout --signal=KILL 120s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock start --attach "$acquisition"' \
     'force_remove_created_container "$acquisition"' 'container_absent "$transfer"' \
-    '/usr/bin/docker create --name "$transfer" --read-only --network none' \
+    '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock create --pull=never --name "$transfer" --read-only --network none' \
     '--mount "type=volume,source=$volume,target=/source,readonly"' \
     '--mount "type=bind,source=$partial,target=/destination"' \
     '/usr/bin/cp -a /source/. /destination/' \
-    '/usr/bin/timeout --signal=KILL 30s /usr/bin/docker start --attach "$transfer"' \
+    '/usr/bin/timeout --signal=KILL 30s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock start --attach "$transfer"' \
     'remove_container "$transfer"' 'remove_volume "$volume"' \
     '[[ "$partial_device" == "$parent_device" ]]' \
     '[[ "$(/usr/bin/stat -c %d "$partial")" == "$partial_device" ]]' \
@@ -72,6 +86,40 @@ for required in \
     /usr/bin/grep -Fq -- "$required" "$workflow" || fail "bounded acquisition boundary missing: $required"
 done
 [ "$(/usr/bin/grep -Fc -- '--network bridge' "$workflow")" -eq 1 ] || fail 'acquisition network authority changed'
+[ "$(/usr/bin/grep -Fc -- '--pull=never' "$workflow")" -eq 2 ] || fail 'workflow image pull denial changed'
+workflow_docker_calls=$(/usr/bin/grep -Fc '/usr/bin/docker' "$workflow")
+[ "$workflow_docker_calls" -gt 0 ] || fail 'workflow Docker boundary missing'
+[ "$workflow_docker_calls" -eq "$(/usr/bin/grep -Fc '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock' "$workflow")" ] || fail 'workflow Docker endpoint or client config is ambient'
+[ "$(/usr/bin/grep -Fc ' pull --quiet --platform linux/amd64 "$checkout_image"' "$workflow")" -eq 1 ] || fail 'exact image acquisition path changed'
+[ "$(/usr/bin/grep -Fc ' image inspect --format '"'"'{{.Os}}/{{.Architecture}}'"'"' "$checkout_image"' "$workflow")" -eq 2 ] || fail 'image platform proof changed'
+[ "$(/usr/bin/grep -Fc 'needs_pull=1' "$workflow")" -eq 2 ] || fail 'image absence/platform decision changed'
+/usr/bin/awk '
+    $0 == "          needs_pull=0" {
+        if (started || done) bad=1
+        started=1; state=1; next
+    }
+    !started { next }
+    state == 1 && index($0, "          image_inventory=$(/usr/bin/timeout ") == 1 { state=2; next }
+    state == 2 && $0 == "          if /usr/bin/grep -Fqx -- \"$checkout_repo_digest\" <<< \"$image_inventory\"; then" { state=3; next }
+    state == 3 && index($0, "            cached_platform=$(/usr/bin/timeout ") == 1 { state=4; next }
+    state == 4 && $0 == "            if [[ \"$cached_platform\" != linux/amd64 ]]; then needs_pull=1; fi" { state=5; next }
+    state == 5 && $0 == "          else" { state=6; next }
+    state == 6 && $0 == "            needs_pull=1" { state=7; next }
+    state == 7 && $0 == "          fi" { state=8; next }
+    state == 8 && $0 == "          if [[ \"$needs_pull\" -eq 1 ]]; then" { state=9; next }
+    state == 9 && index($0, "            /usr/bin/timeout --signal=KILL 180s ") == 1 &&
+        index($0, " pull --quiet --platform linux/amd64 \"$checkout_image\"") { state=10; next }
+    state == 10 && $0 == "          fi" { state=11; next }
+    state == 11 && index($0, "          platform=$(/usr/bin/timeout ") == 1 { state=12; next }
+    state == 12 && $0 == "          [[ \"$platform\" == linux/amd64 ]]" {
+        state=0; started=0; done=1; next
+    }
+    started { bad=1 }
+    END { exit !(done == 1 && bad == 0 && state == 0 && started == 0) }
+' "$workflow" || fail 'image acquisition control flow changed'
+[ "$(/usr/bin/grep -Fc '/usr/bin/rmdir "$docker_config"' "$workflow")" -eq 1 ] || fail 'workflow Docker config cleanup changed'
+[ "$(/usr/bin/grep -Fc 'find "$docker_config" -mindepth 1 -maxdepth 1 -print -quit' "$workflow")" -eq 2 ] || fail 'workflow Docker config emptiness proof changed'
+/usr/bin/grep -Fq 'for name in DOCKER_HOST DOCKER_CONTEXT DOCKER_TLS_VERIFY DOCKER_CERT_PATH DOCKER_CONFIG; do' "$workflow" || fail 'workflow Docker selector denial missing'
 [ "$(/usr/bin/grep -Fc -- '--network none' "$workflow")" -eq 1 ] || fail 'transfer network denial changed'
 [ "$(/usr/bin/grep -Fc '[ "$bytes" -le 67108864 ] && [ "$files" -le 8192 ] && [ "$objects" -le 32768 ]' "$workflow")" -eq 2 ] || fail 'checkout ceilings changed'
 [ "$(/usr/bin/grep -Fc '[ -z "$(/usr/bin/git -C /' "$workflow")" -ge 4 ] || fail 'checkout cleanliness and ref checks missing'
@@ -81,7 +129,7 @@ done
 [ "$(/usr/bin/grep -Fc 'remove_volume "$volume"' "$workflow")" -eq 2 ] || fail 'volume cleanup ordering changed'
 /usr/bin/grep -Fq '"$workspace_parent"/.rar-c2b-checkout-partial-"$GITHUB_RUN_ID"-"$GITHUB_RUN_ATTEMPT")' "$workflow" || fail 'partial cleanup is not identity-bound'
 ! /usr/bin/grep -Fq '|| true' "$workflow" || fail 'checkout cleanup failure is suppressed'
-! /usr/bin/grep -Fq '/var/run/docker.sock' "$workflow" || fail 'checkout gains Docker socket'
+! /usr/bin/grep -Eq -- '(source|target)=/var/run/docker\.sock|/var/run/docker\.sock:|DOCKER_HOST=' "$workflow" || fail 'checkout propagates Docker endpoint authority'
 ! /usr/bin/grep -Eq '\$\{\{[[:space:]]*github\.token|GITHUB_TOKEN|ACTIONS_RUNTIME_TOKEN|PASSWORD|SECRET|CREDENTIAL' "$workflow" "$wrapper" "$harness" || fail 'credential value access present'
 [ "$(/usr/bin/grep -Fxc '          actual_sha=$(git rev-parse HEAD)' "$workflow")" -eq 1 ] || fail 'exact checkout verification missing'
 [ "$(/usr/bin/grep -Fxc '          [[ "$actual_sha" == "$GITHUB_SHA" ]]' "$workflow")" -eq 1 ] || fail 'checkout identity is not exact'
@@ -93,14 +141,38 @@ for required in \
     '--memory-swap 512m' '--pids-limit 64' '--security-opt no-new-privileges' \
     '--cap-drop ALL' '--tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m' \
     '--tmpfs /evidence:rw,noexec,nosuid,nodev,size=4m' \
-    'target=/workspace,readonly' '/usr/bin/docker create' '/usr/bin/docker start --attach' \
-    '/usr/bin/docker inspect' '/usr/bin/docker rm --force' '/usr/bin/env -i'; do
+    'target=/workspace,readonly' '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock create' '--pull=never' \
+    '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock start --attach' '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock inspect' '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock rm --force' \
+    '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock container ls -a --no-trunc --filter "id=$id" --format '"'"'{{.ID}}'"'"'' \
+    'container_absent() {' 'cleanup() {' 'trap cleanup EXIT' "trap 'exit 130' HUP INT TERM" \
+    'docker_config="${RUNNER_TEMP-}/controller-helper-closure-observer-docker-config-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"' \
+    '/usr/bin/install -d -m 700 "$docker_config"' '/usr/bin/rmdir "$docker_config"' \
+    '[ -z "$(/usr/bin/find "$docker_config" -mindepth 1 -maxdepth 1 -print -quit)" ]' \
+    'for name in DOCKER_HOST DOCKER_CONTEXT DOCKER_TLS_VERIFY DOCKER_CERT_PATH DOCKER_CONFIG; do' \
+    '[ -z "${!name-}" ] || fail '"'"'Docker endpoint override present'"'"'' \
+    '[ "$cleanup_failed" -eq 0 ] || rc=1' \
+    'container_absent "$container" || fail '"'"'isolated observer container remains'"'"'' \
+    '/usr/bin/env -i'; do
     /usr/bin/grep -Fq -- "$required" "$wrapper" || fail "wrapper boundary missing: $required"
 done
-! /usr/bin/grep -Eq -- '--privileged|--cap-add|--network[ =](host|bridge)|docker exec|/var/run/docker.sock|--env([ =]|$)' "$wrapper" || fail 'wrapper gains forbidden container or inherited-environment authority'
+! /usr/bin/grep -Eq -- '--privileged|--cap-add|--network[ =](host|bridge)|docker exec|docker cp|docker pull|docker login|--env([ =]|$)' "$wrapper" || fail 'wrapper gains forbidden container or inherited-environment authority'
+! /usr/bin/grep -Eq -- '(source|target)=/var/run/docker\.sock|/var/run/docker\.sock:|DOCKER_HOST=' "$wrapper" "$harness" || fail 'observer path propagates Docker endpoint authority'
+! /usr/bin/grep -Eq -- '--pull=(always|missing)' "$workflow" "$wrapper" || fail 'implicit image acquisition enabled'
+[ "$(/usr/bin/grep -Fc ' pull ' "$workflow")" -eq 1 ] || fail 'workflow image acquisition authority changed'
+[ "$(/usr/bin/grep -Fc ' pull ' "$wrapper")" -eq 0 ] || fail 'wrapper image acquisition authority added'
+! /usr/bin/grep -Eq -- '/usr/bin/docker[^[:cntrl:]]*[[:space:]]login([[:space:]]|$)' "$workflow" "$wrapper" || fail 'Docker credential acquisition enabled'
+! /usr/bin/grep -Fq '|| true' "$wrapper" || fail 'wrapper cleanup failure is suppressed'
+[ "$(/usr/bin/grep -Fc -- '--pull=never' "$wrapper")" -eq 1 ] || fail 'wrapper image pull denial changed'
+wrapper_docker_calls=$(/usr/bin/grep -Fc '/usr/bin/docker' "$wrapper")
+[ "$wrapper_docker_calls" -gt 0 ] || fail 'wrapper Docker boundary missing'
+[ "$wrapper_docker_calls" -eq "$(/usr/bin/grep -Fc '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock' "$wrapper")" ] || fail 'wrapper Docker endpoint or client config is ambient'
+[ "$(/usr/bin/grep -Fc '/usr/bin/rmdir "$docker_config"' "$wrapper")" -eq 1 ] || fail 'wrapper Docker config cleanup changed'
+[ "$(/usr/bin/grep -Fc 'find "$docker_config" -mindepth 1 -maxdepth 1 -print -quit' "$wrapper")" -eq 1 ] || fail 'wrapper Docker config emptiness proof changed'
+[ "$(/usr/bin/grep -Fc '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock rm --force "$container"' "$wrapper")" -eq 2 ] || fail 'wrapper removal paths changed'
+[ "$(/usr/bin/grep -Fc 'container_absent "$container"' "$wrapper")" -eq 2 ] || fail 'wrapper absence verification paths changed'
 ! /usr/bin/grep -Fq 'docker cp' "$wrapper" "$harness" || fail 'stopped tmpfs evidence copy is forbidden'
 [ "$(/usr/bin/grep -Fxc 'decode_stream() {' "$wrapper")" -eq 1 ] || fail 'stream decoder missing or duplicated'
-[ "$(/usr/bin/grep -Fxc '/usr/bin/docker start --attach "$container" | decode_stream "$evidence"' "$wrapper")" -eq 1 ] || fail 'exact stream handoff changed'
+[ "$(/usr/bin/grep -Fxc '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock start --attach "$container" | decode_stream "$evidence"' "$wrapper")" -eq 1 ] || fail 'exact stream handoff changed'
 [ "$(/usr/bin/grep -Fxc 'pipe_status=("${PIPESTATUS[@]}")' "$wrapper")" -eq 1 ] || fail 'stream status binding missing'
 for required in \
     '[ "${#pipe_status[@]}" -eq 2 ]' \
