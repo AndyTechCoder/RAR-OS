@@ -117,4 +117,28 @@ reject stream-status check
 reset
 /usr/bin/sed -i 's/emit_file cases "$case_file"/emit_file receipt "$evidence\/controller-helper-closure.receipt"/' "$repo/tools/ci/controller-helper-closure-observer-harness.sh"
 reject stream-order check
-printf '%s\n' 'controller-helper observer policy mutations passed: cases=28'
+reset
+/usr/bin/sed -i 's/o=size=67108864/o=size=0/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject acquisition-capacity check
+reset
+/usr/bin/sed -i 's/120s \/usr\/bin\/docker start/0s \/usr\/bin\/docker start/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject acquisition-timeout check
+reset
+/usr/bin/sed -i '0,/--network none/s//--network bridge/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject transfer-network check
+reset
+/usr/bin/sed -i 's#target=/source,readonly#target=/source#' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject transfer-source-write check
+reset
+/usr/bin/sed -i '/chmod -R a-w "\$partial"/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject writer-revocation check
+reset
+/usr/bin/sed -i '/controller-helper-closure-checkout-partial-.*rm -rf/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject partial-cleanup-identity check
+reset
+/usr/bin/sed -i '/docker volume rm "\$volume"/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject volume-cleanup check
+reset
+/usr/bin/sed -i 's/--depth=1/--depth=0/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject shallow-exact-fetch check
+printf '%s\n' 'controller-helper observer policy mutations passed: cases=36'
