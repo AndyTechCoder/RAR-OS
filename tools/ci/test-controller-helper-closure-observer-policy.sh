@@ -76,7 +76,7 @@ reset
 /usr/bin/sed -i 's/target_compiled=false/target_compiled=true/' "$repo/tools/ci/fixtures/controller-helper-closure-observer/expected-observation.receipt.v0"
 reject readiness-substitution check
 reset
-/usr/bin/sed -i 's/[[ "$actual_sha" == "$GITHUB_SHA" ]]/[[ "$actual_sha" != "$GITHUB_SHA" ]]/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+/usr/bin/sed -i '/actual_sha.*GITHUB_SHA/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject checkout-identity check
 reset
 /usr/bin/sed -i 's#/usr/bin/env -i#/usr/bin/env#' "$repo/tools/ci/run-controller-helper-closure-observer.sh"
