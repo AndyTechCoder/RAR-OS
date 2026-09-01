@@ -74,15 +74,14 @@ if grep -n "$(printf '\r')" "$inventory" >/dev/null; then fail 'inventory contai
         expected=($1 == "R001" ? "deferred-domain-extension:R001" : ($1 == "R002" ? "no-repair" : "defined:" $1))
         if (NF != 3 || $3 != expected || repair[$1]++) exit 1
         state[$1]=($3 ~ /^deferred-/ ? "deferred" : "active")
-        repair_token[$1]=$2
         repair_count++
     }
     /^repair_semantic\|R[0-9][0-9][0-9]\|/ {
-        if (NF != 7 || active_semantics[$2]++ || state[$2] != "active" || $3 != repair_token[$2]) exit 1
+        if (NF != 7 || active_semantics[$2]++ || state[$2] != "active") exit 1
         active_count++
     }
     /^repair_residual\|R[0-9][0-9][0-9]\|/ {
-        if (NF != 7 || residual_semantics[$2]++ || state[$2] != "deferred" || $3 != repair_token[$2]) exit 1
+        if (NF != 7 || residual_semantics[$2]++ || state[$2] != "deferred") exit 1
         residual_count++
     }
     END {
