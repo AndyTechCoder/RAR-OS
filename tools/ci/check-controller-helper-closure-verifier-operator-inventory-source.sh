@@ -46,18 +46,18 @@ done
 if LC_ALL=C grep -n '[^ -~]' "$inventory" >/dev/null; then fail 'inventory contains a non-ASCII byte'; fi
 if grep -n "$(printf '\r')" "$inventory" >/dev/null; then fail 'inventory contains CR'; fi
 /usr/bin/awk -F '|' '
-    /^P[0-9][0-9][0-9]\\|/ {
+    /^P[0-9][0-9][0-9]\|/ {
         expected=(($1 == "P015" || $1 == "P016") ? "deferred-domain-extension:" $1 : "defined:" $1)
         if (NF != 4 || $4 != expected || primary[$1]++) exit 1
         state[$1]=($4 ~ /^deferred-/ ? "deferred" : "active")
         primary_family[$1]=$2
         primary_count++
     }
-    /^semantic\\|P[0-9][0-9][0-9]\\|/ {
+    /^semantic\|P[0-9][0-9][0-9]\|/ {
         if (NF != 7 || active_semantics[$2]++ || state[$2] != "active") exit 1
         active_count++
     }
-    /^semantic_residual\\|P[0-9][0-9][0-9]\\|/ {
+    /^semantic_residual\|P[0-9][0-9][0-9]\|/ {
         if (NF != 7 || residual_semantics[$2]++ || state[$2] != "deferred") exit 1
         residual_count++
     }
@@ -70,18 +70,18 @@ if grep -n "$(printf '\r')" "$inventory" >/dev/null; then fail 'inventory contai
     }
 ' "$inventory" || fail 'primary-family active/deferred semantic rows are malformed, duplicated, or incomplete'
 /usr/bin/awk -F '|' '
-    /^R[0-9][0-9][0-9]\\|/ {
+    /^R[0-9][0-9][0-9]\|/ {
         expected=($1 == "R001" ? "deferred-domain-extension:R001" : ($1 == "R002" ? "no-repair" : "defined:" $1))
         if (NF != 3 || $3 != expected || repair[$1]++) exit 1
         state[$1]=($3 ~ /^deferred-/ ? "deferred" : "active")
         repair_token[$1]=$2
         repair_count++
     }
-    /^repair_semantic\\|R[0-9][0-9][0-9]\\|/ {
+    /^repair_semantic\|R[0-9][0-9][0-9]\|/ {
         if (NF != 7 || active_semantics[$2]++ || state[$2] != "active" || $3 != repair_token[$2]) exit 1
         active_count++
     }
-    /^repair_residual\\|R[0-9][0-9][0-9]\\|/ {
+    /^repair_residual\|R[0-9][0-9][0-9]\|/ {
         if (NF != 7 || residual_semantics[$2]++ || state[$2] != "deferred" || $3 != repair_token[$2]) exit 1
         residual_count++
     }
