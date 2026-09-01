@@ -35,4 +35,4 @@ ulimit -f 131072
 /bin/sh "$root/tools/ci/test-sprint-alpha-gate-report-v2-policy.sh"
 /bin/sh "$root/tools/ci/test-trusted-launcher-policy.sh"
 
-printf '%s\n' 'Ephemeral policy tests passed: executed=25 source=read-only scratch=tmpfs'
+printf '%s\n' 'Ephemeral policy tests passed: executed=26 source=read-only scratch=tmpfs'
