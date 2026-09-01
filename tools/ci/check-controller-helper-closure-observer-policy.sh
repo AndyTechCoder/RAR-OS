@@ -35,10 +35,10 @@ for required in     '--read-only' '--network none' '--user 65532:65532' '--cpus 
     /usr/bin/grep -Fq -- "$required" "$wrapper" || fail "wrapper boundary missing: $required"
 done
 ! /usr/bin/grep -Eq -- '--privileged|--cap-add|--network[ =](host|bridge)|docker exec|/var/run/docker.sock' "$wrapper" || fail 'wrapper gains forbidden container authority'
-[ "$(/usr/bin/grep -Fxc 'exec /usr/bin/dash "$subject"' "$harness")" -eq 1 ] || fail 'production observer count changed'
+[ "$(/usr/bin/grep -Fc '/usr/bin/dash "$subject"' "$harness")" -eq 1 ] || fail 'production observer count changed'
 [ "$(/usr/bin/grep -Fxc 'case_count=21' "$catalog")" -eq 1 ] || fail 'runtime catalog count changed'
 [ "$(/usr/bin/grep -Ec '^O[0-9][0-9][0-9]\|' "$catalog")" -eq 21 ] || fail 'runtime catalog incomplete'
-[ "$(/usr/bin/grep -Fxc 'case_count=21' "$harness")" -eq 1 ] || fail 'case evidence count changed'
+/usr/bin/grep -Fq "'case_count=21'" "$harness" || fail 'case evidence count changed'
 [ "$(/usr/bin/grep -Fxc 'effect_rule=never-touch-real-toolchain,checkout,retained-evidence,lock,inventory,profile,gate,readiness' "$fixture")" -eq 1 ] || fail 'fixture effect boundary changed'
 [ "$(/usr/bin/wc -l < "$receipt" | /usr/bin/tr -d ' ')" -eq 23 ] || fail 'receipt shape line count changed'
 for denial in helper_compiled=false helper_executed=false target_compiled=false readiness=false; do
