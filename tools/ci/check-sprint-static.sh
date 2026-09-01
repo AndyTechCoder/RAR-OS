@@ -59,6 +59,9 @@ tools/ci/check-specs.sh
     tools/ci/check-controller-helper-build-receipt-v0.sh \
     tools/ci/check-controller-helper-test-evidence-v0.sh \
     tools/ci/test-controller-helper-evidence-v0-policy.sh \
+    tools/ci/check-controller-helper-test-evidence-v1.sh \
+    tools/ci/check-controller-helper-build-evidence-v1.sh \
+    tools/ci/test-controller-helper-evidence-v1-policy.sh \
     tools/ci/check-reference-evidence-v0.sh \
     tools/ci/test-reference-evidence-v0-policy.sh \
     tools/ci/check-reference-verdict-v0.sh \
