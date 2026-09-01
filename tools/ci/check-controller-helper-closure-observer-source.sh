@@ -22,13 +22,16 @@ for file in "$observer" "$contract" "$test_contract" "$workflow" "$wrapper" "$ha
     [ -f "$file" ] && [ ! -L "$file" ] && [ -s "$file" ] || fail "required file missing: $file"
 done
 /bin/sh -n "$observer" "$wrapper" "$harness" "$policy" "$policy_test" || fail 'C2B shell syntax invalid'
+for script in "$observer" "$wrapper" "$harness" "$policy" "$policy_test"; do
+    [ -x "$script" ] || fail "required C2B script is not executable: $script"
+done
 [ "$(sha "$observer")" = e3b4be670797d3f1bc84960d1d1207e470f87ba5a7fadc6327d86b7b61a7f320 ] || fail 'observer bytes escaped review'
 [ "$(sha "$contract")" = 944229644f0805876403cd858d0d8c3c993d73bf00baef4c3ffcbbc7a2522836 ] || fail 'contract bytes escaped review'
 [ "$(sha "$test_contract")" = d2f8837b52bfd2f5c77bc527b7106e981a3ed3bd7dd7114953a83316870045d4 ] || fail 'test_contract bytes escaped review'
 [ "$(sha "$workflow")" = 3a35d17839b1cce1799db718af6b71c1bcc7069f0ba394fbbbdaacf0eb8cbcb9 ] || fail 'workflow bytes escaped review'
 [ "$(sha "$wrapper")" = 65b9c218dca2622f5d013a1bd68a1168f16aa0d066376b61fa069e9e0b4c80c5 ] || fail 'wrapper bytes escaped review'
 [ "$(sha "$harness")" = baee597e197df68defdfa88a468395995e394dd820fd31afa85d3e04c9a02ab7 ] || fail 'harness bytes escaped review'
-[ "$(sha "$policy")" = b6f99f309d2509e41b5082d0806ec6b0bd92e7a9244bdc7709d1f12e1a5cbec6 ] || fail 'policy bytes escaped review'
+[ "$(sha "$policy")" = 7effee32884a6447bc6b9c46dd0c2557e03b81ef33e13dd96c9485596c366ce2 ] || fail 'policy bytes escaped review'
 [ "$(sha "$policy_test")" = 1ac9c7df37bc0a310ecd7aac515764122fcc94f2def2fabf4f638dafa9200a42 ] || fail 'policy_test bytes escaped review'
 [ "$(sha "$catalog")" = 6b946f446d773389e924be0c8d35e88577b3e177f3da0d52af3f52cea398e289 ] || fail 'catalog bytes escaped review'
 [ "$(sha "$fixture")" = bbef536b8820f962d3ce529de904421b9aa8cf808ad29953321f2b1cdafd0314 ] || fail 'fixture bytes escaped review'
