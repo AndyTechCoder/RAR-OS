@@ -332,6 +332,27 @@ validate_projection() {
         fail "semantic field $name payload mismatch"
     if IFS= read -r p_extra <&4; then fail "semantic field $name extension bytes"; fi
     exec 4<&-
+    if [ "$current_case" = RUN ]; then
+        case "$name" in
+            tool-inventory)
+                [ "$(/usr/bin/wc -l < "$semantic_payload" | /usr/bin/tr -d ' ')" -eq 6 ] || fail 'tool inventory line count mismatch'
+                receipt_find=$(/usr/bin/sed -n 's/^find_sha256=//p' "$semantic_payload")
+                receipt_sort=$(/usr/bin/sed -n 's/^sort_sha256=//p' "$semantic_payload")
+                receipt_wc=$(/usr/bin/sed -n 's/^wc_sha256=//p' "$semantic_payload")
+                receipt_stat=$(/usr/bin/sed -n 's/^stat_sha256=//p' "$semantic_payload")
+                receipt_cmp=$(/usr/bin/sed -n 's/^cmp_sha256=//p' "$semantic_payload")
+                receipt_id=$(/usr/bin/sed -n 's/^id_sha256=//p' "$semantic_payload")
+                for tool_digest in "$receipt_find" "$receipt_sort" "$receipt_wc" "$receipt_stat" "$receipt_cmp" "$receipt_id"; do nonzero_sha "$tool_digest" || fail 'tool inventory digest malformed'; done
+                receipt_tool_pins=$p_sha
+                [ "$receipt_tool_pins" = "$RAR_EXPECTED_TOOL_PINS_SHA256" ] || fail 'tool inventory is not trusted-header bound'
+                ;;
+            fixture-inventory) receipt_candidate=$p_sha ;;
+            canonical-manifest) receipt_manifest=$p_sha ;;
+            topology) receipt_topology=$p_sha ;;
+            mount-identities) receipt_second=$p_sha ;;
+            event-bytes) receipt_observer=$p_sha ;;
+        esac
+    fi
     case "$name" in
         observed-event) validate_observed_result "$semantic_payload" ;;
         timeout-termination|residual-proof)
@@ -416,10 +437,19 @@ validate_receipt() {
             oci_image) [ "$value" = sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 ] ;;
             closure_root) [ "$value" = /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu ] ;;
             verifier_sha256) [ "$value" = "$RAR_EXPECTED_SUBJECT_SHA256" ] ;;
-            tool_pins_sha256) [ "$value" = "$RAR_EXPECTED_TOOL_PINS_SHA256" ] ;;
-            observer_sha256|find_sha256|sort_sha256|wc_sha256|stat_sha256|cmp_sha256|id_sha256|candidate_receipt_sha256|topology_sha256|second_pass_sha256) nonzero_sha "$value" ;;
-            candidate_manifest_sha256) nonzero_sha "$value" && manifest_candidate=$value ;;
-            recomputed_manifest_sha256) nonzero_sha "$value" && manifest_recomputed=$value ;;
+            tool_pins_sha256) [ "$value" = "$RAR_EXPECTED_TOOL_PINS_SHA256" ] && [ "$value" = "$receipt_tool_pins" ] ;;
+            observer_sha256) [ "$value" = "$receipt_observer" ] ;;
+            find_sha256) [ "$value" = "$receipt_find" ] ;;
+            sort_sha256) [ "$value" = "$receipt_sort" ] ;;
+            wc_sha256) [ "$value" = "$receipt_wc" ] ;;
+            stat_sha256) [ "$value" = "$receipt_stat" ] ;;
+            cmp_sha256) [ "$value" = "$receipt_cmp" ] ;;
+            id_sha256) [ "$value" = "$receipt_id" ] ;;
+            candidate_receipt_sha256) [ "$value" = "$receipt_candidate" ] ;;
+            topology_sha256) [ "$value" = "$receipt_topology" ] ;;
+            second_pass_sha256) [ "$value" = "$receipt_second" ] ;;
+            candidate_manifest_sha256) [ "$value" = "$receipt_manifest" ] && manifest_candidate=$value ;;
+            recomputed_manifest_sha256) [ "$value" = "$receipt_manifest" ] && manifest_recomputed=$value ;;
             manifest_entries|manifest_bytes) canonical_positive "$value" ;;
             helper_compiled|helper_executed|target_compiled|readiness) [ "$value" = false ] ;;
             *) false ;;
