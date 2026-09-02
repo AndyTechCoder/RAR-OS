@@ -17,7 +17,8 @@ receipt=$root/tools/ci/fixtures/controller-helper-closure-observer/expected-obse
 for file in "$workflow" "$wrapper" "$harness" "$observer" "$catalog" "$fixture" "$pins" "$receipt"; do
     [ -f "$file" ] && [ ! -L "$file" ] && [ -s "$file" ] || fail "required file missing: $file"
 done
-/bin/sh -n "$wrapper" "$harness" "$observer" || fail 'shell syntax invalid'
+/bin/sh -n "$harness" "$observer" || fail 'POSIX shell syntax invalid'
+[ "$(/usr/bin/awk 'NR == 1 { print; exit }' "$wrapper")" = '#!/usr/bin/bash' ] || fail 'wrapper Bash identity changed'
 for forbidden in workflow_dispatch repository_dispatch pull_request pull_request_target schedule workflow_call workflow_run; do
     ! /usr/bin/grep -Eq "^[[:space:]]*$forbidden:" "$workflow" || fail "forbidden trigger: $forbidden"
 done
@@ -117,6 +118,34 @@ workflow_docker_calls=$(/usr/bin/grep -Fc '/usr/bin/docker' "$workflow")
     started { bad=1 }
     END { exit !(done == 1 && bad == 0 && state == 0 && started == 0) }
 ' "$workflow" || fail 'image acquisition control flow changed'
+/usr/bin/awk '
+    $0 == "            --mount \"type=volume,source=$volume,target=/checkout\" \\" {
+        if (role || expected_workdir || acquisition_done) bad=1
+        expected_workdir="acquisition"; next
+    }
+    $0 == "            --mount \"type=bind,source=$partial,target=/destination\" \\" {
+        if (role || expected_workdir || transfer_done) bad=1
+        expected_workdir="transfer"; next
+    }
+    expected_workdir {
+        expected = expected_workdir == "acquisition" ? "            --workdir /checkout \\" : "            --workdir /destination \\"
+        if ($0 != expected) bad=1
+        role=expected_workdir; expected_workdir=""; next
+    }
+    role && $0 == "              set -eu" {
+        if ((getline pwd_line) <= 0) bad=1
+        expected = role == "acquisition" ? "              [ \"$(pwd -P)\" = /checkout ]" : "              [ \"$(pwd -P)\" = /destination ]"
+        if (pwd_line != expected) bad=1
+        if ((getline hash_line) <= 0 || index(hash_line, "              [ \"$(/usr/bin/sha256sum /usr/bin/git ") != 1) bad=1
+        if ((getline first_operation) <= 0) bad=1
+        if (role == "acquisition" && first_operation != "              /usr/bin/git init /checkout") bad=1
+        if (role == "transfer" && first_operation != "              /usr/bin/cp -a /source/. /destination/") bad=1
+        if (role == "acquisition") acquisition_done=1
+        if (role == "transfer") transfer_done=1
+        role=""; next
+    }
+    END { exit !(acquisition_done == 1 && transfer_done == 1 && bad == 0 && role == "" && expected_workdir == "") }
+' "$workflow" || fail 'container working-directory control flow changed'
 [ "$(/usr/bin/grep -Fc '/usr/bin/rmdir "$docker_config"' "$workflow")" -eq 1 ] || fail 'workflow Docker config cleanup changed'
 [ "$(/usr/bin/grep -Fc 'find "$docker_config" -mindepth 1 -maxdepth 1 -print -quit' "$workflow")" -eq 2 ] || fail 'workflow Docker config emptiness proof changed'
 /usr/bin/grep -Fq 'for name in DOCKER_HOST DOCKER_CONTEXT DOCKER_TLS_VERIFY DOCKER_CERT_PATH DOCKER_CONFIG; do' "$workflow" || fail 'workflow Docker selector denial missing'
