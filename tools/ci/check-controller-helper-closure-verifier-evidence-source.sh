@@ -17,11 +17,11 @@ for file in "$contract" "$validator" "$policy" "$valid" "$malformed" "$cases"; d
     [ -f "$file" ] && [ ! -L "$file" ] && [ -s "$file" ] ||
         fail "required source unavailable: $file"
 done
-[ "$(sha_file "$contract")" = d3cff3a4f9e566cb37fdea4b7aefd769e8ef6b99fece1ccef44ec30eac198448 ] ||
+[ "$(sha_file "$contract")" = 71b222fec65a433aff0fa067ef0e9f9a3e32eba9e6f9c52064eb7a4dd1b4ea03 ] ||
     fail 'evidence contract bytes escaped review'
-[ "$(sha_file "$validator")" = 5aa822d4fd51e1e2e753ae60b2d734694d22b646e063cdb286901782680b3260 ] ||
+[ "$(sha_file "$validator")" = f818c947467cdc01f51f2f94ea0e9e5171450fee961fcb3ec82203dfa777f2d7 ] ||
     fail 'evidence validator bytes escaped review'
-[ "$(sha_file "$policy")" = 74153523a0d69bcb26823739eb755511e7664e5571172d7cec7f8d5b24e3b32c ] ||
+[ "$(sha_file "$policy")" = 47f2a06e7ffc5451384a3f8a522bf7b6815fd425be25ccb095233236db2ac858 ] ||
     fail 'evidence policy bytes escaped review'
 [ "$(sha_file "$valid")" = cc5bda22d4bba1eeb7e53d9604fcef23b0eabfc7402216826dcd124d89c6072c ] ||
     fail 'valid seed bytes escaped review'
@@ -40,6 +40,8 @@ for required in \
     'semantic_payload_rule=payload_bytes-canonical-positive-1..16777216;payload_sha256-nonzero-lowercase-SHA256;validator-consumes+hashes-exact-arbitrary-payload-and-rejects-extension' \
     'oracle_derivation_rule=observed-event+timeout-termination+residual-proof-payloads-byte-equal-exact-case-catalog-oracle;mutation-schedule+trigger+acknowledgement+residual-source-payloads-byte-equal-exact-complete-catalog-row' \
     'receipt_reconstruction_rule=verification-receipt-inputs-is-exact-31-line-canonical-receipt-bytes;validator-checks-line-order+literal+trusted-run+digest+decimal+false-domains,candidate-manifest-equals-recomputed-manifest,and-field-SHA256-equals-trusted-header-receipt-SHA256' \
+    'receipt_digest_projection=observer_sha256:event-bytes-payload,tool_pins_sha256:tool-inventory-payload,find+sort+wc+stat+cmp+id:exact-six-line-tool-inventory-values,candidate_receipt_sha256:fixture-inventory-payload,candidate_manifest_sha256+recomputed_manifest_sha256:canonical-manifest-payload,topology_sha256:topology-payload,second_pass_sha256:mount-identities-payload' \
+    'observed_result_derivation=disposition-primary-from-catalog-error-prefix+exit-1;precedence-primary-from-first-error+exit-1;fault-primary-from-F-id+termination/controller-map-from-exact-oracle;receipt-state-from-exact-oracle;validator-byte-compares-derived-record-to-retained-observed-event' \
     'blob_allocation=B000001-clean-success-pass-1+RUN;B000002-clean-success-pass-2+RUN;then-logical-case-order-with-four-consecutive-pre+stdout+stderr+post-blobs-per-runtime-row-or-one-residual-source-proof-blob-per-residual-row;last-B000709' \
     'raw_blob_ids_rule=nonempty-canonical-B-identities-comma-separated-no-spaces;runtime-exact-four-assigned-consecutive-IDs-in-pre+stdout+stderr+post-order;residual-exact-one-assigned-ID;globals-never-listed' \
     'base64_payload_total_max=396032120' \
