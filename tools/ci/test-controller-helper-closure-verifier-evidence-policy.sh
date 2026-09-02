@@ -326,6 +326,52 @@ validator_scratch=$work/validator
 /bin/sh "$validator" "$valid" "$cases" "$validator_scratch" >/dev/null ||
     fail 'complete canonical evidence was rejected'
 
+rewrite_first_blob() {
+    mode=$1
+    input=$2
+    output=$3
+    original=$work/rewrite.original
+    changed=$work/rewrite.changed
+    block=$work/rewrite.block
+    : > "$original"
+    /usr/bin/awk -F '|' '
+        $1=="B" && $2=="B000001" { inside=1; next }
+        inside && $1=="B" { exit }
+        inside && $1=="C" { print $4 }
+    ' "$input" |
+    while IFS= read -r payload; do
+        printf '%s' "$payload" | /usr/bin/base64 --decode >> "$original"
+    done
+    [ "$(size_file "$original")" -gt 1436 ] || fail 'multi-chunk positive vector is not multi-chunk'
+    case "$mode" in
+        inner-length)
+            /usr/bin/sed '0,/field.01.bytes=[0-9][0-9][0-9]/s//field.01.bytes=999/' "$original" > "$changed"
+            ;;
+        inner-hash)
+            /usr/bin/sed '0,/field.01.sha256=[0-9a-f]*/s//field.01.sha256=2222222222222222222222222222222222222222222222222222222222222222/' "$original" > "$changed"
+            ;;
+        *) fail "unknown rewrite mode $mode" ;;
+    esac
+    [ "$(size_file "$changed")" -eq "$(size_file "$original")" ] || fail "$mode rewrite changed outer length"
+    changed_bytes=$(size_file "$changed")
+    changed_sha=$(sha_file "$changed")
+    changed_chunks=$(((changed_bytes + 1435) / 1436))
+    printf 'B|B000001|clean-success-pass-1|RUN|%s|%s|%s\n' "$changed_bytes" "$changed_chunks" "$changed_sha" > "$block"
+    rewrite_index=1
+    rewrite_offset=0
+    while [ "$rewrite_index" -le "$changed_chunks" ]; do
+        /bin/dd if="$changed" of="$piece" bs=1 skip="$rewrite_offset" count=1436 status=none
+        payload=$(/usr/bin/base64 -w 0 "$piece")
+        cid=$(/usr/bin/printf 'C%06d' "$rewrite_index")
+        printf 'C|B000001|%s|%s\n' "$cid" "$payload" >> "$block"
+        rewrite_offset=$((rewrite_offset + $(size_file "$piece")))
+        rewrite_index=$((rewrite_index + 1))
+    done
+    /usr/bin/sed -n '1p' "$input" > "$output"
+    /bin/cat "$block" >> "$output"
+    /usr/bin/awk -F '|' '$1=="B" && $2=="B000002" { keep=1 } keep { print }' "$input" >> "$output"
+}
+
 mutate() {
     id=$1
     input=$2
@@ -344,10 +390,8 @@ mutate() {
             { /bin/cat "$input"; /usr/bin/tail -n 1 "$input"; } > "$output" ;;
         EP008)
             /usr/bin/sed '0,/runtime-pre-input-topology/s//runtime-stdout/' "$input" > "$output" ;;
-        EP009)
-            /usr/bin/awk -F '|' 'BEGIN{OFS="|"} !done && $1=="B"{$5=$5+1;done=1}{print}' "$input" > "$output" ;;
-        EP010)
-            /usr/bin/awk -F '|' 'BEGIN{OFS="|"} !done && $1=="B"{$7="2222222222222222222222222222222222222222222222222222222222222222";done=1}{print}' "$input" > "$output" ;;
+        EP009) rewrite_first_blob inner-length "$input" "$output" ;;
+        EP010) rewrite_first_blob inner-hash "$input" "$output" ;;
         EP011)
             /usr/bin/awk -F '|' 'BEGIN{OFS="|"} !done && $1=="C"{sub(/=$/,"",$4);done=1}{print}' "$input" > "$output" ;;
         EP012)
@@ -363,7 +407,7 @@ mutate() {
         EP017)
             /usr/bin/awk -F '|' 'BEGIN{OFS="|";pad=""} !done && $1=="C"{for(i=0;i<2050;i++)pad=pad"A";$4=pad;done=1}{print}' "$input" > "$output" ;;
         EP018)
-            /usr/bin/awk -F '|' 'BEGIN{OFS="|"} !done && $1=="N"{$6="N001";done=1}{print}' "$input" > "$output" ;;
+            /usr/bin/awk -F '|' 'BEGIN{OFS="|"} !done && $1=="N"{$6="B000001";done=1}{print}' "$input" > "$output" ;;
         EP019)
             /usr/bin/awk -F '|' 'BEGIN{OFS="|"} !done && $1=="N"{$7="2222222222222222222222222222222222222222222222222222222222222222";done=1}{print}' "$input" > "$output" ;;
         EP020)
