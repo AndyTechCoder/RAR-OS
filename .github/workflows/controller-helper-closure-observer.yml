@@ -174,11 +174,13 @@ jobs:
             --security-opt no-new-privileges --cap-drop ALL \
             --tmpfs "/tmp:rw,noexec,nosuid,nodev,size=64m,uid=$runner_uid,gid=$runner_gid,mode=700" \
             --mount "type=volume,source=$volume,target=/checkout" \
+            --workdir /checkout \
             "$checkout_image" /usr/bin/env -i \
             HOME=/tmp PATH=/usr/bin:/bin LC_ALL=C LANG=C GIT_CONFIG_NOSYSTEM=1 \
             GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false \
             /usr/bin/dash -c '
               set -eu
+              [ "$(pwd -P)" = /checkout ]
               [ "$(/usr/bin/sha256sum /usr/bin/git | /usr/bin/awk "{print \$1}")" = 356db14e102d68a1a37d8a1ac577dfd678d45d46e92f468bef8b7154e7bfdc60 ]
               /usr/bin/git init /checkout
               /usr/bin/git -C /checkout remote add origin https://github.com/AndyTechCoder/RAR-OS.git
@@ -214,11 +216,13 @@ jobs:
             --tmpfs "/tmp:rw,noexec,nosuid,nodev,size=64m,uid=$runner_uid,gid=$runner_gid,mode=700" \
             --mount "type=volume,source=$volume,target=/source,readonly" \
             --mount "type=bind,source=$partial,target=/destination" \
+            --workdir /destination \
             "$checkout_image" /usr/bin/env -i \
             HOME=/tmp PATH=/usr/bin:/bin LC_ALL=C LANG=C GIT_CONFIG_NOSYSTEM=1 \
             GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false \
             /usr/bin/dash -c '
               set -eu
+              [ "$(pwd -P)" = /destination ]
               [ "$(/usr/bin/sha256sum /usr/bin/git | /usr/bin/awk "{print \$1}")" = 356db14e102d68a1a37d8a1ac577dfd678d45d46e92f468bef8b7154e7bfdc60 ]
               /usr/bin/cp -a /source/. /destination/
               [ "$(/usr/bin/git -C /destination rev-parse HEAD)" = "$1" ]

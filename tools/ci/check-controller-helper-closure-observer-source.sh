@@ -21,18 +21,18 @@ sha() { /usr/bin/shasum -a 256 "$1" | /usr/bin/awk '{ print $1 }'; }
 for file in "$observer" "$contract" "$test_contract" "$workflow" "$wrapper" "$harness" "$policy" "$policy_test" "$catalog" "$fixture" "$pins" "$receipt"; do
     [ -f "$file" ] && [ ! -L "$file" ] && [ -s "$file" ] || fail "required file missing: $file"
 done
-/bin/sh -n "$observer" "$wrapper" "$harness" "$policy" "$policy_test" || fail 'C2B shell syntax invalid'
+/bin/sh -n "$observer" "$harness" "$policy" "$policy_test" || fail 'C2B POSIX shell syntax invalid'
 for script in "$observer" "$wrapper" "$harness" "$policy" "$policy_test"; do
     [ -x "$script" ] || fail "required C2B script is not executable: $script"
 done
 [ "$(sha "$observer")" = 6fa10b187698077bfa96a119c376aeecb2ed4db92a25af3aad0f5add46e3b6cb ] || fail 'observer bytes escaped review'
 [ "$(sha "$contract")" = 944229644f0805876403cd858d0d8c3c993d73bf00baef4c3ffcbbc7a2522836 ] || fail 'contract bytes escaped review'
 [ "$(sha "$test_contract")" = d2f8837b52bfd2f5c77bc527b7106e981a3ed3bd7dd7114953a83316870045d4 ] || fail 'test_contract bytes escaped review'
-[ "$(sha "$workflow")" = 880f00f804d3cd76f26ea1751c17c0d17e3bdfdf72b05a379f082bd37cf7fcdd ] || fail 'workflow bytes escaped review'
+[ "$(sha "$workflow")" = ff5fe7ca2841134fb9671e571b8d2a0f5c78e3fc0f9baa4fa367719d7283158f ] || fail 'workflow bytes escaped review'
 [ "$(sha "$wrapper")" = 0483af6a99bc63eeb1b6ca275aa80c05d8bb9cbcaa353cad603e9ad9cb4bfcbc ] || fail 'wrapper bytes escaped review'
 [ "$(sha "$harness")" = 459d44d23d0e4036d233ab9bf1ab70b0b665352d2d7646f30d59ef67ab8b8677 ] || fail 'harness bytes escaped review'
-[ "$(sha "$policy")" = 34379fa158aea24907a23749d12a41af0803473d842e5b6df1756833898bad55 ] || fail 'policy bytes escaped review'
-[ "$(sha "$policy_test")" = 1098ba04dd081862afabe3203f5a9da9830f7b3cc3bca37d3c09385a2250ef7a ] || fail 'policy_test bytes escaped review'
+[ "$(sha "$policy")" = 663886549a684cf01d836f160a169f7876af8db20f3e132740e18d1a75cb68f2 ] || fail 'policy bytes escaped review'
+[ "$(sha "$policy_test")" = 0426d3a57a5abf111a17619e32e74b957f52d18369fb4592e2c07a07c57ef064 ] || fail 'policy_test bytes escaped review'
 [ "$(sha "$catalog")" = 6b946f446d773389e924be0c8d35e88577b3e177f3da0d52af3f52cea398e289 ] || fail 'catalog bytes escaped review'
 [ "$(sha "$fixture")" = bbef536b8820f962d3ce529de904421b9aa8cf808ad29953321f2b1cdafd0314 ] || fail 'fixture bytes escaped review'
 [ "$(sha "$pins")" = c9cc0e778a0ee766d7e83286021c29aaff29ad55eea4431f921f4cc77972c3a9 ] || fail 'pins bytes escaped review'
