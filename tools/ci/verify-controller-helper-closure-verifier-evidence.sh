@@ -436,8 +436,7 @@ parse_envelope() {
         IFS= read -r field_terminator <&3 || fail 'field terminator missing'
         [ -z "$field_terminator" ] || fail 'field length framing mismatch'
         if [ -n "$target_ledger" ]; then
-            printf '%s|%s|%s|%s\n' "$nn" "$expected_name" "$field_bytes" "$field_sha" >>
-                "$target_ledger"
+            printf '%s|%s|%s|%s\n' "$nn" "$expected_name" "$field_bytes" "$field_sha" >> "$target_ledger"
         fi
         if [ "$expected_name" = verification-receipt-inputs ]; then
             [ "$field_sha" = "$RAR_EXPECTED_VERIFICATION_RECEIPT_SHA256" ] ||
