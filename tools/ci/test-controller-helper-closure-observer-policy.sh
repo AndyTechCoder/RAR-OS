@@ -284,16 +284,16 @@ reset
 /usr/bin/sed -i 's/--workdir \/destination/--workdir \/wrong-destination/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject transfer-workdir check
 reset
-/usr/bin/awk '$0 != "              [ \"$(pwd -P)\" = /checkout ]" { print }' "$repo/.github/workflows/controller-helper-closure-observer.yml" > "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated"
+/usr/bin/awk '$0 != "              [ \"$(pwd -P)\" = /checkout ] || fail \"working directory\"" { print }' "$repo/.github/workflows/controller-helper-closure-observer.yml" > "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated"
 /usr/bin/mv "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated" "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject acquisition-pwd-assertion check
 reset
-/usr/bin/awk '$0 != "              [ \"$(pwd -P)\" = /destination ]" { print }' "$repo/.github/workflows/controller-helper-closure-observer.yml" > "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated"
+/usr/bin/awk '$0 != "              [ \"$(pwd -P)\" = /destination ] || fail \"working directory\"" { print }' "$repo/.github/workflows/controller-helper-closure-observer.yml" > "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated"
 /usr/bin/mv "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated" "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject transfer-pwd-assertion check
 reset
 /usr/bin/awk '
-    $0 == "              [ \"$(pwd -P)\" = /checkout ]" { held=$0; next }
+    $0 == "              [ \"$(pwd -P)\" = /checkout ] || fail \"working directory\"" { held=$0; next }
     held != "" && $0 == "              /usr/bin/git init /checkout || fail \"git init\"" { print; print held; held=""; next }
     { print }
     END { if (held != "") print held }
@@ -302,7 +302,7 @@ reset
 reject acquisition-pwd-order check
 reset
 /usr/bin/awk '
-    $0 == "              [ \"$(pwd -P)\" = /destination ]" { held=$0; next }
+    $0 == "              [ \"$(pwd -P)\" = /destination ] || fail \"working directory\"" { held=$0; next }
     held != "" && index($0, "              actual_sha=$(/usr/bin/git -C /destination rev-parse HEAD)") == 1 { print; print held; held=""; next }
     { print }
     END { if (held != "") print held }
