@@ -98,13 +98,20 @@ and cannot increase the implementation count.
   `4137f3397590958490dff261ee617df5f40e7cad`. C2A then merged through
   PRs #111-#112; exact-main Specifications run `33473648494` passed validation
   and all 27 isolated mutation-policy tests at
-  `c862e27771b999e593ae26ea12ef424613b67bac`. C2B is now the active candidate:
-  it stages the main-only isolated O001-O021 harness, one production
-  observation, independent four-file validation, and bounded retention. It
-  remains incomplete and non-activating until exact-head review, merge, and
-  distinct exact-main Specifications and observer runs pass. C3V must still
-  independently verify the current exact set, and C3A must separately accept it
-  before any helper build or test.
+  `c862e27771b999e593ae26ea12ef424613b67bac`. C2 later completed at exact
+  main `70a683dfb6dbde03f0f884ddc16ac2a2680a4f4f`: Specifications run
+  `33608694457` and Observer run `33608694456` passed. The C3V D0 packet
+  then merged through PR #132 and bounded checker remediations #133-#134;
+  exact-main Specifications run `33614577338` passed full validation and
+  mutation policy at `8af54a165f930caf7689bff2b070394ede0ad73a`.
+  PR #135 corrected the evidence padding bound and closed the byte grammar;
+  exact-main run `33674068492` passed at
+  `730520de48897a9b41412e0662c0a30d57a59f0c`. C3VA is now the active
+  source-only candidate: it adds the evidence validator and one bounded
+  GitHub-only 20-mutation policy test, but no verifier runtime, workflow,
+  container, compiler, helper, target, acceptance, or readiness authority.
+  C3VB one-shot verification and C3VR retirement remain separate future gates;
+  C3A must later accept retained evidence before any helper build or test.
 - PR #13 is merged at `abd75bfccf4fcd2f197871225d1a78233c0d87dc`;
   exact post-merge trusted-controller run `33294557261` passed. This closes only
   the controller bootstrap, not target implementation or Sprint completion.
