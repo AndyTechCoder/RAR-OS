@@ -35,7 +35,15 @@ printf '%s\n' "$ephemeral" | while IFS= read -r test; do
     [ "$(/usr/bin/grep -Ec '^scratch=' "$test")" -eq 1 ] || exit 1
     [ "$(/usr/bin/grep -Ec '^work=' "$test")" -eq 1 ] || exit 1
     ! /usr/bin/grep -Eq '\$root/out|output_root=|output=\$root/out' "$test" || exit 1
-    ! /usr/bin/sed 's|/dev/null||g' "$test" | /usr/bin/grep -Eq '/(dev|proc|sys|run)/' || exit 1
+    if [ "$test" = tools/ci/test-controller-helper-closure-observer-policy.sh ]; then
+        [ "$(/usr/bin/grep -Fo '/var/run/docker.sock' "$test" | /usr/bin/wc -l | /usr/bin/tr -d ' ')" -eq 18 ] || exit 1
+        ! /usr/bin/grep -F '/var/run/docker.sock' "$test" |
+            /usr/bin/grep -Ev '^(/usr/bin/printf|/usr/bin/sed|        print ")' || exit 1
+        ! /usr/bin/sed -e 's|/dev/null||g' -e 's|/var/run/docker.sock||g' "$test" |
+            /usr/bin/grep -Eq '/(dev|proc|sys|run)/' || exit 1
+    else
+        ! /usr/bin/sed 's|/dev/null||g' "$test" | /usr/bin/grep -Eq '/(dev|proc|sys|run)/' || exit 1
+    fi
     ! /usr/bin/grep -Eq "^(/bin/sh )?$test([[:space:]]|$)" tools/ci/check-sprint-static.sh || exit 1
     ! /usr/bin/grep -Eq "^[[:space:]]*/bin/sh[[:space:]]+$test([[:space:]]|$)" tools/ci/check-specs.sh || exit 1
 done
