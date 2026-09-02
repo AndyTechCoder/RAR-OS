@@ -1300,6 +1300,7 @@ fn class_b_host_inventory_is_complete_canonical_and_traceable() {
         "ci-git",
         "ci-linux-sysroot",
         "actions-checkout",
+        "actions-upload-artifact",
         "github-hosted-runner",
         "github-runner-container-engine",
     ]
