@@ -281,6 +281,7 @@ done < "$plan"
 logical=0
 while IFS='|' read -r marker case_id catalog_kind rest; do
     [ "$marker" = case ] || continue
+    case "$case_id" in V[0-9][0-9][0-9]|Q[0-9][0-9][0-9]|X[0-9][0-9][0-9]) ;; *) continue ;; esac
     logical=$((logical + 1))
     raw_ids=$(
         /usr/bin/awk -F '|' -v c="$case_id" '
@@ -381,7 +382,7 @@ mutate() {
     case "$id" in
         EP001) : > "$output" ;;
         EP002)
-            /usr/bin/sed '0,/^B|B000003|/s//B|B000003|runtime-pre-input-topology|V002|0|/' "$input" > "$output" ;;
+            /usr/bin/awk -F '|' 'BEGIN{OFS="|"} !done && $1=="B" && $2=="B000003"{$4="V002";done=1}{print}' "$input" > "$output" ;;
         EP003)
             /usr/bin/sed "1s/$nonce/4444444444444444444444444444444444444444444444444444444444444444/" "$input" > "$output" ;;
         EP004) /usr/bin/sed '$d' "$input" > "$output" ;;
