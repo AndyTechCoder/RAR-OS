@@ -30,13 +30,15 @@ grep -Fqx 'chunk=C|B000001|C000001|YQ==' "$valid_seed" ||
 grep -Fqx 'chunk=C|B000001|C000001|YQ' "$malformed_seed" ||
     fail 'malformed Base64 seed changed'
 
-scratch=$(/usr/bin/mktemp -d /tmp/rar-c3va-evidence.XXXXXX)
-case "$scratch" in /tmp/rar-c3va-evidence.*) ;; *) fail 'scratch escaped /tmp' ;; esac
-chmod 700 "$scratch"
+scratch=$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")
+[ "$scratch" != disabled ] || { printf '%s\n' 'C3VA evidence policy test skipped: ephemeral scratch disabled'; exit 0; }
+work=$(mktemp -d "$scratch/rar-c3va-evidence.XXXXXX")
+case "$work" in "$scratch"/rar-c3va-evidence.*) ;; *) fail 'work root escaped ephemeral scratch' ;; esac
+chmod 700 "$work"
 cleanup() {
     rc=$?
     trap - EXIT HUP INT TERM
-    /bin/rm -rf -- "$scratch"
+    /bin/rm -rf -- "$work"
     exit "$rc"
 }
 trap cleanup EXIT HUP INT TERM
@@ -65,13 +67,13 @@ export RAR_EXPECTED_FIXTURE_IMAGE_SHA256=$digest
 export RAR_EXPECTED_TOOL_PINS_SHA256=$digest
 export RAR_EXPECTED_ARTIFACT_NONCE=$nonce
 
-plan=$scratch/plan
-ledger=$scratch/ledger
-body=$scratch/body
-envelope=$scratch/envelope
-piece=$scratch/piece
-preimage=$scratch/preimage
-valid=$scratch/valid.v0
+plan=$work/plan
+ledger=$work/ledger
+body=$work/body
+envelope=$work/envelope
+piece=$work/piece
+preimage=$work/preimage
+valid=$work/valid.v0
 : > "$ledger"
 : > "$body"
 
@@ -203,7 +205,7 @@ done < "$cases"
     /bin/cat "$body"
 } > "$valid"
 
-validator_scratch=$scratch/validator
+validator_scratch=$work/validator
 /bin/mkdir "$validator_scratch"
 /bin/sh "$validator" "$valid" "$cases" "$validator_scratch" >/dev/null ||
     fail 'complete canonical evidence was rejected'
@@ -259,7 +261,7 @@ executed=0
 while IFS='|' read -r marker id class expected; do
     [ "$marker" = case ] || continue
     [ "$expected" = reject ] || fail "policy case $id is not reject"
-    mutated=$scratch/$id.v0
+    mutated=$work/$id.v0
     mutate "$id" "$valid" "$mutated"
     /bin/rm -rf -- "$validator_scratch"
     /bin/mkdir "$validator_scratch"
