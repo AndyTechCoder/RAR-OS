@@ -333,7 +333,8 @@ validate_projection() {
     if IFS= read -r p_extra <&4; then fail "semantic field $name extension bytes"; fi
     exec 4<&-
     case "$name" in
-        observed-event|timeout-termination|residual-proof)
+        observed-event) validate_observed_result "$semantic_payload" ;;
+        timeout-termination|residual-proof)
             printf '%s' "$binding_oracle" > "$semantic_expected"
             /usr/bin/cmp -s "$semantic_payload" "$semantic_expected" ||
                 fail "$name does not retain exact catalog oracle bytes"
@@ -343,6 +344,51 @@ validate_projection() {
                 fail "$name does not retain exact catalog row bytes"
             ;;
     esac
+}
+
+validate_observed_result() {
+    raw=$1
+    oldifs=$IFS
+    IFS='|' read -r row_marker row_case row_kind row_source row_left row_right row_binding row_oracle <<EOF
+$(/bin/cat "$case_row_file")
+EOF
+    IFS=$oldifs
+    case "$row_kind" in
+        disposition)
+            primary=${row_oracle%%@*}
+            case "$row_oracle" in *+normal-exit-status-1+*) ;; *) fail 'disposition oracle termination unsupported' ;; esac
+            termination=exit-1
+            controller_exit=1
+            ;;
+        precedence)
+            case "$row_oracle" in first-error-E[0-9][0-9][0-9]) ;; *) fail 'precedence oracle unsupported' ;; esac
+            primary=${row_oracle#first-error-}
+            termination=exit-1
+            controller_exit=1
+            ;;
+        fault)
+            primary=$row_source
+            case "$row_oracle" in
+                signal-25+controller-exit-map-153+*) termination=signal-25; controller_exit=153 ;;
+                exit-1+*) termination=exit-1; controller_exit=1 ;;
+                *) fail 'fault oracle termination unsupported' ;;
+            esac
+            ;;
+        *) fail 'runtime observed result used for residual row' ;;
+    esac
+    case "$row_oracle" in *no-valid-final-receipt*) receipt_state=no-valid-final-receipt ;; *no-receipt*) receipt_state=no-receipt ;; *) receipt_state=no-valid-final-receipt ;; esac
+    {
+        printf '%s\n' \
+            'schema=rar-c3v-observed-result-v0' \
+            "case_id=$row_case" \
+            "catalog_kind=$row_kind" \
+            "primary=$primary" \
+            "termination=$termination" \
+            "controller_exit=$controller_exit" \
+            "receipt_state=$receipt_state"
+    } > "$semantic_expected"
+    /usr/bin/cmp -s "$raw" "$semantic_expected" ||
+        fail 'observed result does not mechanically satisfy catalog oracle'
 }
 
 validate_receipt() {
