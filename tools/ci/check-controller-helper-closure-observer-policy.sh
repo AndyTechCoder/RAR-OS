@@ -72,7 +72,7 @@ for required in \
     'if IFS= read -r _; then fail "unexpected input"; fi' 'fail "stdin closed"' \
     '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock start "$keeper"' 'keeper_policy_exact' \
     '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock create --pull=never --name "$acquisition" --read-only --network bridge' \
-    '--mount "type=volume,source=$volume,target=/checkout"' \
+    '--mount "type=volume,source=$volume,target=/checkout,volume-nocopy"' \
     'GIT_CONFIG_NOSYSTEM=1' 'GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false' \
     '356db14e102d68a1a37d8a1ac577dfd678d45d46e92f468bef8b7154e7bfdc60' \
     '/usr/bin/git init /checkout' \
@@ -142,7 +142,7 @@ docker_create_blocks=$(/usr/bin/awk '
 ' "$workflow") || fail 'cannot extract complete Docker create spans'
 docker_create_blocks_digest_output=$(/usr/bin/printf '%s\n' "$docker_create_blocks" | /usr/bin/shasum -a 256) || fail 'cannot hash complete Docker create spans'
 docker_create_blocks_sha256=${docker_create_blocks_digest_output%% *}
-[ "$docker_create_blocks_sha256" = 1a8566ddd28ca5fc1502849e5967add2c5cc566563b4238b1bd2bb5bc7aae59c ] || fail 'complete Docker create spans changed'
+[ "$docker_create_blocks_sha256" = 0578332b96958a216bf75562fed145e928b938f854aa179812d0d66461d4b7d2 ] || fail 'complete Docker create spans changed'
 docker_logical_inventory=$(/usr/bin/awk '
     BEGIN { needle="/usr/bin/docker" }
     {
@@ -183,7 +183,7 @@ docker_logical_inventory=$(/usr/bin/awk '
 ' "$workflow") || fail 'cannot extract complete logical Docker inventory'
 docker_logical_inventory_digest_output=$(/usr/bin/printf '%s\n' "$docker_logical_inventory" | /usr/bin/shasum -a 256) || fail 'cannot hash complete logical Docker inventory'
 docker_logical_inventory_sha256=${docker_logical_inventory_digest_output%% *}
-[ "$docker_logical_inventory_sha256" = 535711e7612b2d44ad4bb28847a87ac9478c87594a99b076de4bccab8f5bf440 ] || fail 'complete logical Docker inventory changed'
+[ "$docker_logical_inventory_sha256" = 29a6cd6456f247e4f9445a5dd8053b04bfd0d53487d4cc9d1943b2b414c610cf ] || fail 'complete logical Docker inventory changed'
 /usr/bin/awk '
     BEGIN {
         needle="/usr/bin/docker"
@@ -239,7 +239,7 @@ docker_logical_inventory_sha256=${docker_logical_inventory_digest_output%% *}
     END { exit !(done == 1 && bad == 0 && state == 0 && started == 0) }
 ' "$workflow" || fail 'image acquisition control flow changed'
 /usr/bin/awk '
-    $0 == "            --mount \"type=volume,source=$volume,target=/checkout\" \\" {
+    $0 == "            --mount \"type=volume,source=$volume,target=/checkout,volume-nocopy\" \\" {
         if (role || expected_workdir || acquisition_done) bad=1
         expected_workdir="acquisition"; next
     }
@@ -332,16 +332,16 @@ keeper_start_paths=$(/usr/bin/grep -E '/usr/bin/docker --config "\$docker_config
     state == 17 && $0 == "          container_absent \"$transfer\"" { state=18; next }
     state == 18 && $0 == "          container_absent \"$keeper\"" { state=19; next }
     state == 19 && $0 == "          volume_absent \"$volume\"" { state=20; next }
-    state > 0 && state < 20 && (
-        $0 == "          keeper_policy_exact" ||
-        $0 == "          remove_container \"$keeper\"" ||
-        $0 == "          container_absent \"$keeper\"" ||
-        $0 == "          remove_volume \"$volume\"" ||
-        index($0, "--name \"$acquisition\"") ||
-        index($0, "--name \"$transfer\"") ||
-        index($0, "start --attach \"$acquisition\"") ||
-        index($0, "start --attach \"$transfer\"")
-    ) { bad=1 }
+    state > 0 && state < 20 {
+        if ($0 == "          keeper_policy_exact" ||
+            $0 == "          remove_container \"$keeper\"" ||
+            $0 == "          container_absent \"$keeper\"" ||
+            $0 == "          remove_volume \"$volume\"" ||
+            index($0, "--name \"$acquisition\"") ||
+            index($0, "--name \"$transfer\"") ||
+            index($0, "start --attach \"$acquisition\"") ||
+            index($0, "start --attach \"$transfer\"")) bad=1
+    }
     END { exit !(state == 20 && bad == 0) }
 ' "$workflow" || fail 'keeper acquisition/transfer lifecycle order changed'
 [ "$(/usr/bin/grep -Fc '[ "$bytes" -le 67108864 ] && [ "$files" -le 8192 ] && [ "$objects" -le 32768 ]' "$workflow")" -eq 2 ] || fail 'checkout ceilings changed'
