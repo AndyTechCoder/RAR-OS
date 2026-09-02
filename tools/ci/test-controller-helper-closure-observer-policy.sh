@@ -506,4 +506,4 @@ reset
 /usr/bin/mv "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated" "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject false-volume-absence-filter check
 
-printf '%s\n' 'controller-helper observer policy mutations passed: cases=125'
+printf '%s\n' 'controller-helper observer policy mutations passed: cases=127'
