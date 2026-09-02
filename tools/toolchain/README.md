@@ -15,12 +15,13 @@ The Class B inventory records the upstream license and provenance source plus th
 
 Both locks keep external LLD, every QEMU backend, and both firmware inputs unavailable. `certifiable=false` remains mandatory. No command downloads or installs a tool, and no Cargo package, third-party crate, target-linked dependency, target artifact, target asset, firmware payload, or Dependency Exception Record is present.
 
-The CI compiler-closure fields remain `none`. A byte-pinned, source-only
-observer and its experimental contract are checked in for later review, but are
-not wired to a workflow and carry no execution authority. A future explicitly
-authorized cloud observation may emit only a candidate manifest and a
-not-ready receipt; the lock cannot change until the observer tools, complete
-file set, and verifier are independently reviewed and pinned.
+The CI compiler-closure fields remain `none`. C2A's byte-pinned contracts are
+exact-main validated, and C2B stages one main-push-only isolated observer
+workflow. It runs the O001-O021 host harness before exactly one production
+observation and may retain only four independently validated candidate files
+through the pinned upload action. It cannot invoke the compiler, helper, target,
+or update a lock, inventory, profile, gate, or readiness state. The candidate
+remains untrusted until C3V re-observes and C3A separately accepts it.
 
 The exact-set verifier is also present only as byte-pinned inactive source. It
 is not invoked by local checks or workflows and has no reviewed runtime tool-pin

@@ -1,0 +1,339 @@
+name: Controller Helper Closure Observer
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: controller-helper-closure-observer-main
+  cancel-in-progress: false
+
+jobs:
+  observe:
+    name: observe-controller-helper-closure
+    if: github.repository == 'AndyTechCoder/RAR-OS'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      RAR_TRUSTED_CONTROLLER_SHA: ${{ github.sha }}
+      RAR_EXPECTED_SOURCE_REVISION: ${{ github.sha }}
+      RAR_CI_BOOTSTRAP_IMAGE: sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
+    steps:
+      - name: Attest exact main runner
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        run: |
+          [[ "$GITHUB_EVENT_NAME" == push ]]
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_SHA" == "$RAR_TRUSTED_CONTROLLER_SHA" ]]
+          [[ "$GITHUB_SHA" == "$RAR_EXPECTED_SOURCE_REVISION" ]]
+          [[ "${ImageOS-}" == ubuntu24 ]]
+          [[ "${RUNNER_OS-}" == Linux ]]
+          [[ "${RUNNER_ARCH-}" == X64 ]]
+          [[ "${ImageVersion-}" =~ ^[0-9]+(\.[0-9]+)+$ ]]
+
+      - name: Acquire exact main into bounded storage
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        run: |
+          checkout_image=rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
+          runner_uid=$(/usr/bin/id -u)
+          runner_gid=$(/usr/bin/id -g)
+          identity="rar-c2b-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          docker_config="$RUNNER_TEMP/$identity-docker-config"
+          acquisition="$identity-acquire"
+          transfer="$identity-transfer"
+          volume="$identity-source"
+          workspace_parent=$(/usr/bin/dirname "$GITHUB_WORKSPACE")
+          partial="$workspace_parent/.rar-c2b-checkout-partial-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          partial_device=
+          partial_inode=
+          parent_device=
+          parent_inode=
+          for name in DOCKER_HOST DOCKER_CONTEXT DOCKER_TLS_VERIFY DOCKER_CERT_PATH DOCKER_CONFIG; do
+            [[ -z "${!name-}" ]] || { printf 'Docker endpoint override present: %s\n' "$name" >&2; exit 1; }
+          done
+          container_absent() {
+            local found
+            found=$(/usr/bin/timeout --signal=KILL 10s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock container ls -a \
+              --filter "name=^/$1$" --format '{{.Names}}') || return 1
+            [[ -z "$found" ]]
+          }
+          volume_absent() {
+            local found
+            found=$(/usr/bin/timeout --signal=KILL 10s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume ls \
+              --filter "name=^$1$" --format '{{.Name}}') || return 1
+            [[ -z "$found" ]]
+          }
+          remove_container() {
+            local name=$1
+            if ! container_absent "$name"; then
+              /usr/bin/timeout --signal=KILL 10s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock rm --force "$name" >/dev/null || return 1
+            fi
+            container_absent "$name"
+          }
+          force_remove_created_container() {
+            local name=$1
+            /usr/bin/timeout --signal=KILL 10s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock rm --force "$name" >/dev/null || return 1
+            container_absent "$name"
+          }
+          remove_volume() {
+            local name=$1
+            if ! volume_absent "$name"; then
+              /usr/bin/timeout --signal=KILL 10s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume rm --force "$name" >/dev/null || return 1
+            fi
+            volume_absent "$name"
+          }
+          cleanup() {
+            local status=$? cleanup_failed=0
+            trap - EXIT HUP INT TERM
+            remove_container "$acquisition" || cleanup_failed=1
+            remove_container "$transfer" || cleanup_failed=1
+            remove_volume "$volume" || cleanup_failed=1
+            if [[ -n "${partial-}" && (-e "$partial" || -L "$partial") ]]; then
+              case "$partial" in
+                "$workspace_parent"/.rar-c2b-checkout-partial-"$GITHUB_RUN_ID"-"$GITHUB_RUN_ATTEMPT")
+                  if [[ -d "$partial" && ! -L "$partial" &&
+                        "$(/usr/bin/stat -c %d "$partial")" == "$partial_device" &&
+                        "$(/usr/bin/stat -c %i "$partial")" == "$partial_inode" ]]; then
+                    /usr/bin/chmod -R u+w "$partial" || cleanup_failed=1
+                    /usr/bin/rm -rf -- "$partial" || cleanup_failed=1
+                    [[ ! -e "$partial" && ! -L "$partial" ]] || cleanup_failed=1
+                  else
+                    cleanup_failed=1
+                  fi
+                  ;;
+                *) cleanup_failed=1 ;;
+              esac
+            fi
+            container_absent "$acquisition" || cleanup_failed=1
+            container_absent "$transfer" || cleanup_failed=1
+            volume_absent "$volume" || cleanup_failed=1
+            if [[ -e "$docker_config" || -L "$docker_config" ]]; then
+              if [[ -d "$docker_config" && ! -L "$docker_config" ]]; then
+                /usr/bin/rmdir "$docker_config" || cleanup_failed=1
+              else
+                cleanup_failed=1
+              fi
+            fi
+            [[ ! -e "$docker_config" && ! -L "$docker_config" ]] || cleanup_failed=1
+            if [[ "$cleanup_failed" -ne 0 ]]; then exit 1; fi
+            exit "$status"
+          }
+          trap cleanup EXIT
+          trap 'exit 130' HUP INT TERM
+          [[ -d "$workspace_parent" && ! -L "$workspace_parent" ]]
+          [[ "$(CDPATH= cd -- "$workspace_parent" && pwd -P)" == "$workspace_parent" ]]
+          parent_device=$(/usr/bin/stat -c %d "$workspace_parent")
+          parent_inode=$(/usr/bin/stat -c %i "$workspace_parent")
+          [[ -d "$GITHUB_WORKSPACE" && ! -L "$GITHUB_WORKSPACE" ]]
+          [[ -z "$(/usr/bin/find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -print -quit)" ]]
+          [[ ! -e "$partial" && ! -L "$partial" ]]
+          case "$docker_config" in
+            "$RUNNER_TEMP"/rar-c2b-"$GITHUB_RUN_ID"-"$GITHUB_RUN_ATTEMPT"-docker-config) ;;
+            *) printf 'Docker config root identity mismatch\n' >&2; exit 1 ;;
+          esac
+          [[ ! -e "$docker_config" && ! -L "$docker_config" ]]
+          /usr/bin/install -d -m 700 "$docker_config"
+          [[ -d "$docker_config" && ! -L "$docker_config" ]]
+          [[ -z "$(/usr/bin/find "$docker_config" -mindepth 1 -maxdepth 1 -print -quit)" ]]
+          checkout_repo_digest=rust@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
+          needs_pull=0
+          image_inventory=$(/usr/bin/timeout --signal=KILL 10s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock image ls --no-trunc --digests --format '{{.Repository}}@{{.Digest}}')
+          if /usr/bin/grep -Fqx -- "$checkout_repo_digest" <<< "$image_inventory"; then
+            cached_platform=$(/usr/bin/timeout --signal=KILL 10s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock image inspect --format '{{.Os}}/{{.Architecture}}' "$checkout_image")
+            if [[ "$cached_platform" != linux/amd64 ]]; then needs_pull=1; fi
+          else
+            needs_pull=1
+          fi
+          if [[ "$needs_pull" -eq 1 ]]; then
+            /usr/bin/timeout --signal=KILL 180s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock pull --quiet --platform linux/amd64 "$checkout_image" >/dev/null
+          fi
+          platform=$(/usr/bin/timeout --signal=KILL 10s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock image inspect --format '{{.Os}}/{{.Architecture}}' "$checkout_image")
+          [[ "$platform" == linux/amd64 ]]
+          [[ -z "$(/usr/bin/find "$docker_config" -mindepth 1 -maxdepth 1 -print -quit)" ]]
+          container_absent "$acquisition"
+          container_absent "$transfer"
+          volume_absent "$volume"
+          /usr/bin/install -d -m 700 "$partial"
+          partial_device=$(/usr/bin/stat -c %d "$partial")
+          partial_inode=$(/usr/bin/stat -c %i "$partial")
+          [[ "$partial_device" == "$parent_device" ]]
+          /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume create --driver local \
+            --opt type=tmpfs --opt device=tmpfs \
+            --opt "o=size=67108864,uid=$runner_uid,gid=$runner_gid,mode=0700,noexec,nosuid,nodev" \
+            "$volume" >/dev/null
+          [[ "$(/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume inspect --format '{{index .Options "type"}}' "$volume")" == tmpfs ]]
+          [[ "$(/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume inspect --format '{{index .Options "device"}}' "$volume")" == tmpfs ]]
+          [[ "$(/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume inspect --format '{{index .Options "o"}}' "$volume")" == "size=67108864,uid=$runner_uid,gid=$runner_gid,mode=0700,noexec,nosuid,nodev" ]]
+          /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock create --pull=never --name "$acquisition" --read-only --network bridge \
+            --user "$runner_uid:$runner_gid" --cpus 1 --memory 512m --memory-swap 512m --pids-limit 64 \
+            --security-opt no-new-privileges --cap-drop ALL \
+            --tmpfs "/tmp:rw,noexec,nosuid,nodev,size=64m,uid=$runner_uid,gid=$runner_gid,mode=700" \
+            --mount "type=volume,source=$volume,target=/checkout" \
+            "$checkout_image" /usr/bin/env -i \
+            HOME=/tmp PATH=/usr/bin:/bin LC_ALL=C LANG=C GIT_CONFIG_NOSYSTEM=1 \
+            GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false \
+            /usr/bin/dash -c '
+              set -eu
+              [ "$(/usr/bin/sha256sum /usr/bin/git | /usr/bin/awk "{print \$1}")" = 356db14e102d68a1a37d8a1ac577dfd678d45d46e92f468bef8b7154e7bfdc60 ]
+              /usr/bin/git init /checkout
+              /usr/bin/git -C /checkout remote add origin https://github.com/AndyTechCoder/RAR-OS.git
+              /usr/bin/git -C /checkout -c credential.helper= -c core.askPass= \
+                -c filter.lfs.smudge= -c filter.lfs.required=false \
+                fetch --no-tags --depth=1 origin "$1"
+              /usr/bin/git -C /checkout -c filter.lfs.smudge= -c filter.lfs.required=false \
+                checkout --detach FETCH_HEAD
+              [ "$(/usr/bin/git -C /checkout rev-parse HEAD)" = "$1" ]
+              [ -z "$(/usr/bin/git -C /checkout status --porcelain=v1 --untracked-files=all)" ]
+              [ -z "$(/usr/bin/git -C /checkout for-each-ref --format="%(refname)")" ]
+              bytes=$(/usr/bin/du -sb /checkout | /usr/bin/awk "{print \$1}")
+              files=$(/usr/bin/find -P /checkout -xdev -type f -printf x | /usr/bin/wc -c)
+              set -- $(/usr/bin/git -C /checkout count-objects -v | /usr/bin/awk "/^(count|in-pack):/ {print \$2}")
+              [ "$#" -eq 2 ]
+              objects=$(($1 + $2))
+              [ "$bytes" -le 67108864 ] && [ "$files" -le 8192 ] && [ "$objects" -le 32768 ]
+            ' rar-c2b-acquire "$GITHUB_SHA" >/dev/null
+          set +e
+          /usr/bin/timeout --signal=KILL 120s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock start --attach "$acquisition"
+          acquisition_start=$?
+          set -e
+          acquisition_exit=unavailable
+          if [[ "$acquisition_start" -eq 0 ]]; then
+            acquisition_exit=$(/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock inspect --format '{{.State.ExitCode}}' "$acquisition")
+          fi
+          force_remove_created_container "$acquisition"
+          container_absent "$transfer"
+          [[ "$acquisition_start" -eq 0 && "$acquisition_exit" -eq 0 ]]
+          /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock create --pull=never --name "$transfer" --read-only --network none \
+            --user "$runner_uid:$runner_gid" --cpus 1 --memory 512m --memory-swap 512m --pids-limit 64 \
+            --security-opt no-new-privileges --cap-drop ALL \
+            --tmpfs "/tmp:rw,noexec,nosuid,nodev,size=64m,uid=$runner_uid,gid=$runner_gid,mode=700" \
+            --mount "type=volume,source=$volume,target=/source,readonly" \
+            --mount "type=bind,source=$partial,target=/destination" \
+            "$checkout_image" /usr/bin/env -i \
+            HOME=/tmp PATH=/usr/bin:/bin LC_ALL=C LANG=C GIT_CONFIG_NOSYSTEM=1 \
+            GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false \
+            /usr/bin/dash -c '
+              set -eu
+              [ "$(/usr/bin/sha256sum /usr/bin/git | /usr/bin/awk "{print \$1}")" = 356db14e102d68a1a37d8a1ac577dfd678d45d46e92f468bef8b7154e7bfdc60 ]
+              /usr/bin/cp -a /source/. /destination/
+              [ "$(/usr/bin/git -C /destination rev-parse HEAD)" = "$1" ]
+              [ -z "$(/usr/bin/git -C /destination status --porcelain=v1 --untracked-files=all)" ]
+              [ -z "$(/usr/bin/git -C /destination for-each-ref --format="%(refname)")" ]
+              bytes=$(/usr/bin/du -sb /destination | /usr/bin/awk "{print \$1}")
+              files=$(/usr/bin/find -P /destination -xdev -type f -printf x | /usr/bin/wc -c)
+              set -- $(/usr/bin/git -C /destination count-objects -v | /usr/bin/awk "/^(count|in-pack):/ {print \$2}")
+              [ "$#" -eq 2 ]
+              objects=$(($1 + $2))
+              [ "$bytes" -le 67108864 ] && [ "$files" -le 8192 ] && [ "$objects" -le 32768 ]
+              [ "$(CDPATH= cd -- /destination && pwd -P)" = /destination ]
+            ' rar-c2b-transfer "$GITHUB_SHA" >/dev/null
+          set +e
+          /usr/bin/timeout --signal=KILL 30s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock start --attach "$transfer"
+          transfer_start=$?
+          set -e
+          transfer_exit=unavailable
+          if [[ "$transfer_start" -eq 0 ]]; then
+            transfer_exit=$(/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock inspect --format '{{.State.ExitCode}}' "$transfer")
+          fi
+          remove_container "$transfer"
+          [[ "$transfer_start" -eq 0 && "$transfer_exit" -eq 0 ]]
+          remove_volume "$volume"
+          container_absent "$acquisition"
+          container_absent "$transfer"
+          volume_absent "$volume"
+          [[ -d "$partial" && ! -L "$partial" ]]
+          [[ "$(/usr/bin/stat -c %d "$partial")" == "$partial_device" ]]
+          [[ "$(/usr/bin/stat -c %i "$partial")" == "$partial_inode" ]]
+          [[ "$(/usr/bin/stat -c %d "$workspace_parent")" == "$parent_device" ]]
+          [[ "$(/usr/bin/stat -c %i "$workspace_parent")" == "$parent_inode" ]]
+          [[ "$partial_device" == "$parent_device" ]]
+          /usr/bin/chmod -R a-w "$partial"
+          /usr/bin/rmdir "$GITHUB_WORKSPACE"
+          /usr/bin/mv -T "$partial" "$GITHUB_WORKSPACE"
+          [[ -d "$GITHUB_WORKSPACE" && ! -L "$GITHUB_WORKSPACE" ]]
+          [[ "$(/usr/bin/stat -c %d "$GITHUB_WORKSPACE")" == "$partial_device" ]]
+          [[ "$(/usr/bin/stat -c %i "$GITHUB_WORKSPACE")" == "$partial_inode" ]]
+          partial=
+          container_absent "$acquisition"
+          container_absent "$transfer"
+          volume_absent "$volume"
+          trap - EXIT HUP INT TERM
+
+      - name: Verify exact immutable checkout
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          GIT_OPTIONAL_LOCKS: "0"
+        run: |
+          actual_sha=$(git rev-parse HEAD)
+          [[ "$actual_sha" == "$GITHUB_SHA" ]]
+          [[ -z "$(git status --porcelain=v1 --untracked-files=all)" ]]
+          [[ ! -w tools/ci/run-controller-helper-closure-observer.sh ]]
+
+      - name: Bind reviewed source identities
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        run: |
+          wrapper_sha=$(sha256sum tools/ci/run-controller-helper-closure-observer.sh | awk '{print $1}')
+          subject_sha=$(sha256sum tools/ci/observe-controller-helper-closure.sh | awk '{print $1}')
+          fixture_sha=$(sha256sum tools/ci/fixtures/controller-helper-closure-observer/base-closure.v0 | awk '{print $1}')
+          pins_sha=$(sha256sum tools/ci/fixtures/controller-helper-closure-observer/tool-pins.v0 | awk '{print $1}')
+          nonce=$(printf '%s' "$GITHUB_REPOSITORY|$GITHUB_SHA|$GITHUB_RUN_ID|$GITHUB_RUN_ATTEMPT|outer-record" | sha256sum | awk '{print $1}')
+          {
+            printf 'RAR_EXPECTED_WRAPPER_SHA256=%s\n' "$wrapper_sha"
+            printf 'RAR_EXPECTED_SUBJECT_SHA256=%s\n' "$subject_sha"
+            printf 'RAR_EXPECTED_FIXTURE_SHA256=%s\n' "$fixture_sha"
+            printf 'RAR_EXPECTED_TOOL_PINS_SHA256=%s\n' "$pins_sha"
+            printf 'RAR_EXPECTED_RECORD_NONCE=%s\n' "$nonce"
+            printf 'RAR_EXPECTED_ARTIFACT_NAME=controller-helper-closure-observer-%s-%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+            printf 'RAR_EXPECTED_RUN_ID=%s\n' "$GITHUB_RUN_ID"
+            printf 'RAR_EXPECTED_RUN_ATTEMPT=%s\n' "$GITHUB_RUN_ATTEMPT"
+            printf 'RAR_CI_RUNNER_IMAGE_OS=%s\n' "$ImageOS"
+            printf 'RAR_CI_RUNNER_IMAGE_VERSION=%s\n' "$ImageVersion"
+            printf 'RAR_CI_RUNNER_OS=%s\n' "$RUNNER_OS"
+            printf 'RAR_CI_RUNNER_ARCH=%s\n' "$RUNNER_ARCH"
+          } >> "$GITHUB_ENV"
+
+      - name: Prepare exclusive controller evidence root
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          EVIDENCE: ${{ runner.temp }}/controller-helper-closure-observer
+        run: install -d -m 700 "$EVIDENCE"
+
+      - name: Run isolated harness and one candidate observation
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          EVIDENCE: ${{ runner.temp }}/controller-helper-closure-observer
+        run: tools/ci/run-controller-helper-closure-observer.sh "$GITHUB_WORKSPACE" "$EVIDENCE"
+
+      - name: Independently validate exact candidate evidence
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          EVIDENCE: ${{ runner.temp }}/controller-helper-closure-observer
+          RAR_EXPECTED_REPOSITORY: AndyTechCoder/RAR-OS
+          RAR_EXPECTED_REF: refs/heads/main
+          RAR_EXPECTED_EVENT: push
+        run: |
+          tools/ci/verify-controller-helper-closure-observer-run-evidence.sh \
+            "$EVIDENCE" \
+            tools/ci/run-controller-helper-closure-observer.sh \
+            tools/ci/observe-controller-helper-closure.sh \
+            tools/ci/fixtures/controller-helper-closure-observer/base-closure.v0 \
+            tools/ci/fixtures/controller-helper-closure-observer/tool-pins.v0
+
+      - name: Retain four validated candidate files
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: controller-helper-closure-observer-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/controller-helper-closure-observer/controller-helper-closure-observer.cases.v0
+            ${{ runner.temp }}/controller-helper-closure-observer/controller-helper-closure.sha256
+            ${{ runner.temp }}/controller-helper-closure-observer/controller-helper-closure.receipt
+            ${{ runner.temp }}/controller-helper-closure-observer/controller-helper-closure-observer-run-evidence.v0
+          if-no-files-found: error
+          retention-days: 14
+          overwrite: false
+          include-hidden-files: false

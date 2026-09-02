@@ -136,14 +136,17 @@
   inventory remains blocked. The authoritative literal-path C2 packet merged
   through PRs #109-#110, and exact-main Specifications run `33469515632` at
   `4137f3397590958490dff261ee617df5f40e7cad` passed validation and all 26
-  isolated mutation-policy tests. C2A now defines the source-only narrow
-  main-only observer-test authority, canonical outer evidence record,
-  contextual validator, fixtures, and isolated mutation policy. It adds no
-  workflow or runtime and remains incomplete until review, merge, and a
-  distinct exact-main validation/mutation run; C2B remains blocked until then.
-  C3V must later bind the current tools, complete file set, controller,
-  fixtures, retained bytes, and runtime fault/confinement evidence, followed
-  by separate C3A review
+  isolated mutation-policy tests. C2A then merged through PRs #111-#112;
+  exact-main Specifications run `33473648494` at
+  `c862e27771b999e593ae26ea12ef424613b67bac` passed validation and all 27
+  isolated mutation-policy tests. C2B is now the active candidate, staging one
+  main-only isolated O001-O021 harness, one production observation, independent
+  exact four-file validation, and 14-day candidate retention. It remains
+  incomplete and non-activating pending exact-head architecture, correctness,
+  and security review, merge, and distinct exact-main Specifications and
+  observer runs. C3V must later bind the current tools, complete file set,
+  controller, fixtures, retained bytes, and runtime fault/confinement evidence,
+  followed by separate C3A review
 - Controller-helper inventory: an option-neutral blocked instance now binds the
   required builder, compiler closure, trusted source, golden vector, twice-
   reproduced binary, and isolated test-evidence identities. All activating

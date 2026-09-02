@@ -95,13 +95,16 @@ and cannot increase the implementation count.
   and non-activating. The authoritative C2 packet merged through PRs #109-#110;
   exact-main Specifications run `33469515632` passed validation and all 26
   isolated mutation-policy tests at
-  `4137f3397590958490dff261ee617df5f40e7cad`. C2A now freezes the narrow
-  main-only observer-test authority, canonical outer evidence, contextual
-  validator, fixtures, and isolated mutation policy. This source-only change
-  adds no workflow or runtime and remains incomplete until review, merge, and
-  its own exact-main validation/mutation run. C2B stays blocked until then;
-  C3V independently verifies the current exact set, and C3A must separately
-  accept it before any helper build or test.
+  `4137f3397590958490dff261ee617df5f40e7cad`. C2A then merged through
+  PRs #111-#112; exact-main Specifications run `33473648494` passed validation
+  and all 27 isolated mutation-policy tests at
+  `c862e27771b999e593ae26ea12ef424613b67bac`. C2B is now the active candidate:
+  it stages the main-only isolated O001-O021 harness, one production
+  observation, independent four-file validation, and bounded retention. It
+  remains incomplete and non-activating until exact-head review, merge, and
+  distinct exact-main Specifications and observer runs pass. C3V must still
+  independently verify the current exact set, and C3A must separately accept it
+  before any helper build or test.
 - PR #13 is merged at `abd75bfccf4fcd2f197871225d1a78233c0d87dc`;
   exact post-merge trusted-controller run `33294557261` passed. This closes only
   the controller bootstrap, not target implementation or Sprint completion.

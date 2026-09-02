@@ -145,6 +145,21 @@ The C2B workflow must:
 - produce exactly the candidate manifest, 23-line receipt, canonical O001-O021
   case evidence, and versioned outer run-evidence record.
 
+Before source acquisition and before any repository code executes, the trusted
+controller must successfully inventory the local Docker engine for the exact
+pinned Rust repository digest. Inventory failure fails closed without network.
+If the digest is absent, or its successfully inspected cached variant is not
+`linux/amd64`, one anonymous, 180-second-bounded `docker pull` of that exact
+digest for `linux/amd64` is the sole image acquisition network exception. The client uses the exact local Unix endpoint
+and an exclusive, initially empty controller-owned Docker configuration
+directory, receives no secret or credential, and must leave that directory
+empty. A final exact-reference inspection must report `linux/amd64` before
+source acquisition. Every later container creation uses `--pull=never`; image
+inspection, pull failure or timeout, digest mismatch, unexpected configuration
+state, or cleanup failure fails closed. This phase provisions an approved
+Class B host tool only and grants no repository code, observer, compiler,
+helper, target, publication, trust-state, or readiness authority.
+
 The only source-acquisition network exception is an anonymous HTTPS fetch of the
 exact main-push SHA from the canonical public repository. It must run before
 repository code in the same immutable Rust 1.95.0 OCI image already pinned by
@@ -183,11 +198,34 @@ breach, or credential request fails closed. This exception grants source
 transport only; it grants no observer, compiler, helper, target, publication,
 trust-state, or readiness authority.
 
-After source acquisition, repository code, wrapper, harness, observer,
-validators, and every observation container receive no secret, token, network,
-Docker socket, host path outside the exact checkout and controller-owned
-scratch/evidence roots, or mutable source mount. The sole token-bearing
-exception is the already pinned outer `actions/upload-artifact` step after
+After source acquisition, the exact reviewed
+`tools/ci/run-controller-helper-closure-observer.sh` wrapper is the sole
+Docker-capable boundary. It executes on the trusted runner and may invoke only
+the pinned `/usr/bin/docker` client for `create`, `start`, `inspect`,
+`rm`, and exact container-absence queries only through
+`unix:///var/run/docker.sock`. Every invocation supplies that exact
+`--host` value; `DOCKER_HOST`, `DOCKER_CONTEXT`, `DOCKER_TLS_VERIFY`,
+`DOCKER_CERT_PATH`, and `DOCKER_CONFIG` must all be absent, so ambient
+environment or saved/current-context state cannot redirect the client. The
+pre-source image/acquisition/transfer controller uses the same exact endpoint
+binding, an exclusive empty Docker configuration directory, and rejects the
+same ambient selectors before its first Docker call. Every create uses fixed
+arguments and `--pull=never`; only the bounded exact-digest provisioning phase
+above may acquire an image.
+The wrapper receives no authority to build, pull, log in, use a networked Docker
+endpoint, execute in a running container, copy files from a container, or vary
+container policy. No Docker endpoint path, descriptor, environment selector,
+or authority is passed or mounted into any other repository code, the harness,
+observer, validators, or any container. Those components receive no secret, token,
+network, host path outside the exact checkout and controller-owned
+scratch/evidence roots, or mutable source mount. Every post-acquisition
+container remains network-disabled, read-only, non-root, capability-free, and
+resource-bounded. Removal and exact absence of each wrapper-created container
+must succeed before the evidence record, validation, or upload; cleanup failure
+fails closed while preserving the original failure status.
+
+The sole token-bearing exception is the already pinned outer
+`actions/upload-artifact` step after
 independent validation succeeds. It may read only those four exact regular
 non-symlink evidence files, upload once under
 `controller-helper-closure-observer-<run-id>-<run-attempt>`, use a fixed

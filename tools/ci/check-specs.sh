@@ -806,7 +806,7 @@ grep -qx 'license_2=ISC' "$crypto_refs" || fail 'libsodium reference license mis
 class_b_inventory=tools/toolchain/class-b-host-tools.v1
 [ "$(sed -n '1p' "$class_b_inventory")" = 'schema=rar-class-b-host-tool-inventory-v1' ] || fail "Class B inventory schema is invalid"
 [ "$(sed -n '2p' "$class_b_inventory")" = 'id|platform|version|integrity|license|provenance|setup|status' ] || fail "Class B inventory header is invalid"
-[ "$(sed -n '3,$p' "$class_b_inventory" | awk 'END { print NR + 0 }')" -eq 15 ] || fail "Class B inventory entry count is invalid"
+[ "$(sed -n '3,$p' "$class_b_inventory" | awk 'END { print NR + 0 }')" -eq 16 ] || fail "Class B inventory entry count is invalid"
 
 class_b_ids='macos-sealed-bootstrap
 macos-apple-git
@@ -821,6 +821,7 @@ ci-gcc
 ci-git
 ci-linux-sysroot
 actions-checkout
+actions-upload-artifact
 github-hosted-runner
 github-runner-container-engine'
 printf '%s\n' "$class_b_ids" | while IFS= read -r id; do
@@ -838,9 +839,12 @@ done
 
 grep -qx 'schema=rar-host-tool-manifest-v4' tools/toolchain/host-tools.manifest || fail "host tool manifest schema is stale"
 grep -qx 'class_b_inventory=tools/toolchain/class-b-host-tools.v1' tools/toolchain/host-tools.manifest || fail "host tool manifest omits the Class B inventory"
+[ "$(grep -c '^class_b_inventory_sha256=' tools/toolchain/host-tools.manifest)" -eq 1 ] || fail "host tool manifest Class B inventory digest is missing or duplicated"
 grep -Eq '^class_b_inventory_sha256=[0-9a-f]{64}$' tools/toolchain/host-tools.manifest || fail "host tool manifest omits the Class B inventory digest"
 grep -q 'f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3' "$class_b_inventory" || fail "Class B inventory omits the OCI digest"
 grep -q '3d3c42e5aac5ba805825da76410c181273ba90b1' "$class_b_inventory" || fail "Class B inventory omits the checkout action commit"
+grep -Fqx 'actions-upload-artifact|github-actions|v4.6.2|git-sha1-ea165f8d65b6e75b540449e92b4886f43607fa02|MIT|https://github.com/actions/upload-artifact|pin-full-commit-in-controller-helper-closure-observer-workflow-candidate-retention-only|pinned-orchestrator' "$class_b_inventory" || fail "Class B inventory omits the exact candidate-retention upload action"
+grep -q 'ea165f8d65b6e75b540449e92b4886f43607fa02' "$class_b_inventory" || fail "Class B inventory omits the upload action commit"
 grep -q 'ubuntu-24.04-20260823.283.1' "$class_b_inventory" || fail "Class B inventory omits the runner image version"
 grep -qx 'ci_checkout=actions-checkout-v7.0.1-git-sha1-3d3c42e5aac5ba805825da76410c181273ba90b1' \
     tools/toolchain/host-tools.manifest || fail "host tool manifest checkout identity is stale"
@@ -859,6 +863,9 @@ sha256_of() {
     printf '%s\n' "$digest"
 }
 
+class_b_inventory_sha256=$(sha256_of "$class_b_inventory") || fail "cannot hash Class B inventory"
+grep -qx "class_b_inventory_sha256=$class_b_inventory_sha256" tools/toolchain/host-tools.manifest || fail "host tool manifest Class B inventory digest is stale"
+
 controller_helper_packet_sha256=$(sha256_of docs/tasks/sprint-alpha-controller-helper-integration.md) || fail "cannot hash ADR 0024 integration packet"
 [ "$controller_helper_packet_sha256" = 5fcaf8652aa0ebf23f44b403176b9a1716f90456f798d39b708c612bac60724a ] || fail "ADR 0024 integration packet changed without review"
 grep -Fqx 'Status: Authoritative preparation packet - execution remains phase-gated' docs/tasks/sprint-alpha-controller-helper-integration.md || fail "ADR 0024 integration packet status changed"
@@ -871,7 +878,7 @@ grep -Fqx 'Status: Authoritative source-only child packet - implementation requi
 grep -Fqx '`sprint-alpha-controller-helper-integration.md`. This child packet grants no' docs/tasks/sprint-alpha-controller-helper-c1-contracts.md || fail "ADR 0024 C1 packet lost authority denial"
 grep -Fqx -- '- [Sprint Alpha ADR 0024 C1 contract-closure packet](tasks/sprint-alpha-controller-helper-c1-contracts.md)' docs/README.md || fail "ADR 0024 C1 packet is not indexed"
 c2_packet_sha256=$(sha256_of docs/tasks/sprint-alpha-controller-helper-c2-observer.md) || fail "cannot hash ADR 0024 C2 packet"
-[ "$c2_packet_sha256" = f263c3f6f731b1372af54dba9ea68012d33699345a5a89eb485feeb7bc9464fb ] || fail "ADR 0024 C2 packet changed without review"
+[ "$c2_packet_sha256" = b6d30343ca1a9f422435ab3c57addad4a07058d1de103e5f4dba71abf9e442e6 ] || fail "ADR 0024 C2 packet changed without review"
 grep -Fqx 'Status: Authoritative source-only C2 child packet - implementation requires exact-main validation' docs/tasks/sprint-alpha-controller-helper-c2-observer.md || fail "ADR 0024 C2 packet status changed"
 grep -Fqx 'This packet itself grants no workflow execution,' docs/tasks/sprint-alpha-controller-helper-c2-observer.md || fail "ADR 0024 C2 packet lost authority denial"
 grep -Fqx -- '- `tools/ci/check-controller-helper-closure-observer-run-evidence-source.sh`' docs/tasks/sprint-alpha-controller-helper-c2-observer.md || fail "C2B packet omits phase-aware run-evidence checker ownership"
@@ -879,6 +886,14 @@ grep -Fqx -- '- `tools/toolchain/host-tools.manifest`' docs/tasks/sprint-alpha-c
 grep -Fqx 'Before the exact C2B workflow exists, the C2A source checker requires zero' docs/tasks/sprint-alpha-controller-helper-c2-observer.md || fail "C2B packet omits dormant checker phase"
 grep -Fqx 'validator exactly once, only after producer termination and before artifact' docs/tasks/sprint-alpha-controller-helper-c2-observer.md || fail "C2B packet omits exact validator placement"
 grep -Fqx 'binding fails closed. The frozen record schema, validator bytes, candidate' docs/tasks/sprint-alpha-controller-helper-c2-observer.md || fail "C2B packet omits fail-closed transition"
+grep -Fqx '`tools/ci/run-controller-helper-closure-observer.sh` wrapper is the sole' docs/tasks/sprint-alpha-controller-helper-c2-observer.md || fail "C2B packet omits the sole Docker-capable boundary"
+grep -Fqx '`unix:///var/run/docker.sock`. Every invocation supplies that exact' docs/tasks/sprint-alpha-controller-helper-c2-observer.md || fail "C2B packet omits exact local Docker endpoint"
+grep -Fqx '`DOCKER_CERT_PATH`, and `DOCKER_CONFIG` must all be absent, so ambient' docs/tasks/sprint-alpha-controller-helper-c2-observer.md || fail "C2B packet omits Docker context denial"
+grep -Fqx 'Inventory failure fails closed without network.' docs/tasks/sprint-alpha-controller-helper-c2-observer.md || fail "C2B packet conflates image absence with inventory failure"
+grep -Fqx 'digest for `linux/amd64` is the sole image acquisition network exception.' docs/tasks/sprint-alpha-controller-helper-c2-observer.md || fail "C2B packet omits bounded exact-image acquisition"
+grep -Fqx 'directory, receives no secret or credential, and must leave that directory' docs/tasks/sprint-alpha-controller-helper-c2-observer.md || fail "C2B packet omits anonymous empty-config image acquisition"
+grep -Fqx 'arguments and `--pull=never`; only the bounded exact-digest provisioning phase' docs/tasks/sprint-alpha-controller-helper-c2-observer.md || fail "C2B packet omits implicit-pull denial"
+grep -Fqx 'must succeed before the evidence record, validation, or upload; cleanup failure' docs/tasks/sprint-alpha-controller-helper-c2-observer.md || fail "C2B packet omits fail-closed container absence"
 grep -Fqx -- '- [Sprint Alpha ADR 0024 C2 observer-discovery packet](tasks/sprint-alpha-controller-helper-c2-observer.md)' docs/README.md || fail "ADR 0024 C2 packet is not indexed"
 local_lock_sha256=$(sha256_of tools/toolchain/host-tools.lock) || fail "cannot hash local tool lock"
 ci_lock_sha256=$(sha256_of tools/toolchain/host-tools.x86_64-unknown-linux-gnu-ci.lock) || fail "cannot hash CI tool lock"
