@@ -96,6 +96,8 @@ for name in \
     RAR_EXPECTED_ARTIFACT_NONCE; do
     expect_env "$name"
 done
+[ "$(add_bounded 396032119 1 396032120)" = 396032120 ] || fail 'checked bound self-test failed'
+if add_bounded 396032120 1 396032120 >/dev/null 2>&1; then fail 'checked overflow self-test failed'; fi
 [ "$RAR_EXPECTED_REPOSITORY" = AndyTechCoder/RAR-OS ] || fail 'repository expectation invalid'
 revision "$RAR_EXPECTED_CONTROLLER_SHA" || fail 'controller revision malformed'
 revision "$RAR_EXPECTED_SOURCE_SHA" || fail 'source revision malformed'
@@ -130,10 +132,14 @@ decoded=$scratch/current.blob
 pass_one=$scratch/pass-one.fields
 pass_two=$scratch/pass-two.fields
 preimage=$scratch/normalized.preimage
+field_raw=$scratch/current.field
+semantic_expected=$scratch/semantic.expected
+case_row_file=$scratch/case.row
+receipt_keys=$scratch/receipt.keys
 cleanup() {
     rc=$?
     trap - EXIT HUP INT TERM
-    /bin/rm -f -- "$plan" "$ledger" "$encoded" "$chunk" "$decoded" "$pass_one" "$pass_two" "$preimage"
+    /bin/rm -f -- "$plan" "$ledger" "$encoded" "$chunk" "$decoded" "$pass_one" "$pass_two" "$preimage" "$field_raw" "$semantic_expected" "$case_row_file" "$receipt_keys"
     [ -z "$(/usr/bin/find "$scratch" -mindepth 1 -maxdepth 1 -print -quit)" ] || rc=1
     exit "$rc"
 }
@@ -145,7 +151,7 @@ trap cleanup EXIT HUP INT TERM
         'B000002|clean-success-pass-2|RUN'
     /usr/bin/awk -F '|' '
     BEGIN { blob=2; logical=0; runtime=0; residual=0 }
-    /^case\|/ {
+    /^case\|[VQX][0-9][0-9][0-9]\|/ {
         logical++
         expected=(logical<=147 ? sprintf("V%03d",logical) :
             logical<=197 ? sprintf("Q%03d",logical-147) :
@@ -253,6 +259,92 @@ expected_fields_for() {
     esac
 }
 
+observation_for() {
+    case "$1" in
+        domain-header) printf '%s\n' trusted-run-domain ;;
+        tool-inventory|fixture-inventory|output-inventory|pre-mount-inventory|post-mount-inventory) printf '%s\n' complete-inventory ;;
+        topology|pre-topology|post-topology) printf '%s\n' complete-topology ;;
+        canonical-manifest) printf '%s\n' canonical-manifest ;;
+        mount-identities) printf '%s\n' stable-nonaliased-identities ;;
+        event-bytes) printf '%s\n' clean-event-capture ;;
+        resource-bytes|resource-usage) printf '%s\n' within-controller-bounds ;;
+        mutation-schedule) printf '%s\n' exact-catalog-binding-scheduled ;;
+        mutation-trigger) printf '%s\n' exact-trigger-observed ;;
+        mutation-acknowledgement) printf '%s\n' exact-trigger-acknowledged ;;
+        observed-event|timeout-termination) printf '%s\n' catalog-oracle-byte-equal ;;
+        residual-source) printf '%s\n' catalog-source-byte-equal ;;
+        residual-proof) printf '%s\n' catalog-oracle-byte-equal ;;
+        *) return 1 ;;
+    esac
+}
+raw_field() { case "$1" in input-bytes|stdout-bytes|stderr-bytes|output-bytes) return 0 ;; *) return 1 ;; esac; }
+case_binding() {
+    if [ "$current_case" = RUN ]; then
+        binding_row_sha=$RAR_EXPECTED_CASES_SHA256
+        binding_oracle_sha=$RAR_EXPECTED_SUBJECT_SHA256
+        return 0
+    fi
+    /usr/bin/awk -F '|' -v c="$current_case" '$1=="case" && $2==c { print; found++ } END { if(found!=1) exit 1 }' "$cases" > "$case_row_file" || fail 'case row is not unique'
+    binding_row_sha=$(sha_file "$case_row_file")
+    binding_oracle=$(/usr/bin/awk -F '|' '{ print $8 }' "$case_row_file")
+    [ -n "$binding_oracle" ] || fail 'case oracle missing'
+    printf '%s' "$binding_oracle" > "$semantic_expected"
+    binding_oracle_sha=$(sha_file "$semantic_expected")
+}
+validate_projection() {
+    name=$1; raw=$2
+    observation=$(observation_for "$name") || fail "field $name has no semantic rule"
+    case_binding
+    {
+        printf '%s\n' 'schema=rar-c3v-semantic-field-v0' "kind=$current_kind" "case_id=$current_case" "field=$name" "catalog_row_sha256=$binding_row_sha" "oracle_sha256=$binding_oracle_sha" "observation=$observation"
+    } > "$semantic_expected"
+    /usr/bin/cmp -s "$raw" "$semantic_expected" || fail "semantic field $name is not canonically bound"
+}
+validate_receipt() {
+    raw=$1
+    [ "$(size_file "$raw")" -le 8192 ] || fail 'verification receipt oversized'
+    [ "$(/usr/bin/tail -c 1 "$raw" | /usr/bin/od -An -tx1 | /usr/bin/tr -d '[:space:]')" = 0a ] || fail 'verification receipt terminal LF missing'
+    if /usr/bin/od -An -tx1 "$raw" | /usr/bin/grep -Eq '(^| )00( |$)|(^| )0d( |$)'; then fail 'verification receipt NUL or CR present'; fi
+    [ "$(/usr/bin/wc -l < "$raw" | /usr/bin/tr -d ' ')" -eq 31 ] || fail 'verification receipt line count mismatch'
+    printf '%s\n' schema status controller_sha source_sha repository run_id run_attempt runner_os runner_image_version oci_image closure_root verifier_sha256 observer_sha256 tool_pins_sha256 find_sha256 sort_sha256 wc_sha256 stat_sha256 cmp_sha256 id_sha256 candidate_receipt_sha256 candidate_manifest_sha256 recomputed_manifest_sha256 manifest_entries manifest_bytes topology_sha256 second_pass_sha256 helper_compiled helper_executed target_compiled readiness > "$receipt_keys"
+    ordinal=0; manifest_candidate=; manifest_recomputed=
+    while IFS= read -r receipt_line; do
+        ordinal=$((ordinal + 1)); key=${receipt_line%%=*}; value=${receipt_line#*=}
+        [ "$receipt_line" != "$key" ] && [ -n "$value" ] || fail 'verification receipt key/value malformed'
+        expected_key=$(/usr/bin/sed -n "${ordinal}p" "$receipt_keys")
+        [ "$key" = "$expected_key" ] || fail 'verification receipt key order mismatch'
+        case "$key" in
+            schema) [ "$value" = rar-alpha-controller-helper-closure-verification-v0 ] ;;
+            status) [ "$value" = candidate-exact-set-verified-not-reviewed-not-ready ] ;;
+            controller_sha|source_sha) [ "$value" = "$RAR_EXPECTED_CONTROLLER_SHA" ] ;;
+            repository) [ "$value" = "$RAR_EXPECTED_REPOSITORY" ] ;;
+            run_id) [ "$value" = "$RAR_EXPECTED_RUN_ID" ] ;;
+            run_attempt) [ "$value" = "$RAR_EXPECTED_RUN_ATTEMPT" ] ;;
+            runner_os) [ "$value" = ubuntu24 ] ;;
+            runner_image_version) case "$value" in ''|.*|*..*|*.|*[!0-9.]*) false ;; *) [ "${#value}" -le 64 ] ;; esac ;;
+            oci_image) [ "$value" = sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 ] ;;
+            closure_root) [ "$value" = /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu ] ;;
+            verifier_sha256) [ "$value" = "$RAR_EXPECTED_SUBJECT_SHA256" ] ;;
+            tool_pins_sha256) [ "$value" = "$RAR_EXPECTED_TOOL_PINS_SHA256" ] ;;
+            observer_sha256|find_sha256|sort_sha256|wc_sha256|stat_sha256|cmp_sha256|id_sha256|candidate_receipt_sha256|topology_sha256|second_pass_sha256) nonzero_sha "$value" ;;
+            candidate_manifest_sha256) nonzero_sha "$value" && manifest_candidate=$value ;;
+            recomputed_manifest_sha256) nonzero_sha "$value" && manifest_recomputed=$value ;;
+            manifest_entries|manifest_bytes) canonical_positive "$value" ;;
+            helper_compiled|helper_executed|target_compiled|readiness) [ "$value" = false ] ;;
+            *) false ;;
+        esac || fail "verification receipt value invalid: $key"
+    done < "$raw"
+    [ "$manifest_candidate" = "$manifest_recomputed" ] || fail 'verification receipt manifest recomputation mismatch'
+}
+validate_semantic_field() {
+    name=$1; raw=$2
+    case "$name" in
+        verification-receipt-inputs) validate_receipt "$raw" ;;
+        event-bytes|resource-bytes) [ "$current_case" = RUN ] || fail "$name outside clean-success"; validate_projection "$name" "$raw" ;;
+        *) if raw_field "$name"; then :; else validate_projection "$name" "$raw"; fi ;;
+    esac
+}
+
 parse_envelope() {
     target_ledger=
     case "$current" in
@@ -293,12 +385,11 @@ parse_envelope() {
         [ "$field_sha_line" = "field.$nn.sha256=$field_sha" ] &&
             nonzero_sha "$field_sha" || fail 'field digest malformed'
         [ "$field_data_line" = "field.$nn.data" ] || fail 'field data marker invalid'
-        actual_field_sha=$(
-            /bin/dd bs=1 count="$field_bytes" <&3 2>/dev/null |
-                /usr/bin/sha256sum |
-                /usr/bin/awk '{ print $1 }'
-        )
+        /bin/dd bs=1 count="$field_bytes" <&3 of="$field_raw" 2>/dev/null
+        [ "$(size_file "$field_raw")" -eq "$field_bytes" ] || fail 'field decoded length mismatch'
+        actual_field_sha=$(sha_file "$field_raw")
         [ "$actual_field_sha" = "$field_sha" ] || fail 'field decoded digest mismatch'
+        validate_semantic_field "$expected_name" "$field_raw"
         IFS= read -r field_terminator <&3 || fail 'field terminator missing'
         [ -z "$field_terminator" ] || fail 'field length framing mismatch'
         if [ -n "$target_ledger" ]; then
@@ -309,6 +400,7 @@ parse_envelope() {
             [ "$field_sha" = "$RAR_EXPECTED_VERIFICATION_RECEIPT_SHA256" ] ||
                 fail 'verification receipt field is not trusted-header bound'
         fi
+        /bin/rm -f -- "$field_raw" "$semantic_expected" "$case_row_file" "$receipt_keys"
     done
     if IFS= read -r envelope_extra <&3; then
         fail 'envelope has extension bytes'
@@ -424,7 +516,7 @@ EOF
                 fail 'normalized ordinal mismatch'
             expected_case=$(
                 /usr/bin/awk -F '|' -v n="$normalized_seen" '
-                    /^case\|/ { i++; if(i==n){print $2"|"$3; exit} }
+                    /^case\|[VQX][0-9][0-9][0-9]\|/ { i++; if(i==n){print $2"|"$3; exit} }
                 ' "$cases"
             )
             [ "$case_id|$catalog_kind" = "$expected_case" ] ||
