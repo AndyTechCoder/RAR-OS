@@ -209,9 +209,10 @@ accepted content are bounded.
 Only after the acquisition container is removed may a separate pinned,
 network-disabled transfer container mount the acquisition volume read-only and
 one exclusive, initially empty controller-owned partial checkout root writable.
-It first copies exactly `/source/.git` to `/destination/.git`, then copies
-the complete `/source/.` tree to `/destination/`, and only afterward applies
-the real-directory guard and verifies the requested detached exact SHA, a clean
+It copies the complete `/source/.` tree exactly once to `/destination/`; this
+single archive-preserving copy includes `.git` and prevents a second pass from
+overwriting immutable Git pack files. Only afterward it applies the
+real-directory guard and verifies the requested detached exact SHA, a clean
 tree, absence of retained unexpected refs, every byte/file/object ceiling, and
 exact output-root containment. The transfer then exits and is removed. The
 controller rechecks the keeper, removes it, proves it absent, removes the
