@@ -26,12 +26,14 @@ done
 [ "$(/usr/bin/grep -Fxc '      - main' "$workflow")" -eq 1 ] || fail 'main branch not exact'
 [ "$(/usr/bin/grep -Fxc '  contents: read' "$workflow")" -eq 1 ] || fail 'permissions not read-only'
 [ "$(/usr/bin/grep -Fxc '    runs-on: ubuntu-24.04' "$workflow")" -eq 1 ] || fail 'runner not pinned'
+[ "$(/usr/bin/grep -Fxc '    timeout-minutes: 15' "$workflow")" -eq 1 ] || fail 'observe-job deadline changed'
 [ "$(/usr/bin/grep -Fc 'actions/checkout@' "$workflow")" -eq 0 ] || fail 'checkout action receives an implicit token'
 [ "$(/usr/bin/grep -Fxc '        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2' "$workflow")" -eq 1 ] || fail 'upload action pin changed'
 [ "$(/usr/bin/grep -Fxc '      - name: Acquire exact main into bounded storage' "$workflow")" -eq 1 ] || fail 'bounded anonymous acquisition step missing'
 for required in \
     'checkout_image=rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3' \
     'identity="rar-c2b-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"' \
+    'keeper="$identity-keeper"' 'keeper_uid=65532' 'keeper_gid=65532' \
     'docker_config="$RUNNER_TEMP/$identity-docker-config"' \
     'workspace_parent=$(/usr/bin/dirname "$GITHUB_WORKSPACE")' \
     'partial="$workspace_parent/.rar-c2b-checkout-partial-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"' \
@@ -39,7 +41,7 @@ for required in \
     'partial_inode=$(/usr/bin/stat -c %i "$partial")' \
     'parent_device=$(/usr/bin/stat -c %d "$workspace_parent")' \
     'parent_inode=$(/usr/bin/stat -c %i "$workspace_parent")' \
-    'container_absent() {' 'volume_absent() {' 'remove_container() {' 'force_remove_created_container() {' 'remove_volume() {' \
+    'container_absent() {' 'volume_absent() {' 'keeper_policy_exact() {' 'remove_container() {' 'force_remove_created_container() {' 'remove_volume() {' \
     '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock container ls -a' '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume ls' \
     'trap cleanup EXIT' "trap 'exit 130' HUP INT TERM" \
     'if [[ "$cleanup_failed" -ne 0 ]]; then exit 1; fi' \
@@ -59,6 +61,16 @@ for required in \
     '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume create --driver local' '--opt type=tmpfs --opt device=tmpfs' \
     'o=size=67108864,uid=$runner_uid,gid=$runner_gid,mode=0700,noexec,nosuid,nodev' \
     'volume inspect --format '"'"'{{index .Options "o"}}'"'"'' \
+    '[[ "$runner_uid" != "$keeper_uid" ]]' '[[ "$runner_gid" != "$keeper_gid" ]]' \
+    '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock create --pull=never --name "$keeper" --interactive --read-only --network none' \
+    '--user "$keeper_uid:$keeper_gid" --cpus 0.25 --memory 64m --memory-swap 64m --pids-limit 8' \
+    '--mount "type=volume,source=$volume,target=/keep,readonly,volume-nocopy"' \
+    '{{.State.Running}}|{{.State.Restarting}}|{{.RestartCount}}|{{.Config.User}}|{{.HostConfig.NetworkMode}}|{{.HostConfig.ReadonlyRootfs}}|{{.HostConfig.RestartPolicy.Name}}|{{len .Mounts}}' \
+    'true|false|0|$keeper_uid:$keeper_gid|none|true|no|1|volume|$volume|/keep|false' \
+    'a6f559e00b69a4aa4d8cb607be18d9386c5aee55c509e2c075549dcf00e00fc7' \
+    '[ ! -r /keep ] || fail "volume readable"' '[ ! -x /keep ] || fail "volume searchable"' \
+    'if IFS= read -r _; then fail "unexpected input"; fi' 'fail "stdin closed"' \
+    '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock start "$keeper"' 'keeper_policy_exact' \
     '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock create --pull=never --name "$acquisition" --read-only --network bridge' \
     '--mount "type=volume,source=$volume,target=/checkout"' \
     'GIT_CONFIG_NOSYSTEM=1' 'GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false' \
@@ -68,7 +80,7 @@ for required in \
     '-c filter.lfs.smudge= -c filter.lfs.required=false' \
     'fetch --no-tags --depth=1 origin "$1"' 'checkout --detach FETCH_HEAD' \
     '/usr/bin/timeout --signal=KILL 120s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock start --attach "$acquisition"' \
-    'force_remove_created_container "$acquisition"' 'container_absent "$transfer"' \
+    'force_remove_created_container "$acquisition"' 'container_absent "$transfer"' 'remove_container "$keeper"' 'container_absent "$keeper"' \
     '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock create --pull=never --name "$transfer" --read-only --network none' \
     '--mount "type=volume,source=$volume,target=/source,readonly"' \
     '--mount "type=bind,source=$partial,target=/destination"' \
@@ -87,10 +99,41 @@ for required in \
     /usr/bin/grep -Fq -- "$required" "$workflow" || fail "bounded acquisition boundary missing: $required"
 done
 [ "$(/usr/bin/grep -Fc -- '--network bridge' "$workflow")" -eq 1 ] || fail 'acquisition network authority changed'
-[ "$(/usr/bin/grep -Fc -- '--pull=never' "$workflow")" -eq 2 ] || fail 'workflow image pull denial changed'
+[ "$(/usr/bin/grep -Fc -- '--pull=never' "$workflow")" -eq 3 ] || fail 'workflow image pull denial changed'
 workflow_docker_calls=$(/usr/bin/grep -Fc '/usr/bin/docker' "$workflow")
-[ "$workflow_docker_calls" -gt 0 ] || fail 'workflow Docker boundary missing'
+[ "$workflow_docker_calls" -eq 23 ] || fail 'workflow Docker call inventory changed'
 [ "$workflow_docker_calls" -eq "$(/usr/bin/grep -Fc '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock' "$workflow")" ] || fail 'workflow Docker endpoint or client config is ambient'
+docker_inventory=$(/usr/bin/awk 'index($0, "/usr/bin/docker") { print }' "$workflow") || fail 'cannot extract workflow Docker inventory'
+docker_inventory_digest_output=$(/usr/bin/printf '%s\n' "$docker_inventory" | /usr/bin/shasum -a 256) || fail 'cannot hash workflow Docker inventory'
+docker_inventory_sha256=${docker_inventory_digest_output%% *}
+[ "$docker_inventory_sha256" = 96c014ad4025d9bc83d01dbb4e1997ca8b36c8b1a344dc945941d71fc425f53d ] || fail 'workflow Docker call inventory bytes changed'
+/usr/bin/awk '
+    BEGIN {
+        needle="/usr/bin/docker"
+        prefix="/usr/bin/docker --config \"$docker_config\" --host unix:///var/run/docker.sock "
+        keeper_start="          /usr/bin/docker --config \"$docker_config\" --host unix:///var/run/docker.sock start \"$keeper\" >/dev/null"
+        acquisition_start="          /usr/bin/timeout --signal=KILL 120s /usr/bin/docker --config \"$docker_config\" --host unix:///var/run/docker.sock start --attach \"$acquisition\""
+        transfer_start="          /usr/bin/timeout --signal=KILL 30s /usr/bin/docker --config \"$docker_config\" --host unix:///var/run/docker.sock start --attach \"$transfer\""
+    }
+    {
+        scan=$0
+        per_line=0
+        while ((at=index(scan, needle)) != 0) {
+            per_line++
+            docker_occurrences++
+            scan=substr(scan, at + length(needle))
+        }
+        if (per_line > 1) bad=1
+    }
+    index($0, prefix) {
+        docker_calls++
+        rest=substr($0, index($0, prefix) + length(prefix))
+        if (rest !~ /^(container ls|volume ls|volume inspect|inspect|rm|volume rm|image ls|image inspect|pull|volume create|create|start)([[:space:]]|$)/) bad=1
+        if (rest ~ /^start([[:space:]]|$)/ &&
+            $0 != keeper_start && $0 != acquisition_start && $0 != transfer_start) bad=1
+    }
+    END { exit !(docker_calls == 23 && docker_occurrences == 23 && bad == 0) }
+' "$workflow" || fail 'workflow Docker inventory, operation, or physical-line shape changed'
 [ "$(/usr/bin/grep -Fc ' pull --quiet --platform linux/amd64 "$checkout_image"' "$workflow")" -eq 1 ] || fail 'exact image acquisition path changed'
 [ "$(/usr/bin/grep -Fc ' image inspect --format '"'"'{{.Os}}/{{.Architecture}}'"'"' "$checkout_image"' "$workflow")" -eq 2 ] || fail 'image platform proof changed'
 [ "$(/usr/bin/grep -Fc 'needs_pull=1' "$workflow")" -eq 2 ] || fail 'image absence/platform decision changed'
@@ -179,7 +222,51 @@ workflow_docker_calls=$(/usr/bin/grep -Fc '/usr/bin/docker' "$workflow")
 [ "$(/usr/bin/grep -Fc '/usr/bin/rmdir "$docker_config"' "$workflow")" -eq 1 ] || fail 'workflow Docker config cleanup changed'
 [ "$(/usr/bin/grep -Fc 'find "$docker_config" -mindepth 1 -maxdepth 1 -print -quit' "$workflow")" -eq 2 ] || fail 'workflow Docker config emptiness proof changed'
 /usr/bin/grep -Fq 'for name in DOCKER_HOST DOCKER_CONTEXT DOCKER_TLS_VERIFY DOCKER_CERT_PATH DOCKER_CONFIG; do' "$workflow" || fail 'workflow Docker selector denial missing'
-[ "$(/usr/bin/grep -Fc -- '--network none' "$workflow")" -eq 1 ] || fail 'transfer network denial changed'
+[ "$(/usr/bin/grep -Fc -- '--network none' "$workflow")" -eq 2 ] || fail 'keeper/transfer network denial changed'
+[ "$(/usr/bin/grep -Fxc '          keeper_policy_exact' "$workflow")" -eq 4 ] || fail 'keeper lifecycle checks changed'
+[ "$(/usr/bin/grep -Fc 'remove_container "$keeper"' "$workflow")" -eq 2 ] || fail 'keeper cleanup ordering changed'
+[ "$(/usr/bin/grep -Fc 'container_absent "$keeper"' "$workflow")" -eq 5 ] || fail 'keeper absence proofs changed'
+[ "$(/usr/bin/grep -Fxc '          /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock start "$keeper" >/dev/null' "$workflow")" -eq 1 ] || fail 'keeper start path changed'
+keeper_start_paths=$(/usr/bin/grep -E '/usr/bin/docker --config "\$docker_config" --host unix:///var/run/docker\.sock[[:space:]]+(container[[:space:]]+)?start[^[:cntrl:]]*"\$keeper"' "$workflow")
+[ "$keeper_start_paths" = '          /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock start "$keeper" >/dev/null' ] || fail 'unreviewed keeper start or input authority enabled'
+! /usr/bin/grep -Eq -- '/usr/bin/docker --config "\$docker_config" --host unix:///var/run/docker\.sock[[:space:]]+(container[[:space:]]+)?(attach|exec|restart|stop|kill|pause|unpause)([[:space:]]|$)|--restart([=[:space:]]|$)' "$workflow" || fail 'keeper control or restart authority enabled'
+/usr/bin/awk '
+    index($0, "          /usr/bin/docker --config \"$docker_config\" --host unix:///var/run/docker.sock create --pull=never --name \"$keeper\" --interactive --read-only --network none") == 1 {
+        if (state != 0) bad=1
+        state=1
+        next
+    }
+    state == 1 && $0 == "          /usr/bin/docker --config \"$docker_config\" --host unix:///var/run/docker.sock start \"$keeper\" >/dev/null" { state=2; next }
+    state == 2 && $0 == "          keeper_policy_exact" { state=3; next }
+    state == 3 && index($0, "          /usr/bin/docker --config \"$docker_config\" --host unix:///var/run/docker.sock create --pull=never --name \"$acquisition\" ") == 1 { state=4; next }
+    state == 4 && index($0, "          /usr/bin/timeout --signal=KILL 120s /usr/bin/docker --config \"$docker_config\" --host unix:///var/run/docker.sock start --attach \"$acquisition\"") == 1 { state=5; next }
+    state == 5 && $0 == "          force_remove_created_container \"$acquisition\"" { state=6; next }
+    state == 6 && $0 == "          keeper_policy_exact" { state=7; next }
+    state == 7 && index($0, "          /usr/bin/docker --config \"$docker_config\" --host unix:///var/run/docker.sock create --pull=never --name \"$transfer\" ") == 1 { state=8; next }
+    state == 8 && $0 == "          keeper_policy_exact" { state=9; next }
+    state == 9 && index($0, "          /usr/bin/timeout --signal=KILL 30s /usr/bin/docker --config \"$docker_config\" --host unix:///var/run/docker.sock start --attach \"$transfer\"") == 1 { state=10; next }
+    state == 10 && $0 == "          remove_container \"$transfer\"" { state=11; next }
+    state == 11 && $0 == "          [[ \"$transfer_start\" -eq 0 && \"$transfer_exit\" -eq 0 ]]" { state=12; next }
+    state == 12 && $0 == "          keeper_policy_exact" { state=13; next }
+    state == 13 && $0 == "          remove_container \"$keeper\"" { state=14; next }
+    state == 14 && $0 == "          container_absent \"$keeper\"" { state=15; next }
+    state == 15 && $0 == "          remove_volume \"$volume\"" { state=16; next }
+    state == 16 && $0 == "          container_absent \"$acquisition\"" { state=17; next }
+    state == 17 && $0 == "          container_absent \"$transfer\"" { state=18; next }
+    state == 18 && $0 == "          container_absent \"$keeper\"" { state=19; next }
+    state == 19 && $0 == "          volume_absent \"$volume\"" { state=20; next }
+    state > 0 && state < 20 && (
+        $0 == "          keeper_policy_exact" ||
+        $0 == "          remove_container \"$keeper\"" ||
+        $0 == "          container_absent \"$keeper\"" ||
+        $0 == "          remove_volume \"$volume\"" ||
+        index($0, "--name \"$acquisition\"") ||
+        index($0, "--name \"$transfer\"") ||
+        index($0, "start --attach \"$acquisition\"") ||
+        index($0, "start --attach \"$transfer\"")
+    ) { bad=1 }
+    END { exit !(state == 20 && bad == 0) }
+' "$workflow" || fail 'keeper acquisition/transfer lifecycle order changed'
 [ "$(/usr/bin/grep -Fc '[ "$bytes" -le 67108864 ] && [ "$files" -le 8192 ] && [ "$objects" -le 32768 ]' "$workflow")" -eq 2 ] || fail 'checkout ceilings changed'
 [ "$(/usr/bin/grep -Fc 'actual_sha=$(/usr/bin/git -C /' "$workflow")" -eq 2 ] || fail 'checkout identity capture changed'
 [ "$(/usr/bin/grep -Fc 'status_output=$(/usr/bin/git -C /' "$workflow")" -eq 2 ] || fail 'checkout status capture changed'
@@ -193,7 +280,10 @@ workflow_docker_calls=$(/usr/bin/grep -Fc '/usr/bin/docker' "$workflow")
 /usr/bin/grep -Fq '"$workspace_parent"/.rar-c2b-checkout-partial-"$GITHUB_RUN_ID"-"$GITHUB_RUN_ATTEMPT")' "$workflow" || fail 'partial cleanup is not identity-bound'
 ! /usr/bin/grep -Fq '|| true' "$workflow" || fail 'checkout cleanup failure is suppressed'
 ! /usr/bin/grep -Eq -- '(source|target)=/var/run/docker\.sock|/var/run/docker\.sock:|DOCKER_HOST=' "$workflow" || fail 'checkout propagates Docker endpoint authority'
-! /usr/bin/grep -Eq '\$\{\{[[:space:]]*github\.token|GITHUB_TOKEN|ACTIONS_RUNTIME_TOKEN|PASSWORD|SECRET|CREDENTIAL' "$workflow" "$wrapper" "$harness" || fail 'credential value access present'
+! /usr/bin/grep -Eq '\$\{\{[[:space:]]*github\.token|GITHUB_TOKEN|ACTIONS_RUNTIME_TOKEN|PASSWORD|SECRET|CREDENTIAL' "$workflow" "$wrapper" || fail 'credential value access present'
+[ "$(/usr/bin/grep -Fc 'GITHUB_TOKEN=forbidden' "$harness")" -eq 1 ] || fail 'credential negative fixture changed'
+[ "$(/usr/bin/grep -Fc 'TOKEN|PASSWORD|SECRET|CREDENTIAL' "$harness")" -eq 1 ] || fail 'credential detector fixture changed'
+! /usr/bin/grep -Eq '\$\{?[A-Za-z0-9_]*(TOKEN|PASSWORD|SECRET|CREDENTIAL)[A-Za-z0-9_]*\}?' "$harness" || fail 'harness credential value access present'
 [ "$(/usr/bin/grep -Fxc '          actual_sha=$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)' "$workflow")" -eq 1 ] || fail 'exact checkout verification missing'
 [ "$(/usr/bin/grep -Fxc '          [[ "$actual_sha" == "$GITHUB_SHA" ]]' "$workflow")" -eq 1 ] || fail 'checkout identity is not exact'
 [ "$(/usr/bin/grep -Fxc '          [[ -z "$(git -C "$GITHUB_WORKSPACE" status --porcelain=v1 --untracked-files=all)" ]]' "$workflow")" -eq 1 ] || fail 'checkout cleanliness is not workspace-bound'
