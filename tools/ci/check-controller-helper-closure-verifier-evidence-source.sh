@@ -17,11 +17,11 @@ for file in "$contract" "$validator" "$policy" "$valid" "$malformed" "$cases"; d
     [ -f "$file" ] && [ ! -L "$file" ] && [ -s "$file" ] ||
         fail "required source unavailable: $file"
 done
-[ "$(sha_file "$contract")" = cb8f913dce03e748b70d35a106e4c1f2db2012a935860745107eccd0f47d73b2 ] ||
+[ "$(sha_file "$contract")" = d3cff3a4f9e566cb37fdea4b7aefd769e8ef6b99fece1ccef44ec30eac198448 ] ||
     fail 'evidence contract bytes escaped review'
-[ "$(sha_file "$validator")" = 392b808e90edf109f285237d51c33a22eea0182b138ae9db4b798744b40b2223 ] ||
+[ "$(sha_file "$validator")" = e7ff91c5bdd2c170370453e748a0cfd87853860ecb8b613a68597a1ee03c58b0 ] ||
     fail 'evidence validator bytes escaped review'
-[ "$(sha_file "$policy")" = 2b97b76ae7a47a5438cad77f3f77a07566a14b55bff283760cdec6c9f6f92839 ] ||
+[ "$(sha_file "$policy")" = 5dc8afe2e130279d136114f796d606019f97869da48d122359f5441366b269fd ] ||
     fail 'evidence policy bytes escaped review'
 [ "$(sha_file "$valid")" = cc5bda22d4bba1eeb7e53d9604fcef23b0eabfc7402216826dcd124d89c6072c ] ||
     fail 'valid seed bytes escaped review'
@@ -37,6 +37,9 @@ for required in \
     'aggregate_rule=checked-unsigned-arithmetic;blob_count-equals-actual-B-records;chunk_count-equals-actual-C-records+sum-of-B-declared-chunk-counts;decoded_bytes-equals-sum-of-decoded-C-payload-lengths+sum-of-B-declared-decoded-lengths;normalized_count-equals-actual-N-records' \
     'chunk_payload_rule=decoded-length-1..1436;every-nonfinal-chunk-exactly-1436-decoded-bytes+canonical-one-equals-padding;final-chunk-1..1436;concatenated-decoded-length+SHA256-equal-B-header' \
     'decoded_equality_rule=consume-exact-declared-field-bytes+SHA256-must-equal-field-digest;checked-field-count+framing+raw-byte-sum-must-equal-B-decoded-length;B-SHA256-covers-complete-envelope-framing+raw-bytes+terminating-LFs' \
+    'semantic_payload_rule=payload_bytes-canonical-positive-1..16777216;payload_sha256-nonzero-lowercase-SHA256;validator-consumes+hashes-exact-arbitrary-payload-and-rejects-extension' \
+    'oracle_derivation_rule=observed-event+timeout-termination+residual-proof-payloads-byte-equal-exact-case-catalog-oracle;mutation-schedule+trigger+acknowledgement+residual-source-payloads-byte-equal-exact-complete-catalog-row' \
+    'receipt_reconstruction_rule=verification-receipt-inputs-is-exact-31-line-canonical-receipt-bytes;validator-checks-line-order+literal+trusted-run+digest+decimal+false-domains,candidate-manifest-equals-recomputed-manifest,and-field-SHA256-equals-trusted-header-receipt-SHA256' \
     'blob_allocation=B000001-clean-success-pass-1+RUN;B000002-clean-success-pass-2+RUN;then-logical-case-order-with-four-consecutive-pre+stdout+stderr+post-blobs-per-runtime-row-or-one-residual-source-proof-blob-per-residual-row;last-B000709' \
     'raw_blob_ids_rule=nonempty-canonical-B-identities-comma-separated-no-spaces;runtime-exact-four-assigned-consecutive-IDs-in-pre+stdout+stderr+post-order;residual-exact-one-assigned-ID;globals-never-listed' \
     'base64_payload_total_max=396032120' \
