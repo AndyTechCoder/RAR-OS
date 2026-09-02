@@ -75,8 +75,49 @@ envelope=$work/envelope
 piece=$work/piece
 preimage=$work/preimage
 valid=$work/valid.v0
+field=$work/field.raw
+receipt=$work/verification.receipt
+case_row_file=$work/case.row
+semantic=$work/semantic
 : > "$ledger"
 : > "$body"
+
+{
+    printf '%s\n' \
+        'schema=rar-alpha-controller-helper-closure-verification-v0' \
+        'status=candidate-exact-set-verified-not-reviewed-not-ready' \
+        "controller_sha=$revision" \
+        "source_sha=$revision" \
+        'repository=AndyTechCoder/RAR-OS' \
+        'run_id=9001' \
+        'run_attempt=1' \
+        'runner_os=ubuntu24' \
+        'runner_image_version=24.04.1' \
+        'oci_image=sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3' \
+        'closure_root=/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu' \
+        "verifier_sha256=$digest" \
+        "observer_sha256=$digest" \
+        "tool_pins_sha256=$digest" \
+        "find_sha256=$digest" \
+        "sort_sha256=$digest" \
+        "wc_sha256=$digest" \
+        "stat_sha256=$digest" \
+        "cmp_sha256=$digest" \
+        "id_sha256=$digest" \
+        "candidate_receipt_sha256=$digest" \
+        "candidate_manifest_sha256=$digest" \
+        "recomputed_manifest_sha256=$digest" \
+        'manifest_entries=1' \
+        'manifest_bytes=1' \
+        "topology_sha256=$digest" \
+        "second_pass_sha256=$digest" \
+        'helper_compiled=false' \
+        'helper_executed=false' \
+        'target_compiled=false' \
+        'readiness=false'
+} > "$receipt"
+receipt_sha=$(sha_file "$receipt")
+export RAR_EXPECTED_VERIFICATION_RECEIPT_SHA256=$receipt_sha
 
 {
     printf '%s\n' \
@@ -84,7 +125,7 @@ valid=$work/valid.v0
         'B000002|clean-success-pass-2|RUN'
     /usr/bin/awk -F '|' '
     BEGIN { blob=2 }
-    /^case\|/ {
+    /^case\|[VQX][0-9][0-9][0-9]\|/ {
         if ($3 ~ /-residual$/) {
             blob++
             printf "B%06d|residual-source-proof|%s\n",blob,$2
@@ -118,29 +159,85 @@ fields_for() {
     esac
 }
 
+observation_for() {
+    case "$1" in
+        domain-header) printf '%s\n' trusted-run-domain ;;
+        tool-inventory|fixture-inventory|output-inventory|pre-mount-inventory|post-mount-inventory) printf '%s\n' complete-inventory ;;
+        topology|pre-topology|post-topology) printf '%s\n' complete-topology ;;
+        canonical-manifest) printf '%s\n' canonical-manifest ;;
+        mount-identities) printf '%s\n' stable-nonaliased-identities ;;
+        event-bytes) printf '%s\n' clean-event-capture ;;
+        resource-bytes|resource-usage) printf '%s\n' within-controller-bounds ;;
+        mutation-schedule) printf '%s\n' exact-catalog-binding-scheduled ;;
+        mutation-trigger) printf '%s\n' exact-trigger-observed ;;
+        mutation-acknowledgement) printf '%s\n' exact-trigger-acknowledged ;;
+        observed-event|timeout-termination) printf '%s\n' catalog-oracle-byte-equal ;;
+        residual-source) printf '%s\n' catalog-source-byte-equal ;;
+        residual-proof) printf '%s\n' catalog-oracle-byte-equal ;;
+        *) return 1 ;;
+    esac
+}
+materialize_field() {
+    name=$1
+    kind=$2
+    case_id=$3
+    case "$name" in
+        verification-receipt-inputs) /bin/cp "$receipt" "$field"; return ;;
+        input-bytes)
+            /usr/bin/awk -F '|' -v c="$case_id" '$1=="case" && $2==c { print; found++ } END { if(found!=1) exit 1 }' "$cases" > "$field" || fail "cannot bind input $case_id"
+            return ;;
+        stdout-bytes)
+            if [ "$case_id" = V001 ]; then
+                /usr/bin/awk 'BEGIN { for(i=0;i<1800;i++) printf "A" }' > "$field"
+                printf '\000\n\377' >> "$field"
+            else
+                printf 'stdout|%s\n' "$case_id" > "$field"
+            fi
+            return ;;
+        stderr-bytes) printf 'stderr|%s\n' "$case_id" > "$field"; return ;;
+        output-bytes) printf 'output|%s|%s\n' "$kind" "$case_id" > "$field"; return ;;
+    esac
+    observation=$(observation_for "$name") || fail "no semantic observation for $name"
+    if [ "$case_id" = RUN ]; then
+        row_sha=$cases_sha
+        oracle_sha=$digest
+    else
+        /usr/bin/awk -F '|' -v c="$case_id" '$1=="case" && $2==c { print; found++ } END { if(found!=1) exit 1 }' "$cases" > "$case_row_file" || fail "case row missing $case_id"
+        row_sha=$(sha_file "$case_row_file")
+        oracle=$(/usr/bin/awk -F '|' '{ print $8 }' "$case_row_file")
+        printf '%s' "$oracle" > "$semantic"
+        oracle_sha=$(sha_file "$semantic")
+    fi
+    {
+        printf '%s\n' \
+            'schema=rar-c3v-semantic-field-v0' \
+            "kind=$kind" \
+            "case_id=$case_id" \
+            "field=$name" \
+            "catalog_row_sha256=$row_sha" \
+            "oracle_sha256=$oracle_sha" \
+            "observation=$observation"
+    } > "$field"
+}
+
 chunk_total=0
 decoded_total=0
 while IFS='|' read -r blob kind case_id; do
     fields=$(fields_for "$kind") || fail "unknown planned kind $kind"
     set -- $fields
-    {
-        printf '%s\n' \
-            'rar-c3v-envelope-v0' \
-            "kind=$kind" \
-            "case_id=$case_id" \
-            "field_count=$#"
-        ordinal=0
-        for name do
-            ordinal=$((ordinal + 1))
-            nn=$(/usr/bin/printf '%02d' "$ordinal")
-            printf '%s\n' \
-                "field.$nn.name=$name" \
-                "field.$nn.bytes=0" \
-                "field.$nn.sha256=$empty_sha" \
-                "field.$nn.data" \
-                ''
-        done
-    } > "$envelope"
+    : > "$envelope"
+    printf '%s\n' 'rar-c3v-envelope-v0' "kind=$kind" "case_id=$case_id" "field_count=$#" >> "$envelope"
+    ordinal=0
+    for name do
+        ordinal=$((ordinal + 1))
+        nn=$(/usr/bin/printf '%02d' "$ordinal")
+        materialize_field "$name" "$kind" "$case_id"
+        field_bytes=$(size_file "$field")
+        field_sha=$(sha_file "$field")
+        printf '%s\n' "field.$nn.name=$name" "field.$nn.bytes=$field_bytes" "field.$nn.sha256=$field_sha" "field.$nn.data" >> "$envelope"
+        /bin/cat "$field" >> "$envelope"
+        printf '\n' >> "$envelope"
+    done
     decoded=$(size_file "$envelope")
     sha=$(sha_file "$envelope")
     chunks=$(((decoded + 1435) / 1436))
@@ -183,7 +280,7 @@ while IFS='|' read -r marker case_id catalog_kind rest; do
             "source_sha=$revision" \
             'run_id=9001' \
             'run_attempt=1' \
-            "verification_receipt_sha256=$empty_sha" \
+            "verification_receipt_sha256=$receipt_sha" \
             "case_id=$case_id" \
             'result=pass' \
             "raw_blob_ids=$raw_ids"
@@ -200,7 +297,7 @@ done < "$cases"
 [ "$logical" -eq 209 ] || fail 'normalized generation count mismatch'
 {
     printf 'H|rar-alpha-controller-helper-closure-verifier-evidence-v0|AndyTechCoder/RAR-OS|%s|%s|9001|1|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|166|43|209|709|%s|%s|209|0|mechanically-verified-not-reviewed-not-ready\n' \
-        "$revision" "$revision" "$empty_sha" \
+        "$revision" "$revision" "$receipt_sha" \
         "$digest" "$digest" "$digest" "$digest" "$digest" "$digest" "$digest" "$cases_sha" \
         "$digest" "$digest" "$digest" "$nonce" "$chunk_total" "$decoded_total"
     /bin/cat "$body"
