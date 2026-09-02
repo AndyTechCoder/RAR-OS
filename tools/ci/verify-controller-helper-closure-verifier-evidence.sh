@@ -269,7 +269,8 @@ parse_envelope() {
     [ "$envelope_case" = "case_id=$current_case" ] || fail 'envelope case mismatch'
     field_count=${envelope_count#field_count=}
     [ "$envelope_count" = "field_count=$field_count" ] &&
-        canonical_positive "$field_count" || fail 'envelope field count malformed'
+        bounded_unsigned "$field_count" 11 && [ "$field_count" -gt 0 ] ||
+        fail 'envelope field count malformed'
     expected_fields=$(expected_fields_for "$current_kind") ||
         fail 'envelope kind has no field schema'
     set -- $expected_fields
