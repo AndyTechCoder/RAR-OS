@@ -19,7 +19,7 @@ for file in "$contract" "$validator" "$policy" "$valid" "$malformed" "$cases"; d
 done
 [ "$(sha_file "$contract")" = d3cff3a4f9e566cb37fdea4b7aefd769e8ef6b99fece1ccef44ec30eac198448 ] ||
     fail 'evidence contract bytes escaped review'
-[ "$(sha_file "$validator")" = e7ff91c5bdd2c170370453e748a0cfd87853860ecb8b613a68597a1ee03c58b0 ] ||
+[ "$(sha_file "$validator")" = 5aa822d4fd51e1e2e753ae60b2d734694d22b646e063cdb286901782680b3260 ] ||
     fail 'evidence validator bytes escaped review'
 [ "$(sha_file "$policy")" = 74153523a0d69bcb26823739eb755511e7664e5571172d7cec7f8d5b24e3b32c ] ||
     fail 'evidence policy bytes escaped review'
