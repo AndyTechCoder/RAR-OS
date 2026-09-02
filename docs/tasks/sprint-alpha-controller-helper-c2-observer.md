@@ -147,10 +147,12 @@ The C2B workflow must:
 
 Before source acquisition and before any repository code executes, the trusted
 controller must successfully inventory the local Docker engine for the exact
-pinned Rust repository digest. Inventory failure fails closed without network.
+pinned Rust repository digest.
+Inventory failure fails closed without network.
 If the digest is absent, or its successfully inspected cached variant is not
 `linux/amd64`, one anonymous, 180-second-bounded `docker pull` of that exact
-digest for `linux/amd64` is the sole image acquisition network exception. The client uses the exact local Unix endpoint
+digest for `linux/amd64` is the sole image acquisition network exception.
+The client uses the exact local Unix endpoint
 and an exclusive, initially empty controller-owned Docker configuration
 directory, receives no secret or credential, and must leave that directory
 empty. A final exact-reference inspection must report `linux/amd64` before
