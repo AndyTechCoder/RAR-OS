@@ -269,10 +269,10 @@ jobs:
         env:
           GIT_OPTIONAL_LOCKS: "0"
         run: |
-          actual_sha=$(git rev-parse HEAD)
+          actual_sha=$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)
           [[ "$actual_sha" == "$GITHUB_SHA" ]]
-          [[ -z "$(git status --porcelain=v1 --untracked-files=all)" ]]
-          [[ ! -w tools/ci/run-controller-helper-closure-observer.sh ]]
+          [[ -z "$(git -C "$GITHUB_WORKSPACE" status --porcelain=v1 --untracked-files=all)" ]]
+          [[ ! -w "$GITHUB_WORKSPACE/tools/ci/run-controller-helper-closure-observer.sh" ]]
 
       - name: Bind reviewed source identities
         shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}

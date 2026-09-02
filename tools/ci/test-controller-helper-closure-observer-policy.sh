@@ -261,4 +261,14 @@ reset
 /usr/bin/sed -i 's/^            needs_pull=1$/            needs_pull=0/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject absent-inventory-assignment check
 
-printf '%s\n' 'controller-helper observer policy mutations passed: cases=69'
+reset
+/usr/bin/sed -i 's/git -C "\$GITHUB_WORKSPACE" rev-parse HEAD/git rev-parse HEAD/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject checkout-cwd-binding check
+reset
+/usr/bin/sed -i 's/git -C "\$GITHUB_WORKSPACE" status/git status/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject checkout-status-cwd-binding check
+reset
+/usr/bin/sed -i 's#"\$GITHUB_WORKSPACE/tools/ci/run-controller-helper-closure-observer.sh"#tools/ci/run-controller-helper-closure-observer.sh#' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject checkout-writability-cwd-binding check
+
+printf '%s\n' 'controller-helper observer policy mutations passed: cases=72'
