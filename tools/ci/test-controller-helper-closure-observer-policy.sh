@@ -133,6 +133,12 @@ reset
 /usr/bin/sed -i 's/o=size=67108864/o=size=0/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject acquisition-capacity check
 reset
+/usr/bin/sed -i 's#target=/checkout,volume-nocopy#target=/checkout#' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject acquisition-volume-copyup check
+reset
+/usr/bin/sed -i '/\/usr\/bin\/cp -a \/source\/\. \/destination\//d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject transfer-copy-missing check
+reset
 /usr/bin/sed -i 's/120s \/usr\/bin\/docker --config "\$docker_config" --host unix:\/\/\/var\/run\/docker.sock start/0s \/usr\/bin\/docker --config "\$docker_config" --host unix:\/\/\/var\/run\/docker.sock start/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject acquisition-timeout check
 reset
