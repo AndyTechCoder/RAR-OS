@@ -195,9 +195,11 @@ materialize_field() {
             fi
             return ;;
         stderr-bytes) printf 'stderr|%s\n' "$case_id" > "$field"; return ;;
-        output-bytes) printf 'output|%s|%s\n' "$kind" "$case_id" > "$field"; return ;;
+        output-bytes) case "$kind" in clean-success-pass-1|clean-success-pass-2) printf 'output|clean-success-pass|RUN\n' ;; *) printf 'output|%s|%s\n' "$kind" "$case_id" ;; esac > "$field"; return ;;
     esac
     observation=$(observation_for "$name") || fail "no semantic observation for $name"
+    semantic_kind=$kind
+    case "$semantic_kind" in clean-success-pass-1|clean-success-pass-2) semantic_kind=clean-success-pass ;; esac
     if [ "$case_id" = RUN ]; then
         row_sha=$cases_sha
         oracle_sha=$digest
@@ -217,7 +219,7 @@ materialize_field() {
             /bin/cp "$case_row_file" "$payload"
             ;;
         *)
-            printf 'captured|%s|%s|%s\n' "$kind" "$case_id" "$name" > "$payload"
+            printf 'captured|%s|%s|%s\n' "$semantic_kind" "$case_id" "$name" > "$payload"
             ;;
     esac
     payload_bytes=$(size_file "$payload")
@@ -225,7 +227,7 @@ materialize_field() {
     {
         printf '%s\n' \
             'schema=rar-c3v-semantic-field-v0' \
-            "kind=$kind" \
+            "kind=$semantic_kind" \
             "case_id=$case_id" \
             "field=$name" \
             "catalog_row_sha256=$row_sha" \
