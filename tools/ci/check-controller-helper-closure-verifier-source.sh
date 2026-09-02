@@ -17,7 +17,9 @@ fail() {
 verifier_sha=$(env -u LC_CTYPE LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$verifier" | /usr/bin/awk '{ print $1 }')
 contract_sha=$(env -u LC_CTYPE LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$contract" | /usr/bin/awk '{ print $1 }')
 [ "$verifier_sha" = 3cbeeb85abc3023980a8afe444178ea7acc31f298b3b0975d2c4d6630c82a76c ] || fail 'verifier bytes escaped review'
-[ "$contract_sha" = 7b4fa610e1ceaef39432ac24493fd1307865cd2e59dae153d1d3aaa3881e6ac7 ] || fail 'verification contract bytes escaped review'
+[ "$contract_sha" = d01b46559ca305c4eb522d37cb157c503cfe3d6158f21de7ada4d18244c3a577 ] || fail 'verification contract bytes escaped review'
+grep -Fqx 'status=experimental-C3VA-candidate-source-only-unwired' "$contract" || fail 'C3VA verification state overclaims completion'
+grep -Fqx 'c3va_state=lossless-evidence-contract+validator+policy-tests-candidate-under-review,verifier+controller+container+workflow-remain-unwired+unexecuted' "$contract" || fail 'C3VA candidate boundary changed'
 
 for required in \
     '#!/usr/bin/dash' \
