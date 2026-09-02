@@ -337,7 +337,9 @@ validate_projection() {
     if [ "$current_case" = RUN ]; then
         case "$name" in
             tool-inventory)
-                [ "$(/usr/bin/wc -l < "$semantic_payload" | /usr/bin/tr -d ' ')" -eq 6 ] || fail 'tool inventory line count mismatch'
+                [ "$(/usr/bin/wc -l < "$semantic_payload" | /usr/bin/tr -d ' ')" -eq 8 ] || fail 'tool inventory line count mismatch'
+                [ "$(/usr/bin/sed -n '1p' "$semantic_payload")" = schema=rar-alpha-controller-helper-closure-verifier-tools-v0 ] || fail 'tool inventory schema mismatch'
+                [ "$(/usr/bin/sed -n '8p' "$semantic_payload")" = status=reviewed-for-candidate-verification-only ] || fail 'tool inventory status mismatch'
                 receipt_find=$(/usr/bin/sed -n 's/^find_sha256=//p' "$semantic_payload")
                 receipt_sort=$(/usr/bin/sed -n 's/^sort_sha256=//p' "$semantic_payload")
                 receipt_wc=$(/usr/bin/sed -n 's/^wc_sha256=//p' "$semantic_payload")
@@ -348,11 +350,10 @@ validate_projection() {
                 receipt_tool_pins=$p_sha
                 [ "$receipt_tool_pins" = "$RAR_EXPECTED_TOOL_PINS_SHA256" ] || fail 'tool inventory is not trusted-header bound'
                 ;;
+            domain-header) receipt_observer=$p_sha ;;
             fixture-inventory) receipt_candidate=$p_sha ;;
-            canonical-manifest) receipt_manifest=$p_sha ;;
+            canonical-manifest) receipt_manifest=$p_sha; receipt_second=$p_sha ;;
             topology) receipt_topology=$p_sha ;;
-            mount-identities) receipt_second=$p_sha ;;
-            event-bytes) receipt_observer=$p_sha ;;
         esac
     fi
     case "$name" in
