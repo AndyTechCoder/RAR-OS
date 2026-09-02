@@ -36,6 +36,7 @@ Status: Gate 0 approved on 2026-07-16
 - [Sprint Alpha ADR 0024 controller/helper integration packet](tasks/sprint-alpha-controller-helper-integration.md)
 - [Sprint Alpha ADR 0024 C1 contract-closure packet](tasks/sprint-alpha-controller-helper-c1-contracts.md)
 - [Sprint Alpha ADR 0024 C2 observer-discovery packet](tasks/sprint-alpha-controller-helper-c2-observer.md)
+- [Sprint Alpha ADR 0024 C3V exact-set verification packet](tasks/sprint-alpha-controller-helper-c3v-verifier.md)
 - [Initial Codex Handoff Prompt](handoff-prompt.md)
 - [V1 Alpha Codex Execution Runbook](v1-alpha-execution.md)
 - [GitHub Actions account-unblock runbook](runbooks/github-actions-account-unblock.md)
