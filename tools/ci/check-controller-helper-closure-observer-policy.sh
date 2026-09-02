@@ -107,6 +107,42 @@ docker_inventory=$(/usr/bin/awk 'index($0, "/usr/bin/docker") { print }' "$workf
 docker_inventory_digest_output=$(/usr/bin/printf '%s\n' "$docker_inventory" | /usr/bin/shasum -a 256) || fail 'cannot hash workflow Docker inventory'
 docker_inventory_sha256=${docker_inventory_digest_output%% *}
 [ "$docker_inventory_sha256" = 96c014ad4025d9bc83d01dbb4e1997ca8b36c8b1a344dc945941d71fc425f53d ] || fail 'workflow Docker call inventory bytes changed'
+docker_create_blocks=$(/usr/bin/awk '
+    index($0, "--name \"$keeper\" --interactive") {
+        if (capture != "") bad=1
+        capture="keeper"
+        blocks++
+        print
+        next
+    }
+    index($0, "--name \"$acquisition\" --read-only") {
+        if (capture != "") bad=1
+        capture="acquisition"
+        blocks++
+        print
+        next
+    }
+    index($0, "--name \"$transfer\" --read-only") {
+        if (capture != "") bad=1
+        capture="transfer"
+        blocks++
+        print
+        next
+    }
+    capture != "" {
+        if ((capture == "keeper" && index($0, "start \"$keeper\"")) ||
+            (capture == "acquisition" && index($0, "start --attach \"$acquisition\"")) ||
+            (capture == "transfer" && index($0, "start --attach \"$transfer\""))) {
+            capture=""
+            next
+        }
+        print
+    }
+    END { if (bad || capture != "" || blocks != 3) exit 1 }
+' "$workflow") || fail 'cannot extract complete Docker create spans'
+docker_create_blocks_digest_output=$(/usr/bin/printf '%s\n' "$docker_create_blocks" | /usr/bin/shasum -a 256) || fail 'cannot hash complete Docker create spans'
+docker_create_blocks_sha256=${docker_create_blocks_digest_output%% *}
+[ "$docker_create_blocks_sha256" = 1a8566ddd28ca5fc1502849e5967add2c5cc566563b4238b1bd2bb5bc7aae59c ] || fail 'complete Docker create spans changed'
 /usr/bin/awk '
     BEGIN {
         needle="/usr/bin/docker"

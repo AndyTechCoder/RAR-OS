@@ -477,5 +477,16 @@ reset
 ' "$repo/.github/workflows/controller-helper-closure-observer.yml" > "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated"
 /usr/bin/mv "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated" "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject same-count-docker-substitution check
+reset
+/usr/bin/awk '
+    index($0, "--name \"$acquisition\" --read-only --network bridge") {
+        print
+        print "            --privileged --pid=host --mount \"type=bind,source=/,target=/host\" \\"
+        next
+    }
+    { print }
+' "$repo/.github/workflows/controller-helper-closure-observer.yml" > "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated"
+/usr/bin/mv "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated" "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject hostile-create-continuation check
 
-printf '%s\n' 'controller-helper observer policy mutations passed: cases=123'
+printf '%s\n' 'controller-helper observer policy mutations passed: cases=124'
