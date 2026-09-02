@@ -46,6 +46,9 @@ jobs:
           docker_config="$RUNNER_TEMP/$identity-docker-config"
           acquisition="$identity-acquire"
           transfer="$identity-transfer"
+          keeper="$identity-keeper"
+          keeper_uid=65532
+          keeper_gid=65532
           volume="$identity-source"
           workspace_parent=$(/usr/bin/dirname "$GITHUB_WORKSPACE")
           partial="$workspace_parent/.rar-c2b-checkout-partial-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
@@ -67,6 +70,15 @@ jobs:
             found=$(/usr/bin/timeout --signal=KILL 10s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume ls \
               --filter "name=^$1$" --format '{{.Name}}') || return 1
             [[ -z "$found" ]]
+          }
+          keeper_policy_exact() {
+            local state volume_options
+            state=$(/usr/bin/timeout --signal=KILL 10s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock inspect \
+              --format '{{.State.Running}}|{{.State.Restarting}}|{{.RestartCount}}|{{.Config.User}}|{{.HostConfig.NetworkMode}}|{{.HostConfig.ReadonlyRootfs}}|{{.HostConfig.RestartPolicy.Name}}|{{len .Mounts}}|{{range .Mounts}}{{.Type}}|{{.Name}}|{{.Destination}}|{{.RW}}{{end}}' "$keeper") || return 1
+            [[ "$state" == "true|false|0|$keeper_uid:$keeper_gid|none|true|no|1|volume|$volume|/keep|false" ]] || return 1
+            volume_options=$(/usr/bin/timeout --signal=KILL 10s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume inspect \
+              --format '{{index .Options "o"}}' "$volume") || return 1
+            [[ "$volume_options" == "size=67108864,uid=$runner_uid,gid=$runner_gid,mode=0700,noexec,nosuid,nodev" ]]
           }
           remove_container() {
             local name=$1
@@ -92,6 +104,7 @@ jobs:
             trap - EXIT HUP INT TERM
             remove_container "$acquisition" || cleanup_failed=1
             remove_container "$transfer" || cleanup_failed=1
+            remove_container "$keeper" || cleanup_failed=1
             remove_volume "$volume" || cleanup_failed=1
             if [[ -n "${partial-}" && (-e "$partial" || -L "$partial") ]]; then
               case "$partial" in
@@ -111,6 +124,7 @@ jobs:
             fi
             container_absent "$acquisition" || cleanup_failed=1
             container_absent "$transfer" || cleanup_failed=1
+            container_absent "$keeper" || cleanup_failed=1
             volume_absent "$volume" || cleanup_failed=1
             if [[ -e "$docker_config" || -L "$docker_config" ]]; then
               if [[ -d "$docker_config" && ! -L "$docker_config" ]]; then
@@ -157,6 +171,7 @@ jobs:
           [[ -z "$(/usr/bin/find "$docker_config" -mindepth 1 -maxdepth 1 -print -quit)" ]]
           container_absent "$acquisition"
           container_absent "$transfer"
+          container_absent "$keeper"
           volume_absent "$volume"
           /usr/bin/install -d -m 700 "$partial"
           partial_device=$(/usr/bin/stat -c %d "$partial")
@@ -169,6 +184,26 @@ jobs:
           [[ "$(/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume inspect --format '{{index .Options "type"}}' "$volume")" == tmpfs ]]
           [[ "$(/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume inspect --format '{{index .Options "device"}}' "$volume")" == tmpfs ]]
           [[ "$(/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume inspect --format '{{index .Options "o"}}' "$volume")" == "size=67108864,uid=$runner_uid,gid=$runner_gid,mode=0700,noexec,nosuid,nodev" ]]
+          [[ "$runner_uid" != "$keeper_uid" ]]
+          [[ "$runner_gid" != "$keeper_gid" ]]
+          /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock create --pull=never --name "$keeper" --interactive --read-only --network none \
+            --user "$keeper_uid:$keeper_gid" --cpus 0.25 --memory 64m --memory-swap 64m --pids-limit 8 \
+            --security-opt no-new-privileges --cap-drop ALL \
+            --mount "type=volume,source=$volume,target=/keep,readonly,volume-nocopy" \
+            --workdir / \
+            "$checkout_image" /usr/bin/env -i \
+            PATH=/usr/bin:/bin LC_ALL=C LANG=C \
+            /usr/bin/dash -c '
+              fail() { /usr/bin/printf "C2B keeper failed: %s\n" "$1" >&2; exit 1; }
+              set -eu
+              [ "$(/usr/bin/sha256sum /usr/bin/dash | /usr/bin/awk "{print \$1}")" = a6f559e00b69a4aa4d8cb607be18d9386c5aee55c509e2c075549dcf00e00fc7 ] || fail "dash binary hash"
+              [ ! -r /keep ] || fail "volume readable"
+              [ ! -x /keep ] || fail "volume searchable"
+              if IFS= read -r _; then fail "unexpected input"; fi
+              fail "stdin closed"
+            ' rar-c2b-keeper >/dev/null
+          /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock start "$keeper" >/dev/null
+          keeper_policy_exact
           /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock create --pull=never --name "$acquisition" --read-only --network bridge \
             --user "$runner_uid:$runner_gid" --cpus 1 --memory 512m --memory-swap 512m --pids-limit 64 \
             --security-opt no-new-privileges --cap-drop ALL \
@@ -217,6 +252,7 @@ jobs:
             acquisition_exit=$(/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock inspect --format '{{.State.ExitCode}}' "$acquisition")
           fi
           force_remove_created_container "$acquisition"
+          keeper_policy_exact
           container_absent "$transfer"
           [[ "$acquisition_start" -eq 0 && "$acquisition_exit" -eq 0 ]]
           /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock create --pull=never --name "$transfer" --read-only --network none \
@@ -255,6 +291,7 @@ jobs:
               [ "$bytes" -le 67108864 ] && [ "$files" -le 8192 ] && [ "$objects" -le 32768 ] || fail "checkout ceilings"
               [ "$(CDPATH= cd -- /destination && pwd -P)" = /destination ] || fail "physical destination"
             ' rar-c2b-transfer "$GITHUB_SHA" >/dev/null
+          keeper_policy_exact
           set +e
           /usr/bin/timeout --signal=KILL 30s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock start --attach "$transfer"
           transfer_start=$?
@@ -265,9 +302,13 @@ jobs:
           fi
           remove_container "$transfer"
           [[ "$transfer_start" -eq 0 && "$transfer_exit" -eq 0 ]]
+          keeper_policy_exact
+          remove_container "$keeper"
+          container_absent "$keeper"
           remove_volume "$volume"
           container_absent "$acquisition"
           container_absent "$transfer"
+          container_absent "$keeper"
           volume_absent "$volume"
           [[ -d "$partial" && ! -L "$partial" ]]
           [[ "$(/usr/bin/stat -c %d "$partial")" == "$partial_device" ]]
@@ -284,6 +325,7 @@ jobs:
           partial=
           container_absent "$acquisition"
           container_absent "$transfer"
+          container_absent "$keeper"
           volume_absent "$volume"
           trap - EXIT HUP INT TERM
 

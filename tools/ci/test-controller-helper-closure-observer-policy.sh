@@ -359,4 +359,145 @@ reset
 /usr/bin/sed -i '/cp -a \/source\/\.git \/destination\/\.git/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject git-metadata-copy check
 
-printf '%s\n' 'controller-helper observer policy mutations passed: cases=91'
+reset
+/usr/bin/sed -i 's/keeper_uid=65532/keeper_uid=0/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-uid check
+reset
+/usr/bin/sed -i 's/keeper_gid=65532/keeper_gid=0/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-gid check
+reset
+/usr/bin/sed -i 's/--name "\$keeper" --interactive/--name "$keeper"/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-interactive check
+reset
+/usr/bin/sed -i 's/--name "\$keeper" --interactive --read-only --network none/--name "$keeper" --interactive --read-only --network bridge/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-network check
+reset
+/usr/bin/sed -i 's#target=/keep,readonly,volume-nocopy#target=/keep#' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-mount check
+reset
+/usr/bin/sed -i '/\[ ! -r \/keep \].*volume readable/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-read-denial check
+reset
+/usr/bin/sed -i '/\[ ! -x \/keep \].*volume searchable/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-search-denial check
+reset
+/usr/bin/sed -i 's/if IFS= read -r _; then fail "unexpected input"; fi/exit 0/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-early-exit check
+reset
+/usr/bin/sed -i 's/start "\$keeper"/start --attach "$keeper"/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-input-attachment check
+reset
+/usr/bin/awk 'removed == 0 && $0 == "          keeper_policy_exact" { removed=1; next } { print }' "$repo/.github/workflows/controller-helper-closure-observer.yml" > "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated"
+/usr/bin/mv "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated" "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-lifecycle-check check
+reset
+/usr/bin/sed -i '/remove_container "\$keeper"/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-cleanup check
+reset
+/usr/bin/sed -i 's/true|false|0|\$keeper_uid/true|false|1|$keeper_uid/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-restart-count check
+reset
+/usr/bin/printf '%s\n' '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock restart "$keeper"' >> "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-restart-authority check
+reset
+/usr/bin/printf '%s\n' 'printf "%s\\n" "$CREDENTIAL_SECRET"' >> "$repo/tools/ci/controller-helper-closure-observer-harness.sh"
+reject harness-credential-read check
+reset
+/usr/bin/sed -i 's/timeout-minutes: 15/timeout-minutes: 1/' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject observe-deadline check
+reset
+/usr/bin/sed -i 's/mode=0700/mode=0777/g' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-volume-access check
+
+reset
+/usr/bin/awk '
+    $0 == "          keeper_policy_exact" { seen++; if (seen == 2) { held=$0; next } }
+    held != "" && index($0, "--name \"$transfer\"") { print; print held; held=""; next }
+    { print }
+    END { if (held != "") print held }
+' "$repo/.github/workflows/controller-helper-closure-observer.yml" > "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated"
+/usr/bin/mv "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated" "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-check-order check
+reset
+/usr/bin/sed -i '/force_remove_created_container "\$acquisition"/a\          /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock stop "$keeper"' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-stop-between-phases check
+reset
+/usr/bin/sed -i '/force_remove_created_container "\$acquisition"/a\          remove_container "$keeper"' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-remove-between-phases check
+reset
+/usr/bin/awk '
+    $0 == "          remove_volume \"$volume\"" { after_remove=1; print; next }
+    after_remove && $0 == "          container_absent \"$keeper\"" { held=$0; next }
+    after_remove && held != "" && $0 == "          volume_absent \"$volume\"" { print; print held; held=""; after_remove=0; next }
+    { print }
+    END { if (held != "") print held }
+' "$repo/.github/workflows/controller-helper-closure-observer.yml" > "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated"
+/usr/bin/mv "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated" "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-post-volume-absence-order check
+reset
+/usr/bin/printf '%s\n' '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock container stop "$keeper"' >> "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-namespaced-stop check
+reset
+/usr/bin/printf '%s\n' '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock container exec "$keeper" /usr/bin/true' >> "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-namespaced-exec check
+reset
+/usr/bin/printf '%s\n' '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock start -a "$keeper"' >> "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-short-attach check
+reset
+/usr/bin/printf '%s\n' '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock start --interactive "$keeper"' >> "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-long-interactive check
+reset
+/usr/bin/printf '%s\n' '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock container start -i "$keeper"' >> "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-namespaced-short-interactive check
+reset
+/usr/bin/printf '%s\n' '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock \' '  container exec "$keeper" /usr/bin/true' >> "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject keeper-split-command check
+reset
+/usr/bin/printf '%s\n' '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock create --name "$identity-extra" --privileged --network host "$checkout_image" /usr/bin/true' >> "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject extra-container-create check
+reset
+/usr/bin/printf '%s\n' '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume create "$identity-extra-volume"' >> "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject extra-volume-create check
+reset
+/usr/bin/printf '%s\n' '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock rm --force unrelated-container' >> "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject extra-container-remove check
+reset
+/usr/bin/printf '%s\n' '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume rm --force unrelated-volume' >> "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject extra-volume-remove check
+reset
+/usr/bin/printf '%s\n' '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock image ls; /usr/bin/docker --config "$docker_config" --log-level debug --host unix:///var/run/docker.sock create --name "$identity-extra" "$checkout_image"' >> "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject double-docker-call check
+reset
+/usr/bin/awk '
+    index($0, "Options \"type\"") {
+        print "          /usr/bin/docker --config \"$docker_config\" --host unix:///var/run/docker.sock create --name \"$identity-extra\" --privileged --network host \"$checkout_image\" /usr/bin/true >/dev/null"
+        next
+    }
+    { print }
+' "$repo/.github/workflows/controller-helper-closure-observer.yml" > "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated"
+/usr/bin/mv "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated" "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject same-count-docker-substitution check
+reset
+/usr/bin/awk '
+    index($0, "--name \"$acquisition\" --read-only --network bridge") {
+        print
+        print "            --privileged --pid=host --mount \"type=bind,source=/,target=/host\" \\"
+        next
+    }
+    { print }
+' "$repo/.github/workflows/controller-helper-closure-observer.yml" > "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated"
+/usr/bin/mv "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated" "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject hostile-create-continuation check
+reset
+/usr/bin/awk '
+    index($0, "volume ls \\") {
+        print
+        print "              --filter \"label=never\" \\"
+        next
+    }
+    { print }
+' "$repo/.github/workflows/controller-helper-closure-observer.yml" > "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated"
+/usr/bin/mv "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated" "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject false-volume-absence-filter check
+
+printf '%s\n' 'controller-helper observer policy mutations passed: cases=125'
