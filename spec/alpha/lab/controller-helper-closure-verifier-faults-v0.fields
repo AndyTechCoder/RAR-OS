@@ -1,5 +1,5 @@
 schema=rar-alpha-controller-helper-closure-verifier-faults-v0
-status=experimental-complete+C3VA-evidence-bound-source-only-unwired
+status=experimental-complete+C3VA-evidence-candidate-source-only-unwired
 execution_authority=none-until-C3V
 fault_count=12
 evidence_fault_binding=F005+F006+F007+F009+F011-require-lossless-post-output-event-resource-preimages;all-F001-through-F012-bind-observed-exit+bounded-output+filesystem-delta+resource+termination-bytes
