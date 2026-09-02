@@ -297,6 +297,8 @@ validate_projection() {
     raw=$2
     observation=$(observation_for "$name") || fail "field $name has no semantic rule"
     case_binding
+    semantic_kind=$current_kind
+    case "$semantic_kind" in clean-success-pass-1|clean-success-pass-2) semantic_kind=clean-success-pass ;; esac
     exec 4< "$raw"
     IFS= read -r p_schema <&4 || fail 'semantic schema missing'
     IFS= read -r p_kind <&4 || fail 'semantic kind missing'
@@ -309,7 +311,7 @@ validate_projection() {
     IFS= read -r p_sha_line <&4 || fail 'semantic payload digest missing'
     IFS= read -r p_data <&4 || fail 'semantic payload marker missing'
     [ "$p_schema" = schema=rar-c3v-semantic-field-v0 ] &&
-        [ "$p_kind" = "kind=$current_kind" ] &&
+        [ "$p_kind" = "kind=$semantic_kind" ] &&
         [ "$p_case" = "case_id=$current_case" ] &&
         [ "$p_field" = "field=$name" ] &&
         [ "$p_row" = "catalog_row_sha256=$binding_row_sha" ] &&
