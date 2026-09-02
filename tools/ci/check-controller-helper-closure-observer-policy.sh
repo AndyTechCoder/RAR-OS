@@ -58,7 +58,7 @@ for required in \
     '[[ "$platform" == linux/amd64 ]]' \
     '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock volume create --driver local' '--opt type=tmpfs --opt device=tmpfs' \
     'o=size=67108864,uid=$runner_uid,gid=$runner_gid,mode=0700,noexec,nosuid,nodev' \
-    'docker volume inspect --format '"'"'{{index .Options "o"}}'"'"'' \
+    'volume inspect --format '"'"'{{index .Options "o"}}'"'"'' \
     '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock create --pull=never --name "$acquisition" --read-only --network bridge' \
     '--mount "type=volume,source=$volume,target=/checkout"' \
     'GIT_CONFIG_NOSYSTEM=1' 'GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false' \
@@ -138,20 +138,51 @@ workflow_docker_calls=$(/usr/bin/grep -Fc '/usr/bin/docker' "$workflow")
         if (pwd_line != expected) bad=1
         if ((getline hash_line) <= 0 || index(hash_line, "              [ \"$(/usr/bin/sha256sum /usr/bin/git ") != 1) bad=1
         if ((getline first_operation) <= 0) bad=1
-        if (role == "acquisition" && first_operation != "              /usr/bin/git init /checkout") bad=1
-        if (role == "transfer" && first_operation != "              /usr/bin/cp -a /source/. /destination/") bad=1
+        if (role == "acquisition" && first_operation != "              /usr/bin/git init /checkout || fail \"git init\"") bad=1
+        if (role == "transfer" && first_operation != "              /usr/bin/cp -a /source/. /destination/ || fail \"copy\"") bad=1
         if (role == "acquisition") acquisition_done=1
         if (role == "transfer") transfer_done=1
         role=""; next
     }
     END { exit !(acquisition_done == 1 && transfer_done == 1 && bad == 0 && role == "" && expected_workdir == "") }
 ' "$workflow" || fail 'container working-directory control flow changed'
+/usr/bin/awk '
+    $0 == "              /usr/bin/git init /checkout || fail \"git init\"" {
+        if (role || acquisition_done) bad=1
+        role="acquisition"; state=1; next
+    }
+    $0 == "              /usr/bin/cp -a /source/. /destination/ || fail \"copy\"" {
+        if (role || transfer_done) bad=1
+        role="transfer"; state=1; next
+    }
+    role == "acquisition" && state == 1 && $0 == "              [ -d /checkout/.git ] && [ ! -L /checkout/.git ] || fail \"git directory\"" { state=2; next }
+    role == "transfer" && state == 1 && $0 == "              [ -d /destination/.git ] && [ ! -L /destination/.git ] || fail \"git directory\"" { state=2; next }
+    state == 2 {
+        expected = role == "acquisition" ? "              GIT_DIR=/checkout/.git" : "              GIT_DIR=/destination/.git"
+        if ($0 != expected) bad=1
+        state=3; next
+    }
+    state == 3 {
+        expected = role == "acquisition" ? "              GIT_WORK_TREE=/checkout" : "              GIT_WORK_TREE=/destination"
+        if ($0 != expected) bad=1
+        state=4; next
+    }
+    state == 4 && $0 == "              export GIT_DIR GIT_WORK_TREE" { state=5; next }
+    role == "acquisition" && state == 5 && index($0, "              /usr/bin/git -C /checkout remote add origin ") == 1 { acquisition_done=1; role=""; state=0; next }
+    role == "transfer" && state == 5 && $0 == "              actual_sha=$(/usr/bin/git -C /destination rev-parse HEAD) || fail \"rev-parse\"" { transfer_done=1; role=""; state=0; next }
+    role && state { bad=1 }
+    END { exit !(acquisition_done == 1 && transfer_done == 1 && bad == 0 && role == "" && state == 0) }
+' "$workflow" || fail 'Git environment control flow changed'
 [ "$(/usr/bin/grep -Fc '/usr/bin/rmdir "$docker_config"' "$workflow")" -eq 1 ] || fail 'workflow Docker config cleanup changed'
 [ "$(/usr/bin/grep -Fc 'find "$docker_config" -mindepth 1 -maxdepth 1 -print -quit' "$workflow")" -eq 2 ] || fail 'workflow Docker config emptiness proof changed'
 /usr/bin/grep -Fq 'for name in DOCKER_HOST DOCKER_CONTEXT DOCKER_TLS_VERIFY DOCKER_CERT_PATH DOCKER_CONFIG; do' "$workflow" || fail 'workflow Docker selector denial missing'
 [ "$(/usr/bin/grep -Fc -- '--network none' "$workflow")" -eq 1 ] || fail 'transfer network denial changed'
 [ "$(/usr/bin/grep -Fc '[ "$bytes" -le 67108864 ] && [ "$files" -le 8192 ] && [ "$objects" -le 32768 ]' "$workflow")" -eq 2 ] || fail 'checkout ceilings changed'
-[ "$(/usr/bin/grep -Fc '[ -z "$(/usr/bin/git -C /' "$workflow")" -ge 4 ] || fail 'checkout cleanliness and ref checks missing'
+[ "$(/usr/bin/grep -Fc 'actual_sha=$(/usr/bin/git -C /' "$workflow")" -eq 2 ] || fail 'checkout identity capture changed'
+[ "$(/usr/bin/grep -Fc 'status_output=$(/usr/bin/git -C /' "$workflow")" -eq 2 ] || fail 'checkout status capture changed'
+[ "$(/usr/bin/grep -Fc 'refs_output=$(/usr/bin/git -C /' "$workflow")" -eq 2 ] || fail 'checkout ref capture changed'
+[ "$(/usr/bin/grep -Fc 'object_counts=$(/usr/bin/git -C /' "$workflow")" -eq 2 ] || fail 'checkout object capture changed'
+[ "$(/usr/bin/grep -Fc ') || fail "count-objects"' "$workflow")" -eq 2 ] || fail 'Git object failure is masked'
 [ "$(/usr/bin/grep -Fc 'remove_container "$acquisition"' "$workflow")" -eq 1 ] || fail 'acquisition fallback cleanup changed'
 [ "$(/usr/bin/grep -Fc 'force_remove_created_container "$acquisition"' "$workflow")" -eq 1 ] || fail 'immediate acquisition removal changed'
 [ "$(/usr/bin/grep -Fc 'remove_container "$transfer"' "$workflow")" -eq 2 ] || fail 'transfer cleanup ordering changed'

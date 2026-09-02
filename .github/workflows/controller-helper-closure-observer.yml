@@ -179,25 +179,34 @@ jobs:
             HOME=/tmp PATH=/usr/bin:/bin LC_ALL=C LANG=C GIT_CONFIG_NOSYSTEM=1 \
             GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false \
             /usr/bin/dash -c '
+              fail() { /usr/bin/printf "C2B acquisition failed: %s\n" "$1" >&2; exit 1; }
               set -eu
-              [ "$(pwd -P)" = /checkout ]
-              [ "$(/usr/bin/sha256sum /usr/bin/git | /usr/bin/awk "{print \$1}")" = 356db14e102d68a1a37d8a1ac577dfd678d45d46e92f468bef8b7154e7bfdc60 ]
-              /usr/bin/git init /checkout
-              /usr/bin/git -C /checkout remote add origin https://github.com/AndyTechCoder/RAR-OS.git
+              [ "$(pwd -P)" = /checkout ] || fail "working directory"
+              [ "$(/usr/bin/sha256sum /usr/bin/git | /usr/bin/awk "{print \$1}")" = 356db14e102d68a1a37d8a1ac577dfd678d45d46e92f468bef8b7154e7bfdc60 ] || fail "git binary hash"
+              /usr/bin/git init /checkout || fail "git init"
+              [ -d /checkout/.git ] && [ ! -L /checkout/.git ] || fail "git directory"
+              GIT_DIR=/checkout/.git
+              GIT_WORK_TREE=/checkout
+              export GIT_DIR GIT_WORK_TREE
+              /usr/bin/git -C /checkout remote add origin https://github.com/AndyTechCoder/RAR-OS.git || fail "remote"
               /usr/bin/git -C /checkout -c credential.helper= -c core.askPass= \
                 -c filter.lfs.smudge= -c filter.lfs.required=false \
-                fetch --no-tags --depth=1 origin "$1"
+                fetch --no-tags --depth=1 origin "$1" || fail "fetch"
               /usr/bin/git -C /checkout -c filter.lfs.smudge= -c filter.lfs.required=false \
-                checkout --detach FETCH_HEAD
-              [ "$(/usr/bin/git -C /checkout rev-parse HEAD)" = "$1" ]
-              [ -z "$(/usr/bin/git -C /checkout status --porcelain=v1 --untracked-files=all)" ]
-              [ -z "$(/usr/bin/git -C /checkout for-each-ref --format="%(refname)")" ]
-              bytes=$(/usr/bin/du -sb /checkout | /usr/bin/awk "{print \$1}")
-              files=$(/usr/bin/find -P /checkout -xdev -type f -printf x | /usr/bin/wc -c)
-              set -- $(/usr/bin/git -C /checkout count-objects -v | /usr/bin/awk "/^(count|in-pack):/ {print \$2}")
-              [ "$#" -eq 2 ]
+                checkout --detach FETCH_HEAD || fail "checkout"
+              actual_sha=$(/usr/bin/git -C /checkout rev-parse HEAD) || fail "rev-parse"
+              [ "$actual_sha" = "$1" ] || fail "identity"
+              status_output=$(/usr/bin/git -C /checkout status --porcelain=v1 --untracked-files=all) || fail "status"
+              [ -z "$status_output" ] || fail "dirty checkout"
+              refs_output=$(/usr/bin/git -C /checkout for-each-ref --format="%(refname)") || fail "refs"
+              [ -z "$refs_output" ] || fail "unexpected refs"
+              bytes=$(/usr/bin/du -sb /checkout | /usr/bin/awk "{print \$1}") || fail "byte count"
+              files=$(/usr/bin/find -P /checkout -xdev -type f -printf x | /usr/bin/wc -c) || fail "file count"
+              object_counts=$(/usr/bin/git -C /checkout count-objects -v) || fail "count-objects"
+              set -- $(/usr/bin/printf "%s\n" "$object_counts" | /usr/bin/awk "/^(count|in-pack):/ {print \$2}")
+              [ "$#" -eq 2 ] || fail "object count shape"
               objects=$(($1 + $2))
-              [ "$bytes" -le 67108864 ] && [ "$files" -le 8192 ] && [ "$objects" -le 32768 ]
+              [ "$bytes" -le 67108864 ] && [ "$files" -le 8192 ] && [ "$objects" -le 32768 ] || fail "checkout ceilings"
             ' rar-c2b-acquire "$GITHUB_SHA" >/dev/null
           set +e
           /usr/bin/timeout --signal=KILL 120s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock start --attach "$acquisition"
@@ -221,20 +230,29 @@ jobs:
             HOME=/tmp PATH=/usr/bin:/bin LC_ALL=C LANG=C GIT_CONFIG_NOSYSTEM=1 \
             GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false \
             /usr/bin/dash -c '
+              fail() { /usr/bin/printf "C2B transfer failed: %s\n" "$1" >&2; exit 1; }
               set -eu
-              [ "$(pwd -P)" = /destination ]
-              [ "$(/usr/bin/sha256sum /usr/bin/git | /usr/bin/awk "{print \$1}")" = 356db14e102d68a1a37d8a1ac577dfd678d45d46e92f468bef8b7154e7bfdc60 ]
-              /usr/bin/cp -a /source/. /destination/
-              [ "$(/usr/bin/git -C /destination rev-parse HEAD)" = "$1" ]
-              [ -z "$(/usr/bin/git -C /destination status --porcelain=v1 --untracked-files=all)" ]
-              [ -z "$(/usr/bin/git -C /destination for-each-ref --format="%(refname)")" ]
-              bytes=$(/usr/bin/du -sb /destination | /usr/bin/awk "{print \$1}")
-              files=$(/usr/bin/find -P /destination -xdev -type f -printf x | /usr/bin/wc -c)
-              set -- $(/usr/bin/git -C /destination count-objects -v | /usr/bin/awk "/^(count|in-pack):/ {print \$2}")
-              [ "$#" -eq 2 ]
+              [ "$(pwd -P)" = /destination ] || fail "working directory"
+              [ "$(/usr/bin/sha256sum /usr/bin/git | /usr/bin/awk "{print \$1}")" = 356db14e102d68a1a37d8a1ac577dfd678d45d46e92f468bef8b7154e7bfdc60 ] || fail "git binary hash"
+              /usr/bin/cp -a /source/. /destination/ || fail "copy"
+              [ -d /destination/.git ] && [ ! -L /destination/.git ] || fail "git directory"
+              GIT_DIR=/destination/.git
+              GIT_WORK_TREE=/destination
+              export GIT_DIR GIT_WORK_TREE
+              actual_sha=$(/usr/bin/git -C /destination rev-parse HEAD) || fail "rev-parse"
+              [ "$actual_sha" = "$1" ] || fail "identity"
+              status_output=$(/usr/bin/git -C /destination status --porcelain=v1 --untracked-files=all) || fail "status"
+              [ -z "$status_output" ] || fail "dirty checkout"
+              refs_output=$(/usr/bin/git -C /destination for-each-ref --format="%(refname)") || fail "refs"
+              [ -z "$refs_output" ] || fail "unexpected refs"
+              bytes=$(/usr/bin/du -sb /destination | /usr/bin/awk "{print \$1}") || fail "byte count"
+              files=$(/usr/bin/find -P /destination -xdev -type f -printf x | /usr/bin/wc -c) || fail "file count"
+              object_counts=$(/usr/bin/git -C /destination count-objects -v) || fail "count-objects"
+              set -- $(/usr/bin/printf "%s\n" "$object_counts" | /usr/bin/awk "/^(count|in-pack):/ {print \$2}")
+              [ "$#" -eq 2 ] || fail "object count shape"
               objects=$(($1 + $2))
-              [ "$bytes" -le 67108864 ] && [ "$files" -le 8192 ] && [ "$objects" -le 32768 ]
-              [ "$(CDPATH= cd -- /destination && pwd -P)" = /destination ]
+              [ "$bytes" -le 67108864 ] && [ "$files" -le 8192 ] && [ "$objects" -le 32768 ] || fail "checkout ceilings"
+              [ "$(CDPATH= cd -- /destination && pwd -P)" = /destination ] || fail "physical destination"
             ' rar-c2b-transfer "$GITHUB_SHA" >/dev/null
           set +e
           /usr/bin/timeout --signal=KILL 30s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock start --attach "$transfer"
