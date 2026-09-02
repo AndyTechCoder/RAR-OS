@@ -72,7 +72,7 @@ for required in \
     '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock create --pull=never --name "$transfer" --read-only --network none' \
     '--mount "type=volume,source=$volume,target=/source,readonly"' \
     '--mount "type=bind,source=$partial,target=/destination"' \
-    '/usr/bin/cp -a /source/. /destination/' \
+    '/usr/bin/cp -a /source/.git /destination/.git' '/usr/bin/cp -a /source/. /destination/' \
     '/usr/bin/timeout --signal=KILL 30s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock start --attach "$transfer"' \
     'remove_container "$transfer"' 'remove_volume "$volume"' \
     '[[ "$partial_device" == "$parent_device" ]]' \
@@ -134,12 +134,15 @@ workflow_docker_calls=$(/usr/bin/grep -Fc '/usr/bin/docker' "$workflow")
     }
     role && $0 == "              set -eu" {
         if ((getline pwd_line) <= 0) bad=1
-        expected = role == "acquisition" ? "              [ \"$(pwd -P)\" = /checkout ]" : "              [ \"$(pwd -P)\" = /destination ]"
+        expected = role == "acquisition" ? "              [ \"$(pwd -P)\" = /checkout ] || fail \"working directory\"" : "              [ \"$(pwd -P)\" = /destination ] || fail \"working directory\""
         if (pwd_line != expected) bad=1
         if ((getline hash_line) <= 0 || index(hash_line, "              [ \"$(/usr/bin/sha256sum /usr/bin/git ") != 1) bad=1
         if ((getline first_operation) <= 0) bad=1
         if (role == "acquisition" && first_operation != "              /usr/bin/git init /checkout || fail \"git init\"") bad=1
-        if (role == "transfer" && first_operation != "              /usr/bin/cp -a /source/. /destination/ || fail \"copy\"") bad=1
+        if (role == "transfer") {
+            if (first_operation != "              /usr/bin/cp -a /source/.git /destination/.git || fail \"git metadata copy\"") bad=1
+            if ((getline second_operation) <= 0 || second_operation != "              /usr/bin/cp -a /source/. /destination/ || fail \"copy\"") bad=1
+        }
         if (role == "acquisition") acquisition_done=1
         if (role == "transfer") transfer_done=1
         role=""; next
