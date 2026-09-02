@@ -172,30 +172,62 @@ acquisition container has a read-only root, non-root identity, bounded
 resources, no-new-privileges, all capabilities dropped, and a separate bounded
 noexec temporary mount.
 
-The controller must track the acquisition container and bounded volume by
-exclusive identities, enforce a 120-second wall-clock deadline followed by
-forced container removal within 10 seconds on timeout or any failure, and
-retain no networked container afterward. Git acquisition is a depth-one fetch
-of only the requested 40-byte commit identity into `FETCH_HEAD`; it fetches
-no tags, other refs, submodules, or LFS objects and disables LFS smudge
-behavior. Before success, the complete checkout including `.git` must contain
-at most 67,108,864 bytes, 8,192 regular files, and 32,768 loose-plus-packed Git
-objects, so both write-time capacity and accepted content are bounded.
+The controller must track the acquisition container, bounded volume, transfer
+container, and a continuity-only keeper container by exclusive identities. The
+keeper exists solely because a local-driver tmpfs volume loses its contents when
+no running container holds its mount. It starts before acquisition and remains
+running through transfer. It uses the same digest-pinned image with
+`--pull=never`, `--network none`, a read-only root, `--interactive`, fixed
+resource limits, `no-new-privileges`, all capabilities dropped, an empty
+allowlisted environment, and only the bounded volume mounted at
+`/keep` read-only with `volume-nocopy`. It receives no host bind, source or
+destination checkout mount, Docker socket, secret, credential, repository
+program, or executable authority.
+
+The keeper runs as fixed UID/GID `65532:65532`, distinct from the attested
+runner UID/GID that owns the mode-0700 volume root. Before blocking, the pinned
+`/usr/bin/dash` command must prove that `/keep` is neither readable nor
+searchable by that identity; it may not enumerate or open a path below
+`/keep`. It then blocks only on an exact stdin `read`; input, EOF, early
+exit, a stopped state, restart, restart-count drift, identity drift, mount
+drift, or loss of the read/search denial fails closed. Thus the keeper holds a
+mount but receives no readable source authority. The existing immutable
+`timeout-minutes: 15` observe-job deadline bounds this wait and all cleanup;
+cancellation or deadline cleanup failure remains fail closed.
+
+The controller enforces a 120-second acquisition deadline followed by forced
+container removal within 10 seconds on timeout or any failure, and retains no
+networked container afterward. It proves the keeper running and policy-exact
+before acquisition, after acquisition removal, and immediately before transfer.
+Git acquisition is a depth-one fetch of only the requested 40-byte commit
+identity into `FETCH_HEAD`; it fetches no tags, other refs, submodules, or LFS
+objects and disables LFS smudge behavior. Before success, the complete checkout
+including `.git` must contain at most 67,108,864 bytes, 8,192 regular files,
+and 32,768 loose-plus-packed Git objects, so both write-time capacity and
+accepted content are bounded.
 
 Only after the acquisition container is removed may a separate pinned,
 network-disabled transfer container mount the acquisition volume read-only and
 one exclusive, initially empty controller-owned partial checkout root writable.
-It copies the bounded checkout once, verifies the requested detached exact SHA,
-a clean tree, absence of retained unexpected refs, every byte/file/object
-ceiling, and exact output-root containment, then exits and is removed. The
-controller removes the bounded volume and revokes partial-root write permission
-before atomically promoting it to the exact checkout root. No repository code,
-validator, or observation container may read either root before promotion; all
-later source mounts are read-only. Any partial root is identity-checked and
-discarded on failure before repository use. Fetch or transfer failure, timeout,
-cleanup failure, revision drift, an unexpected checkout entry or ref, a ceiling
-breach, or credential request fails closed. This exception grants source
-transport only; it grants no observer, compiler, helper, target, publication,
+It first copies exactly `/source/.git` to `/destination/.git`, then copies
+the complete `/source/.` tree to `/destination/`, and only afterward applies
+the real-directory guard and verifies the requested detached exact SHA, a clean
+tree, absence of retained unexpected refs, every byte/file/object ceiling, and
+exact output-root containment. The transfer then exits and is removed. The
+controller rechecks the keeper, removes it, proves it absent, removes the
+bounded volume, proves it absent, and revokes partial-root write permission
+before atomically promoting the partial root to the exact checkout root.
+
+Normal cleanup order is transfer, keeper, then volume after acquisition has
+already been removed. Failure cleanup order is acquisition, transfer, keeper,
+then volume. Every removal is bounded and exact absence is required; cleanup
+preserves the original failure and upgrades any cleanup failure. No repository
+code, validator, or observation container may read either root before
+promotion; all later source mounts are read-only. Any partial root is
+identity-checked and discarded on failure before repository use. Fetch,
+transfer, keeper, timeout, cleanup, revision, unexpected-entry or ref, ceiling,
+or credential failure fails closed. This exception grants source transport
+continuity only; it grants no observer, compiler, helper, target, publication,
 trust-state, or readiness authority.
 
 After source acquisition, the exact reviewed
