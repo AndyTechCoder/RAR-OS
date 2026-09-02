@@ -362,7 +362,7 @@ reset
 reject masked-git-failure check
 
 reset
-/usr/bin/sed -i '/cp -a \/source\/\.git \/destination\/\.git/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+/usr/bin/sed -i 's#/usr/bin/cp -a /source/\. /destination/#/usr/bin/cp -a /source/* /destination/#' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject git-metadata-copy check
 
 reset
