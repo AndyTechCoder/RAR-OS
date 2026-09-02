@@ -136,10 +136,11 @@ field_raw=$scratch/current.field
 semantic_expected=$scratch/semantic.expected
 case_row_file=$scratch/case.row
 receipt_keys=$scratch/receipt.keys
+semantic_payload=$scratch/semantic.payload
 cleanup() {
     rc=$?
     trap - EXIT HUP INT TERM
-    /bin/rm -f -- "$plan" "$ledger" "$encoded" "$chunk" "$decoded" "$pass_one" "$pass_two" "$preimage" "$field_raw" "$semantic_expected" "$case_row_file" "$receipt_keys"
+    /bin/rm -f -- "$plan" "$ledger" "$encoded" "$chunk" "$decoded" "$pass_one" "$pass_two" "$preimage" "$field_raw" "$semantic_expected" "$case_row_file" "$receipt_keys" "$semantic_payload"
     [ -z "$(/usr/bin/find "$scratch" -mindepth 1 -maxdepth 1 -print -quit)" ] || rc=1
     exit "$rc"
 }
@@ -292,14 +293,56 @@ case_binding() {
     binding_oracle_sha=$(sha_file "$semantic_expected")
 }
 validate_projection() {
-    name=$1; raw=$2
+    name=$1
+    raw=$2
     observation=$(observation_for "$name") || fail "field $name has no semantic rule"
     case_binding
-    {
-        printf '%s\n' 'schema=rar-c3v-semantic-field-v0' "kind=$current_kind" "case_id=$current_case" "field=$name" "catalog_row_sha256=$binding_row_sha" "oracle_sha256=$binding_oracle_sha" "observation=$observation"
-    } > "$semantic_expected"
-    /usr/bin/cmp -s "$raw" "$semantic_expected" || fail "semantic field $name is not canonically bound"
+    exec 4< "$raw"
+    IFS= read -r p_schema <&4 || fail 'semantic schema missing'
+    IFS= read -r p_kind <&4 || fail 'semantic kind missing'
+    IFS= read -r p_case <&4 || fail 'semantic case missing'
+    IFS= read -r p_field <&4 || fail 'semantic field missing'
+    IFS= read -r p_row <&4 || fail 'semantic row binding missing'
+    IFS= read -r p_oracle <&4 || fail 'semantic oracle binding missing'
+    IFS= read -r p_observation <&4 || fail 'semantic observation missing'
+    IFS= read -r p_bytes_line <&4 || fail 'semantic payload length missing'
+    IFS= read -r p_sha_line <&4 || fail 'semantic payload digest missing'
+    IFS= read -r p_data <&4 || fail 'semantic payload marker missing'
+    [ "$p_schema" = schema=rar-c3v-semantic-field-v0 ] &&
+        [ "$p_kind" = "kind=$current_kind" ] &&
+        [ "$p_case" = "case_id=$current_case" ] &&
+        [ "$p_field" = "field=$name" ] &&
+        [ "$p_row" = "catalog_row_sha256=$binding_row_sha" ] &&
+        [ "$p_oracle" = "oracle_sha256=$binding_oracle_sha" ] &&
+        [ "$p_observation" = "observation=$observation" ] ||
+        fail "semantic field $name binding mismatch"
+    p_bytes=${p_bytes_line#payload_bytes=}
+    [ "$p_bytes_line" = "payload_bytes=$p_bytes" ] &&
+        bounded_unsigned "$p_bytes" 16777216 && [ "$p_bytes" -gt 0 ] ||
+        fail "semantic field $name payload length malformed"
+    p_sha=${p_sha_line#payload_sha256=}
+    [ "$p_sha_line" = "payload_sha256=$p_sha" ] && nonzero_sha "$p_sha" ||
+        fail "semantic field $name payload digest malformed"
+    [ "$p_data" = payload ] || fail "semantic field $name payload marker invalid"
+    /bin/dd bs=1 count="$p_bytes" <&4 of="$semantic_payload" 2>/dev/null
+    [ "$(size_file "$semantic_payload")" -eq "$p_bytes" ] &&
+        [ "$(sha_file "$semantic_payload")" = "$p_sha" ] ||
+        fail "semantic field $name payload mismatch"
+    if IFS= read -r p_extra <&4; then fail "semantic field $name extension bytes"; fi
+    exec 4<&-
+    case "$name" in
+        observed-event|timeout-termination|residual-proof)
+            printf '%s' "$binding_oracle" > "$semantic_expected"
+            /usr/bin/cmp -s "$semantic_payload" "$semantic_expected" ||
+                fail "$name does not retain exact catalog oracle bytes"
+            ;;
+        mutation-schedule|mutation-trigger|mutation-acknowledgement|residual-source)
+            [ "$current_case" != RUN ] && /usr/bin/cmp -s "$semantic_payload" "$case_row_file" ||
+                fail "$name does not retain exact catalog row bytes"
+            ;;
+    esac
 }
+
 validate_receipt() {
     raw=$1
     [ "$(size_file "$raw")" -le 8192 ] || fail 'verification receipt oversized'
@@ -400,7 +443,7 @@ parse_envelope() {
             [ "$field_sha" = "$RAR_EXPECTED_VERIFICATION_RECEIPT_SHA256" ] ||
                 fail 'verification receipt field is not trusted-header bound'
         fi
-        /bin/rm -f -- "$field_raw" "$semantic_expected" "$case_row_file" "$receipt_keys"
+        /bin/rm -f -- "$field_raw" "$semantic_expected" "$case_row_file" "$receipt_keys" "$semantic_payload"
     done
     if IFS= read -r envelope_extra <&3; then
         fail 'envelope has extension bytes'
