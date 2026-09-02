@@ -143,6 +143,47 @@ docker_create_blocks=$(/usr/bin/awk '
 docker_create_blocks_digest_output=$(/usr/bin/printf '%s\n' "$docker_create_blocks" | /usr/bin/shasum -a 256) || fail 'cannot hash complete Docker create spans'
 docker_create_blocks_sha256=${docker_create_blocks_digest_output%% *}
 [ "$docker_create_blocks_sha256" = 1a8566ddd28ca5fc1502849e5967add2c5cc566563b4238b1bd2bb5bc7aae59c ] || fail 'complete Docker create spans changed'
+docker_logical_inventory=$(/usr/bin/awk '
+    BEGIN { needle="/usr/bin/docker" }
+    {
+        if (role != "") {
+            end_role=(role == "keeper" && index($0, "start \"$keeper\"")) ||
+                (role == "acquisition" && index($0, "start --attach \"$acquisition\"")) ||
+                (role == "transfer" && index($0, "start --attach \"$transfer\""))
+            if (end_role) {
+                role=""
+            } else {
+                print
+                next
+            }
+        }
+        if (continuation) {
+            print
+            if ($0 !~ /\\$/) continuation=0
+            next
+        }
+        if (index($0, needle)) {
+            commands++
+            print
+            if (index($0, "--name \"$keeper\" --interactive")) {
+                role="keeper"
+                blocks++
+            } else if (index($0, "--name \"$acquisition\" --read-only")) {
+                role="acquisition"
+                blocks++
+            } else if (index($0, "--name \"$transfer\" --read-only")) {
+                role="transfer"
+                blocks++
+            } else if ($0 ~ /\\$/) {
+                continuation=1
+            }
+        }
+    }
+    END { if (role != "" || continuation || commands != 23 || blocks != 3) exit 1 }
+' "$workflow") || fail 'cannot extract complete logical Docker inventory'
+docker_logical_inventory_digest_output=$(/usr/bin/printf '%s\n' "$docker_logical_inventory" | /usr/bin/shasum -a 256) || fail 'cannot hash complete logical Docker inventory'
+docker_logical_inventory_sha256=${docker_logical_inventory_digest_output%% *}
+[ "$docker_logical_inventory_sha256" = 535711e7612b2d44ad4bb28847a87ac9478c87594a99b076de4bccab8f5bf440 ] || fail 'complete logical Docker inventory changed'
 /usr/bin/awk '
     BEGIN {
         needle="/usr/bin/docker"

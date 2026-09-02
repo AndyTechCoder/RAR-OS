@@ -488,5 +488,16 @@ reset
 ' "$repo/.github/workflows/controller-helper-closure-observer.yml" > "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated"
 /usr/bin/mv "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated" "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject hostile-create-continuation check
+reset
+/usr/bin/awk '
+    index($0, "volume ls \\") {
+        print
+        print "              --filter \"label=never\" \\"
+        next
+    }
+    { print }
+' "$repo/.github/workflows/controller-helper-closure-observer.yml" > "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated"
+/usr/bin/mv "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated" "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject false-volume-absence-filter check
 
-printf '%s\n' 'controller-helper observer policy mutations passed: cases=124'
+printf '%s\n' 'controller-helper observer policy mutations passed: cases=125'
