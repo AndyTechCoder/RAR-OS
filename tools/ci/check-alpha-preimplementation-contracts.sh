@@ -181,9 +181,9 @@ require_digest "$lab/controller-helper-runtime-v0.fields" 20d85fcafc0b0fefd44adc
 require_digest "$lab/controller-helper-runtime-cases.v0" df51cc29ce2ce905d9935a25f1ef9803a9cdf3706b2144b8de347fd324ba79f2
 require_digest "$lab/controller-helper-closure-observer-test-v0.fields" d2f8837b52bfd2f5c77bc527b7106e981a3ed3bd7dd7114953a83316870045d4
 require_digest "$lab/controller-helper-closure-observer-run-evidence-v0.fields" a0519b80bd85522b9119dcf6dc971f45d307b7d1b37cf0e04c84b93ae74e8978
-require_digest "$lab/controller-helper-closure-verifier-faults-v0.fields" 43f38cc2e75567a9e473c8f2c3d5f8ed6fffc03b8a33a70622bcdd1521901a00
-require_digest "$lab/controller-helper-closure-verifier-cases-v0" 8a5564e07810f300d2a65bd0cd7a5c76513ef80f36f1ade4b87bf1f8a3b64897
-require_digest "$lab/controller-helper-closure-verifier-evidence-v0.fields" 4de1353a2bc22af60e56f38f8139c925fffdcaca14e362521d570f79271ac175
+require_digest "$lab/controller-helper-closure-verifier-faults-v0.fields" 926b4b2efe66897baa6574475f74ba6878e96cf394b8c8eab290c03cd3ea2d9a
+require_digest "$lab/controller-helper-closure-verifier-cases-v0" 5538692c9d8ceb84909a69be0c02388112b6692b4577c0bf1e6fc77eff3be945
+require_digest "$lab/controller-helper-closure-verifier-evidence-v0.fields" cb8f913dce03e748b70d35a106e4c1f2db2012a935860745107eccd0f47d73b2
 require_digest "$lab/controller-helper-closure-acceptance-v0.fields" 9447da52e1253267ce886aeed85a75f5544d6b520d737342dde9cdce0d0aa261
 require_digest "$lab/controller-helper-test-evidence-v1.fields" 62e0b135014a854d1187ef6ff9b24da9de07be50cd6e2e9b14cd9d59a0508ad7
 require_digest "$lab/controller-helper-build-evidence-v1.fields" c2d174bf2d793079f98a7467f4b7bd12ceddc00e0c67d247a4b0531f66999f97
