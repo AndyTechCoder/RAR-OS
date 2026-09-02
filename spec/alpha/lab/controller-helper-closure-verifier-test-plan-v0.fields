@@ -1,9 +1,9 @@
 schema=rar-alpha-controller-helper-closure-verifier-test-plan-v0
-status=experimental-C3VA-validated-source-only-unwired
+status=experimental-C3VA-candidate-source-only-unwired
 purpose=record-an-initial-controller-owned-validation+mutation+confinement-test-design-without-claiming-runtime-readiness
 execution_authority=none
 coverage_status=complete-via-117-constructible-dispositions+37-executable-precedence+12-faults+43-reviewed-residual-proofs-in-controller-helper-closure-verifier-cases-v0+faults-v0.fields+evidence-v0.fields,still-not-an-acceptance-instance+not-ready-for-wiring
-runtime_state=contracts+evidence-validator-policy-activated;C3V-harness+run+fixture-image+tool-pin+candidate+evidence-instances-not-created
+runtime_state=contracts+evidence-validator-policy-candidate-under-review;C3V-harness+run+fixture-image+tool-pin+candidate+evidence-instances-not-created
 disposition_runtime_count=117
 disposition_residual_count=30
 precedence_runtime_count=37
@@ -85,8 +85,8 @@ precedence_status=37-executable-dual-invalid-oracles+13-catalog-only-residual-re
 evidence_status=lossless-bounded+validator-enforced-by-controller-helper-closure-verifier-evidence-v0.fields;C3V-runtime-instance+fixtures-still-required
 repeatability_status=closed-by-lossless-attempt-variant-raw-preimages+validator-derived-normalized-comparison+exact-nonaliasing+anti-replay
 evidence_blob_allocation=2-clean-success-pass-preimages+166*4-runtime-preimages+43-residual-proof-preimages=709
-evidence_bounds=decoded-296816640,Base64-payload-395755520,chunk-decoded-1436,chunks-206741,blob-decoded-16777216,blob-count-709,normalized-records-209,logical-records-207660,evidence-file-440401920,artifact-441473024
-evidence_projection=bounded-forward-only-lossless-decode+hash+length+count+domain+nonalias-validation,normalized-records-derived-only-from-retained-preimages
+evidence_bounds=decoded-296816640,Base64-payload-396032120,chunk-decoded-1436,chunks-206741,blob-decoded-16777216,blob-count-709,normalized-records-209,logical-records-207660,evidence-file-440401920,artifact-441473024
+evidence_projection=bounded-forward-only-single-Base64-decode+length-framed-raw-field-hash+length+count+domain+nonalias-validation,normalized-records-derived-only-from-retained-preimages+trusted-run-header
 evidence_mutations=empty+alias+replay+truncation+extension+reorder+duplicate+wrong-domain+wrong-length+wrong-hash+malformed-Base64+blob-count+chunk-count+line-count+decoded-total+per-blob+oversize+projection-cycle+raw-normalized-mismatch+cross-case-substitution
 retained_runtime_evidence_requirements=controller+subject+contract+tool-pin+fixture-image-digests,case-id,lossless-mutation-schedule+trigger+ack+event,exit,lossless-stdout+stderr,pre+post-mount+topology-inventories,lossless-output-inventory+bytes,resource+timeout+termination
 retained_residual_proof_requirements=case-id+catalog+reason+source+proof-identities+review-verdict+lossless-source+proof-bytes,no-runtime-mutation+no-observed-exit+stdout+stderr+filesystem-result
