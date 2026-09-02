@@ -5,7 +5,8 @@ LANG=C
 PATH=/usr/bin:/bin
 export LC_ALL LANG PATH
 
-[ "${GITHUB_ACTIONS-}" = true ] && [ "${CI-}" = true ] && [ "${RUNNER_OS-}" = Linux ] || {
+[ "${GITHUB_ACTIONS-}" = true ] && [ "${CI-}" = true ] &&
+    [ "${RAR_CI_RUNNER_OS-}" = Linux ] && [ "${RAR_POLICY_MUTATION_TESTS-}" = 1 ] || {
     printf '%s\n' 'C3VA evidence policy test is GitHub-hosted Linux CI only' >&2
     exit 1
 }
