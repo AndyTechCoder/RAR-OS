@@ -106,6 +106,16 @@ receipt cannot update a lock, inventory, controller, profile, gate, build, or
 readiness state; provenance, licenses, acquisition, tool pins, retained bytes,
 and runtime evidence still require separate review.
 
+The C3VA candidate now defines one single-Base64, length-framed raw evidence
+stream with 709 deterministic typed blobs and 209 validator-derived normalized
+records. Its trusted run tuple, checked aggregate counts, per-field and per-blob
+hashes, 396032120-byte Base64 cap, canonical zero representation, and scoped
+replay rule are source-bound. A GitHub-only ephemeral policy test constructs a
+complete synthetic artifact and requires all 20 named malformed mutations to
+fail closed. This is candidate validation machinery only: it does not run the
+dormant verifier or authorize a container, workflow, compiler, helper, target,
+acceptance, or readiness state.
+
 `controller-helper-closure-verifier-test-plan-v0.fields` now binds the complete
 source-only C1 validation design. It accounts for 117 constructible disposition
 cases, 30 disposition residual proofs, 37 executable precedence oracles, 13
