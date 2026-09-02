@@ -92,7 +92,7 @@ for required in \
     '[[ "$(/usr/bin/stat -c %i "$partial")" == "$partial_inode" ]]' \
     '[[ "$(/usr/bin/stat -c %d "$workspace_parent")" == "$parent_device" ]]' \
     '[[ "$(/usr/bin/stat -c %i "$workspace_parent")" == "$parent_inode" ]]' \
-    '/usr/bin/chmod -R a-w "$partial"' '/usr/bin/rmdir "$GITHUB_WORKSPACE"' \
+    '/usr/bin/chmod -R a-w,a+rX "$partial"' '/usr/bin/rmdir "$GITHUB_WORKSPACE"' \
     '/usr/bin/mv -T "$partial" "$GITHUB_WORKSPACE"' \
     '[[ "$(/usr/bin/stat -c %d "$GITHUB_WORKSPACE")" == "$partial_device" ]]' \
     '[[ "$(/usr/bin/stat -c %i "$GITHUB_WORKSPACE")" == "$partial_inode" ]]'; do
