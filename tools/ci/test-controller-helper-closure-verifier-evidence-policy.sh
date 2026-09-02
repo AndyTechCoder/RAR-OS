@@ -208,6 +208,20 @@ materialize_field() {
         printf '%s' "$oracle" > "$semantic"
         oracle_sha=$(sha_file "$semantic")
     fi
+    payload=$work/payload.raw
+    case "$name" in
+        observed-event|timeout-termination|residual-proof)
+            printf '%s' "$oracle" > "$payload"
+            ;;
+        mutation-schedule|mutation-trigger|mutation-acknowledgement|residual-source)
+            /bin/cp "$case_row_file" "$payload"
+            ;;
+        *)
+            printf 'captured|%s|%s|%s\n' "$kind" "$case_id" "$name" > "$payload"
+            ;;
+    esac
+    payload_bytes=$(size_file "$payload")
+    payload_sha=$(sha_file "$payload")
     {
         printf '%s\n' \
             'schema=rar-c3v-semantic-field-v0' \
@@ -216,7 +230,11 @@ materialize_field() {
             "field=$name" \
             "catalog_row_sha256=$row_sha" \
             "oracle_sha256=$oracle_sha" \
-            "observation=$observation"
+            "observation=$observation" \
+            "payload_bytes=$payload_bytes" \
+            "payload_sha256=$payload_sha" \
+            'payload'
+        /bin/cat "$payload"
     } > "$field"
 }
 
