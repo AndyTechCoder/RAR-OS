@@ -288,7 +288,7 @@ reject transfer-pwd-assertion check
 reset
 /usr/bin/awk '
     $0 == "              [ \"$(pwd -P)\" = /checkout ]" { held=$0; next }
-    held != "" && $0 == "              /usr/bin/git init /checkout" { print; print held; held=""; next }
+    held != "" && $0 == "              /usr/bin/git init /checkout || fail \"git init\"" { print; print held; held=""; next }
     { print }
     END { if (held != "") print held }
 ' "$repo/.github/workflows/controller-helper-closure-observer.yml" > "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated"
@@ -297,7 +297,7 @@ reject acquisition-pwd-order check
 reset
 /usr/bin/awk '
     $0 == "              [ \"$(pwd -P)\" = /destination ]" { held=$0; next }
-    held != "" && index($0, "              /usr/bin/git -C /destination rev-parse HEAD") == 1 { print; print held; held=""; next }
+    held != "" && index($0, "              actual_sha=$(/usr/bin/git -C /destination rev-parse HEAD)") == 1 { print; print held; held=""; next }
     { print }
     END { if (held != "") print held }
 ' "$repo/.github/workflows/controller-helper-closure-observer.yml" > "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated"
@@ -307,4 +307,52 @@ reset
 /usr/bin/sed -i '1s#/usr/bin/bash#/bin/sh#' "$repo/tools/ci/run-controller-helper-closure-observer.sh"
 reject bash-wrapper-identity check
 
-printf '%s\n' 'controller-helper observer policy mutations passed: cases=79'
+reset
+/usr/bin/sed -i 's#GIT_DIR=/checkout/.git#GIT_DIR=/wrong/.git#' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject acquisition-git-dir check
+reset
+/usr/bin/sed -i 's#GIT_DIR=/destination/.git#GIT_DIR=/wrong/.git#' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject transfer-git-dir check
+reset
+/usr/bin/sed -i 's#GIT_WORK_TREE=/checkout#GIT_WORK_TREE=/wrong#' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject acquisition-git-work-tree check
+reset
+/usr/bin/sed -i 's#GIT_WORK_TREE=/destination#GIT_WORK_TREE=/wrong#' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject transfer-git-work-tree check
+reset
+/usr/bin/sed -i '/\[ -d \/checkout\/\.git \].*git directory/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject acquisition-git-directory-guard check
+reset
+/usr/bin/sed -i '/\[ -d \/destination\/\.git \].*git directory/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject transfer-git-directory-guard check
+reset
+/usr/bin/awk '$0 == "              export GIT_DIR GIT_WORK_TREE" { seen++; if (seen == 1) next } { print }' "$repo/.github/workflows/controller-helper-closure-observer.yml" > "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated"
+/usr/bin/mv "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated" "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject acquisition-git-export check
+reset
+/usr/bin/awk '$0 == "              export GIT_DIR GIT_WORK_TREE" { seen++; if (seen == 2) next } { print }' "$repo/.github/workflows/controller-helper-closure-observer.yml" > "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated"
+/usr/bin/mv "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated" "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject transfer-git-export check
+reset
+/usr/bin/awk '
+    $0 == "              export GIT_DIR GIT_WORK_TREE" && !moved { held=$0; moved=1; next }
+    moved == 1 && index($0, "              /usr/bin/git -C /checkout remote add origin ") == 1 { print; print held; moved=2; next }
+    { print }
+    END { if (moved == 1) print held }
+' "$repo/.github/workflows/controller-helper-closure-observer.yml" > "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated"
+/usr/bin/mv "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated" "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject acquisition-git-export-order check
+reset
+/usr/bin/awk '
+    $0 == "              export GIT_DIR GIT_WORK_TREE" { seen++; if (seen == 2) { held=$0; next } }
+    held != "" && index($0, "              actual_sha=$(/usr/bin/git -C /destination rev-parse HEAD)") == 1 { print; print held; held=""; next }
+    { print }
+    END { if (held != "") print held }
+' "$repo/.github/workflows/controller-helper-closure-observer.yml" > "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated"
+/usr/bin/mv "$repo/.github/workflows/controller-helper-closure-observer.yml.mutated" "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject transfer-git-export-order check
+reset
+/usr/bin/sed -i '0,/ || fail "count-objects"/s///' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject masked-git-failure check
+
+printf '%s\n' 'controller-helper observer policy mutations passed: cases=90'
