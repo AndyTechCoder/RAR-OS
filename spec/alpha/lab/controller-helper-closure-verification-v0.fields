@@ -1,9 +1,9 @@
 schema=rar-alpha-controller-helper-closure-verification-schema-v0
-status=experimental-C3VA-validated-source-only-unwired
+status=experimental-C3VA-candidate-source-only-unwired
 purpose=mechanically-verify-a-retained-candidate-compiler-closure-exact-set-without-reviewing-provenance-or-activating-anything
 execution_authority=none
 candidate_state=absent,no-cloud-run-authorized,no-retained-candidate-manifest-or-receipt
-c3va_state=lossless-evidence-contract+validator+policy-tests-activated,verifier+controller+container+workflow-remain-unwired+unexecuted
+c3va_state=lossless-evidence-contract+validator+policy-tests-candidate-under-review,verifier+controller+container+workflow-remain-unwired+unexecuted
 evidence_contract=spec/alpha/lab/controller-helper-closure-verifier-evidence-v0.fields,exact-709-blob+209-normalized-record-lossless-format
 evidence_binding=independent-validator-recomputes-clean-success-two-pass-equality+31-line-receipt-bindings+all-runtime+residual-normalized-results-from-retained-raw-preimages
 input_boundary=exact-controller-owned-read-only-/evidence-mount,no-concurrent-writer,exactly-controller-helper-closure.sha256+controller-helper-closure.receipt
