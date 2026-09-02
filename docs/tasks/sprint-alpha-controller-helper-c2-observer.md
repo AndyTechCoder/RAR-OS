@@ -83,6 +83,8 @@ After C2A closes, the C2B writer owns only these paths:
 - `docs/sprint-alpha-dashboard.md`
 - `SPRINT_STATUS.md`
 
+Post-merge exact-main remediation authority for `tests/bootstrap/src/main.rs` is limited to synchronizing its expected Class B inventory ID set with the already-reviewed `tools/toolchain/class-b-host-tools.v1`. It may not change route behavior, production code, tool identities, compiler/helper/target authority, readiness, or any other assertion.
+
 Before the exact C2B workflow exists, the C2A source checker requires zero
 workflow references to the run-evidence validator and mutation policy. After
 C2A exact-main closure, the exact
