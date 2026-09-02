@@ -84,7 +84,7 @@ for required in \
     '/usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock create --pull=never --name "$transfer" --read-only --network none' \
     '--mount "type=volume,source=$volume,target=/source,readonly"' \
     '--mount "type=bind,source=$partial,target=/destination"' \
-    '/usr/bin/cp -a /source/.git /destination/.git' '/usr/bin/cp -a /source/. /destination/' \
+    '/usr/bin/cp -a /source/. /destination/' \
     '/usr/bin/timeout --signal=KILL 30s /usr/bin/docker --config "$docker_config" --host unix:///var/run/docker.sock start --attach "$transfer"' \
     'remove_container "$transfer"' 'remove_volume "$volume"' \
     '[[ "$partial_device" == "$parent_device" ]]' \
@@ -142,7 +142,7 @@ docker_create_blocks=$(/usr/bin/awk '
 ' "$workflow") || fail 'cannot extract complete Docker create spans'
 docker_create_blocks_digest_output=$(/usr/bin/printf '%s\n' "$docker_create_blocks" | /usr/bin/shasum -a 256) || fail 'cannot hash complete Docker create spans'
 docker_create_blocks_sha256=${docker_create_blocks_digest_output%% *}
-[ "$docker_create_blocks_sha256" = 0578332b96958a216bf75562fed145e928b938f854aa179812d0d66461d4b7d2 ] || fail 'complete Docker create spans changed'
+[ "$docker_create_blocks_sha256" = 7ca9cf404b9c600b4a825cf5bee5749df97f9e13ff199a5c94ff9771c8f23a3b ] || fail 'complete Docker create spans changed'
 docker_logical_inventory=$(/usr/bin/awk '
     BEGIN { needle="/usr/bin/docker" }
     {
@@ -183,7 +183,7 @@ docker_logical_inventory=$(/usr/bin/awk '
 ' "$workflow") || fail 'cannot extract complete logical Docker inventory'
 docker_logical_inventory_digest_output=$(/usr/bin/printf '%s\n' "$docker_logical_inventory" | /usr/bin/shasum -a 256) || fail 'cannot hash complete logical Docker inventory'
 docker_logical_inventory_sha256=${docker_logical_inventory_digest_output%% *}
-[ "$docker_logical_inventory_sha256" = 29a6cd6456f247e4f9445a5dd8053b04bfd0d53487d4cc9d1943b2b414c610cf ] || fail 'complete logical Docker inventory changed'
+[ "$docker_logical_inventory_sha256" = 39963397bcdcf85ddc8f733d372f0491838746efe85cb1b893160f647b3e6c69 ] || fail 'complete logical Docker inventory changed'
 /usr/bin/awk '
     BEGIN {
         needle="/usr/bin/docker"
@@ -259,10 +259,7 @@ docker_logical_inventory_sha256=${docker_logical_inventory_digest_output%% *}
         if ((getline hash_line) <= 0 || index(hash_line, "              [ \"$(/usr/bin/sha256sum /usr/bin/git ") != 1) bad=1
         if ((getline first_operation) <= 0) bad=1
         if (role == "acquisition" && first_operation != "              /usr/bin/git init /checkout || fail \"git init\"") bad=1
-        if (role == "transfer") {
-            if (first_operation != "              /usr/bin/cp -a /source/.git /destination/.git || fail \"git metadata copy\"") bad=1
-            if ((getline second_operation) <= 0 || second_operation != "              /usr/bin/cp -a /source/. /destination/ || fail \"copy\"") bad=1
-        }
+        if (role == "transfer" && first_operation != "              /usr/bin/cp -a /source/. /destination/ || fail \"copy\"") bad=1
         if (role == "acquisition") acquisition_done=1
         if (role == "transfer") transfer_done=1
         role=""; next
@@ -445,9 +442,9 @@ done
     END { exit !(cases && manifest && receipt && cases < manifest && manifest < receipt) }
 ' "$harness" || fail 'stream emission order changed'
 /usr/bin/awk '
-    /docker start --attach/ { start=NR }
-    /docker rm --force "\$container"/ { removed=NR }
-    /record=\$evidence\/controller-helper-closure-observer-run-evidence.v0/ { record=NR }
+    index($0, "/usr/bin/docker --config \"$docker_config\" --host unix:///var/run/docker.sock start --attach \"$container\"") { start=NR }
+    index($0, "/usr/bin/docker --config \"$docker_config\" --host unix:///var/run/docker.sock rm --force \"$container\"") { removed=NR }
+    index($0, "record=$evidence/controller-helper-closure-observer-run-evidence.v0") { record=NR }
     END { exit !(start && removed && record && start < removed && removed < record) }
 ' "$wrapper" || fail 'producer revocation order changed'
 [ "$(/usr/bin/grep -Fxc 'case_count=21' "$catalog")" -eq 1 ] || fail 'runtime catalog count changed'
