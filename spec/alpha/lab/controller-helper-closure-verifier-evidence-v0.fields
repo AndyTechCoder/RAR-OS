@@ -18,6 +18,15 @@ decoded_envelope_prefix=rar-c3v-envelope-v0-LF,kind=<kind>-LF,case_id=<case-id>-
 decoded_field_frame=field.NN.name=<name>-LF,field.NN.bytes=<canonical-decimal>-LF,field.NN.sha256=<64-lowercase-hex>-LF,field.NN.data-LF,then-exact-declared-raw-bytes,then-LF
 decoded_zero_rule=bytes-0+sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855+zero-data-bytes-between-data-LF-and-terminating-LF
 decoded_equality_rule=consume-exact-declared-field-bytes+SHA256-must-equal-field-digest;checked-field-count+framing+raw-byte-sum-must-equal-B-decoded-length;B-SHA256-covers-complete-envelope-framing+raw-bytes+terminating-LFs
+semantic_field_encoding=all-non-byte-stream-fields-except-verification-receipt-inputs-use-exact-rar-c3v-semantic-field-v0-grammar-with-10-ASCII/LF-header-lines+exact-length-framed-arbitrary-payload-bytes
+semantic_field_order=schema,kind,case_id,field,catalog_row_sha256,oracle_sha256,observation,payload_bytes,payload_sha256,payload-marker,then-exact-payload-bytes-with-no-extension
+semantic_binding_rule=kind+case_id+field-byte-equal-containing-envelope;catalog-row-SHA256-derived-from-exact-trusted-case-row-or-trusted-whole-catalog-for-RUN;oracle-SHA256-derived-from-exact-catalog-oracle-bytes-or-trusted-subject-for-RUN
+semantic_payload_rule=payload_bytes-canonical-positive-1..16777216;payload_sha256-nonzero-lowercase-SHA256;validator-consumes+hashes-exact-arbitrary-payload-and-rejects-extension
+byte_stream_field_rule=input-bytes+stdout-bytes+stderr-bytes+output-bytes-remain-lossless-arbitrary-raw-field-bytes;their-length+digest+case+kind-bindings-come-from-envelope+blob+normalized-preimage
+oracle_derivation_rule=observed-event+timeout-termination+residual-proof-payloads-byte-equal-exact-case-catalog-oracle;mutation-schedule+trigger+acknowledgement+residual-source-payloads-byte-equal-exact-complete-catalog-row
+receipt_reconstruction_rule=verification-receipt-inputs-is-exact-31-line-canonical-receipt-bytes;validator-checks-line-order+literal+trusted-run+digest+decimal+false-domains,candidate-manifest-equals-recomputed-manifest,and-field-SHA256-equals-trusted-header-receipt-SHA256
+result_derivation_rule=case-result-is-pass-only-after-all-assigned-raw-blobs-frame+hash+semantic+exact-catalog-row+exact-oracle-bindings-validate;supplied-N-result-never-creates-pass
+coverage_rule=complete-positive-fixture-has-709-blobs+209-normalized-records,nonempty-semantic-payloads,exact-31-line-receipt,at-least-one-binary-NUL+LF+non-ASCII-byte-stream,and-at-least-one-multi-chunk-blob;mutations-cover-inner+outer-length/hash,canonical-padding,checked-aggregate-boundary,replay+alias+projection+cross-case
 kind_clean_success=clean-success-pass-1|RUN|domain-header,tool-inventory,fixture-inventory,topology,canonical-manifest,mount-identities,output-inventory,output-bytes,event-bytes,resource-bytes,verification-receipt-inputs
 kind_runtime_pre=runtime-pre-input-topology|case|domain-header,input-bytes,pre-mount-inventory,pre-topology,mount-identities,mutation-schedule
 kind_runtime_stdout=runtime-stdout|case|stdout-bytes
@@ -25,7 +34,7 @@ kind_runtime_stderr=runtime-stderr|case|stderr-bytes
 kind_runtime_post=runtime-post-output-event-resource|case|post-mount-inventory,post-topology,output-inventory,output-bytes,mutation-trigger,mutation-acknowledgement,observed-event,resource-usage,timeout-termination
 kind_residual=residual-source-proof|case|residual-source,residual-proof
 blob_allocation=B000001-clean-success-pass-1+RUN;B000002-clean-success-pass-2+RUN;then-logical-case-order-with-four-consecutive-pre+stdout+stderr+post-blobs-per-runtime-row-or-one-residual-source-proof-blob-per-residual-row;last-B000709
-clean_success_validation=field-name+length+SHA256-sequences-identical-across-B000001+B000002;validator-recomputes-pass-equality+verification-receipt-binding-from-retained-fields
+clean_success_validation=field-name+length+SHA256-sequences-identical-across-B000001+B000002;validator-recomputes-pass-equality+all-31-line-verification-receipt-bindings-from-retained-fields
 normalized_record=N|ordinal|case_id|catalog_kind|result|raw_blob_ids|normalized_sha256
 normalized_order=exactly-209;ordinal-001..209;case-id-V001..V147+Q001..Q050+X001..X012;catalog-kind-byte-equals-case-catalog;result-pass
 raw_blob_ids_rule=nonempty-canonical-B-identities-comma-separated-no-spaces;runtime-exact-four-assigned-consecutive-IDs-in-pre+stdout+stderr+post-order;residual-exact-one-assigned-ID;globals-never-listed
