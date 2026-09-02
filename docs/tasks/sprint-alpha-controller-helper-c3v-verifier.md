@@ -20,7 +20,7 @@ The C2 prerequisite is exact main `70a683dfb6dbde03f0f884ddc16ac2a2680a4f4f`, pa
 
 After D0, C3V has three separately reviewed and merged subphases:
 
-1. **C3VA - contract and evidence activation.** Close the repeatability/evidence gap and activate only validators and static policy tests. No workflow, container, or verifier runtime exists.
+1. **C3VA - contract and evidence activation.** Close the repeatability/evidence gap and activate only validators and static policy tests. C3VA adds or activates no workflow, container, or verifier runtime and never executes the existing dormant verifier source.
 2. **C3VB - one-shot trusted-main verification.** After C3VA exact-main validation, add one exact-revision workflow and bounded controller/harness.
 3. **C3VR - mandatory retirement.** After C3VB exact-main evidence and independent review, make the workflow inert without deleting any file, then pass a distinct exact-main gate before C3A or unrelated main work.
 
@@ -59,7 +59,7 @@ C3VA may change only these literal paths:
 
 No directory or descriptive ownership is granted.
 
-C3VA adds exactly `tools/ci/test-controller-helper-closure-verifier-evidence-policy.sh|ephemeral` to `tools/ci/policy-test-modes.v0`, changing the registry from 28 to 29 entries. The runner invokes all 29 exactly once in registry order and reports exactly `policy-tests=29`. The confinement checker recognizes exactly that new path and mode. No other registry row, order, mode, runner behavior, or confinement exception changes.
+C3VA adds exactly `tools/ci/test-controller-helper-closure-verifier-evidence-policy.sh|ephemeral` to `tools/ci/policy-test-modes.v0`. Ephemeral rows change 28 to 29; immutable rows remain exactly 5; total test rows change 33 to 34. The runner invokes all 29 ephemeral tests exactly once in registry order and reports exactly `Ephemeral policy tests passed: executed=29 source=read-only scratch=tmpfs`. The confinement checker recognizes exactly that new path and mode. No other registry row, order, mode, summary shape, runner behavior, or confinement exception changes.
 
 C3VA must replace the digest-only evidence design with one lossless, canonical, ASCII/LF framing that retains content-addressed typed raw preimages for every runtime and residual result. It must include exact lengths, SHA-256 digests, domain tuples, canonical zero-length representation, nonaliasing identities, and deterministic ordering for:
 
@@ -72,9 +72,13 @@ C3VA must replace the digest-only evidence design with one lossless, canonical, 
 - residual source and proof bytes;
 - the raw-to-normalized projection and normalized comparison fields.
 
-Arbitrary bytes are encoded with one canonical Base64 alphabet and padding rule; the validator decodes them losslessly, checks declared lengths and hashes, derives every normalized record and digest from retained bytes, and rejects self-asserted normalized values. Empty, alias, replay, truncation, extension, reorder, duplicate, wrong-domain, wrong-length, wrong-hash, malformed-Base64, oversize, projection-cycle, and cross-case substitution mutations fail closed.
+Arbitrary bytes use the RFC 4648 standard Base64 alphabet with required canonical padding, no whitespace, and no alternate spelling. The retained decoded payload maximum is exactly 296816640 bytes; its Base64 payload maximum is exactly `4*ceil(decoded_bytes/3) = 395755520` bytes. Each chunk carries at most 1436 decoded bytes and one Base64 payload, so its complete framing record is at most 2048 bytes. The evidence contains at most 206741 chunks.
 
-The evidence maximum is 440401920 bytes. Its conservative proof is `395755520 + 206741*128 + 709*256 + 209*2048 + 8192 = 422836096`. The exact six-file artifact maximum is 441473024 bytes, below the existing 536870912-byte output budget. Raw stdout plus stderr remains at most 65536 bytes per runtime case. A header is at most 8192 bytes and each normalized case/proof record is at most 2048 bytes.
+There are exactly 709 typed blobs: four per runtime case (166*4=664), one per residual proof (43), and two run-global blobs, for `664+43+2=709`. Each runtime case has one pre/input/topology envelope, one stdout blob, one stderr blob, and one post/output/event/resource envelope. Each residual proof has one lossless source/proof envelope. The two global blobs contain the domain/header inputs and the tool/fixture inputs. No blob exceeds 16777216 decoded bytes; the total decoded cap still governs. Every blob has one header of at most 256 bytes and exact type, case/domain identity, decoded length, chunk count, and SHA-256. The evidence has one header of at most 8192 bytes, exactly 209 normalized records of at most 2048 bytes, and at most 207660 logical records total: one header, 709 blob headers, 206741 chunk records, and 209 normalized records.
+
+The validator parses as a bounded forward-only stream, never buffers more than one 1436-byte decoded chunk plus fixed parser state, decodes losslessly, checks every declared length/count/hash, derives every normalized record and digest from retained bytes, and rejects self-asserted normalized values. Empty, alias, replay, truncation, extension, reorder, duplicate, wrong-domain, wrong-length, wrong-hash, malformed-Base64, blob-count, chunk-count, line-count, decoded-total, per-blob, oversize, projection-cycle, and cross-case substitution mutations fail closed.
+
+The evidence file maximum is 440401920 bytes. Its conservative proof is `395755520 + 206741*128 + 709*256 + 209*2048 + 8192 = 422836096`. The exact six-file artifact maximum is 441473024 bytes, below the existing 536870912-byte output budget. Raw stdout plus stderr remains at most 65536 decoded bytes per runtime case.
 
 C3VA must remove the test plan's undefined repeatability state and replace it with a closed, validator-enforced definition. The cases and faults catalogs must bind the added alias, replay, truncation, oversize, projection, and raw/normalized mismatch mutations. C3VA is incomplete while any named repeatability, retention, reconstruction, nonaliasing, or normalization gap remains.
 
@@ -115,28 +119,25 @@ C3VB may change only these literal paths:
 
 No directory or descriptive ownership is granted.
 
-Every C3VA semantic contract, source checker, evidence validator, evidence policy test, and evidence fixture is frozen in C3VB by its exact C3VA-main SHA-256 digest. C3VB may consume but must not modify those files. The existing `tools/ci/verify-controller-helper-closure-candidate.sh` and the direct `tools/ci/controller-helper-closure-observer-harness.sh` are also frozen by exact reviewed digest and remain read-only.
+Every C3VA semantic contract, source checker, evidence validator, evidence policy test, and evidence fixture is frozen in C3VB by its exact C3VA-main SHA-256 digest. C3VB may consume but must not modify those files. The existing `tools/ci/verify-controller-helper-closure-candidate.sh`, direct production observer `tools/ci/observe-controller-helper-closure.sh`, and `spec/alpha/lab/controller-helper-closure-observation-v0.fields` are also frozen by exact reviewed digest and remain read-only.
 
-C3VB adds exactly `tools/ci/test-controller-helper-closure-verifier-policy.sh|ephemeral` to the 29-entry registry, producing exactly 30 entries. The runner invokes all 30 once in registry order and reports exactly `policy-tests=30`. The confinement checker recognizes only that one added path/mode. No existing row, mode, ordering, or C3VA test changes.
+C3VB adds exactly `tools/ci/test-controller-helper-closure-verifier-policy.sh|ephemeral` to the 34-row registry. Ephemeral rows change 29 to 30; immutable rows remain exactly 5; total test rows change 34 to 35. The runner invokes all 30 ephemeral tests exactly once in registry order and reports exactly `Ephemeral policy tests passed: executed=30 source=read-only scratch=tmpfs`. The confinement checker recognizes only that one added path and mode. No existing row, mode, ordering, summary shape, or C3VA test changes.
 
 ## One-shot trusted-main workflow
 
 C3VB adds exactly one verifier workflow at `.github/workflows/controller-helper-closure-verifier.yml`. It has `contents: read`, no write permission, no pull-request trigger, no cache, and no secret or credential input. All actions use full commit SHAs.
 
-Its only automatic trigger is `push` to `main` with the literal path filter `spec/alpha/lab/controller-helper-closure-verifier-activation-v0.fields`. The activation record is created once in C3VB and is immutable afterward. The job proves:
+Its only automatic trigger is `push` to `main` with the literal path filter `spec/alpha/lab/controller-helper-closure-verifier-activation-v0.fields`. The activation record is created once in C3VB and is immutable afterward. Before any repository code runs, the job proves canonical repository, push event, main ref, Linux/X64 runner, `github.event.after == github.event.head_commit.id == GITHUB_SHA`, `github.event.before` equals the literal exact C3VA-main SHA frozen during C3VB, and `github.run_attempt == 1`.
 
-- canonical repository, push event, main ref, Linux/X64 runner, and exact GitHub SHA;
-- exactly two commit parents;
-- first parent equals the exact C3VA main SHA frozen during C3VB;
-- merge tree equals the second-parent tree;
-- the first-parent diff contains only C3VB-owned paths;
-- the activation record has the exact reviewed schema and one-shot state.
+After immutable network-free transfer, pinned Git proves `HEAD == GITHUB_SHA`, exactly two ordered parents, parent 1 equals both `github.event.before` and the literal exact C3VA-main SHA, parent 2 is a distinct canonical 40-hex commit, and the merge tree equals parent 2's tree. It rejects missing, extra, or reordered parents and every identity/tree mismatch. The first-parent diff must contain only C3VB-owned paths and the activation record must have the exact reviewed schema and one-shot state.
 
-A future unrelated main push does not match the path filter. A future activation-record change fails the pinned first-parent and immutable-record checks. The workflow uses `concurrency: controller-helper-closure-verifier-main`, `cancel-in-progress: false`, one attempt only, no retry loop, and a 20-minute job timeout.
+The evidence records parent 1, parent 2, both parent/tree identities, merge SHA/tree, event before/after, run ID/attempt, and controller/source identities. The external merge gate constructs the merge with only the exact C3VB PR head that passed all three reviews and checks as parent 2. Independent post-run evidence review must compare the recorded parent 2 to that established reviewed head before C3VB completes; the workflow proves topology and byte identity while the external gate proves review authority without a circular self-hash.
 
-Repository acquisition uses the accepted C2 bounded immutable pattern and image `rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3` for `linux/amd64`. The only network exception is anonymous exact-digest image acquisition when the local inventory lacks that exact platform image. Checkout acquisition is anonymous, exact-revision, depth-bounded, and removed before verification. Every later container uses `--pull=never`.
+A future unrelated main push does not match the path filter. A future activation-record change fails the pinned first-parent and immutable-record checks. The workflow uses `concurrency: controller-helper-closure-verifier-main`, `cancel-in-progress: false`, exactly run attempt 1, no retry loop, and a 20-minute job timeout.
 
-C3VB invokes the frozen observer harness directly in its own fresh isolated container to produce exactly the fresh manifest and 23-line observation receipt for the exact C3VB merge revision. It does not invoke the C2 wrapper, consume C2 outer run evidence, or reuse any prior artifact. The controller independently validates and freezes those two files before verification.
+Repository acquisition uses the accepted C2 bounded immutable pattern and image `rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3` for `linux/amd64`. Exactly two isolated, bounded pre-verification network phases are permitted: anonymous provisioning of that exact platform/image digest only when inventory proves it absent, and anonymous exact-revision depth-bounded source acquisition. Each phase has a distinct container identity, empty mode-0700 Docker configuration, lifetime, output bound, and cleanup/absence proof. Both containers and their configurations are terminated and removed before observation or verification. No other network is allowed; every subsequent container uses `--network none` and `--pull=never`.
+
+C3VB invokes the frozen production observer `tools/ci/observe-controller-helper-closure.sh` directly in its own fresh isolated container to produce exactly the fresh manifest and 23-line observation receipt for the exact C3VB merge revision. It does not invoke the C2 wrapper, the O001-O021 observer harness, C2 outer validation, or any prior artifact. The controller independently validates and freezes those two files against the frozen observation contract before verification.
 
 ## Verifier confinement
 
