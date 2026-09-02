@@ -137,10 +137,12 @@ semantic_expected=$scratch/semantic.expected
 case_row_file=$scratch/case.row
 receipt_keys=$scratch/receipt.keys
 semantic_payload=$scratch/semantic.payload
+retained_receipt=$scratch/retained.receipt
+receipt_seen=0
 cleanup() {
     rc=$?
     trap - EXIT HUP INT TERM
-    /bin/rm -f -- "$plan" "$ledger" "$encoded" "$chunk" "$decoded" "$pass_one" "$pass_two" "$preimage" "$field_raw" "$semantic_expected" "$case_row_file" "$receipt_keys" "$semantic_payload"
+    /bin/rm -f -- "$plan" "$ledger" "$encoded" "$chunk" "$decoded" "$pass_one" "$pass_two" "$preimage" "$field_raw" "$semantic_expected" "$case_row_file" "$receipt_keys" "$semantic_payload" "$retained_receipt"
     [ -z "$(/usr/bin/find "$scratch" -mindepth 1 -maxdepth 1 -print -quit)" ] || rc=1
     exit "$rc"
 }
@@ -460,7 +462,14 @@ validate_receipt() {
 validate_semantic_field() {
     name=$1; raw=$2
     case "$name" in
-        verification-receipt-inputs) validate_receipt "$raw" ;;
+        verification-receipt-inputs)
+            receipt_seen=$((receipt_seen + 1))
+            case "$receipt_seen" in
+                1) /bin/cp "$raw" "$retained_receipt" ;;
+                2) /usr/bin/cmp -s "$raw" "$retained_receipt" || fail 'clean-pass receipt bytes differ' ;;
+                *) fail 'unexpected verification receipt copy' ;;
+            esac
+            ;;
         event-bytes|resource-bytes) [ "$current_case" = RUN ] || fail "$name outside clean-success"; validate_projection "$name" "$raw" ;;
         *) if raw_field "$name"; then :; else validate_projection "$name" "$raw"; fi ;;
     esac
@@ -692,5 +701,7 @@ declared_decoded_sum=$(
     fail 'declared blob decoded total mismatch'
 [ "$(size_file "$pass_one")" -gt 0 ] && /usr/bin/cmp -s "$pass_one" "$pass_two" ||
     fail 'clean-success field projections differ'
+[ "$receipt_seen" -eq 2 ] || fail 'clean-success receipt count mismatch'
+validate_receipt "$retained_receipt"
 [ "$encoded_seen" -le 396032120 ] || fail 'Base64 payload total exceeded'
 printf '%s\n' 'controller-helper closure verifier evidence structure validated: not runtime evidence, not reviewed, not ready'
