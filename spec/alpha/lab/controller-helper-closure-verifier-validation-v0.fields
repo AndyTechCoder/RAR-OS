@@ -1,9 +1,9 @@
 schema=rar-alpha-controller-helper-closure-verifier-validation-v0
-status=experimental-C3VA-validated-source-only-unwired
+status=experimental-C3VA-candidate-source-only-unwired
 purpose=fix-representable-deterministic-predicate-error-classes+exact-control-flow-stages+source-precedence-relationships-for-the-inactive-closure-verifier
 execution_authority=none
 c3va_authority=evidence-contract-validator+policy-tests-only,no-verifier+container+workflow+compiler+helper+target-execution
-evidence_validation=lossless-typed-preimages+canonical-Base64+exact-length+count+hash+domain+ordering+nonalias+anti-replay+validator-derived-normalization
+evidence_validation=lossless-length-framed-typed-raw-preimages+single-outer-canonical-Base64+exact-field+blob+aggregate-length+count+hash+domain+ordering+nonalias+trusted-run-binding+scoped-anti-replay+validator-derived-normalization
 subject_path=tools/ci/verify-controller-helper-closure-candidate.sh
 subject_sha256=3cbeeb85abc3023980a8afe444178ea7acc31f298b3b0975d2c4d6630c82a76c
 error_catalog=controller-helper-closure-verifier-errors-v0
