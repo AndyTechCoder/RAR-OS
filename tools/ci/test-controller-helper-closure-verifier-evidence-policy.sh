@@ -177,6 +177,32 @@ observation_for() {
         *) return 1 ;;
     esac
 }
+write_observed_result() {
+    oldifs=$IFS
+    IFS='|' read -r row_marker row_case row_kind row_source row_left row_right row_binding row_oracle <<EOF
+$(/bin/cat "$case_row_file")
+EOF
+    IFS=$oldifs
+    case "$row_kind" in
+        disposition) primary=${row_oracle%%@*}; termination=exit-1; controller_exit=1 ;;
+        precedence) primary=${row_oracle#first-error-}; termination=exit-1; controller_exit=1 ;;
+        fault)
+            primary=$row_source
+            case "$row_oracle" in signal-25+controller-exit-map-153+*) termination=signal-25; controller_exit=153 ;; *) termination=exit-1; controller_exit=1 ;; esac
+            ;;
+        *) fail "cannot generate observed result for $row_kind" ;;
+    esac
+    case "$row_oracle" in *no-valid-final-receipt*) receipt_state=no-valid-final-receipt ;; *no-receipt*) receipt_state=no-receipt ;; *) receipt_state=no-valid-final-receipt ;; esac
+    printf '%s\n' \
+        'schema=rar-c3v-observed-result-v0' \
+        "case_id=$row_case" \
+        "catalog_kind=$row_kind" \
+        "primary=$primary" \
+        "termination=$termination" \
+        "controller_exit=$controller_exit" \
+        "receipt_state=$receipt_state" > "$payload"
+}
+
 materialize_field() {
     name=$1
     kind=$2
@@ -212,9 +238,8 @@ materialize_field() {
     fi
     payload=$work/payload.raw
     case "$name" in
-        observed-event|timeout-termination|residual-proof)
-            printf '%s' "$oracle" > "$payload"
-            ;;
+        observed-event) write_observed_result ;;
+        timeout-termination|residual-proof) printf '%s' "$oracle" > "$payload" ;;
         mutation-schedule|mutation-trigger|mutation-acknowledgement|residual-source)
             /bin/cp "$case_row_file" "$payload"
             ;;
