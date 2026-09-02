@@ -13,7 +13,7 @@ blob_id_rule=exactly-B000001-through-B000709,increasing,no-gap+duplicate+reorder
 blob_domain_rule=kind+case_id+ordinal-fixed-by-blob_allocation;decoded_bytes:canonical-positive-decimal-1..16777216;chunk_count:canonical-positive-decimal-1..206741;sha256:nonzero-64-lowercase-hex
 chunk_record=C|blob_id|chunk_id|base64_payload
 chunk_id_rule=per-blob-exactly-C000001-through-declared-chunk_count,increasing,no-gap+duplicate+reorder,blob_id-equals-open-blob
-chunk_payload_rule=decoded-length-1..1436;every-nonfinal-chunk-exactly-1436-decoded-bytes+unpadded;final-chunk-1..1436;concatenated-decoded-length+SHA256-equal-B-header
+chunk_payload_rule=decoded-length-1..1436;every-nonfinal-chunk-exactly-1436-decoded-bytes+canonical-one-equals-padding;final-chunk-1..1436;concatenated-decoded-length+SHA256-equal-B-header
 decoded_envelope_prefix=rar-c3v-envelope-v0-LF,kind=<kind>-LF,case_id=<case-id>-LF,field_count=<canonical-positive-decimal>-LF
 decoded_field_frame=field.NN.name=<name>-LF,field.NN.bytes=<canonical-decimal>-LF,field.NN.sha256=<64-lowercase-hex>-LF,field.NN.data-LF,then-exact-declared-raw-bytes,then-LF
 decoded_zero_rule=bytes-0+sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855+zero-data-bytes-between-data-LF-and-terminating-LF
