@@ -315,7 +315,7 @@ jobs:
           [[ "$(/usr/bin/stat -c %d "$workspace_parent")" == "$parent_device" ]]
           [[ "$(/usr/bin/stat -c %i "$workspace_parent")" == "$parent_inode" ]]
           [[ "$partial_device" == "$parent_device" ]]
-          /usr/bin/chmod -R a-w "$partial"
+          /usr/bin/chmod -R a-w,a+rX "$partial"
           /usr/bin/rmdir "$GITHUB_WORKSPACE"
           /usr/bin/mv -T "$partial" "$GITHUB_WORKSPACE"
           [[ -d "$GITHUB_WORKSPACE" && ! -L "$GITHUB_WORKSPACE" ]]
