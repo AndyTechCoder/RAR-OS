@@ -270,7 +270,6 @@ jobs:
               set -eu
               [ "$(pwd -P)" = /destination ] || fail "working directory"
               [ "$(/usr/bin/sha256sum /usr/bin/git | /usr/bin/awk "{print \$1}")" = 356db14e102d68a1a37d8a1ac577dfd678d45d46e92f468bef8b7154e7bfdc60 ] || fail "git binary hash"
-              /usr/bin/cp -a /source/.git /destination/.git || fail "git metadata copy"
               /usr/bin/cp -a /source/. /destination/ || fail "copy"
               [ -d /destination/.git ] && [ ! -L /destination/.git ] || fail "git directory"
               GIT_DIR=/destination/.git
