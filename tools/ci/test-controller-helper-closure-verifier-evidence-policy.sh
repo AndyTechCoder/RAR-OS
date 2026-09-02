@@ -82,6 +82,19 @@ semantic=$work/semantic
 : > "$ledger"
 : > "$body"
 
+printf '%s\n' "find_sha256=$digest" "sort_sha256=$digest" "wc_sha256=$digest" "stat_sha256=$digest" "cmp_sha256=$digest" "id_sha256=$digest" > "$semantic"
+tool_inventory_sha=$(sha_file "$semantic")
+hash_clean_payload() {
+    printf 'captured|clean-success-pass|RUN|%s\n' "$1" > "$semantic"
+    sha_file "$semantic"
+}
+fixture_inventory_sha=$(hash_clean_payload fixture-inventory)
+manifest_sha=$(hash_clean_payload canonical-manifest)
+topology_sha=$(hash_clean_payload topology)
+second_pass_sha=$(hash_clean_payload mount-identities)
+observer_sha=$(hash_clean_payload event-bytes)
+export RAR_EXPECTED_TOOL_PINS_SHA256=$tool_inventory_sha
+
 {
     printf '%s\n' \
         'schema=rar-alpha-controller-helper-closure-verification-v0' \
@@ -96,21 +109,21 @@ semantic=$work/semantic
         'oci_image=sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3' \
         'closure_root=/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu' \
         "verifier_sha256=$digest" \
-        "observer_sha256=$digest" \
-        "tool_pins_sha256=$digest" \
+        "observer_sha256=$observer_sha" \
+        "tool_pins_sha256=$tool_inventory_sha" \
         "find_sha256=$digest" \
         "sort_sha256=$digest" \
         "wc_sha256=$digest" \
         "stat_sha256=$digest" \
         "cmp_sha256=$digest" \
         "id_sha256=$digest" \
-        "candidate_receipt_sha256=$digest" \
-        "candidate_manifest_sha256=$digest" \
-        "recomputed_manifest_sha256=$digest" \
+        "candidate_receipt_sha256=$fixture_inventory_sha" \
+        "candidate_manifest_sha256=$manifest_sha" \
+        "recomputed_manifest_sha256=$manifest_sha" \
         'manifest_entries=1' \
         'manifest_bytes=1' \
-        "topology_sha256=$digest" \
-        "second_pass_sha256=$digest" \
+        "topology_sha256=$topology_sha" \
+        "second_pass_sha256=$second_pass_sha" \
         'helper_compiled=false' \
         'helper_executed=false' \
         'target_compiled=false' \
@@ -238,6 +251,10 @@ materialize_field() {
     fi
     payload=$work/payload.raw
     case "$name" in
+        tool-inventory)
+            printf '%s\n' "find_sha256=$digest" "sort_sha256=$digest" "wc_sha256=$digest" "stat_sha256=$digest" "cmp_sha256=$digest" "id_sha256=$digest" > "$payload"
+            ;;
+
         observed-event) write_observed_result ;;
         timeout-termination|residual-proof) printf '%s' "$oracle" > "$payload" ;;
         mutation-schedule|mutation-trigger|mutation-acknowledgement|residual-source)
@@ -345,7 +362,7 @@ done < "$cases"
     printf 'H|rar-alpha-controller-helper-closure-verifier-evidence-v0|AndyTechCoder/RAR-OS|%s|%s|9001|1|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|166|43|209|709|%s|%s|209|0|mechanically-verified-not-reviewed-not-ready\n' \
         "$revision" "$revision" "$receipt_sha" \
         "$digest" "$digest" "$digest" "$digest" "$digest" "$digest" "$digest" "$cases_sha" \
-        "$digest" "$digest" "$digest" "$nonce" "$chunk_total" "$decoded_total"
+        "$digest" "$digest" "$RAR_EXPECTED_TOOL_PINS_SHA256" "$nonce" "$chunk_total" "$decoded_total"
     /bin/cat "$body"
 } > "$valid"
 
