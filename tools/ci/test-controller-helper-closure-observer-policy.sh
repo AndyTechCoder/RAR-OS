@@ -355,4 +355,8 @@ reset
 /usr/bin/sed -i '0,/ || fail "count-objects"/s///' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject masked-git-failure check
 
-printf '%s\n' 'controller-helper observer policy mutations passed: cases=90'
+reset
+/usr/bin/sed -i '/cp -a \/source\/\.git \/destination\/\.git/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+reject git-metadata-copy check
+
+printf '%s\n' 'controller-helper observer policy mutations passed: cases=91'
