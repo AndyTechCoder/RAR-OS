@@ -1,0 +1,6 @@
+schema=rar-alpha-controller-helper-closure-verifier-evidence-malformed-fragment-v0
+purpose=must-reject-noncanonical-Base64
+blob_header=B|B000001|clean-success-pass-1|S000|1|1|ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb
+chunk=C|B000001|C000001|YQ
+expected=reject
+authority=validator-fixture-only,no-verifier+workflow+runtime+readiness
