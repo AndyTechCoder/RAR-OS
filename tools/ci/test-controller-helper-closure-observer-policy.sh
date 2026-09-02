@@ -148,7 +148,7 @@ reset
 /usr/bin/sed -i 's#target=/source,readonly#target=/source#' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject transfer-source-write check
 reset
-/usr/bin/sed -i '/chmod -R a-w "\$partial"/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
+/usr/bin/sed -i '/chmod -R a-w,a+rX "\$partial"/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
 reject writer-revocation check
 reset
 /usr/bin/sed -i '/"\$workspace_parent"\/.rar-c2b-checkout-partial-.*)/d' "$repo/.github/workflows/controller-helper-closure-observer.yml"
