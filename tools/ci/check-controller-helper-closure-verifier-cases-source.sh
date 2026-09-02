@@ -8,9 +8,12 @@ subject=$root/spec/alpha/lab/controller-helper-closure-verifier-cases-v0
 fail() { printf '%s\n' 'rar-alpha-controller-helper-closure-verifier-cases-v0 source check failed: '"$1" >&2; exit 1; }
 [ -f "$subject" ] && [ ! -L "$subject" ] || fail 'subject unavailable'
 actual=$(env -u LC_CTYPE LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$subject" | /usr/bin/awk '{print $1}')
-[ "$actual" = 8a5564e07810f300d2a65bd0cd7a5c76513ef80f36f1ade4b87bf1f8a3b64897 ] || fail 'subject bytes escaped review'
+[ "$actual" = 5538692c9d8ceb84909a69be0c02388112b6692b4577c0bf1e6fc77eff3be945 ] || fail 'subject bytes escaped review'
 for required in \
     'schema=rar-alpha-controller-helper-closure-verifier-cases-v0' \
+    'status=experimental-complete-classification+C3VA-evidence-candidate-source-only-unwired' \
+    'evidence_policy_case_count=20' \
+    'evidence_projection_rule=each-of-209-logical-rows-binds-exactly-one-normalized-record;runtime-rows-reference-four-case-blobs,residual-rows-reference-one-proof-blob,clean-success-two-pass-preimages-are-separate-run-global-blobs' \
     'disposition_case_count=147' \
     'disposition_runtime_count=117' \
     'disposition_residual_count=30' \
