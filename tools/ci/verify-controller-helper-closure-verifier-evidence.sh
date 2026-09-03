@@ -60,6 +60,9 @@ expect_env() {
 [ -z "$(/usr/bin/find "$scratch" -mindepth 1 -maxdepth 1 -print -quit)" ] ||
     fail 'scratch root not empty'
 [ "$(size_file "$evidence")" -le 440401920 ] || fail 'evidence file oversized'
+maximum_physical_line=$(/usr/bin/wc -L < "$evidence" | /usr/bin/tr -d ' ')
+bounded_unsigned "$maximum_physical_line" 440401920 || fail 'physical line measurement malformed'
+[ "$maximum_physical_line" -le 8192 ] || fail 'physical line bound exceeded'
 [ "$(/usr/bin/tail -c 1 "$evidence" | /usr/bin/od -An -tx1 | /usr/bin/tr -d '[:space:]')" = 0a ] ||
     fail 'terminal LF missing'
 if /usr/bin/od -An -tx1 "$evidence" |
