@@ -82,17 +82,22 @@ semantic=$work/semantic
 : > "$ledger"
 : > "$body"
 
-printf '%s\n' "find_sha256=$digest" "sort_sha256=$digest" "wc_sha256=$digest" "stat_sha256=$digest" "cmp_sha256=$digest" "id_sha256=$digest" > "$semantic"
+printf '%s\n' \
+    'schema=rar-alpha-controller-helper-closure-verifier-tools-v0' \
+    "find_sha256=$digest" "sort_sha256=$digest" "wc_sha256=$digest" \
+    "stat_sha256=$digest" "cmp_sha256=$digest" "id_sha256=$digest" \
+    'status=reviewed-for-candidate-verification-only' > "$semantic"
 tool_inventory_sha=$(sha_file "$semantic")
-hash_clean_payload() {
-    printf 'captured|clean-success-pass|RUN|%s\n' "$1" > "$semantic"
-    sha_file "$semantic"
-}
-fixture_inventory_sha=$(hash_clean_payload fixture-inventory)
-manifest_sha=$(hash_clean_payload canonical-manifest)
-topology_sha=$(hash_clean_payload topology)
-second_pass_sha=$(hash_clean_payload mount-identities)
-observer_sha=$(hash_clean_payload event-bytes)
+printf '%s\n' 'reviewed-observer-source-bytes-v0' > "$semantic"
+observer_sha=$(sha_file "$semantic")
+printf '%s\n' 'canonical-candidate-observation-receipt-v0' > "$semantic"
+fixture_inventory_sha=$(sha_file "$semantic")
+printf '%s  %s\n' "$digest" a > "$semantic"
+manifest_sha=$(sha_file "$semantic")
+manifest_bytes=$(size_file "$semantic")
+printf '%s\n' 'a|f|1|2|1|1|644|0|0' > "$semantic"
+topology_sha=$(sha_file "$semantic")
+second_pass_sha=$manifest_sha
 export RAR_EXPECTED_TOOL_PINS_SHA256=$tool_inventory_sha
 
 {
@@ -121,7 +126,7 @@ export RAR_EXPECTED_TOOL_PINS_SHA256=$tool_inventory_sha
         "candidate_manifest_sha256=$manifest_sha" \
         "recomputed_manifest_sha256=$manifest_sha" \
         'manifest_entries=1' \
-        'manifest_bytes=1' \
+        "manifest_bytes=$manifest_bytes" \
         "topology_sha256=$topology_sha" \
         "second_pass_sha256=$second_pass_sha" \
         'helper_compiled=false' \
@@ -198,14 +203,16 @@ EOF
     IFS=$oldifs
     case "$row_kind" in
         disposition) primary=${row_oracle%%@*}; termination=exit-1; controller_exit=1 ;;
-        precedence) primary=${row_oracle#first-error-}; termination=exit-1; controller_exit=1 ;;
+        precedence) primary=${row_oracle#first-error-}; termination=exit-1; controller_exit=1; receipt_state=not-specified-by-precedence-oracle ;;
         fault)
             primary=$row_source
             case "$row_oracle" in signal-25+controller-exit-map-153+*) termination=signal-25; controller_exit=153 ;; *) termination=exit-1; controller_exit=1 ;; esac
             ;;
         *) fail "cannot generate observed result for $row_kind" ;;
     esac
-    case "$row_oracle" in *no-valid-final-receipt*) receipt_state=no-valid-final-receipt ;; *no-receipt*) receipt_state=no-receipt ;; *) receipt_state=no-valid-final-receipt ;; esac
+    if [ -z "${receipt_state-}" ]; then
+        case "$row_oracle" in *no-valid-final-receipt*) receipt_state=no-valid-final-receipt ;; *no-receipt*) receipt_state=no-receipt ;; *) fail "receipt state unavailable for $row_case" ;; esac
+    fi
     printf '%s\n' \
         'schema=rar-c3v-observed-result-v0' \
         "case_id=$row_case" \
@@ -251,10 +258,17 @@ materialize_field() {
     fi
     payload=$work/payload.raw
     case "$name" in
+        domain-header) printf '%s\n' 'reviewed-observer-source-bytes-v0' > "$payload" ;;
         tool-inventory)
-            printf '%s\n' "find_sha256=$digest" "sort_sha256=$digest" "wc_sha256=$digest" "stat_sha256=$digest" "cmp_sha256=$digest" "id_sha256=$digest" > "$payload"
+            printf '%s\n' \
+                'schema=rar-alpha-controller-helper-closure-verifier-tools-v0' \
+                "find_sha256=$digest" "sort_sha256=$digest" "wc_sha256=$digest" \
+                "stat_sha256=$digest" "cmp_sha256=$digest" "id_sha256=$digest" \
+                'status=reviewed-for-candidate-verification-only' > "$payload"
             ;;
-
+        fixture-inventory) printf '%s\n' 'canonical-candidate-observation-receipt-v0' > "$payload" ;;
+        canonical-manifest) printf '%s  %s\n' "$digest" a > "$payload" ;;
+        topology) printf '%s\n' 'a|f|1|2|1|1|644|0|0' > "$payload" ;;
         observed-event) write_observed_result ;;
         timeout-termination|residual-proof) printf '%s' "$oracle" > "$payload" ;;
         mutation-schedule|mutation-trigger|mutation-acknowledgement|residual-source)
