@@ -17,11 +17,11 @@ for file in "$contract" "$validator" "$policy" "$valid" "$malformed" "$cases"; d
     [ -f "$file" ] && [ ! -L "$file" ] && [ -s "$file" ] ||
         fail "required source unavailable: $file"
 done
-[ "$(sha_file "$contract")" = 47b007bdb898afcac887da1d533ad1230123c1729bdd35d2a13473f446393cb5 ] ||
+[ "$(sha_file "$contract")" = c03fed3cadd7f60d8f833c039f704f8d39a0387b64abe4fa657ab7f43c16dfb6 ] ||
     fail 'evidence contract bytes escaped review'
-[ "$(sha_file "$validator")" = e72d00680417d080ca0a10b1e6ee8763be6e8fdcf7d38609d35e258ded1afc2a ] ||
+[ "$(sha_file "$validator")" = 63c249db1da9b844a5bcae4d3ba82dd8b5ccd08aaf7df15dddb48fcfb34a2e19 ] ||
     fail 'evidence validator bytes escaped review'
-[ "$(sha_file "$policy")" = 495a440f83fd21e56cfe8591299046ef5de6af13b9ca2a6d631b7e4d5ee6140b ] ||
+[ "$(sha_file "$policy")" = 3a8797642fe8aa80d099a15de390dbb1170ab5f210bdca79211db9f9684ccbb2 ] ||
     fail 'evidence policy bytes escaped review'
 [ "$(sha_file "$valid")" = cc5bda22d4bba1eeb7e53d9604fcef23b0eabfc7402216826dcd124d89c6072c ] ||
     fail 'valid seed bytes escaped review'
@@ -34,13 +34,14 @@ for required in \
     'status=experimental-C3VA-candidate-source-only-unwired' \
     'execution_authority=none-until-complete-C3VA-review+merge+exact-main-validation' \
     'trusted_header_rule=repository+controller_sha+source_sha+run_id+run_attempt+verification_receipt_sha256-must-byte-equal-validator-invocation-context;all-other-digest-domains-must-byte-equal-separately-trusted-inputs' \
+    'observer_trust_rule=domain-header-retained-observer-source-payload-SHA256-must-byte-equal-separate-RAR_EXPECTED_OBSERVER_SHA256-invocation-context;verification-receipt-observer_sha256+candidate-receipt-generator_sha256-must-project-that-same-retained-payload' \
     'aggregate_rule=checked-unsigned-arithmetic;blob_count-equals-actual-B-records;chunk_count-equals-actual-C-records+sum-of-B-declared-chunk-counts;decoded_bytes-equals-sum-of-decoded-C-payload-lengths+sum-of-B-declared-decoded-lengths;normalized_count-equals-actual-N-records' \
     'chunk_payload_rule=decoded-length-1..1436;every-nonfinal-chunk-exactly-1436-decoded-bytes+canonical-one-equals-padding;final-chunk-1..1436;concatenated-decoded-length+SHA256-equal-B-header' \
     'decoded_equality_rule=consume-exact-declared-field-bytes+SHA256-must-equal-field-digest;checked-field-count+framing+raw-byte-sum-must-equal-B-decoded-length;B-SHA256-covers-complete-envelope-framing+raw-bytes+terminating-LFs' \
     'semantic_payload_rule=payload_bytes-canonical-positive-1..16777216;payload_sha256-nonzero-lowercase-SHA256;validator-consumes+hashes-exact-arbitrary-payload-and-rejects-extension' \
-    'oracle_derivation_rule=observed-event+timeout-termination+residual-proof-payloads-byte-equal-exact-case-catalog-oracle;mutation-schedule+trigger+acknowledgement+residual-source-payloads-byte-equal-exact-complete-catalog-row' \
+    'oracle_derivation_rule=observed-event-is-exact-derived-7-line-result-record;timeout-termination+residual-proof-payloads-byte-equal-exact-case-catalog-oracle;mutation-schedule+trigger+acknowledgement+residual-source-payloads-byte-equal-exact-complete-catalog-row' \
     'receipt_reconstruction_rule=both-verification-receipt-inputs-fields-are-retained+byte-identical+trusted-header-digest-bound;31-line-validation-occurs-only-after-both-clean-passes-parse+field-ledgers-match;validator-checks-line-order+literal+trusted-run+digest+decimal+false-domains' \
-    'receipt_digest_projection=observer_sha256:domain-header-retained-reviewed-observer-source-bytes,tool_pins_sha256:complete-canonical-8-line-tool-inventory-payload,find+sort+wc+stat+cmp+id:ordered-tool-inventory-values,candidate_receipt_sha256:fixture-inventory-retained-candidate-observation-receipt-bytes,candidate_manifest_sha256+recomputed_manifest_sha256+second_pass_sha256:canonical-manifest-payload-after-two-pass-equality,topology_sha256:complete-sorted-topology-payload' \
+    'receipt_digest_projection=observer_sha256:domain-header-retained-reviewed-observer-source-bytes,tool_pins_sha256:complete-canonical-8-line-tool-inventory-payload,find+sort+wc+stat+cmp+id:ordered-tool-inventory-values,candidate_receipt_sha256:fixture-inventory-retained-candidate-observation-receipt-bytes,candidate_manifest_sha256+recomputed_manifest_sha256+second_pass_sha256:canonical-manifest-payload-after-two-pass-equality,topology_sha256:complete-sorted-topology-payload;manifest_entries+manifest_bytes:recomputed-from-canonical-manifest-payload' \
     'observed_result_derivation=disposition-primary+termination+receipt-state-from-exact-oracle;precedence-primary+termination-from-exact-oracle+receipt-state-explicitly-not-specified-by-precedence-oracle;fault-primary+termination/controller-map+receipt-state-from-exact-oracle;validator-byte-compares-derived-record-to-retained-observed-event' \
     'blob_allocation=B000001-clean-success-pass-1+RUN;B000002-clean-success-pass-2+RUN;then-logical-case-order-with-four-consecutive-pre+stdout+stderr+post-blobs-per-runtime-row-or-one-residual-source-proof-blob-per-residual-row;last-B000709' \
     'raw_blob_ids_rule=nonempty-canonical-B-identities-comma-separated-no-spaces;runtime-exact-four-assigned-consecutive-IDs-in-pre+stdout+stderr+post-order;residual-exact-one-assigned-ID;globals-never-listed' \
