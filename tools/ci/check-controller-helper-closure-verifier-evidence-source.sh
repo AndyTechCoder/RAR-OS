@@ -17,11 +17,11 @@ for file in "$contract" "$validator" "$policy" "$valid" "$malformed" "$cases"; d
     [ -f "$file" ] && [ ! -L "$file" ] && [ -s "$file" ] ||
         fail "required source unavailable: $file"
 done
-[ "$(sha_file "$contract")" = c03fed3cadd7f60d8f833c039f704f8d39a0387b64abe4fa657ab7f43c16dfb6 ] ||
+[ "$(sha_file "$contract")" = 96708288381e5af521b08dab43e08095490a2a4c40319cde924a13ed880e4ed2 ] ||
     fail 'evidence contract bytes escaped review'
-[ "$(sha_file "$validator")" = 63c249db1da9b844a5bcae4d3ba82dd8b5ccd08aaf7df15dddb48fcfb34a2e19 ] ||
+[ "$(sha_file "$validator")" = 01549053b6d7a67bd3038099d0f6b06830e7e919eb131f92e5de7b3536007646 ] ||
     fail 'evidence validator bytes escaped review'
-[ "$(sha_file "$policy")" = 3a8797642fe8aa80d099a15de390dbb1170ab5f210bdca79211db9f9684ccbb2 ] ||
+[ "$(sha_file "$policy")" = 5a61f010628467f04424eaa0bae4cf1f1807b1c6f2f3cdcd4efa86d057544382 ] ||
     fail 'evidence policy bytes escaped review'
 [ "$(sha_file "$valid")" = cc5bda22d4bba1eeb7e53d9604fcef23b0eabfc7402216826dcd124d89c6072c ] ||
     fail 'valid seed bytes escaped review'
@@ -42,6 +42,8 @@ for required in \
     'oracle_derivation_rule=observed-event-is-exact-derived-7-line-result-record;timeout-termination+residual-proof-payloads-byte-equal-exact-case-catalog-oracle;mutation-schedule+trigger+acknowledgement+residual-source-payloads-byte-equal-exact-complete-catalog-row' \
     'receipt_reconstruction_rule=both-verification-receipt-inputs-fields-are-retained+byte-identical+trusted-header-digest-bound;31-line-validation-occurs-only-after-both-clean-passes-parse+field-ledgers-match;validator-checks-line-order+literal+trusted-run+digest+decimal+false-domains' \
     'receipt_digest_projection=observer_sha256:domain-header-retained-reviewed-observer-source-bytes,tool_pins_sha256:complete-canonical-8-line-tool-inventory-payload,find+sort+wc+stat+cmp+id:ordered-tool-inventory-values,candidate_receipt_sha256:fixture-inventory-retained-candidate-observation-receipt-bytes,candidate_manifest_sha256+recomputed_manifest_sha256+second_pass_sha256:canonical-manifest-payload-after-two-pass-equality,topology_sha256:complete-sorted-topology-payload;manifest_entries+manifest_bytes:recomputed-from-canonical-manifest-payload' \
+    'manifest_order_validation=canonical-manifest-payload-must-use-strict-LC_ALL-C-bytewise-ascending-path-order+valid-unique-rows;outer-valid+inner-valid+two-pass-identical-order-mutation-must-reach-specific-order-rejection' \
+    'semantic_tamper_rule=six-additional-outer-valid+inner-hash-valid+two-pass-identical-mutations-cover-observer-source,complete-tool-pins,candidate-receipt,topology,manifest+recomputed+second-pass-cross-bindings,and-canonical-manifest-order' \
     'observed_result_derivation=disposition-primary+termination+receipt-state-from-exact-oracle;precedence-primary+termination-from-exact-oracle+receipt-state-explicitly-not-specified-by-precedence-oracle;fault-primary+termination/controller-map+receipt-state-from-exact-oracle;validator-byte-compares-derived-record-to-retained-observed-event' \
     'blob_allocation=B000001-clean-success-pass-1+RUN;B000002-clean-success-pass-2+RUN;then-logical-case-order-with-four-consecutive-pre+stdout+stderr+post-blobs-per-runtime-row-or-one-residual-source-proof-blob-per-residual-row;last-B000709' \
     'raw_blob_ids_rule=nonempty-canonical-B-identities-comma-separated-no-spaces;runtime-exact-four-assigned-consecutive-IDs-in-pre+stdout+stderr+post-order;residual-exact-one-assigned-ID;globals-never-listed' \
