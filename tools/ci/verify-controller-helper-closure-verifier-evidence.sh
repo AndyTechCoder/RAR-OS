@@ -47,7 +47,7 @@ add_bounded() {
     printf '%s\n' "$next"
 }
 expect_env() {
-    eval "value=\${$1-}"
+    eval "value=${$1-}"
     [ -n "$value" ] || fail "trusted expectation missing: $1"
 }
 
@@ -347,6 +347,12 @@ validate_projection() {
                 receipt_cmp=$(/usr/bin/sed -n 's/^cmp_sha256=//p' "$semantic_payload")
                 receipt_id=$(/usr/bin/sed -n 's/^id_sha256=//p' "$semantic_payload")
                 for tool_digest in "$receipt_find" "$receipt_sort" "$receipt_wc" "$receipt_stat" "$receipt_cmp" "$receipt_id"; do nonzero_sha "$tool_digest" || fail 'tool inventory digest malformed'; done
+                printf '%s\n' \
+                    'schema=rar-alpha-controller-helper-closure-verifier-tools-v0' \
+                    "find_sha256=$receipt_find" "sort_sha256=$receipt_sort" "wc_sha256=$receipt_wc" \
+                    "stat_sha256=$receipt_stat" "cmp_sha256=$receipt_cmp" "id_sha256=$receipt_id" \
+                    'status=reviewed-for-candidate-verification-only' > "$semantic_expected"
+                /usr/bin/cmp -s "$semantic_payload" "$semantic_expected" || fail 'tool inventory is not canonical bytes'
                 receipt_tool_pins=$p_sha
                 [ "$receipt_tool_pins" = "$RAR_EXPECTED_TOOL_PINS_SHA256" ] || fail 'tool inventory is not trusted-header bound'
                 ;;
@@ -372,6 +378,7 @@ validate_projection() {
 
 validate_observed_result() {
     raw=$1
+    receipt_state=
     oldifs=$IFS
     IFS='|' read -r row_marker row_case row_kind row_source row_left row_right row_binding row_oracle <<EOF
 $(/bin/cat "$case_row_file")
@@ -389,6 +396,7 @@ EOF
             primary=${row_oracle#first-error-}
             termination=exit-1
             controller_exit=1
+            receipt_state=not-specified-by-precedence-oracle
             ;;
         fault)
             primary=$row_source
@@ -400,7 +408,13 @@ EOF
             ;;
         *) fail 'runtime observed result used for residual row' ;;
     esac
-    case "$row_oracle" in *no-valid-final-receipt*) receipt_state=no-valid-final-receipt ;; *no-receipt*) receipt_state=no-receipt ;; *) receipt_state=no-valid-final-receipt ;; esac
+    if [ -z "$receipt_state" ]; then
+        case "$row_oracle" in
+            *no-valid-final-receipt*) receipt_state=no-valid-final-receipt ;;
+            *no-receipt*) receipt_state=no-receipt ;;
+            *) fail 'catalog oracle does not define receipt state' ;;
+        esac
+    fi
     {
         printf '%s\n' \
             'schema=rar-c3v-observed-result-v0' \
