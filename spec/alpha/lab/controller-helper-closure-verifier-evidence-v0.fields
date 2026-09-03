@@ -34,7 +34,7 @@ candidate_receipt_rule=fixture-inventory-payload-is-exact-canonical-23-line-obse
 manifest_order_validation=canonical-manifest-payload-must-use-strict-LC_ALL-C-bytewise-ascending-path-order+valid-unique-rows;outer-valid+inner-valid+two-pass-identical-order-mutation-must-reach-specific-order-rejection
 semantic_tamper_rule=six-additional-outer-valid+inner-hash-valid+two-pass-identical-mutations-cover-observer-source,complete-tool-pins,candidate-receipt,topology,manifest+recomputed+second-pass-cross-bindings,and-canonical-manifest-order
 result_derivation_rule=case-result-is-pass-only-after-all-assigned-raw-blobs-frame+hash+semantic+exact-catalog-row+exact-oracle-bindings-validate;supplied-N-result-never-creates-pass
-coverage_rule=complete-positive-fixture-has-709-blobs+209-normalized-records,nonempty-semantic-payloads,exact-31-line-receipt,at-least-one-binary-NUL+LF+non-ASCII-byte-stream,and-at-least-one-multi-chunk-blob;mutations-cover-inner+outer-length/hash,canonical-padding,checked-aggregate-boundary,replay+alias+projection+cross-case+maximum-size-no-newline-physical-line
+coverage_rule=complete-positive-fixture-has-709-blobs+209-normalized-records,nonempty-semantic-payloads,exact-31-line-receipt,at-least-one-binary-NUL+LF+non-ASCII-byte-stream,and-at-least-one-multi-chunk-blob;mutations-cover-inner+outer-length/hash,canonical-padding,checked-aggregate-boundary,replay+alias+projection+cross-case+exact-maximum-size-no-newline-line+exact-maximum-size-control-byte-line-with-terminal-LF
 kind_clean_success=clean-success-pass-1|RUN|domain-header,tool-inventory,fixture-inventory,topology,canonical-manifest,mount-identities,output-inventory,output-bytes,event-bytes,resource-bytes,verification-receipt-inputs
 kind_runtime_pre=runtime-pre-input-topology|case|domain-header,input-bytes,pre-mount-inventory,pre-topology,mount-identities,mutation-schedule
 kind_runtime_stdout=runtime-stdout|case|stdout-bytes
@@ -66,7 +66,7 @@ evidence_file_max=440401920
 evidence_bound=396032120+206741*128+709*256+209*2048+8192=423112696,below-440401920
 artifact_bound=exact-six-file-set-at-most-441473024,below-existing-output-budget-536870912
 stdout_stderr_decoded_per_runtime_case_max=65536
-physical_line_prevalidation=before-any-shell-read,fixed-memory-LC_ALL-C-wc-longest-line-scan-rejects-more-than-8192-bytes;record-specific-256-or-2048-byte-limits-follow-after-bounded-read
+physical_line_prevalidation=before-any-shell-read,fixed-memory-LC_ALL-C-od-byte-stream+bounded-awk-token-scan-counts-every-byte-and-rejects-physical-lines-more-than-8192-bytes;separate-fixed-buffer-byte-domain-scan-precedes-any-line-consumer;record-specific-256-or-2048-byte-limits-follow-after-bounded-read
 streaming_rule=bounded-forward-only-outer-parser,one-current-blob-spool+one-1436-byte-decode-buffer+fixed-state,spool-removed-before-next-blob
 mutation_rule=empty+alias+replay+truncation+extension+reorder+duplicate+wrong-domain+wrong-length+wrong-hash+malformed-Base64+blob-count+chunk-count+line-count+decoded-total+per-blob+oversize+projection-cycle+raw-normalized-mismatch+cross-case-substitution-all-fail-closed
 verdict_rule=mechanically-verified-not-reviewed-not-ready-or-normalized-not-ready,never-reviewed+accepted+ready
