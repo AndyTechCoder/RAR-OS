@@ -139,10 +139,12 @@ receipt_keys=$scratch/receipt.keys
 semantic_payload=$scratch/semantic.payload
 retained_receipt=$scratch/retained.receipt
 receipt_seen=0
+candidate_receipt_raw=$scratch/candidate.receipt
+candidate_receipt_seen=0
 cleanup() {
     rc=$?
     trap - EXIT HUP INT TERM
-    /bin/rm -f -- "$plan" "$ledger" "$encoded" "$chunk" "$decoded" "$pass_one" "$pass_two" "$preimage" "$field_raw" "$semantic_expected" "$case_row_file" "$receipt_keys" "$semantic_payload" "$retained_receipt"
+    /bin/rm -f -- "$plan" "$ledger" "$encoded" "$chunk" "$decoded" "$pass_one" "$pass_two" "$preimage" "$field_raw" "$semantic_expected" "$case_row_file" "$receipt_keys" "$semantic_payload" "$retained_receipt" "$candidate_receipt_raw"
     [ -z "$(/usr/bin/find "$scratch" -mindepth 1 -maxdepth 1 -print -quit)" ] || rc=1
     exit "$rc"
 }
@@ -357,8 +359,18 @@ validate_projection() {
                 [ "$receipt_tool_pins" = "$RAR_EXPECTED_TOOL_PINS_SHA256" ] || fail 'tool inventory is not trusted-header bound'
                 ;;
             domain-header) receipt_observer=$p_sha ;;
-            fixture-inventory) receipt_candidate=$p_sha ;;
-            canonical-manifest) receipt_manifest=$p_sha; receipt_second=$p_sha ;;
+            fixture-inventory)
+                receipt_candidate=$p_sha
+                candidate_receipt_seen=$((candidate_receipt_seen + 1))
+                case "$candidate_receipt_seen" in 1) /bin/cp "$semantic_payload" "$candidate_receipt_raw" ;; 2) /usr/bin/cmp -s "$semantic_payload" "$candidate_receipt_raw" || fail 'candidate receipt differs between passes' ;; *) fail 'unexpected candidate receipt copy' ;; esac
+                ;;
+            canonical-manifest)
+                /usr/bin/awk 'length($0)>450 || $0 !~ /^[0-9a-f]{64}  [A-Za-z0-9._+:/-]{1,384}$/ { exit 1 } { if(path[$2]++) exit 1; count++ } END { if(count<1) exit 1 }' "$semantic_payload" || fail 'canonical manifest payload malformed'
+                receipt_manifest=$p_sha
+                receipt_second=$p_sha
+                receipt_manifest_entries=$(/usr/bin/wc -l < "$semantic_payload" | /usr/bin/tr -d ' ')
+                receipt_manifest_bytes=$(size_file "$semantic_payload")
+                ;;
             topology) receipt_topology=$p_sha ;;
         esac
     fi
@@ -429,6 +441,40 @@ EOF
         fail 'observed result does not mechanically satisfy catalog oracle'
 }
 
+validate_candidate_receipt() {
+    raw=$1
+    [ "$(size_file "$raw")" -le 4096 ] && [ "$(/usr/bin/wc -l < "$raw" | /usr/bin/tr -d ' ')" -eq 23 ] || fail 'candidate receipt size or line count invalid'
+    printf '%s\n' schema status controller_sha source_sha repository ref event run_id run_attempt runner_os runner_image_version oci_image closure_root generator_sha256 find_sha256 sort_sha256 manifest_sha256 manifest_entries manifest_bytes helper_compiled helper_executed target_compiled readiness > "$receipt_keys"
+    ordinal=0
+    while IFS= read -r candidate_line; do
+        ordinal=$((ordinal + 1)); key=${candidate_line%%=*}; value=${candidate_line#*=}
+        [ "$candidate_line" != "$key" ] && [ -n "$value" ] || fail 'candidate receipt key/value malformed'
+        [ "$key" = "$(/usr/bin/sed -n "${ordinal}p" "$receipt_keys")" ] || fail 'candidate receipt key order mismatch'
+        case "$key" in
+            schema) [ "$value" = rar-alpha-controller-helper-closure-observation-v0 ] ;;
+            status) [ "$value" = observed-not-reviewed-not-ready ] ;;
+            controller_sha|source_sha) [ "$value" = "$RAR_EXPECTED_CONTROLLER_SHA" ] ;;
+            repository) [ "$value" = "$RAR_EXPECTED_REPOSITORY" ] ;;
+            ref) [ "$value" = refs/heads/main ] ;;
+            event) [ "$value" = push ] ;;
+            run_id) [ "$value" = "$RAR_EXPECTED_RUN_ID" ] ;;
+            run_attempt) [ "$value" = "$RAR_EXPECTED_RUN_ATTEMPT" ] ;;
+            runner_os) [ "$value" = ubuntu24 ] ;;
+            runner_image_version) case "$value" in ''|.*|*..*|*.|*[!0-9.]*) false ;; *) [ "${#value}" -le 64 ] ;; esac ;;
+            oci_image) [ "$value" = sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 ] ;;
+            closure_root) [ "$value" = /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu ] ;;
+            generator_sha256) [ "$value" = "$receipt_observer" ] ;;
+            find_sha256) [ "$value" = "$receipt_find" ] ;;
+            sort_sha256) [ "$value" = "$receipt_sort" ] ;;
+            manifest_sha256) [ "$value" = "$receipt_manifest" ] ;;
+            manifest_entries) [ "$value" = "$receipt_manifest_entries" ] ;;
+            manifest_bytes) [ "$value" = "$receipt_manifest_bytes" ] ;;
+            helper_compiled|helper_executed|target_compiled|readiness) [ "$value" = false ] ;;
+            *) false ;;
+        esac || fail "candidate receipt value invalid: $key"
+    done < "$raw"
+}
+
 validate_receipt() {
     raw=$1
     [ "$(size_file "$raw")" -le 8192 ] || fail 'verification receipt oversized'
@@ -467,7 +513,8 @@ validate_receipt() {
             second_pass_sha256) [ "$value" = "$receipt_second" ] ;;
             candidate_manifest_sha256) [ "$value" = "$receipt_manifest" ] && manifest_candidate=$value ;;
             recomputed_manifest_sha256) [ "$value" = "$receipt_manifest" ] && manifest_recomputed=$value ;;
-            manifest_entries|manifest_bytes) canonical_positive "$value" ;;
+            manifest_entries) [ "$value" = "$receipt_manifest_entries" ] ;;
+            manifest_bytes) [ "$value" = "$receipt_manifest_bytes" ] ;;
             helper_compiled|helper_executed|target_compiled|readiness) [ "$value" = false ] ;;
             *) false ;;
         esac || fail "verification receipt value invalid: $key"
@@ -717,6 +764,8 @@ declared_decoded_sum=$(
 [ "$(size_file "$pass_one")" -gt 0 ] && /usr/bin/cmp -s "$pass_one" "$pass_two" ||
     fail 'clean-success field projections differ'
 [ "$receipt_seen" -eq 2 ] || fail 'clean-success receipt count mismatch'
+[ "$candidate_receipt_seen" -eq 2 ] || fail 'clean-success candidate receipt count mismatch'
+validate_candidate_receipt "$candidate_receipt_raw"
 validate_receipt "$retained_receipt"
 [ "$encoded_seen" -le 396032120 ] || fail 'Base64 payload total exceeded'
 printf '%s\n' 'controller-helper closure verifier evidence structure validated: not runtime evidence, not reviewed, not ready'
