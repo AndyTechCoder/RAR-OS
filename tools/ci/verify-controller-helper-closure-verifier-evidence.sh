@@ -368,6 +368,7 @@ validate_projection() {
                 ;;
             canonical-manifest)
                 /usr/bin/awk 'length($0)>450 || $0 !~ /^[0-9a-f]{64}  [A-Za-z0-9._+:/-]{1,384}$/ { exit 1 } { if(path[$2]++) exit 1; count++ } END { if(count<1) exit 1 }' "$semantic_payload" || fail 'canonical manifest payload malformed'
+                /usr/bin/awk 'NR>1 && ("x" $2) <= ("x" previous) { exit 1 } { previous=$2 }' "$semantic_payload" || fail 'canonical manifest payload order invalid'
                 receipt_manifest=$p_sha
                 receipt_second=$p_sha
                 receipt_manifest_entries=$(/usr/bin/wc -l < "$semantic_payload" | /usr/bin/tr -d ' ')
