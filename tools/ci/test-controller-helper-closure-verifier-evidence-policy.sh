@@ -522,7 +522,7 @@ rewrite_clean_semantic_blob() {
             /usr/bin/sed "s/^generator_sha256=.*/generator_sha256=4444444444444444444444444444444444444444444444444444444444444444/" "$semantic" > "$semantic_payload_file"
             ;;
         topology) nn=04; field_name=topology; observation=complete-topology; printf '%s\n' 'b|f|1|2|1|1|644|0|0' > "$semantic_payload_file" ;;
-        manifest) nn=05; field_name=canonical-manifest; observation=canonical-manifest; printf '%s  %s\n' "4444444444444444444444444444444444444444444444444444444444444444" a > "$semantic_payload_file" ;;
+        manifest) nn=05; field_name=canonical-manifest; observation=canonical-manifest; printf '%s  %s\n%s  %s\n' "4444444444444444444444444444444444444444444444444444444444444444" a "$digest" b > "$semantic_payload_file" ;;
         manifest-order) nn=05; field_name=canonical-manifest; observation=canonical-manifest; printf '%s  %s\n%s  %s\n' "$digest" b "$digest" a > "$semantic_payload_file" ;;
         *) fail "unknown semantic rewrite $mode" ;;
     esac
