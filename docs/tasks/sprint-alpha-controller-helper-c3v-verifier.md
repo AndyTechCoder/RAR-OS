@@ -59,6 +59,19 @@ C3VA may change only these literal paths:
 
 No directory or descriptive ownership is granted.
 
+## C3VA recovery erratum (2026-09-03)
+
+Owner authorization for this bounded recovery was recorded on 2026-09-03 under the delegated safe-direction authority. This erratum supersedes only the earlier C3VA clauses that say C3VA makes no workflow or container change and that no other runner behavior or confinement exception changes. All other requirements remain authoritative.
+
+C3VA may additionally change the literal path `.github/workflows/specifications.yml` only to increase the existing Specifications mutation-policy container's `/tmp` tmpfs from exactly `128m` to exactly `512m`. The primary validation container remains exactly `128m`; the mutation container remains read-only, networkless, unprivileged, capability-free, PID-bounded, and memory-bounded at 2048 MiB, and every other workflow trigger, job, command, mount, resource control, permission, checkout, and authority gate remains byte-unchanged.
+
+The existing `tools/ci/run-ephemeral-policy-tests.sh` file-size ceiling becomes exactly `ulimit -f 860160`. Under the pinned Linux `dash` 512-byte unit this is exactly 440401920 bytes, equal to the evidence-file maximum and no larger. The 512 MiB tmpfs is 536870912 bytes, leaving 96468992 bytes beyond one maximum boundary fixture while remaining inside the existing 2048 MiB container memory limit.
+
+Only `tools/ci/test-controller-helper-closure-verifier-evidence-policy.sh` may use `/dev/zero`, and only through its three already reviewed, read-only `dd` input lines that construct the two exact 440401920-byte physical-line boundary fixtures. The confinement checker must require each complete physical line exactly once, require exactly three total `/dev/zero` occurrences, and retain the generic ban on every other `/dev`, `/proc`, `/sys`, and `/run` path. It must bind the primary 128 MiB and mutation 512 MiB tmpfs lines to their respective Docker spans, require exactly one file-limit row with the exact value, and exercise canonical-pass, wrong-mutation-size, and swapped-association inputs through the same inline POSIX-AWK state machine.
+
+This erratum creates no new workflow, trigger, job, container, verifier execution, target execution, compiler use, helper use, network access, credential, device write, Mac/SSD execution, public format, acceptance, signing, release, or readiness authority. The packet-only amendment must merge after exact-head architecture, correctness, and security review. Its resulting-main run may retain only the already identified confinement failure from run `33801818662`; the three-file implementation must follow immediately with no unrelated main work and must pass a distinct exact-main Specifications run including the complete mutation suite.
+
+
 C3VA adds exactly `tools/ci/test-controller-helper-closure-verifier-evidence-policy.sh|ephemeral` to `tools/ci/policy-test-modes.v0`. Ephemeral rows change 28 to 29; immutable rows remain exactly 5; total test rows change 33 to 34. The runner invokes all 29 ephemeral tests exactly once in registry order and reports exactly `Ephemeral policy tests passed: executed=29 source=read-only scratch=tmpfs`. The confinement checker recognizes exactly that new path and mode. No other registry row, order, mode, summary shape, runner behavior, or confinement exception changes.
 
 C3VA must replace the digest-only evidence design with one lossless, canonical, ASCII/LF framing that retains content-addressed typed raw preimages for every runtime and residual result. It must include exact lengths, SHA-256 digests, domain tuples, canonical zero-length representation, nonaliasing identities, and deterministic ordering for:
