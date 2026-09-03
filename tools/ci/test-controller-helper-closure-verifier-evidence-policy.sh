@@ -528,7 +528,7 @@ rewrite_clean_semantic_blob() {
     payload_bytes=$(size_file "$semantic_payload_file")
     payload_sha=$(sha_file "$semantic_payload_file")
     {
-        printf '%s\n' 'schema=rar-c3v-semantic-field-v0' 'kind=clean-success-pass' 'case_id=RUN' "field=$field_name" "catalog_row_sha256=$cases_sha" "oracle_sha256=$digest" "observation=$observation" "payload_bytes=$semantic_payload_file_bytes" "payload_sha256=$semantic_payload_file_sha" 'payload'
+        printf '%s\n' 'schema=rar-c3v-semantic-field-v0' 'kind=clean-success-pass' 'case_id=RUN' "field=$field_name" "catalog_row_sha256=$cases_sha" "oracle_sha256=$digest" "observation=$observation" "payload_bytes=$payload_bytes" "payload_sha256=$payload_sha" 'payload'
         /bin/cat "$semantic_payload_file"
     } > "$replacement"
     replacement_sha=$(sha_file "$replacement")
