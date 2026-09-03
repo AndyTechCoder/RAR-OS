@@ -22,16 +22,15 @@ sha_file() {
 for file in "$contract" "$errors" "$precedence" "$subject"; do
     [ -f "$file" ] && [ ! -L "$file" ] || fail "required regular source is unavailable: $file"
 done
-[ "$(sha_file "$contract")" = e5b833ef01d603fdcd12771976c9da1240e567d372a5bbdcd1ab5be78a2d0abf ] || fail 'validation contract bytes escaped review'
+[ "$(sha_file "$contract")" = 1958c06a458cca81d4c5914f2664d4e70e0575ef2d7e260407638485c1727f2f ] || fail 'validation contract bytes escaped review'
 [ "$(sha_file "$errors")" = 9370f2e29e3932f42826441568baed629d2d2ab8fd107f50b6fb58e1d1637b4f ] || fail 'error catalog bytes escaped review'
 [ "$(sha_file "$precedence")" = d1255c3fad6bdb213040b4309fad4b4b8e59c95a951dc2a6da64bc55887ccc72 ] || fail 'precedence catalog bytes escaped review'
 [ "$(sha_file "$subject")" = 3cbeeb85abc3023980a8afe444178ea7acc31f298b3b0975d2c4d6630c82a76c ] || fail 'verifier subject bytes escaped validation contract'
 
 for required in \
-    'status=experimental-C3VA-candidate-source-only-unwired' \
+    'status=experimental-inactive-source-only' \
     'execution_authority=none' \
     'subject_sha256=3cbeeb85abc3023980a8afe444178ea7acc31f298b3b0975d2c4d6630c82a76c' \
-    'evidence_validation=lossless-length-framed-typed-raw-preimages+single-outer-canonical-Base64+exact-field+blob+aggregate-length+count+hash+domain+ordering+nonalias+trusted-run-binding+scoped-anti-replay+validator-derived-normalization' \
     'stage_count=32' \
     'catalog_scope=representable-deterministic-verifier-predicate+comparison-rejections-only;command+read+write+close+tool-output+resource-exhaustion-faults-require-a-separate-reviewed-fault-contract' \
     'multi_stage_class_rule=a-shared-source-site-class-may-list-plus-separated-occurrence-stages;each-runtime-case-must-bind-one-exact-occurrence-stage;class+occurrence-stage-identifies-the-oracle' \
