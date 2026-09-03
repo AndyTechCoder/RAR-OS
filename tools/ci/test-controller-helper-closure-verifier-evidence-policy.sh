@@ -578,6 +578,18 @@ while IFS='|' read -r marker id class expected; do
     executed=$((executed + 1))
 done < "$policy_cases"
 [ "$executed" -eq 20 ] || fail 'not all evidence policy mutations executed'
+near_max_line=$work/near-max-single-line.v0
+near_max_error=$work/near-max-single-line.err
+/bin/dd if=/dev/zero bs=1048576 count=420 status=none | /usr/bin/tr '\000' A > "$near_max_line"
+[ "$(size_file "$near_max_line")" -eq 440401920 ] || fail 'near-maximum line fixture size mismatch'
+/bin/rm -rf -- "$validator_scratch"
+/bin/mkdir "$validator_scratch"
+if /bin/sh "$validator" "$near_max_line" "$cases" "$validator_scratch" >/dev/null 2>"$near_max_error"; then
+    fail 'maximum-size no-newline evidence was accepted'
+fi
+/usr/bin/grep -Fq 'physical line bound exceeded' "$near_max_error" ||
+    fail 'maximum-size no-newline evidence did not reach physical-line rejection'
+/bin/rm -f -- "$near_max_line" "$near_max_error"
 semantic_executed=0
 for semantic_mode in observer tool-pins candidate-receipt topology manifest manifest-order; do
     first=$work/semantic-first.v0
