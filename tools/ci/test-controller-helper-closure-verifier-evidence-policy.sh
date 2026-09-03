@@ -604,6 +604,20 @@ fi
 /usr/bin/grep -Fq 'physical line bound exceeded' "$near_max_error" ||
     fail 'maximum-size control-byte evidence did not reach pre-read line rejection'
 /bin/rm -f -- "$near_max_line" "$near_max_error"
+unreadable_evidence=$work/unreadable-evidence.v0
+unreadable_error=$work/unreadable-evidence.err
+printf 'H\n' > "$unreadable_evidence"
+/bin/chmod 000 "$unreadable_evidence"
+/bin/rm -rf -- "$validator_scratch"
+/bin/mkdir "$validator_scratch"
+if /bin/sh "$validator" "$unreadable_evidence" "$cases" "$validator_scratch" >/dev/null 2>"$unreadable_error"; then
+    /bin/chmod 600 "$unreadable_evidence"
+    fail 'unreadable evidence was accepted'
+fi
+/bin/chmod 600 "$unreadable_evidence"
+/usr/bin/grep -Fq 'physical line bound exceeded' "$unreadable_error" ||
+    fail 'byte-scan producer failure did not fail closed'
+/bin/rm -f -- "$unreadable_evidence" "$unreadable_error"
 semantic_executed=0
 for semantic_mode in observer tool-pins candidate-receipt topology manifest manifest-order; do
     first=$work/semantic-first.v0
