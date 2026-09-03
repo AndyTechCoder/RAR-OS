@@ -69,7 +69,21 @@ done
 runner_tests=$(/usr/bin/sed -n 's|^/bin/sh "$root/\(tools/ci/test-[a-z0-9.-]*\.sh\)"$|\1|p' "$runner")
 [ "$runner_tests" = "$ephemeral" ] || exit 1
 [ "$(/usr/bin/grep -Fxc "printf '%s\\n' 'Ephemeral policy tests passed: executed=29 source=read-only scratch=tmpfs'" "$runner")" -eq 1 ] || exit 1
-[ "$(/usr/bin/grep -Ec '^ulimit -f ' "$runner")" -eq 1 ] || exit 1
+limit_state_machine='
+    index($0, "ulimit") {
+        total++
+        if ($0 == "ulimit -f 860160") exact++
+    }
+    END { if (total != 1 || exact != 1) exit 1 }
+'
+/usr/bin/awk "$limit_state_machine" "$runner" || exit 1
+/usr/bin/printf '%s\n' 'ulimit -f 860160' |
+    /usr/bin/awk "$limit_state_machine" || exit 1
+if /usr/bin/printf '%s\n' 'ulimit -f 860160' '  ulimit -f 860161' |
+    /usr/bin/awk "$limit_state_machine"; then
+    exit 1
+fi
+[ "$(/usr/bin/grep -Fc 'ulimit' "$runner")" -eq 1 ] || exit 1
 [ "$(/usr/bin/grep -Fxc 'ulimit -f 860160' "$runner")" -eq 1 ] || exit 1
 [ "$((860160 * 512))" -eq 440401920 ] || exit 1
 [ "$(/usr/bin/grep -Fxc '          path: primary-source' "$workflow")" -eq 1 ] || exit 1
@@ -84,51 +98,76 @@ runner_tests=$(/usr/bin/sed -n 's|^/bin/sh "$root/\(tools/ci/test-[a-z0-9.-]*\.s
 [ "$(/usr/bin/grep -Fc -- '--tmpfs "/tmp:' "$workflow")" -eq 2 ] || exit 1
 
 tmpfs_state_machine='
+    function close_span() {
+        if (!tmpfs_seen || !mount_seen) bad = 1
+        in_docker = 0
+        tmpfs_seen = 0
+        mount_seen = 0
+    }
     $0 == "      - name: Validate in pinned read-only container on attested runner" {
-        phase = "primary"; primary_steps++; next
+        if (in_docker) bad = 1
+        phase = "primary"
+        primary_steps++
+        next
     }
     $0 == "      - name: Run mutation policy tests with read-only source" {
-        phase = "mutation"; mutation_steps++; next
+        if (in_docker) bad = 1
+        phase = "mutation"
+        mutation_steps++
+        next
     }
     /^[[:space:]]*docker run / {
+        if (in_docker || (phase != "primary" && phase != "mutation")) bad = 1
+        in_docker = 1
+        tmpfs_seen = 0
+        mount_seen = 0
         if (phase == "primary") primary_docker++
         else if (phase == "mutation") mutation_docker++
-        else bad = 1
+        if ($0 !~ /\\[[:space:]]*$/) close_span()
         next
     }
-    /--tmpfs "\/tmp:/ {
-        tmpfs_total++
-        if (phase == "primary" && index($0, "size=128m,") != 0) primary_tmpfs++
-        else if (phase == "mutation" && index($0, "size=512m,") != 0) mutation_tmpfs++
-        else bad = 1
+    in_docker {
+        if ($0 ~ /--tmpfs "\/tmp:/) {
+            tmpfs_total++
+            if (tmpfs_seen || mount_seen) bad = 1
+            if (phase == "primary" && index($0, "size=128m,") != 0) primary_tmpfs++
+            else if (phase == "mutation" && index($0, "size=512m,") != 0) mutation_tmpfs++
+            else bad = 1
+            tmpfs_seen = 1
+        } else if ($0 ~ /--mount "type=bind,source=\$GITHUB_WORKSPACE\/primary-source,target=\/workspace"/) {
+            if (phase != "primary" || !tmpfs_seen || mount_seen) bad = 1
+            primary_mount++
+            mount_seen = 1
+        } else if ($0 ~ /--mount "type=bind,source=\$GITHUB_WORKSPACE\/mutation-source,target=\/workspace,readonly"/) {
+            if (phase != "mutation" || !tmpfs_seen || mount_seen) bad = 1
+            mutation_mount++
+            mount_seen = 1
+        }
+        if ($0 !~ /\\[[:space:]]*$/) close_span()
         next
     }
-    /--mount "type=bind,source=\$GITHUB_WORKSPACE\/primary-source,target=\/workspace"/ {
-        if (phase == "primary") primary_mount++
-        else bad = 1
-        next
-    }
-    /--mount "type=bind,source=\$GITHUB_WORKSPACE\/mutation-source,target=\/workspace,readonly"/ {
-        if (phase == "mutation") mutation_mount++
-        else bad = 1
-        next
+    /--tmpfs "\/tmp:|--mount "type=bind,source=\$GITHUB_WORKSPACE\/(primary|mutation)-source/ {
+        bad = 1
     }
     END {
+        if (in_docker) close_span()
         if (bad || primary_steps != 1 || mutation_steps != 1 ||
             primary_docker != 1 || mutation_docker != 1 ||
             tmpfs_total != 2 || primary_tmpfs != 1 || mutation_tmpfs != 1 ||
             primary_mount != 1 || mutation_mount != 1) exit 1
     }
 '
-/usr/bin/awk "$tmpfs_state_machine" "$workflow" || exit 1
 canonical_tmpfs_sequence='      - name: Validate in pinned read-only container on attested runner
-docker run
---tmpfs "/tmp:rw,size=128m,"
---mount "type=bind,source=$GITHUB_WORKSPACE/primary-source,target=/workspace"
+docker run \
+--tmpfs "/tmp:rw,size=128m," \
+--mount "type=bind,source=$GITHUB_WORKSPACE/primary-source,target=/workspace" \
+command
       - name: Run mutation policy tests with read-only source
-docker run
---tmpfs "/tmp:rw,size=512m,"
---mount "type=bind,source=$GITHUB_WORKSPACE/mutation-source,target=/workspace,readonly"'
+docker run \
+--tmpfs "/tmp:rw,size=512m," \
+--mount "type=bind,source=$GITHUB_WORKSPACE/mutation-source,target=/workspace,readonly" \
+command'
+/usr/bin/awk "$tmpfs_state_machine" "$workflow" || exit 1
 /usr/bin/printf '%s\n' "$canonical_tmpfs_sequence" |
     /usr/bin/awk "$tmpfs_state_machine" || exit 1
 if /usr/bin/printf '%s\n' "$canonical_tmpfs_sequence" |
@@ -138,6 +177,17 @@ if /usr/bin/printf '%s\n' "$canonical_tmpfs_sequence" |
 fi
 if /usr/bin/printf '%s\n' "$canonical_tmpfs_sequence" |
     /usr/bin/sed -e 's/size=128m/size=swapm/' -e 's/size=512m/size=128m/' -e 's/size=swapm/size=512m/' |
+    /usr/bin/awk "$tmpfs_state_machine"; then
+    exit 1
+fi
+if /usr/bin/printf '%s\n' "$canonical_tmpfs_sequence" |
+    /usr/bin/sed '/docker run \\/i\
+--tmpfs "/tmp:rw,size=512m," \\' |
+    /usr/bin/awk "$tmpfs_state_machine"; then
+    exit 1
+fi
+if /usr/bin/printf '%s\n' "$canonical_tmpfs_sequence" |
+    /usr/bin/sed '/size=512m/{h;d;}; /mutation-source/{G;}' |
     /usr/bin/awk "$tmpfs_state_machine"; then
     exit 1
 fi
