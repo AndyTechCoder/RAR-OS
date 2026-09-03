@@ -477,6 +477,71 @@ mutate() {
     esac
 }
 
+rewrite_clean_semantic_blob() {
+    target=$1
+    target_kind=$2
+    mode=$3
+    input=$4
+    output=$5
+    original=$work/semantic.original
+    changed=$work/semantic.changed
+    replacement=$work/semantic.replacement
+    block=$work/semantic.block
+    : > "$original"
+    /usr/bin/awk -F '|' -v target="$target" '
+        $1=="B" && $2==target { inside=1; next }
+        inside && $1=="B" { exit }
+        inside && $1=="C" { print $4 }
+    ' "$input" | while IFS= read -r encoded_part; do
+        printf '%s' "$encoded_part" | /usr/bin/base64 --decode >> "$original"
+    done
+    case "$mode" in
+        observer) nn=01; field_name=domain-header; observation=trusted-run-domain; printf '%s\n' reviewed-observer-source-bytes-v1 > "$payload" ;;
+        tool-pins) nn=02; field_name=tool-inventory; observation=complete-inventory; printf '%s\n' 'schema=rar-alpha-controller-helper-closure-verifier-tools-v0' "find_sha256=4444444444444444444444444444444444444444444444444444444444444444" "sort_sha256=$digest" "wc_sha256=$digest" "stat_sha256=$digest" "cmp_sha256=$digest" "id_sha256=$digest" 'status=reviewed-for-candidate-verification-only' > "$payload" ;;
+        candidate-receipt) nn=03; field_name=fixture-inventory; observation=complete-inventory; printf '%s\n' canonical-candidate-observation-receipt-v1 > "$payload" ;;
+        topology) nn=04; field_name=topology; observation=complete-topology; printf '%s\n' 'b|f|1|2|1|1|644|0|0' > "$payload" ;;
+        manifest) nn=05; field_name=canonical-manifest; observation=canonical-manifest; printf '%s  %s\n' "4444444444444444444444444444444444444444444444444444444444444444" a > "$payload" ;;
+        *) fail "unknown semantic rewrite $mode" ;;
+    esac
+    payload_bytes=$(size_file "$payload")
+    payload_sha=$(sha_file "$payload")
+    {
+        printf '%s\n' 'schema=rar-c3v-semantic-field-v0' 'kind=clean-success-pass' 'case_id=RUN' "field=$field_name" "catalog_row_sha256=$cases_sha" "oracle_sha256=$digest" "observation=$observation" "payload_bytes=$payload_bytes" "payload_sha256=$payload_sha" 'payload'
+        /bin/cat "$payload"
+    } > "$replacement"
+    replacement_sha=$(sha_file "$replacement")
+    /usr/bin/awk -v nn="$nn" -v replacement="$replacement" -v replacement_sha="$replacement_sha" '
+        $0=="field." nn ".sha256=" substr($0,20) { }
+        $0 ~ ("^field\\." nn "\\.sha256=") { print "field." nn ".sha256=" replacement_sha; next }
+        $0=="field." nn ".data" {
+            print
+            while ((getline line < replacement) > 0) print line
+            close(replacement)
+            skip=1
+            next
+        }
+        skip && $0 ~ "^field\\.[0-9][0-9]\\.name=" { skip=0 }
+        skip { next }
+        { print }
+    ' "$original" > "$changed"
+    changed_bytes=$(size_file "$changed")
+    changed_sha=$(sha_file "$changed")
+    changed_chunks=$(((changed_bytes + 1435) / 1436))
+    printf 'B|%s|%s|RUN|%s|%s|%s\n' "$target" "$target_kind" "$changed_bytes" "$changed_chunks" "$changed_sha" > "$block"
+    rewrite_index=1; rewrite_offset=0
+    while [ "$rewrite_index" -le "$changed_chunks" ]; do
+        /bin/dd if="$changed" of="$piece" bs=1 skip="$rewrite_offset" count=1436 status=none
+        encoded_part=$(/usr/bin/base64 -w 0 "$piece")
+        cid=$(/usr/bin/printf 'C%06d' "$rewrite_index")
+        printf 'C|%s|%s|%s\n' "$target" "$cid" "$encoded_part" >> "$block"
+        rewrite_offset=$((rewrite_offset + $(size_file "$piece")))
+        rewrite_index=$((rewrite_index + 1))
+    done
+    /usr/bin/awk -F '|' -v target="$target" '$1=="B" && $2==target { exit } { print }' "$input" > "$output"
+    /bin/cat "$block" >> "$output"
+    /usr/bin/awk -F '|' -v target="$target" 'seen && $1=="B" { keep=1 } $1=="B" && $2==target { seen=1; next } keep { print }' "$input" >> "$output"
+}
+
 executed=0
 while IFS='|' read -r marker id class expected; do
     [ "$marker" = case ] || continue
@@ -491,4 +556,18 @@ while IFS='|' read -r marker id class expected; do
     executed=$((executed + 1))
 done < "$policy_cases"
 [ "$executed" -eq 20 ] || fail 'not all evidence policy mutations executed'
-printf '%s\n' 'C3VA evidence policy tests passed: complete=1 rejected=20 runtime=none'
+semantic_executed=0
+for semantic_mode in observer tool-pins candidate-receipt topology manifest; do
+    first=$work/semantic-first.v0
+    mutated=$work/semantic-$semantic_mode.v0
+    rewrite_clean_semantic_blob B000001 clean-success-pass-1 "$semantic_mode" "$valid" "$first"
+    rewrite_clean_semantic_blob B000002 clean-success-pass-2 "$semantic_mode" "$first" "$mutated"
+    /bin/rm -rf -- "$validator_scratch"
+    /bin/mkdir "$validator_scratch"
+    if /bin/sh "$validator" "$mutated" "$cases" "$validator_scratch" >/dev/null 2>&1; then
+        fail "semantic receipt projection mutation accepted: $semantic_mode"
+    fi
+    semantic_executed=$((semantic_executed + 1))
+done
+[ "$semantic_executed" -eq 5 ] || fail 'semantic receipt mutation count mismatch'
+printf '%s\n' 'C3VA evidence policy tests passed: complete=1 rejected=20 semantic-rejected=5 runtime=none'
