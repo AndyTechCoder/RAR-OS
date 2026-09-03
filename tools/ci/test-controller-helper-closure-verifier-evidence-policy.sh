@@ -504,6 +504,7 @@ rewrite_clean_semantic_blob() {
     changed=$work/semantic.changed
     replacement=$work/semantic.replacement
     block=$work/semantic.block
+    semantic_payload_file=$work/semantic.payload
     : > "$original"
     /usr/bin/awk -F '|' -v target="$target" '
         $1=="B" && $2==target { inside=1; next }
@@ -513,22 +514,22 @@ rewrite_clean_semantic_blob() {
         printf '%s' "$encoded_part" | /usr/bin/base64 --decode >> "$original"
     done
     case "$mode" in
-        observer) nn=01; field_name=domain-header; observation=trusted-run-domain; printf '%s\n' reviewed-observer-source-bytes-v1 > "$payload" ;;
-        tool-pins) nn=02; field_name=tool-inventory; observation=complete-inventory; printf '%s\n' 'schema=rar-alpha-controller-helper-closure-verifier-tools-v0' "find_sha256=4444444444444444444444444444444444444444444444444444444444444444" "sort_sha256=$digest" "wc_sha256=$digest" "stat_sha256=$digest" "cmp_sha256=$digest" "id_sha256=$digest" 'status=reviewed-for-candidate-verification-only' > "$payload" ;;
+        observer) nn=01; field_name=domain-header; observation=trusted-run-domain; printf '%s\n' reviewed-observer-source-bytes-v1 > "$semantic_payload_file" ;;
+        tool-pins) nn=02; field_name=tool-inventory; observation=complete-inventory; printf '%s\n' 'schema=rar-alpha-controller-helper-closure-verifier-tools-v0' "find_sha256=4444444444444444444444444444444444444444444444444444444444444444" "sort_sha256=$digest" "wc_sha256=$digest" "stat_sha256=$digest" "cmp_sha256=$digest" "id_sha256=$digest" 'status=reviewed-for-candidate-verification-only' > "$semantic_payload_file" ;;
         candidate-receipt)
             nn=03; field_name=fixture-inventory; observation=complete-inventory
             write_candidate_receipt "$semantic"
-            /usr/bin/sed "s/^generator_sha256=.*/generator_sha256=4444444444444444444444444444444444444444444444444444444444444444/" "$semantic" > "$payload"
+            /usr/bin/sed "s/^generator_sha256=.*/generator_sha256=4444444444444444444444444444444444444444444444444444444444444444/" "$semantic" > "$semantic_payload_file"
             ;;
-        topology) nn=04; field_name=topology; observation=complete-topology; printf '%s\n' 'b|f|1|2|1|1|644|0|0' > "$payload" ;;
-        manifest) nn=05; field_name=canonical-manifest; observation=canonical-manifest; printf '%s  %s\n' "4444444444444444444444444444444444444444444444444444444444444444" a > "$payload" ;;
+        topology) nn=04; field_name=topology; observation=complete-topology; printf '%s\n' 'b|f|1|2|1|1|644|0|0' > "$semantic_payload_file" ;;
+        manifest) nn=05; field_name=canonical-manifest; observation=canonical-manifest; printf '%s  %s\n' "4444444444444444444444444444444444444444444444444444444444444444" a > "$semantic_payload_file" ;;
         *) fail "unknown semantic rewrite $mode" ;;
     esac
-    payload_bytes=$(size_file "$payload")
-    payload_sha=$(sha_file "$payload")
+    payload_bytes=$(size_file "$semantic_payload_file")
+    payload_sha=$(sha_file "$semantic_payload_file")
     {
-        printf '%s\n' 'schema=rar-c3v-semantic-field-v0' 'kind=clean-success-pass' 'case_id=RUN' "field=$field_name" "catalog_row_sha256=$cases_sha" "oracle_sha256=$digest" "observation=$observation" "payload_bytes=$payload_bytes" "payload_sha256=$payload_sha" 'payload'
-        /bin/cat "$payload"
+        printf '%s\n' 'schema=rar-c3v-semantic-field-v0' 'kind=clean-success-pass' 'case_id=RUN' "field=$field_name" "catalog_row_sha256=$cases_sha" "oracle_sha256=$digest" "observation=$observation" "payload_bytes=$semantic_payload_file_bytes" "payload_sha256=$semantic_payload_file_sha" 'payload'
+        /bin/cat "$semantic_payload_file"
     } > "$replacement"
     replacement_sha=$(sha_file "$replacement")
     /usr/bin/awk -v nn="$nn" -v replacement="$replacement" -v replacement_sha="$replacement_sha" '
