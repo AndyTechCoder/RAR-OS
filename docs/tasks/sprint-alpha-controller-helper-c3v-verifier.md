@@ -72,6 +72,35 @@ Only `tools/ci/test-controller-helper-closure-verifier-evidence-policy.sh` may u
 This erratum creates no new workflow, trigger, job, container, verifier execution, target execution, compiler use, helper use, network access, credential, device write, Mac/SSD execution, public format, acceptance, signing, release, or readiness authority. The packet-only amendment must merge after exact-head architecture, correctness, and security review. Its resulting-main run may retain only the already identified confinement failure from run `33801818662`; the three-file implementation must follow immediately with no unrelated main work and must pass a distinct exact-main Specifications run including the complete mutation suite.
 
 
+## C3VA hosted-runner rollout recovery erratum (2026-09-03)
+
+Owner authorization for this bounded recovery is recorded on 2026-09-03 under the delegated safe-direction authority after exact-main runs proved that GitHub concurrently schedules two released images behind the `ubuntu-24.04` label. Run `33806231004` used image `20260831.293.1`; run `33815290752` used image `20260823.283.1`. Retrying until one image happens to pass is prohibited and is not acceptance evidence.
+
+This erratum preserves the existing GitHub-hosted, external-attested, noncertifying Class-B orchestration boundary and the immutable OCI validation root. It authorizes a closed rollout allowlist containing exactly `20260823.283.1` and `20260831.293.1`; empty, malformed, or any version outside that exact set fails closed, as do reordered or duplicated inventory identities. The runtime boundary enforces exact `ImageOS=ubuntu24`, `RUNNER_OS=Linux`, `RUNNER_ARCH=X64`, and membership in that two-value image-version set. Runner binary and Hosted Compute Agent identities are setup-log attestations retained in inventory and review evidence; repository code cannot read them independently and must not claim to prove them at runtime.
+
+The two Class-B inventory identities are unique and their complete reviewed rows are exactly:
+
+`github-hosted-runner-20260823.283.1|github-actions|ubuntu-24.04-20260823.283.1-runner-2.337.0|hosted-compute-agent-20260819.586-commit-3cc4a88dfa507ef76119ad1bb3eccc6378bb2b76-release-ubuntu24-20260823.283|GitHub-Actions-service-terms-plus-runner-images-MIT|https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260823.283|runs-on-ubuntu-24.04-and-assert-ImageOS-ImageVersion-membership|external-attested-noncertifying`
+
+`github-hosted-runner-20260831.293.1|github-actions|ubuntu-24.04-20260831.293.1-runner-2.337.0|hosted-compute-agent-20260828.587-commit-abac92662cab4cc7352de4f9f9d2e2419aad9c29-release-ubuntu24-20260831.293|GitHub-Actions-service-terms-plus-runner-images-MIT|https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260831.293|runs-on-ubuntu-24.04-and-assert-ImageOS-ImageVersion-membership|external-attested-noncertifying`
+
+After this packet-only amendment merges, C3VA may additionally change only these literal live paths:
+
+- `tools/rarbuild/bootstrap-lib.sh`
+- `tests/bootstrap/run.sh`
+- `tests/bootstrap/src/main.rs`
+- `tools/ci/check-specs.sh`
+- `tools/toolchain/class-b-host-tools.v1`
+- `tools/toolchain/dependencies.r0`
+- `tools/toolchain/host-tools.manifest`
+
+No directory or descriptive ownership is granted. The implementation must positively exercise both allowed versions and reject empty, malformed, and representative versions outside the exact two-value set; bind exactly two complete unique inventory rows, exact allowlist cardinality and order, the recomputed Class-B digest, and the unchanged OCI digest, CI lock, checkout/upload pins, and noncertifying status. Historical observer evidence fixtures remain byte-unchanged.
+
+For this seven-path recovery only, this erratum supersedes the permanent inventory-change denial solely for `tools/toolchain/class-b-host-tools.v1`, `tools/toolchain/dependencies.r0`, and `tools/toolchain/host-tools.manifest`. Every other permanent denial remains effective.
+
+This erratum creates no new workflow, trigger, job, network access, credential, self-hosted runner, container authority, verifier execution, target execution, compiler use, device write, Mac/SSD execution, public format, acceptance, signing, release, or readiness authority. The packet-only amendment may retain only the known singleton runner mismatch. The seven-path implementation must follow with no unrelated main work and must pass independent exact-head review plus a distinct exact-main Specifications run in which primary validation and the complete mutation suite both execute and pass.
+
+
 C3VA adds exactly `tools/ci/test-controller-helper-closure-verifier-evidence-policy.sh|ephemeral` to `tools/ci/policy-test-modes.v0`. Ephemeral rows change 28 to 29; immutable rows remain exactly 5; total test rows change 33 to 34. The runner invokes all 29 ephemeral tests exactly once in registry order and reports exactly `Ephemeral policy tests passed: executed=29 source=read-only scratch=tmpfs`. The confinement checker recognizes exactly that new path and mode. No other registry row, order, mode, summary shape, runner behavior, or confinement exception changes.
 
 C3VA must replace the digest-only evidence design with one lossless, canonical, ASCII/LF framing that retains content-addressed typed raw preimages for every runtime and residual result. It must include exact lengths, SHA-256 digests, domain tuples, canonical zero-length representation, nonaliasing identities, and deterministic ordering for:
