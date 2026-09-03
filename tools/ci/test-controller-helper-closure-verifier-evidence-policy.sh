@@ -514,7 +514,11 @@ rewrite_clean_semantic_blob() {
     case "$mode" in
         observer) nn=01; field_name=domain-header; observation=trusted-run-domain; printf '%s\n' reviewed-observer-source-bytes-v1 > "$payload" ;;
         tool-pins) nn=02; field_name=tool-inventory; observation=complete-inventory; printf '%s\n' 'schema=rar-alpha-controller-helper-closure-verifier-tools-v0' "find_sha256=4444444444444444444444444444444444444444444444444444444444444444" "sort_sha256=$digest" "wc_sha256=$digest" "stat_sha256=$digest" "cmp_sha256=$digest" "id_sha256=$digest" 'status=reviewed-for-candidate-verification-only' > "$payload" ;;
-        candidate-receipt) nn=03; field_name=fixture-inventory; observation=complete-inventory; printf '%s\n' canonical-candidate-observation-receipt-v1 > "$payload" ;;
+        candidate-receipt)
+            nn=03; field_name=fixture-inventory; observation=complete-inventory
+            write_candidate_receipt "$semantic"
+            /usr/bin/sed "s/^generator_sha256=.*/generator_sha256=4444444444444444444444444444444444444444444444444444444444444444/" "$semantic" > "$payload"
+            ;;
         topology) nn=04; field_name=topology; observation=complete-topology; printf '%s\n' 'b|f|1|2|1|1|644|0|0' > "$payload" ;;
         manifest) nn=05; field_name=canonical-manifest; observation=canonical-manifest; printf '%s  %s\n' "4444444444444444444444444444444444444444444444444444444444444444" a > "$payload" ;;
         *) fail "unknown semantic rewrite $mode" ;;
