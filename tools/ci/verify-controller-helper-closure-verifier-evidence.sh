@@ -60,17 +60,17 @@ expect_env() {
 [ -z "$(/usr/bin/find "$scratch" -mindepth 1 -maxdepth 1 -print -quit)" ] ||
     fail 'scratch root not empty'
 [ "$(size_file "$evidence")" -le 440401920 ] || fail 'evidence file oversized'
-maximum_physical_line=$(/usr/bin/wc -L < "$evidence" | /usr/bin/tr -d ' ')
-bounded_unsigned "$maximum_physical_line" 440401920 || fail 'physical line measurement malformed'
-[ "$maximum_physical_line" -le 8192 ] || fail 'physical line bound exceeded'
+if ! /usr/bin/od -An -v -tu1 "$evidence" | /usr/bin/awk '{ for (i=1; i<=NF; i++) { if ($i==10) line_bytes=0; else { line_bytes++; if (line_bytes>8192) exit 1 } } }'; then
+    fail 'physical line bound exceeded'
+fi
 [ "$(/usr/bin/tail -c 1 "$evidence" | /usr/bin/od -An -tx1 | /usr/bin/tr -d '[:space:]')" = 0a ] ||
     fail 'terminal LF missing'
 if /usr/bin/od -An -tx1 "$evidence" |
     /usr/bin/grep -Eq '(^| )00( |$)|(^| )0d( |$)'; then
     fail 'NUL or CR present'
 fi
-if /usr/bin/grep -n '[^ -~]' "$evidence" >/dev/null; then
-    fail 'non-ASCII outer byte present'
+if ! /usr/bin/od -An -v -tu1 "$evidence" | /usr/bin/awk '{ for (i=1; i<=NF; i++) if ($i!=10 && ($i<32 || $i>126)) exit 1 }'; then
+    fail 'non-ASCII or forbidden control byte present'
 fi
 if /usr/bin/grep -n '^$' "$evidence" >/dev/null; then
     fail 'blank outer record present'
