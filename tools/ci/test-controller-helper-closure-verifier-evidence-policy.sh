@@ -590,6 +590,20 @@ fi
 /usr/bin/grep -Fq 'physical line bound exceeded' "$near_max_error" ||
     fail 'maximum-size no-newline evidence did not reach physical-line rejection'
 /bin/rm -f -- "$near_max_line" "$near_max_error"
+{
+    /bin/dd if=/dev/zero bs=1048576 count=419 status=none
+    /bin/dd if=/dev/zero bs=1048575 count=1 status=none
+} | /usr/bin/tr '\000' '\010' > "$near_max_line"
+printf '\n' >> "$near_max_line"
+[ "$(size_file "$near_max_line")" -eq 440401920 ] || fail 'maximum-size control-line fixture size mismatch'
+/bin/rm -rf -- "$validator_scratch"
+/bin/mkdir "$validator_scratch"
+if /bin/sh "$validator" "$near_max_line" "$cases" "$validator_scratch" >/dev/null 2>"$near_max_error"; then
+    fail 'maximum-size control-byte evidence was accepted'
+fi
+/usr/bin/grep -Fq 'physical line bound exceeded' "$near_max_error" ||
+    fail 'maximum-size control-byte evidence did not reach pre-read line rejection'
+/bin/rm -f -- "$near_max_line" "$near_max_error"
 semantic_executed=0
 for semantic_mode in observer tool-pins candidate-receipt topology manifest manifest-order; do
     first=$work/semantic-first.v0
