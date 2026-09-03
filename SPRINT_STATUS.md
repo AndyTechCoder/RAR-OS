@@ -1,14 +1,14 @@
 # Sprint Alpha 0.1 Status
 
-- Date: 2026-08-31
+- Date: 2026-09-03
 - Current milestone: post-P0 pre-Milestone A controller, machine-evidence, and
   SSD-confinement gates; acceptance-v2 publication/recovery remains a separate
   pre-Milestone B gate
 - Objective: close the remaining controller/helper, retained-machine-evidence,
   and SSD-confinement gates before Milestone A, and separately finish
   acceptance-v2 publication/controller closure before Milestone B
-- Status content baseline: verified implementation checkpoint at
-  `65ae7aedd11298c8f15ed96cd94166e2afa03e2a`
+- Status content baseline: reviewed C3VA source candidate at
+  `51f639cbd1f071f637c4b13eca3c2cb9fb8880c3`, plus this status-only reconciliation
 - Status rebaseline evidence: docs-only PR #58 merged at
   `2765128406210040bc0f16de586e9ccc8d39a452`; exact-main Specifications
   run `33309132199`, job `99250884902`, passed
