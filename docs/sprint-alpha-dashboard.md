@@ -108,7 +108,8 @@ and cannot increase the implementation count.
   exact-main run `33674068492` passed at
   `730520de48897a9b41412e0662c0a30d57a59f0c`. C3VA is now the active
   source-only candidate: it adds the evidence validator and one bounded
-  GitHub-only 20-mutation policy test, but no verifier runtime, workflow,
+  GitHub-only policy suite with 20 catalog mutations plus focused semantic,
+  maximum-boundary, and producer-failure cases, but no verifier runtime, workflow,
   container, compiler, helper, target, acceptance, or readiness authority.
   C3VB one-shot verification and C3VR retirement remain separate future gates;
   C3A must later accept retained evidence before any helper build or test.
