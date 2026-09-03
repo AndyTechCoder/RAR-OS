@@ -90,11 +90,27 @@ printf '%s\n' \
 tool_inventory_sha=$(sha_file "$semantic")
 printf '%s\n' 'reviewed-observer-source-bytes-v0' > "$semantic"
 observer_sha=$(sha_file "$semantic")
-printf '%s\n' 'canonical-candidate-observation-receipt-v0' > "$semantic"
-fixture_inventory_sha=$(sha_file "$semantic")
 printf '%s  %s\n' "$digest" a > "$semantic"
 manifest_sha=$(sha_file "$semantic")
 manifest_bytes=$(size_file "$semantic")
+manifest_entries=1
+write_candidate_receipt() {
+    candidate_target=$1
+    printf '%s\n' \
+        'schema=rar-alpha-controller-helper-closure-observation-v0' \
+        'status=observed-not-reviewed-not-ready' \
+        "controller_sha=$revision" "source_sha=$revision" \
+        'repository=AndyTechCoder/RAR-OS' 'ref=refs/heads/main' 'event=push' \
+        'run_id=9001' 'run_attempt=1' 'runner_os=ubuntu24' \
+        'runner_image_version=24.04.1' \
+        'oci_image=sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3' \
+        'closure_root=/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu' \
+        "generator_sha256=$observer_sha" "find_sha256=$digest" "sort_sha256=$digest" \
+        "manifest_sha256=$manifest_sha" "manifest_entries=$manifest_entries" "manifest_bytes=$manifest_bytes" \
+        'helper_compiled=false' 'helper_executed=false' 'target_compiled=false' 'readiness=false' > "$candidate_target"
+}
+write_candidate_receipt "$semantic"
+fixture_inventory_sha=$(sha_file "$semantic")
 printf '%s\n' 'a|f|1|2|1|1|644|0|0' > "$semantic"
 topology_sha=$(sha_file "$semantic")
 second_pass_sha=$manifest_sha
@@ -267,7 +283,7 @@ materialize_field() {
                 "stat_sha256=$digest" "cmp_sha256=$digest" "id_sha256=$digest" \
                 'status=reviewed-for-candidate-verification-only' > "$payload"
             ;;
-        fixture-inventory) printf '%s\n' 'canonical-candidate-observation-receipt-v0' > "$payload" ;;
+        fixture-inventory) write_candidate_receipt "$payload" ;;
         canonical-manifest) printf '%s  %s\n' "$digest" a > "$payload" ;;
         topology) printf '%s\n' 'a|f|1|2|1|1|644|0|0' > "$payload" ;;
         observed-event) write_observed_result ;;
