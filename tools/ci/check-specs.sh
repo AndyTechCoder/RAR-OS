@@ -853,7 +853,7 @@ grep -q 'f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3' "$cla
 grep -q '3d3c42e5aac5ba805825da76410c181273ba90b1' "$class_b_inventory" || fail "Class B inventory omits the checkout action commit"
 grep -Fqx 'actions-upload-artifact|github-actions|v4.6.2|git-sha1-ea165f8d65b6e75b540449e92b4886f43607fa02|MIT|https://github.com/actions/upload-artifact|pin-full-commit-in-controller-helper-closure-observer-workflow-candidate-retention-only|pinned-orchestrator' "$class_b_inventory" || fail "Class B inventory omits the exact candidate-retention upload action"
 grep -q 'ea165f8d65b6e75b540449e92b4886f43607fa02' "$class_b_inventory" || fail "Class B inventory omits the upload action commit"
-grep -q 'ubuntu-24.04-20260823.283.1' "$class_b_inventory" || fail "Class B inventory omits the runner image version"
+grep -q 'ubuntu-24.04-20260831.293.1' "$class_b_inventory" || fail "Class B inventory omits the runner image version"
 grep -qx 'ci_checkout=actions-checkout-v7.0.1-git-sha1-3d3c42e5aac5ba805825da76410c181273ba90b1' \
     tools/toolchain/host-tools.manifest || fail "host tool manifest checkout identity is stale"
 
