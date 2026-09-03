@@ -38,7 +38,7 @@ for required in \
     'precedence_status=37-executable-dual-invalid-oracles+13-catalog-only-residual-relations-bound-in-controller-helper-closure-verifier-cases-v0,not-runtime-tested+not-acceptance-evidence' \
     'evidence_status=lossless-bounded+validator-enforced-by-controller-helper-closure-verifier-evidence-v0.fields;C3V-runtime-instance+fixtures-still-required' \
     'activation_rule=exact-reviewed-validation-catalog+input-domain+117-constructible-disposition-cases+37-executable-runtime-precedence+12-fault-cases+43-reviewed-residual-proofs,evidence+normalized-verdict-contract+fixtures,controller-source,fixture-image,tool-pins,subject-pins,workflow-wiring,and-exact-main-validation-required-before-first-run' \
-    'local_rule=plan-check-is-text+hash+limited-direct-nonwiring-only;never-run-verifier,test-controller,container,compiler,helper,target,VM,or-emulator-on-Mac'; do
+    'local_rule=plan-check-is-text+hash+limited-direct-nonwiring-only;C3VA-validator-policy-execution-is-GitHub-hosted-only;never-run-verifier,test-controller,container,compiler,helper,target,VM,or-emulator-on-Mac'; do
     grep -Fqx "$required" "$plan" || fail "required invariant is missing: $required"
 done
 
