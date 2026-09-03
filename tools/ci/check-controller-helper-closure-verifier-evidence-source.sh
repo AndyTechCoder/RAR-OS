@@ -17,11 +17,11 @@ for file in "$contract" "$validator" "$policy" "$valid" "$malformed" "$cases"; d
     [ -f "$file" ] && [ ! -L "$file" ] && [ -s "$file" ] ||
         fail "required source unavailable: $file"
 done
-[ "$(sha_file "$contract")" = 71b222fec65a433aff0fa067ef0e9f9a3e32eba9e6f9c52064eb7a4dd1b4ea03 ] ||
+[ "$(sha_file "$contract")" = 47b007bdb898afcac887da1d533ad1230123c1729bdd35d2a13473f446393cb5 ] ||
     fail 'evidence contract bytes escaped review'
-[ "$(sha_file "$validator")" = f818c947467cdc01f51f2f94ea0e9e5171450fee961fcb3ec82203dfa777f2d7 ] ||
+[ "$(sha_file "$validator")" = e72d00680417d080ca0a10b1e6ee8763be6e8fdcf7d38609d35e258ded1afc2a ] ||
     fail 'evidence validator bytes escaped review'
-[ "$(sha_file "$policy")" = 47f2a06e7ffc5451384a3f8a522bf7b6815fd425be25ccb095233236db2ac858 ] ||
+[ "$(sha_file "$policy")" = 495a440f83fd21e56cfe8591299046ef5de6af13b9ca2a6d631b7e4d5ee6140b ] ||
     fail 'evidence policy bytes escaped review'
 [ "$(sha_file "$valid")" = cc5bda22d4bba1eeb7e53d9604fcef23b0eabfc7402216826dcd124d89c6072c ] ||
     fail 'valid seed bytes escaped review'
@@ -39,9 +39,9 @@ for required in \
     'decoded_equality_rule=consume-exact-declared-field-bytes+SHA256-must-equal-field-digest;checked-field-count+framing+raw-byte-sum-must-equal-B-decoded-length;B-SHA256-covers-complete-envelope-framing+raw-bytes+terminating-LFs' \
     'semantic_payload_rule=payload_bytes-canonical-positive-1..16777216;payload_sha256-nonzero-lowercase-SHA256;validator-consumes+hashes-exact-arbitrary-payload-and-rejects-extension' \
     'oracle_derivation_rule=observed-event+timeout-termination+residual-proof-payloads-byte-equal-exact-case-catalog-oracle;mutation-schedule+trigger+acknowledgement+residual-source-payloads-byte-equal-exact-complete-catalog-row' \
-    'receipt_reconstruction_rule=verification-receipt-inputs-is-exact-31-line-canonical-receipt-bytes;validator-checks-line-order+literal+trusted-run+digest+decimal+false-domains,candidate-manifest-equals-recomputed-manifest,and-field-SHA256-equals-trusted-header-receipt-SHA256' \
-    'receipt_digest_projection=observer_sha256:event-bytes-payload,tool_pins_sha256:tool-inventory-payload,find+sort+wc+stat+cmp+id:exact-six-line-tool-inventory-values,candidate_receipt_sha256:fixture-inventory-payload,candidate_manifest_sha256+recomputed_manifest_sha256:canonical-manifest-payload,topology_sha256:topology-payload,second_pass_sha256:mount-identities-payload' \
-    'observed_result_derivation=disposition-primary-from-catalog-error-prefix+exit-1;precedence-primary-from-first-error+exit-1;fault-primary-from-F-id+termination/controller-map-from-exact-oracle;receipt-state-from-exact-oracle;validator-byte-compares-derived-record-to-retained-observed-event' \
+    'receipt_reconstruction_rule=both-verification-receipt-inputs-fields-are-retained+byte-identical+trusted-header-digest-bound;31-line-validation-occurs-only-after-both-clean-passes-parse+field-ledgers-match;validator-checks-line-order+literal+trusted-run+digest+decimal+false-domains' \
+    'receipt_digest_projection=observer_sha256:domain-header-retained-reviewed-observer-source-bytes,tool_pins_sha256:complete-canonical-8-line-tool-inventory-payload,find+sort+wc+stat+cmp+id:ordered-tool-inventory-values,candidate_receipt_sha256:fixture-inventory-retained-candidate-observation-receipt-bytes,candidate_manifest_sha256+recomputed_manifest_sha256+second_pass_sha256:canonical-manifest-payload-after-two-pass-equality,topology_sha256:complete-sorted-topology-payload' \
+    'observed_result_derivation=disposition-primary+termination+receipt-state-from-exact-oracle;precedence-primary+termination-from-exact-oracle+receipt-state-explicitly-not-specified-by-precedence-oracle;fault-primary+termination/controller-map+receipt-state-from-exact-oracle;validator-byte-compares-derived-record-to-retained-observed-event' \
     'blob_allocation=B000001-clean-success-pass-1+RUN;B000002-clean-success-pass-2+RUN;then-logical-case-order-with-four-consecutive-pre+stdout+stderr+post-blobs-per-runtime-row-or-one-residual-source-proof-blob-per-residual-row;last-B000709' \
     'raw_blob_ids_rule=nonempty-canonical-B-identities-comma-separated-no-spaces;runtime-exact-four-assigned-consecutive-IDs-in-pre+stdout+stderr+post-order;residual-exact-one-assigned-ID;globals-never-listed' \
     'base64_payload_total_max=396032120' \
