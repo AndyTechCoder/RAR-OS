@@ -16,7 +16,7 @@ workflow=.github/workflows/specifications.yml
 /usr/bin/awk -F '|' '
     NR <= 2 { next }
     NF != 2 || $1 !~ /^tools\/ci\/test-[a-z0-9.-]+\.sh$/ || $2 !~ /^(immutable|ephemeral)$/ || ++seen[$1] != 1 { bad=1 }
-    END { if (NR != 35 || bad) exit 1 }
+    END { if (NR != 36 || bad) exit 1 }
 ' "$manifest"
 
 declared=$(/usr/bin/sed -n '3,$s/|.*//p' "$manifest" | /usr/bin/sort)
