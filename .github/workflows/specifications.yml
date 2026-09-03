@@ -145,7 +145,7 @@ jobs:
             --user "$host_uid:$host_gid" \
             --cpus 2 --memory 2048m --memory-swap 2048m --pids-limit 256 \
             --security-opt no-new-privileges --cap-drop ALL \
-            --tmpfs "/tmp:rw,nosuid,nodev,size=128m,uid=$host_uid,gid=$host_gid,mode=1777" \
+            --tmpfs "/tmp:rw,nosuid,nodev,size=512m,uid=$host_uid,gid=$host_gid,mode=1777" \
             --tmpfs "/build:rw,exec,nosuid,nodev,size=32m,uid=$host_uid,gid=$host_gid,mode=700" \
             --tmpfs "/evidence:rw,nosuid,nodev,noexec,size=64m,uid=$host_uid,gid=$host_gid,mode=700" \
             --mount "type=bind,source=$GITHUB_WORKSPACE/mutation-source,target=/workspace,readonly" \
