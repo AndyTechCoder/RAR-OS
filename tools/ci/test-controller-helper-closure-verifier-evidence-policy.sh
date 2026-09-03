@@ -196,6 +196,7 @@ observation_for() {
     esac
 }
 write_observed_result() {
+    receipt_state=
     oldifs=$IFS
     IFS='|' read -r row_marker row_case row_kind row_source row_left row_right row_binding row_oracle <<EOF
 $(/bin/cat "$case_row_file")
