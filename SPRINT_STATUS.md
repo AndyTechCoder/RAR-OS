@@ -1,14 +1,14 @@
 # Sprint Alpha 0.1 Status
 
-- Date: 2026-08-31
+- Date: 2026-09-03
 - Current milestone: post-P0 pre-Milestone A controller, machine-evidence, and
   SSD-confinement gates; acceptance-v2 publication/recovery remains a separate
   pre-Milestone B gate
 - Objective: close the remaining controller/helper, retained-machine-evidence,
   and SSD-confinement gates before Milestone A, and separately finish
   acceptance-v2 publication/controller closure before Milestone B
-- Status content baseline: verified implementation checkpoint at
-  `65ae7aedd11298c8f15ed96cd94166e2afa03e2a`
+- Status content baseline: reviewed C3VA source candidate at
+  `51f639cbd1f071f637c4b13eca3c2cb9fb8880c3`, plus this status-only reconciliation
 - Status rebaseline evidence: docs-only PR #58 merged at
   `2765128406210040bc0f16de586e9ccc8d39a452`; exact-main Specifications
   run `33309132199`, job `99250884902`, passed
@@ -139,14 +139,23 @@
   isolated mutation-policy tests. C2A then merged through PRs #111-#112;
   exact-main Specifications run `33473648494` at
   `c862e27771b999e593ae26ea12ef424613b67bac` passed validation and all 27
-  isolated mutation-policy tests. C2B is now the active candidate, staging one
-  main-only isolated O001-O021 harness, one production observation, independent
-  exact four-file validation, and 14-day candidate retention. It remains
-  incomplete and non-activating pending exact-head architecture, correctness,
-  and security review, merge, and distinct exact-main Specifications and
-  observer runs. C3V must later bind the current tools, complete file set,
-  controller, fixtures, retained bytes, and runtime fault/confinement evidence,
-  followed by separate C3A review
+  isolated mutation-policy tests. C2 completed at exact main
+  `70a683dfb6dbde03f0f884ddc16ac2a2680a4f4f`; Specifications run
+  `33608694457` and Observer run `33608694456` passed. C3V D0 and bounded
+  corrections then merged through PRs #132-#135; exact-main Specifications
+  run `33674068492` passed at
+  `730520de48897a9b41412e0662c0a30d57a59f0c`. C3VA is the active
+  source-only candidate in PR #136. Its exact code/spec head
+  `2e67eec1c6a77250c3d4fc0f9a55163150db36d7` passed architecture,
+  correctness, and security source review; documentation-only head
+  `51f639cbd1f071f637c4b13eca3c2cb9fb8880c3` passed run `33798059680`
+  and delta review. The PR is ready but unmerged because the automated
+  safety reviewer requires a fresh owner acknowledgement before placing
+  source on `main`; therefore distinct exact-main full validation and
+  mutation evidence do not yet exist. C3VB one-shot verification and C3VR
+  retirement remain separate gates, followed by C3A evidence acceptance.
+  No verifier runtime, compiler, helper, target, Lab activation, acceptance,
+  or readiness authority is granted
 - Controller-helper inventory: an option-neutral blocked instance now binds the
   required builder, compiler closure, trusted source, golden vector, twice-
   reproduced binary, and isolated test-evidence identities. All activating

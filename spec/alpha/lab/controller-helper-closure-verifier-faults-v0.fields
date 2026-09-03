@@ -1,7 +1,9 @@
 schema=rar-alpha-controller-helper-closure-verifier-faults-v0
-status=experimental-complete-source-only-inactive
+status=experimental-complete+C3VA-evidence-candidate-source-only-unwired
 execution_authority=none-until-C3V
 fault_count=12
+evidence_fault_binding=F005+F006+F007+F009+F011-require-lossless-post-output-event-resource-preimages;all-F001-through-F012-bind-observed-exit+bounded-output+filesystem-delta+resource+termination-bytes
+evidence_policy_binding=malformed+truncated+oversized+wrong-count+wrong-hash+raw-normalized-mismatch-evidence-is-rejected-by-C3VA-validator-before-any-retention
 fault|F001|command-spawn|pre-start|required-command|exit-1+no-receipt
 fault|F002|command-status|enumeration|required-command|exit-1+no-receipt
 fault|F003|read-short|input-snapshot|subject-input|exit-1+no-receipt

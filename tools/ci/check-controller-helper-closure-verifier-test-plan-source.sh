@@ -11,13 +11,13 @@ fail() {
 
 [ -f "$plan" ] && [ ! -L "$plan" ] || fail 'test plan is unavailable'
 plan_sha=$(env -u LC_CTYPE LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$plan" | /usr/bin/awk '{ print $1 }')
-[ "$plan_sha" = 93aebda0f60d8da3c68b59517758964feebd1471adce9e2523f9733d8ce44cc3 ] || fail 'test-plan bytes escaped review'
+[ "$plan_sha" = 5a8fadb329a9367b4f27711a9bed8c55db32f18e8f32d15289dcc505a8d99c26 ] || fail 'test-plan bytes escaped review'
 
 for required in \
-    'status=experimental-complete-source-only-inactive' \
+    'status=experimental-C3VA-candidate-source-only-unwired' \
     'execution_authority=none' \
     'coverage_status=complete-via-117-constructible-dispositions+37-executable-precedence+12-faults+43-reviewed-residual-proofs-in-controller-helper-closure-verifier-cases-v0+faults-v0.fields+evidence-v0.fields,still-not-an-acceptance-instance+not-ready-for-wiring' \
-    'runtime_state=contracts-complete;C3V-harness+run+fixture-image+tool-pin+candidate+evidence-instances-not-created' \
+    'runtime_state=contracts+evidence-validator-policy-candidate-under-review;C3V-harness+run+fixture-image+tool-pin+candidate+evidence-instances-not-created' \
     'disposition_runtime_count=117' \
     'disposition_residual_count=30' \
     'precedence_runtime_count=37' \
@@ -36,7 +36,7 @@ for required in \
     'input_domain=controller-helper-closure-verifier-input-domain-v0.fields,inactive-source-only,no-fixtures+cases+controller+execution-authority' \
     'coverage_gap=closed-by-controller-helper-closure-verifier-cases-v0+faults-v0.fields' \
     'precedence_status=37-executable-dual-invalid-oracles+13-catalog-only-residual-relations-bound-in-controller-helper-closure-verifier-cases-v0,not-runtime-tested+not-acceptance-evidence' \
-    'evidence_status=specified-by-controller-helper-closure-verifier-evidence-v0.fields;C3V-instance+fixtures-still-required' \
+    'evidence_status=lossless-bounded+validator-enforced-by-controller-helper-closure-verifier-evidence-v0.fields;C3V-runtime-instance+fixtures-still-required' \
     'activation_rule=exact-reviewed-validation-catalog+input-domain+117-constructible-disposition-cases+37-executable-runtime-precedence+12-fault-cases+43-reviewed-residual-proofs,evidence+normalized-verdict-contract+fixtures,controller-source,fixture-image,tool-pins,subject-pins,workflow-wiring,and-exact-main-validation-required-before-first-run' \
     'local_rule=plan-check-is-text+hash+limited-direct-nonwiring-only;never-run-verifier,test-controller,container,compiler,helper,target,VM,or-emulator-on-Mac'; do
     grep -Fqx "$required" "$plan" || fail "required invariant is missing: $required"

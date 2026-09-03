@@ -1,5 +1,5 @@
 schema=rar-alpha-controller-helper-closure-verifier-cases-v0
-status=experimental-complete-classification-source-only-inactive
+status=experimental-complete-classification+C3VA-evidence-candidate-source-only-unwired
 disposition_case_count=147
 disposition_runtime_count=117
 disposition_residual_count=30
@@ -228,5 +228,9 @@ precedence_projection_rule=precedence-rows-bind-two-exact-primary+repair-tuples-
 mutation_rule=exact-phase-trigger+ack,controller-cannot-reach-scratch-after-launch,independent-repair-only
 ordering_rule=V001-through-V147,Q001-through-Q050,X001-through-X012,exactly-once,no-extra-row
 unrepresentable_rule=source-proof+source-dominated+cryptographic-residual+domain-extension-remain-explicit-rows,never-silently-skipped
+evidence_policy_case_count=20
+evidence_policy_case_ids=EP001-empty,EP002-alias,EP003-replay,EP004-truncation,EP005-extension,EP006-reorder,EP007-duplicate,EP008-wrong-domain,EP009-wrong-length,EP010-wrong-hash,EP011-malformed-Base64,EP012-blob-count,EP013-chunk-count,EP014-line-count,EP015-decoded-total,EP016-per-blob,EP017-oversize,EP018-projection-cycle,EP019-raw-normalized-mismatch,EP020-cross-case-substitution
+evidence_policy_case_rule=EP001-through-EP020-are-C3VA-validator-mutations-only,not-additional-V+Q+X-logical-relationships+not-verifier-runtime-evidence
+evidence_projection_rule=each-of-209-logical-rows-binds-exactly-one-normalized-record;runtime-rows-reference-four-case-blobs,residual-rows-reference-one-proof-blob,clean-success-two-pass-preimages-are-separate-run-global-blobs
 no_success_effect=lock+inventory+profile+gate+readiness+workflow+GitHub-unchanged
 local_rule=text+hash+structure-check-only;never-run-on-Mac

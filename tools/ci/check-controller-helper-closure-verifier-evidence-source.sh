@@ -4,23 +4,88 @@ LC_ALL=C
 LANG=C
 export LC_ALL LANG
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-subject=$root/spec/alpha/lab/controller-helper-closure-verifier-evidence-v0.fields
-fail() { printf '%s\n' 'rar-alpha-controller-helper-closure-verifier-evidence-v0 source check failed: '"$1" >&2; exit 1; }
-[ -f "$subject" ] && [ ! -L "$subject" ] || fail 'subject unavailable'
-actual=$(env -u LC_CTYPE LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$subject" | /usr/bin/awk '{print $1}')
-[ "$actual" = 4de1353a2bc22af60e56f38f8139c925fffdcaca14e362521d570f79271ac175 ] || fail 'subject bytes escaped review'
-grep -Fqx 'schema=rar-alpha-controller-helper-closure-verifier-evidence-v0' "$subject" || fail 'schema changed'
-for line in \
- 'header_fields=schema,controller_sha,source_sha,subject_sha,validation_sha,dispositions_sha,templates_sha,precedence_sha,faults_sha,cases_sha,base_fixture_sha,fixture_image_sha,tool_pins_sha,run_nonce,root_identity,runtime_case_count,residual_proof_count,logical_relationship_count,failed_count,verdict' \
- 'runtime_case_fields=case_id,kind,disposition_id,class_id,stage,mutation_or_fault,repair,expected_exit,observed_exit,stdout_sha256,stderr_sha256,pre_state_sha256,post_state_sha256,result' \
- 'residual_proof_fields=case_id,kind,source_id,class_or_relation,stage_or_sides,disposition,reason,source_sha256,proof_sha256,result' \
- 'case_count_rule=117-runtime-disposition+37-runtime-precedence+12-runtime-fault=166-runtime;30-disposition-residual+13-precedence-residual=43-residual-proofs;209-logical-relationships-total,each-required-ID-exactly-once' \
- 'ordering_rule=logical-order-exactly-V001-through-V147+Q001-through-Q050+X001-through-X012;runtime+residual-projections-preserve-logical-order' \
- 'residual_result_rule=pass-only-when-catalog+reason+source+proof-identities-match-reviewed-residual-contract;residual-records-have-no-expected-exit+observed-exit+stdout+stderr+pre-state+post-state+filesystem-delta' \
- 'anti_replay_rule=run-nonce+root+controller+source+fixture-image+tool-pins-tuple-never-reused,no-cross-revision-evidence' \
- 'no_success_effect=lock+inventory+profile+gate+readiness+workflow+GitHub+compiler-use+helper-build-unchanged'; do grep -Fqx "$line" "$subject" || fail "missing invariant: $line"; done
-grep -Fq 'local_rule=' "$subject" || fail 'local execution denial missing'
-if grep -R -Fq 'controller-helper-closure-verifier-evidence-v0.fields' "$root/.github/workflows"; then fail 'source-only contract is wired to a workflow'; fi
-grep -qx 'rust_toolchain_closure_manifest_relative=none' "$root/tools/toolchain/host-tools.x86_64-unknown-linux-gnu-ci.lock" || fail 'CI closure lock activated'
-grep -qx 'state=blocked' "$root/tools/sprint-alpha/controller-helper-v0.env" || fail 'helper inventory activated'
-printf '%s\n' 'rar-alpha-controller-helper-closure-verifier-evidence-v0 is complete, source-only, inactive, and unwired'
+contract=$root/spec/alpha/lab/controller-helper-closure-verifier-evidence-v0.fields
+validator=$root/tools/ci/verify-controller-helper-closure-verifier-evidence.sh
+policy=$root/tools/ci/test-controller-helper-closure-verifier-evidence-policy.sh
+valid=$root/tools/ci/fixtures/controller-helper-closure-verifier/evidence-valid.v0
+malformed=$root/tools/ci/fixtures/controller-helper-closure-verifier/evidence-malformed.v0
+cases=$root/tools/ci/fixtures/controller-helper-closure-verifier/evidence-cases.v0
+fail() { printf 'C3VA evidence source check failed: %s\n' "$1" >&2; exit 1; }
+sha_file() { env -u LC_CTYPE LC_ALL=C LANG=C /usr/bin/shasum -a 256 "$1" | /usr/bin/awk '{ print $1 }'; }
+
+for file in "$contract" "$validator" "$policy" "$valid" "$malformed" "$cases"; do
+    [ -f "$file" ] && [ ! -L "$file" ] && [ -s "$file" ] ||
+        fail "required source unavailable: $file"
+done
+[ "$(sha_file "$contract")" = 36ec55db65b2796f1f79d263da9cf84bcbe5ab355ad1adfdbcaaf9b761f63c37 ] ||
+    fail 'evidence contract bytes escaped review'
+[ "$(sha_file "$validator")" = 44aa4bb62741e60b55f381252bcfa9e8dffc26f7f1bdad386ad35fd25f0827e0 ] ||
+    fail 'evidence validator bytes escaped review'
+[ "$(sha_file "$policy")" = e8ec8f16eafadaab57d4be18b14335f8a7a13edaa15c9c736b260b85358fd966 ] ||
+    fail 'evidence policy bytes escaped review'
+[ "$(sha_file "$valid")" = cc5bda22d4bba1eeb7e53d9604fcef23b0eabfc7402216826dcd124d89c6072c ] ||
+    fail 'valid seed bytes escaped review'
+[ "$(sha_file "$malformed")" = 847158a1a0201ffea557e78845dcdafb356519e3fe3adaa1e4302820866500e2 ] ||
+    fail 'malformed seed bytes escaped review'
+[ "$(sha_file "$cases")" = ac194d1c6ff7bba2c50f17d835c03ad237e3cbb5aa65e58443869f4b6b9bb3c4 ] ||
+    fail 'evidence mutation catalog bytes escaped review'
+
+for required in \
+    'status=experimental-C3VA-candidate-source-only-unwired' \
+    'execution_authority=none-until-complete-C3VA-review+merge+exact-main-validation' \
+    'trusted_header_rule=repository+controller_sha+source_sha+run_id+run_attempt+verification_receipt_sha256-must-byte-equal-validator-invocation-context;all-other-digest-domains-must-byte-equal-separately-trusted-inputs' \
+    'observer_trust_rule=domain-header-retained-observer-source-payload-SHA256-must-byte-equal-separate-RAR_EXPECTED_OBSERVER_SHA256-invocation-context;verification-receipt-observer_sha256+candidate-receipt-generator_sha256-must-project-that-same-retained-payload' \
+    'aggregate_rule=checked-unsigned-arithmetic;blob_count-equals-actual-B-records;chunk_count-equals-actual-C-records+sum-of-B-declared-chunk-counts;decoded_bytes-equals-sum-of-decoded-C-payload-lengths+sum-of-B-declared-decoded-lengths;normalized_count-equals-actual-N-records' \
+    'chunk_payload_rule=decoded-length-1..1436;every-nonfinal-chunk-exactly-1436-decoded-bytes+canonical-one-equals-padding;final-chunk-1..1436;concatenated-decoded-length+SHA256-equal-B-header' \
+    'physical_line_prevalidation=before-any-shell-read,fixed-memory-LC_ALL-C-od-byte-stream+bounded-awk-token-scan-counts-every-byte-and-rejects-physical-lines-more-than-8192-bytes;in-band-RAR_OD_COMPLETE-emitted-only-after-successful-od-read+required-by-awk-END;separate-fixed-buffer-byte-domain-scan-precedes-any-line-consumer;record-specific-256-or-2048-byte-limits-follow-after-bounded-read' \
+    'decoded_equality_rule=consume-exact-declared-field-bytes+SHA256-must-equal-field-digest;checked-field-count+framing+raw-byte-sum-must-equal-B-decoded-length;B-SHA256-covers-complete-envelope-framing+raw-bytes+terminating-LFs' \
+    'semantic_payload_rule=payload_bytes-canonical-positive-1..16777216;payload_sha256-nonzero-lowercase-SHA256;validator-consumes+hashes-exact-arbitrary-payload-and-rejects-extension' \
+    'oracle_derivation_rule=observed-event-is-exact-derived-7-line-result-record;timeout-termination+residual-proof-payloads-byte-equal-exact-case-catalog-oracle;mutation-schedule+trigger+acknowledgement+residual-source-payloads-byte-equal-exact-complete-catalog-row' \
+    'receipt_reconstruction_rule=both-verification-receipt-inputs-fields-are-retained+byte-identical+trusted-header-digest-bound;31-line-validation-occurs-only-after-both-clean-passes-parse+field-ledgers-match;validator-checks-line-order+literal+trusted-run+digest+decimal+false-domains' \
+    'receipt_digest_projection=observer_sha256:domain-header-retained-reviewed-observer-source-bytes,tool_pins_sha256:complete-canonical-8-line-tool-inventory-payload,find+sort+wc+stat+cmp+id:ordered-tool-inventory-values,candidate_receipt_sha256:fixture-inventory-retained-candidate-observation-receipt-bytes,candidate_manifest_sha256+recomputed_manifest_sha256+second_pass_sha256:canonical-manifest-payload-after-two-pass-equality,topology_sha256:complete-sorted-topology-payload;manifest_entries+manifest_bytes:recomputed-from-canonical-manifest-payload' \
+    'manifest_order_validation=canonical-manifest-payload-must-use-strict-LC_ALL-C-bytewise-ascending-path-order+valid-unique-rows;outer-valid+inner-valid+two-pass-identical-order-mutation-must-reach-specific-order-rejection' \
+    'semantic_tamper_rule=six-additional-outer-valid+inner-hash-valid+two-pass-identical-mutations-cover-observer-source,complete-tool-pins,candidate-receipt,topology,manifest+recomputed+second-pass-cross-bindings,and-canonical-manifest-order' \
+    'observed_result_derivation=disposition-primary+termination+receipt-state-from-exact-oracle;precedence-primary+termination-from-exact-oracle+receipt-state-explicitly-not-specified-by-precedence-oracle;fault-primary+termination/controller-map+receipt-state-from-exact-oracle;validator-byte-compares-derived-record-to-retained-observed-event' \
+    'blob_allocation=B000001-clean-success-pass-1+RUN;B000002-clean-success-pass-2+RUN;then-logical-case-order-with-four-consecutive-pre+stdout+stderr+post-blobs-per-runtime-row-or-one-residual-source-proof-blob-per-residual-row;last-B000709' \
+    'raw_blob_ids_rule=nonempty-canonical-B-identities-comma-separated-no-spaces;runtime-exact-four-assigned-consecutive-IDs-in-pre+stdout+stderr+post-order;residual-exact-one-assigned-ID;globals-never-listed' \
+    'base64_payload_total_max=396032120' \
+    'evidence_bound=396032120+206741*128+709*256+209*2048+8192=423112696,below-440401920' \
+    'anti_replay_rule=stateless-validator-proves-within-artifact-uniqueness+trusted-header-binding-only;global-historical-reuse-is-not-claimed;C3VB-one-shot-context+external-review-reject-reused-run-tuple-or-receipt' \
+    'local_rule=text+hash+structure-check-only-on-Mac;validator-policy-execution-GitHub-hosted-only;never-run-verifier+controller+container+compiler+helper+target+VM+emulator-on-Mac'; do
+    grep -Fqx "$required" "$contract" || fail "missing contract invariant: $required"
+done
+
+/bin/sh -n "$validator" "$policy" || fail 'validator or policy shell syntax invalid'
+grep -Fqx 'schema=rar-alpha-controller-helper-closure-verifier-evidence-policy-cases-v0' "$cases" ||
+    fail 'mutation catalog schema invalid'
+grep -Fqx 'case_count=20' "$cases" || fail 'mutation case count declaration invalid'
+[ "$(grep -Ec '^case\|EP[0-9][0-9][0-9]\|[a-zA-Z0-9-]+\|reject$' "$cases")" -eq 20 ] ||
+    fail 'mutation case rows incomplete'
+number=1
+while [ "$number" -le 20 ]; do
+    id=$(printf 'EP%03d' "$number")
+    [ "$(grep -Ec "^case\\|$id\\|" "$cases")" -eq 1 ] ||
+        fail "mutation case missing or duplicated: $id"
+    number=$((number + 1))
+done
+grep -Fqx 'blob_header=B|B000001|clean-success-pass-1|RUN|1|1|ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb' "$valid" ||
+    fail 'valid seed domain changed'
+grep -Fqx 'chunk=C|B000001|C000001|YQ==' "$valid" ||
+    fail 'valid canonical Base64 seed changed'
+grep -Fqx 'chunk=C|B000001|C000001|YQ' "$malformed" ||
+    fail 'malformed Base64 seed changed'
+[ "$(grep -Fxc 'tools/ci/test-controller-helper-closure-verifier-evidence-policy.sh|ephemeral' "$root/tools/ci/policy-test-modes.v0")" -eq 1 ] ||
+    fail 'evidence policy registry row missing or duplicated'
+grep -Fqx '/bin/sh "$root/tools/ci/test-controller-helper-closure-verifier-evidence-policy.sh"' "$root/tools/ci/run-ephemeral-policy-tests.sh" ||
+    fail 'evidence policy test is not run by ephemeral runner'
+if grep -R -Eq 'verify-controller-helper-closure-verifier-evidence|test-controller-helper-closure-verifier-evidence-policy' "$root/.github/workflows"; then
+    fail 'C3VA source is directly wired to a workflow'
+fi
+if grep -Eq 'docker|rustc|cargo|qemu|/var/run/docker.sock' "$validator" "$policy"; then
+    fail 'C3VA validator policy gained forbidden runtime authority'
+fi
+grep -qx 'rust_toolchain_closure_manifest_relative=none' "$root/tools/toolchain/host-tools.x86_64-unknown-linux-gnu-ci.lock" ||
+    fail 'CI closure lock activated'
+grep -qx 'state=blocked' "$root/tools/sprint-alpha/controller-helper-v0.env" ||
+    fail 'helper inventory activated'
+printf '%s\n' 'C3VA evidence sources are byte-bound, GitHub-policy-only, source-only, and unwired'
