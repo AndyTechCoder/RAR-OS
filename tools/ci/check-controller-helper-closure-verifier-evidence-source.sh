@@ -17,11 +17,11 @@ for file in "$contract" "$validator" "$policy" "$valid" "$malformed" "$cases"; d
     [ -f "$file" ] && [ ! -L "$file" ] && [ -s "$file" ] ||
         fail "required source unavailable: $file"
 done
-[ "$(sha_file "$contract")" = 96708288381e5af521b08dab43e08095490a2a4c40319cde924a13ed880e4ed2 ] ||
+[ "$(sha_file "$contract")" = 74664e41d883d3cd3dd16d1eb0f0fc439ae8fa6f486b2259e62b0200fcd6c73f ] ||
     fail 'evidence contract bytes escaped review'
-[ "$(sha_file "$validator")" = 01549053b6d7a67bd3038099d0f6b06830e7e919eb131f92e5de7b3536007646 ] ||
+[ "$(sha_file "$validator")" = 7a6a9410c02c5b5bc28f2d77c11dfb6009d584e3c89f357d653efdcce1d9397c ] ||
     fail 'evidence validator bytes escaped review'
-[ "$(sha_file "$policy")" = 52ad460aaac59cd74d963d6df2d59c19535dcd0bb03b073f3b30fca54261d0c9 ] ||
+[ "$(sha_file "$policy")" = 686898e47a605663d86426444f3e026e9e899c6fc2647646d1ec56de13d96640 ] ||
     fail 'evidence policy bytes escaped review'
 [ "$(sha_file "$valid")" = cc5bda22d4bba1eeb7e53d9604fcef23b0eabfc7402216826dcd124d89c6072c ] ||
     fail 'valid seed bytes escaped review'
@@ -37,6 +37,7 @@ for required in \
     'observer_trust_rule=domain-header-retained-observer-source-payload-SHA256-must-byte-equal-separate-RAR_EXPECTED_OBSERVER_SHA256-invocation-context;verification-receipt-observer_sha256+candidate-receipt-generator_sha256-must-project-that-same-retained-payload' \
     'aggregate_rule=checked-unsigned-arithmetic;blob_count-equals-actual-B-records;chunk_count-equals-actual-C-records+sum-of-B-declared-chunk-counts;decoded_bytes-equals-sum-of-decoded-C-payload-lengths+sum-of-B-declared-decoded-lengths;normalized_count-equals-actual-N-records' \
     'chunk_payload_rule=decoded-length-1..1436;every-nonfinal-chunk-exactly-1436-decoded-bytes+canonical-one-equals-padding;final-chunk-1..1436;concatenated-decoded-length+SHA256-equal-B-header' \
+    'physical_line_prevalidation=before-any-shell-read,fixed-memory-LC_ALL-C-wc-longest-line-scan-rejects-more-than-8192-bytes;record-specific-256-or-2048-byte-limits-follow-after-bounded-read' \
     'decoded_equality_rule=consume-exact-declared-field-bytes+SHA256-must-equal-field-digest;checked-field-count+framing+raw-byte-sum-must-equal-B-decoded-length;B-SHA256-covers-complete-envelope-framing+raw-bytes+terminating-LFs' \
     'semantic_payload_rule=payload_bytes-canonical-positive-1..16777216;payload_sha256-nonzero-lowercase-SHA256;validator-consumes+hashes-exact-arbitrary-payload-and-rejects-extension' \
     'oracle_derivation_rule=observed-event-is-exact-derived-7-line-result-record;timeout-termination+residual-proof-payloads-byte-equal-exact-case-catalog-oracle;mutation-schedule+trigger+acknowledgement+residual-source-payloads-byte-equal-exact-complete-catalog-row' \
