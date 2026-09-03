@@ -511,7 +511,6 @@ rewrite_clean_semantic_blob() {
     } > "$replacement"
     replacement_sha=$(sha_file "$replacement")
     /usr/bin/awk -v nn="$nn" -v replacement="$replacement" -v replacement_sha="$replacement_sha" '
-        $0=="field." nn ".sha256=" substr($0,20) { }
         $0 ~ ("^field\\." nn "\\.sha256=") { print "field." nn ".sha256=" replacement_sha; next }
         $0=="field." nn ".data" {
             print
@@ -520,7 +519,7 @@ rewrite_clean_semantic_blob() {
             skip=1
             next
         }
-        skip && $0 ~ "^field\\.[0-9][0-9]\\.name=" { skip=0 }
+        skip && $0 ~ "^field\\.[0-9][0-9]\\.name=" { skip=0; print "" }
         skip { next }
         { print }
     ' "$original" > "$changed"
