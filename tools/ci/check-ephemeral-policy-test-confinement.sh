@@ -41,6 +41,13 @@ printf '%s\n' "$ephemeral" | while IFS= read -r test; do
             /usr/bin/grep -Ev '^(/usr/bin/printf|/usr/bin/sed|        print ")' || exit 1
         ! /usr/bin/sed -e 's|/dev/null||g' -e 's|/var/run/docker.sock||g' "$test" |
             /usr/bin/grep -Eq '/(dev|proc|sys|run)/' || exit 1
+    elif [ "$test" = tools/ci/test-controller-helper-closure-verifier-evidence-policy.sh ]; then
+        [ "$(/usr/bin/grep -Fo '/dev/zero' "$test" | /usr/bin/wc -l | /usr/bin/tr -d ' ')" -eq 3 ] || exit 1
+        [ "$(/usr/bin/grep -Fxc "/bin/dd if=/dev/zero bs=1048576 count=420 status=none | /usr/bin/tr '\\000' A > \"\$near_max_line\"" "$test")" -eq 1 ] || exit 1
+        [ "$(/usr/bin/grep -Fxc '    /bin/dd if=/dev/zero bs=1048576 count=419 status=none' "$test")" -eq 1 ] || exit 1
+        [ "$(/usr/bin/grep -Fxc '    /bin/dd if=/dev/zero bs=1048575 count=1 status=none' "$test")" -eq 1 ] || exit 1
+        ! /usr/bin/sed -e 's|/dev/null||g' -e 's|/dev/zero||g' "$test" |
+            /usr/bin/grep -Eq '/(dev|proc|sys|run)/' || exit 1
     else
         ! /usr/bin/sed 's|/dev/null||g' "$test" | /usr/bin/grep -Eq '/(dev|proc|sys|run)/' || exit 1
     fi
