@@ -47,7 +47,7 @@ add_bounded() {
     printf '%s\n' "$next"
 }
 expect_env() {
-    eval "value=${$1-}"
+    eval "value=\${$1-}"
     [ -n "$value" ] || fail "trusted expectation missing: $1"
 }
 
@@ -83,6 +83,7 @@ for name in \
     RAR_EXPECTED_RUN_ATTEMPT \
     RAR_EXPECTED_VERIFICATION_RECEIPT_SHA256 \
     RAR_EXPECTED_SUBJECT_SHA256 \
+    RAR_EXPECTED_OBSERVER_SHA256 \
     RAR_EXPECTED_VERIFICATION_CONTRACT_SHA256 \
     RAR_EXPECTED_VALIDATION_SHA256 \
     RAR_EXPECTED_DISPOSITIONS_SHA256 \
@@ -108,6 +109,7 @@ canonical_positive "$RAR_EXPECTED_RUN_ATTEMPT" || fail 'run attempt malformed'
 for value in \
     "$RAR_EXPECTED_VERIFICATION_RECEIPT_SHA256" \
     "$RAR_EXPECTED_SUBJECT_SHA256" \
+    "$RAR_EXPECTED_OBSERVER_SHA256" \
     "$RAR_EXPECTED_VERIFICATION_CONTRACT_SHA256" \
     "$RAR_EXPECTED_VALIDATION_SHA256" \
     "$RAR_EXPECTED_DISPOSITIONS_SHA256" \
@@ -358,7 +360,7 @@ validate_projection() {
                 receipt_tool_pins=$p_sha
                 [ "$receipt_tool_pins" = "$RAR_EXPECTED_TOOL_PINS_SHA256" ] || fail 'tool inventory is not trusted-header bound'
                 ;;
-            domain-header) receipt_observer=$p_sha ;;
+            domain-header) receipt_observer=$p_sha; [ "$receipt_observer" = "$RAR_EXPECTED_OBSERVER_SHA256" ] || fail 'observer source is not independently trusted' ;;
             fixture-inventory)
                 receipt_candidate=$p_sha
                 candidate_receipt_seen=$((candidate_receipt_seen + 1))
