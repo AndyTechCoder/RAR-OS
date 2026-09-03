@@ -115,6 +115,7 @@ printf '%s\n' 'a|f|1|2|1|1|644|0|0' > "$semantic"
 topology_sha=$(sha_file "$semantic")
 second_pass_sha=$manifest_sha
 export RAR_EXPECTED_TOOL_PINS_SHA256=$tool_inventory_sha
+export RAR_EXPECTED_OBSERVER_SHA256=$observer_sha
 
 {
     printf '%s\n' \
@@ -539,7 +540,7 @@ rewrite_clean_semantic_blob() {
             skip=1
             next
         }
-        skip && $0 ~ "^field\\.[0-9][0-9]\\.name=" { skip=0; print "" }
+        skip && $0 ~ "^field\\.[0-9][0-9]\\.name=" { skip=0; print ""; print; next }
         skip { next }
         { print }
     ' "$original" > "$changed"
@@ -583,9 +584,19 @@ for semantic_mode in observer tool-pins candidate-receipt topology manifest; do
     rewrite_clean_semantic_blob B000002 clean-success-pass-2 "$semantic_mode" "$first" "$mutated"
     /bin/rm -rf -- "$validator_scratch"
     /bin/mkdir "$validator_scratch"
-    if /bin/sh "$validator" "$mutated" "$cases" "$validator_scratch" >/dev/null 2>&1; then
+    case "$semantic_mode" in
+        observer) semantic_expected_error="observer source is not independently trusted" ;;
+        tool-pins) semantic_expected_error="tool inventory is not trusted-header bound" ;;
+        candidate-receipt) semantic_expected_error="candidate receipt value invalid: generator_sha256" ;;
+        topology) semantic_expected_error="verification receipt value invalid: topology_sha256" ;;
+        manifest) semantic_expected_error="candidate receipt value invalid: manifest_sha256" ;;
+    esac
+    semantic_error=$work/semantic-$semantic_mode.err
+    if /bin/sh "$validator" "$mutated" "$cases" "$validator_scratch" >/dev/null 2>"$semantic_error"; then
         fail "semantic receipt projection mutation accepted: $semantic_mode"
     fi
+    /usr/bin/grep -Fq "$semantic_expected_error" "$semantic_error" ||
+        fail "semantic mutation did not reach intended rejection: $semantic_mode"
     semantic_executed=$((semantic_executed + 1))
 done
 [ "$semantic_executed" -eq 5 ] || fail 'semantic receipt mutation count mismatch'
