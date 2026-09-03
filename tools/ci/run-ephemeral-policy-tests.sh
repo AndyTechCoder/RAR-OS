@@ -6,7 +6,7 @@ export LC_ALL LANG
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 [ "$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")" = /tmp ] || exit 1
-ulimit -f 131072
+ulimit -f 860160
 
 /bin/sh "$root/tools/ci/test-accepted-evidence-v0-policy.sh"
 /bin/sh "$root/tools/ci/test-alpha-crypto-reference-policy.sh"
