@@ -90,10 +90,10 @@ printf '%s\n' \
 tool_inventory_sha=$(sha_file "$semantic")
 printf '%s\n' 'reviewed-observer-source-bytes-v0' > "$semantic"
 observer_sha=$(sha_file "$semantic")
-printf '%s  %s\n' "$digest" a > "$semantic"
+printf '%s  %s\n%s  %s\n' "$digest" a "$digest" b > "$semantic"
 manifest_sha=$(sha_file "$semantic")
 manifest_bytes=$(size_file "$semantic")
-manifest_entries=1
+manifest_entries=2
 write_candidate_receipt() {
     candidate_target=$1
     printf '%s\n' \
@@ -142,7 +142,7 @@ export RAR_EXPECTED_OBSERVER_SHA256=$observer_sha
         "candidate_receipt_sha256=$fixture_inventory_sha" \
         "candidate_manifest_sha256=$manifest_sha" \
         "recomputed_manifest_sha256=$manifest_sha" \
-        'manifest_entries=1' \
+        'manifest_entries=2' \
         "manifest_bytes=$manifest_bytes" \
         "topology_sha256=$topology_sha" \
         "second_pass_sha256=$second_pass_sha" \
@@ -285,7 +285,7 @@ materialize_field() {
                 'status=reviewed-for-candidate-verification-only' > "$payload"
             ;;
         fixture-inventory) write_candidate_receipt "$payload" ;;
-        canonical-manifest) printf '%s  %s\n' "$digest" a > "$payload" ;;
+        canonical-manifest) printf '%s  %s\n%s  %s\n' "$digest" a "$digest" b > "$payload" ;;
         topology) printf '%s\n' 'a|f|1|2|1|1|644|0|0' > "$payload" ;;
         observed-event) write_observed_result ;;
         timeout-termination|residual-proof) printf '%s' "$oracle" > "$payload" ;;
@@ -523,6 +523,7 @@ rewrite_clean_semantic_blob() {
             ;;
         topology) nn=04; field_name=topology; observation=complete-topology; printf '%s\n' 'b|f|1|2|1|1|644|0|0' > "$semantic_payload_file" ;;
         manifest) nn=05; field_name=canonical-manifest; observation=canonical-manifest; printf '%s  %s\n' "4444444444444444444444444444444444444444444444444444444444444444" a > "$semantic_payload_file" ;;
+        manifest-order) nn=05; field_name=canonical-manifest; observation=canonical-manifest; printf '%s  %s\n%s  %s\n' "$digest" b "$digest" a > "$semantic_payload_file" ;;
         *) fail "unknown semantic rewrite $mode" ;;
     esac
     payload_bytes=$(size_file "$semantic_payload_file")
@@ -578,7 +579,7 @@ while IFS='|' read -r marker id class expected; do
 done < "$policy_cases"
 [ "$executed" -eq 20 ] || fail 'not all evidence policy mutations executed'
 semantic_executed=0
-for semantic_mode in observer tool-pins candidate-receipt topology manifest; do
+for semantic_mode in observer tool-pins candidate-receipt topology manifest manifest-order; do
     first=$work/semantic-first.v0
     mutated=$work/semantic-$semantic_mode.v0
     rewrite_clean_semantic_blob B000001 clean-success-pass-1 "$semantic_mode" "$valid" "$first"
@@ -591,6 +592,7 @@ for semantic_mode in observer tool-pins candidate-receipt topology manifest; do
         candidate-receipt) semantic_expected_error="candidate receipt value invalid: generator_sha256" ;;
         topology) semantic_expected_error="verification receipt value invalid: topology_sha256" ;;
         manifest) semantic_expected_error="candidate receipt value invalid: manifest_sha256" ;;
+        manifest-order) semantic_expected_error="canonical manifest payload order invalid" ;;
     esac
     semantic_error=$work/semantic-$semantic_mode.err
     if /bin/sh "$validator" "$mutated" "$cases" "$validator_scratch" >/dev/null 2>"$semantic_error"; then
@@ -600,5 +602,5 @@ for semantic_mode in observer tool-pins candidate-receipt topology manifest; do
         fail "semantic mutation did not reach intended rejection: $semantic_mode"
     semantic_executed=$((semantic_executed + 1))
 done
-[ "$semantic_executed" -eq 5 ] || fail 'semantic receipt mutation count mismatch'
-printf '%s\n' 'C3VA evidence policy tests passed: complete=1 rejected=20 semantic-rejected=5 runtime=none'
+[ "$semantic_executed" -eq 6 ] || fail 'semantic receipt mutation count mismatch'
+printf '%s\n' 'C3VA evidence policy tests passed: complete=1 rejected=20 semantic-rejected=6 runtime=none'
