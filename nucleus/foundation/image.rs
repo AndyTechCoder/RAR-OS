@@ -46,7 +46,9 @@ fn build(efi:&[u8])->Vec<u8> {
 }
 fn main() {
     let args:Vec<_>=env::args().collect(); assert_eq!(args.len(),3);
-    let efi=fs::read(&args[1]).unwrap(); let image=build(&efi);
+    let efi=fs::read(&args[1]).unwrap();
+    diagnostics(&args[1],&efi);
+    let image=build(&efi);
     fs::write(&args[2],image).unwrap();
 }
 #[cfg(test)]
@@ -62,4 +64,34 @@ mod tests {
         assert!((4085..65525).contains(&((32768-97)/4)));
     }
     #[test] #[should_panic] fn invalid_executable_rejected() { build(&[0;1024]); }
+}
+
+fn diagnostics(name:&str, efi:&[u8]) {
+    use std::io::Write;
+    let read=|i:usize|u32::from_le_bytes(efi[i..i+4].try_into().unwrap()) as usize;
+    let pe=read(60); let mut log=fs::OpenOptions::new().append(true).open("/tmp/model-tests.log").unwrap();
+    writeln!(log,"PE-DIAGNOSTIC {name} bytes={} header={}",efi.len(),
+        efi[..256.min(efi.len())].iter().map(|b|format!("{b:02x}")).collect::<String>()).unwrap();
+    let n=u16::from_le_bytes(efi[pe+6..pe+8].try_into().unwrap()) as usize;
+    let optional=u16::from_le_bytes(efi[pe+20..pe+22].try_into().unwrap()) as usize;
+    let debug_rva=read(pe+24+112+48);
+    for i in 0..n {
+        let s=pe+24+optional+i*40;
+        let rva=read(s+12);let raw=read(s+20);let length=read(s+16);
+        if debug_rva>=rva && debug_rva+28<=rva+length {
+            let d=raw+debug_rva-rva;
+            let size=read(d+16).min(256);let pointer=read(d+24);
+            if pointer+size<=efi.len() {
+                writeln!(log,"PE-DEBUG {} {}",efi[d..d+28].iter().map(|b|format!("{b:02x}")).collect::<String>(),
+                    efi[pointer..pointer+size].iter().map(|b|format!("{b:02x}")).collect::<String>()).unwrap();
+            }
+        }
+    }
+    write!(log,"PE-BLOCKS").unwrap();
+    for block in efi.chunks(4096) {
+        let mut h=0xcbf29ce484222325u64;
+        for &b in block {h=(h^b as u64).wrapping_mul(0x100000001b3);}
+        write!(log," {h:016x}").unwrap();
+    }
+    writeln!(log).unwrap();
 }
