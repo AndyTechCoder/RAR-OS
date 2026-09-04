@@ -24,6 +24,11 @@ POLICY = dict(network="none", readonly=True, user="65532:65532",
               privilege="no-new-privileges", guest_network=False,
               passthrough=False, credentials=False, raw_disk=False)
 
+def source_kind(base_has_kernel, source_has_kernel):
+    if base_has_kernel and not source_has_kernel:
+        raise ValueError("proposal removes the existing Foundation kernel")
+    return "target" if source_has_kernel else "controller-only"
+
 def digest(data):
     return hashlib.sha256(data).hexdigest()
 
@@ -110,6 +115,15 @@ def negative_tests():
         else:
             raise AssertionError("invalid transfer accepted")
     transcript("normal", ("\n".join(READY) + "\n").encode())
+    assert source_kind(False, False) == "controller-only"
+    assert source_kind(False, True) == "target"
+    assert source_kind(True, True) == "target"
+    try:
+        source_kind(True, False)
+    except ValueError:
+        rejected += 1
+    else:
+        raise AssertionError("kernel removal incorrectly classified as infrastructure")
     return rejected
 
 def run(argv, timeout, limit, allowed=(0,), log_path=None):
@@ -176,6 +190,14 @@ def main():
     def save():
         (evidence / "manifest.json").write_text(json.dumps(summary, indent=2) + "\n")
     save()
+    kind = source_kind((controller / "nucleus/foundation/main.rs").is_file(),
+                       (source / "nucleus/foundation/main.rs").is_file())
+    if kind == "controller-only":
+        summary["status"] = "controller-only"
+        summary["target_execution"] = "not-applicable: base and proposal contain no kernel"
+        save()
+        print("Controller-only validation; no target implementation or boot claim.", flush=True)
+        return
     context = controller / "tools/rar-lab/foundation"
     containers = []
     try:

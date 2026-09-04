@@ -64,3 +64,10 @@ Each launch copies the pinned OVMF variable-store template into private bounded
 container tmpfs. The code pflash stays read-only; only this disposable variable
 file is writable to firmware. Both templates are included in the recorded tool
 hashes. Nothing is persisted across profiles or exposed to the owner device.
+
+Controller-only bootstrap proposals are identified only when neither the trusted
+base nor the proposed source contains a Foundation kernel. Their evidence says
+controller-only and makes no build/boot claim. A proposal removing an existing
+kernel is rejected. Any proposal containing the kernel must run the complete
+reproducibility and boot gate. This avoids reporting a missing-source compiler
+failure as a kernel failure while the first controller is being established.
