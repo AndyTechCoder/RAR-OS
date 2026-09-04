@@ -59,6 +59,8 @@ docs/adr/0027-alpha-bootstrap-retirement-and-dma-closure.md
 docs/adr/0028-alpha-artifact-and-service-identities.md
 docs/adr/0029-alpha-state-ticket-lifecycle.md
 docs/adr/0031-alpha-compact-pci-bdf-encoding.md
+docs/adr/0032-fast-track-alpha.md
+docs/tasks/fast-track-alpha-milestone-1.md
 docs/proposals/alpha-owner-choice-brief.md
 docs/proposals/0022-alpha-graphics-input-authority.md
 docs/proposals/0023-alpha-boot-determinism-and-entry-state.md
@@ -499,6 +501,9 @@ grep -Fqx '`I approve ADR 0027 Alternative B, ADR 0028 Alternative A, and ADR 00
 [ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
     docs/adr/0031-alpha-compact-pci-bdf-encoding.md 0031 \
     docs/approval-record.md 'Alternative A')" = accepted ] || fail "ADR 0031 canonical decision is not accepted"
+[ "$(/bin/sh tools/ci/classify-proposed-adr.sh \
+    docs/adr/0032-fast-track-alpha.md 0032 \
+    docs/approval-record.md 'Alternative A')" = accepted ] || fail "ADR 0032 canonical decision is not accepted"
 grep -qx 'Status: Historical proposal — superseded on 2026-08-31' \
     docs/proposals/0031-alpha-compact-pci-bdf-encoding.md || fail "ADR 0031 proposal regained non-historical status"
 grep -qx 'Decision: Undecided at proposal publication' \
@@ -671,7 +676,7 @@ duplicates=$(printf '%s\n' "$index_targets" | sort | uniq -d)
 
 adr_files=$(sed -n 's/^- \[ADR [^]]*\](\(adr\/[^)]*\.md\))$/docs\/\1/p' docs/README.md)
 adr_count=$(printf '%s\n' "$adr_files" | awk 'NF { count++ } END { print count + 0 }')
-[ "$adr_count" -eq 30 ] || fail "expected exactly 30 indexed ADRs"
+[ "$adr_count" -eq 31 ] || fail "expected exactly 31 indexed ADRs"
 
 approval_date=$(sed -n 's/^Date: //p' docs/approval-record.md)
 case "$approval_date" in
@@ -745,6 +750,7 @@ printf '%s\n' "$adr_files" | while IFS= read -r adr; do
         docs/adr/0022-* | docs/adr/0023-* | docs/adr/0024-* | docs/adr/0025-* | docs/adr/0026-*) adr_approval_date=2026-08-29 ;;
         docs/adr/0027-* | docs/adr/0028-* | docs/adr/0029-*) adr_approval_date=2026-08-30 ;;
         docs/adr/0031-*) adr_approval_date=2026-08-31 ;;
+        docs/adr/0032-*) adr_approval_date=2026-09-04 ;;
         *) adr_approval_date=$approval_date ;;
     esac
     grep -qx "Status: Accepted — $adr_approval_date" "$adr" || fail "ADR status mismatch: $adr"
@@ -946,7 +952,7 @@ grep -Fqx 'This erratum creates no new workflow, trigger, job, container, verifi
 grep -Fqx 'Owner authorization for this bounded recovery is recorded on 2026-09-03 under the delegated safe-direction authority after exact-main runs proved that GitHub concurrently schedules two released images behind the `ubuntu-24.04` label. Run `33806231004` used image `20260831.293.1`; run `33815290752` used image `20260823.283.1`. Retrying until one image happens to pass is prohibited and is not acceptance evidence.' docs/tasks/sprint-alpha-controller-helper-c3v-verifier.md || fail "ADR 0024 C3VA runner-rollout evidence is not exact"
 grep -Fqx 'This erratum preserves the existing GitHub-hosted, external-attested, noncertifying Class-B orchestration boundary and the immutable OCI validation root. It authorizes a closed rollout allowlist containing exactly `20260823.283.1` and `20260831.293.1`; empty, malformed, or any version outside that exact set fails closed, as do reordered or duplicated inventory identities. The runtime boundary enforces exact `ImageOS=ubuntu24`, `RUNNER_OS=Linux`, `RUNNER_ARCH=X64`, and membership in that two-value image-version set. Runner binary and Hosted Compute Agent identities are setup-log attestations retained in inventory and review evidence; repository code cannot read them independently and must not claim to prove them at runtime.' docs/tasks/sprint-alpha-controller-helper-c3v-verifier.md || fail "ADR 0024 C3VA runner-rollout boundary is not closed"
 grep -Fqx 'No directory or descriptive ownership is granted.' docs/tasks/sprint-alpha-controller-helper-c3v-verifier.md >/dev/null || fail "ADR 0024 C3VA runner-rollout ownership is not literal"
-grep -Fqx 'Historical observer evidence fixtures remain byte-unchanged.' docs/tasks/sprint-alpha-controller-helper-c3v-verifier.md || fail "ADR 0024 C3VA runner-rollout rewrites historical evidence"
+grep -Fqx 'No directory or descriptive ownership is granted. The implementation must positively exercise both allowed versions and reject empty, malformed, and representative versions outside the exact two-value set; bind exactly two complete unique inventory rows, exact allowlist cardinality and order, the recomputed Class-B digest, and the unchanged OCI digest, CI lock, checkout/upload pins, and noncertifying status. Historical observer evidence fixtures remain byte-unchanged.' docs/tasks/sprint-alpha-controller-helper-c3v-verifier.md || fail "ADR 0024 C3VA runner-rollout rewrites historical evidence"
 grep -Fqx 'For this seven-path recovery only, this erratum supersedes the permanent inventory-change denial solely for `tools/toolchain/class-b-host-tools.v1`, `tools/toolchain/dependencies.r0`, and `tools/toolchain/host-tools.manifest`. Every other permanent denial remains effective.' docs/tasks/sprint-alpha-controller-helper-c3v-verifier.md || fail "ADR 0024 C3VA runner-rollout inventory supersession is not exact"
 grep -Fqx 'This erratum creates no new workflow, trigger, job, network access, credential, self-hosted runner, container authority, verifier execution, target execution, compiler use, device write, Mac/SSD execution, public format, acceptance, signing, release, or readiness authority. The packet-only amendment may retain only the known singleton runner mismatch. The seven-path implementation must follow with no unrelated main work and must pass independent exact-head review plus a distinct exact-main Specifications run in which primary validation and the complete mutation suite both execute and pass.' docs/tasks/sprint-alpha-controller-helper-c3v-verifier.md || fail "ADR 0024 C3VA runner-rollout recovery expanded authority"
 grep -Fq 'Because every chunk is padded independently, the Base64 payload total is `sum_i(4*ceil(chunk_i_decoded_bytes/3))` and the exact accepted payload cap is 396032120 bytes, including independent final-chunk padding at all 709 blob boundaries, not `4*ceil(total_decoded_bytes/3)`.' docs/tasks/sprint-alpha-controller-helper-c3v-verifier.md || fail "ADR 0024 C3VA lost independent-padding bound"
@@ -1089,7 +1095,7 @@ grep -Fqx '          [ "$RAR_EXPECTED_SOURCE_REPOSITORY" = "$RAR_CANONICAL_REPOS
 [ "$(grep -Fxc '          path: controller' .github/workflows/specifications.yml)" -eq 1 ] || fail "Specifications trusted controller checkout is missing or ambiguous"
 [ "$(grep -Fxc '          path: primary-source' .github/workflows/specifications.yml)" -eq 1 ] || fail "Specifications primary source checkout is missing or ambiguous"
 [ "$(grep -Fxc '          path: mutation-source' .github/workflows/specifications.yml)" -eq 1 ] || fail "Specifications mutation source checkout is missing or ambiguous"
-[ "$(grep -Fxc "        if: steps.authority.outputs.execution == 'full'" .github/workflows/specifications.yml)" -eq 2 ] || fail "Specifications executable phases are not authority-gated"
+[ "$(grep -Fxc "        if: steps.authority.outputs.execution == 'full' || steps.authority.outputs.execution == 'isolated-proposal'" .github/workflows/specifications.yml)" -eq 2 ] || fail "Specifications executable phases are not authority-gated"
 grep -Fq 'controller/tools/ci/check-specifications-authority.sh' .github/workflows/specifications.yml || fail "Specifications workflow does not invoke the trusted authority checker"
 grep -Fqx '        GIT_CONFIG_NOSYSTEM=1 \' tools/ci/check-specifications-authority.sh || fail "Specifications authority checker permits system Git configuration"
 grep -Fqx '        GIT_OPTIONAL_LOCKS=0 \' tools/ci/check-specifications-authority.sh || fail "Specifications authority checker permits optional Git writes"
@@ -1098,7 +1104,7 @@ grep -Fqx '    tools \' tools/ci/check-specifications-authority.sh || fail "Spec
 grep -Fqx '    tests \' tools/ci/check-specifications-authority.sh || fail "Specifications authority closure omits executable test harnesses"
 grep -Fq "\$1 !~ /^100(644|755)\$/" tools/ci/check-specifications-authority.sh || fail "Specifications authority checker permits symlink or submodule authority"
 grep -Fqx "    /usr/bin/printf '%s\\n' 'execution=full' >> \"\$output\"" tools/ci/check-specifications-authority.sh || fail "Specifications authority checker cannot enable exact-closure execution"
-grep -Fqx "    /usr/bin/printf '%s\\n' 'execution=deferred' >> \"\$output\"" tools/ci/check-specifications-authority.sh || fail "Specifications authority checker cannot defer controller changes"
+grep -Fqx "    /usr/bin/printf '%s\\n' 'execution=isolated-proposal' >> \"\$output\"" tools/ci/check-specifications-authority.sh || fail "Specifications authority checker cannot isolate controller proposals"
 grep -Fq 'run_event=push' tools/ci/check-remote-sprint-preflight.sh || fail "remote preflight does not prefer resulting-main validation"
 grep -Fq 'Bind executable validation authority to trusted controller' tools/ci/check-remote-sprint-preflight.sh || fail "remote preflight omits authority-step evidence"
 grep -Fq 'Validate in pinned read-only container on attested runner' tools/ci/check-remote-sprint-preflight.sh || fail "remote preflight omits full validation evidence"

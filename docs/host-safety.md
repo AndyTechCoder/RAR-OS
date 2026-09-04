@@ -1,5 +1,20 @@
 # Host Mac Safety Policy
 
+## Current session confinement
+
+The owner requires GitHub-only repository mutation for Fast-Track Alpha. Agents
+must not create, change, move, or delete any file on the Mac or attached SSD,
+including Git metadata, build caches and artifacts. They must not build, link,
+package, mount, boot or execute RAR OS there. Read-only inspection is allowed
+only when needed; GitHub is authoritative.
+
+Cloud target execution is permitted only through the certified disposable
+profile and RAR Lab wrapper defined by the active milestone contract. The
+profile has no credentials, guest networking, device passthrough, raw disks,
+host filesystem sharing, elevation, or persistence. Proposal validators may run
+only inside the fixed trusted-controller container boundary described by ADR
+0032; proposal code never controls the outer workflow or receives authority.
+
 Status: Mandatory and effective immediately
 
 ## Absolute invariant

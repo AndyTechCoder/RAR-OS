@@ -226,3 +226,24 @@ ADR 0031 approval: approved
 ADR 0031 approver: Andy / RAR project owner
 ADR 0031 date: 2026-08-31
 ADR 0031 decision: Alternative A
+
+## Fast-Track Alpha approval
+
+Status: Approved
+
+On 2026-09-04, the owner approved replacing the slow Alpha authorization-chain
+process with ADR 0032 Alternative A and the five milestone model. This changes
+delivery governance, not the constitution, trust boundaries, dependency policy,
+signing, isolation, recovery, rollback, persistent-data promises, tier meanings,
+public formats, or long-term product direction.
+
+The owner also approved the one-time reviewed transition merge required to
+replace the self-referential controller rule. After that merge, proposal
+validation executes only inside the fixed credential-free, networkless,
+unprivileged, resource-bounded trusted-controller container. Exact-main
+validation remains required before target implementation merges.
+
+ADR 0032 approval: approved
+ADR 0032 approver: Andy / RAR project owner
+ADR 0032 date: 2026-09-04
+ADR 0032 decision: Alternative A

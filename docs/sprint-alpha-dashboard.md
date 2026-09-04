@@ -1,5 +1,16 @@
 # Sprint Alpha Dashboard
 
+## Active Fast-Track position — 2026-09-04
+
+- Current milestone: 1 of 5, Foundation.
+- Governance transition: in progress.
+- Target implementation: not started.
+- Certified cloud boot evidence: none.
+- Milestone 1 completion: 0%.
+
+Historic A–G status below is retained as evidence and is not the active
+execution sequence.
+
 Status: Explanatory only — not authority or completion evidence
 
 This is the short orientation view. The approved Sprint Alpha contract, active

@@ -1,5 +1,15 @@
 # V1 Alpha Codex Execution Runbook
 
+## Active Fast-Track Alpha execution
+
+ADR 0032 supersedes the staged prompt sequence below for new Alpha work. The
+historic sequence remains a record. Execute the five milestones in
+`release-roadmap.md`, beginning with
+`tasks/fast-track-alpha-milestone-1.md`. Use continuous bounded checks, a small
+number of vertical pull requests, one serious integrated review near milestone
+completion, and consolidated remediation. Passing specifications alone is not
+OS functionality; runtime claims require retained certified-cloud evidence.
+
 Status: Approved for execution; begins after repository publication and GitHub authentication
 
 ## Sprint Alpha 0.1 execution overlay

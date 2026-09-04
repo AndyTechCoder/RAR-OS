@@ -1,5 +1,22 @@
 # Release Roadmap
 
+## Active Fast-Track Alpha overlay
+
+ADR 0032 replaces the former authorization-chain process with five evidence
+milestones while preserving the technical roadmap below:
+
+1. Foundation: boot, memory, allocator, diagnostics, exceptions and timer.
+2. Platform: processes, isolation, storage, input, framebuffer and drivers.
+3. Usable Alpha: compositor, shell, launcher, settings, files and terminal.
+4. Modern architecture: signed layers, atomic updates, rollback, recovery and
+   separated user data.
+5. Expansion: networking, SDK, applications, AI/agent interfaces and additional
+   hardware profiles.
+
+The active contract is
+[`Fast-Track Alpha Milestone 1`](tasks/fast-track-alpha-milestone-1.md).
+Later milestones do not become current merely because interfaces are prepared.
+
 Status: Gate 0 approved direction — 2026-07-16
 Strategy: plan the complete architecture, deliver verified releases in sequence
 

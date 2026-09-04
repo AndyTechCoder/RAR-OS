@@ -1,5 +1,14 @@
 # Implementation Handoff
 
+## Active Fast-Track Alpha handoff
+
+ADR 0032 is the active process authority. Work proceeds by evidence milestones,
+not prompt numbers or nested authorization packets. The current handoff is
+[`Fast-Track Alpha Milestone 1`](tasks/fast-track-alpha-milestone-1.md).
+Keep public contracts replaceable, update tests and documentation with behavior,
+and retain all security, signing, isolation, recovery, rollback, dependency and
+data-separation requirements.
+
 Status: Gate 0 approved direction — 2026-07-16
 
 ## Repository structure
