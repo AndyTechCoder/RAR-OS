@@ -11,6 +11,7 @@ case "$root" in '/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/'*) budget_c
 ulimit -f 131072
 
 tools/ci/check-specs.sh
+/bin/sh tools/rar-lab/foundation/check.sh
 /bin/sh -n \
     tools/ci/check-sprint-static.sh \
     tools/ci/check-local-sprint-preflight.sh \
