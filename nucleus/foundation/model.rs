@@ -240,3 +240,22 @@ mod handoff_tests {
         assert!(validate_table(&b,0,24).is_err());
     }
 }
+
+#[cfg(test)]
+#[path = "image.rs"]
+mod image_tests;
+
+pub fn validate_virtual_page(address:u64)->Result<(),Error> {
+    if address==0 || address%PAGE!=0 || !canonical(address) {Err(Error::Invalid)} else {Ok(())}
+}
+#[cfg(test)]
+mod virtual_page_tests {
+    use super::*;
+    #[test] fn rejects_noncanonical_alias_before_page_walk() {
+        assert_eq!(validate_virtual_page(0xffff_8000_0010_0000),Ok(()));
+        assert_eq!(validate_virtual_page(0x0000_8000_0010_0000),Err(Error::Invalid));
+        assert_eq!(validate_virtual_page(0),Err(Error::Invalid));
+        assert_eq!(validate_virtual_page(0x1001),Err(Error::Invalid));
+        assert_eq!(validate_virtual_page(0x0000_7fff_ffff_f000),Ok(()));
+    }
+}

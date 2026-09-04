@@ -1,0 +1,34 @@
+{
+  "schema": "rar-foundation-dependencies-v1",
+  "target": "x86_64-unknown-uefi",
+  "rar_code": "nucleus/foundation/*.rs",
+  "external_compiler_support": [
+    {
+      "name": "core",
+      "version": "1.95.0",
+      "provenance": "Rust UEFI target component",
+      "sha256": "4cc55629480aa8ab5b39eb6b7458433b48461d6626fdea0330fb88e23af818ea",
+      "license": "MIT OR Apache-2.0",
+      "authority": "ADR 0003 no_std Rust bootstrap"
+    },
+    {
+      "name": "compiler_builtins",
+      "version": "bundled with Rust 1.95.0",
+      "provenance": "same hash-pinned Rust target component",
+      "license": "MIT OR Apache-2.0 WITH LLVM-exception",
+      "authority": "ADR 0003 compiler/LLVM bootstrap"
+    }
+  ],
+  "third_party_target_crates": [],
+  "target_std": false,
+  "target_alloc": false,
+  "external_boot_library": false,
+  "host_tools": {
+    "compiler": "Rust 1.95.0",
+    "linker": "bundled rust-lld",
+    "image_generator": "RAR-owned Rust host program",
+    "emulator": "QEMU 1:7.2+dfsg-7+deb12u18+b3",
+    "platform_firmware": "OVMF 2022.11-6+deb12u2"
+  },
+  "limitations": "Compiler support is external and is not claimed as RAR-authored. Production native runtime replacement belongs to later milestones."
+}

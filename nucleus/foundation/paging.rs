@@ -54,7 +54,7 @@ impl Tables {
     }
     /// Caller has stopped all users of this mapping; this profile is uniprocessor.
     pub unsafe fn unmap(&mut self,address:u64)->Result<(),Error> {
-        if address%4096!=0 {return Err(Error::Invalid);}
+        crate::model::validate_virtual_page(address)?;
         let p=unsafe {self.leaf(address,false)?};
         if unsafe {p.read()}&1==0 {return Err(Error::Invalid);}
         unsafe {p.write(0);asm!("invlpg [{}]",in(reg)address,options(nostack,preserves_flags));}
