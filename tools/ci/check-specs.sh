@@ -858,13 +858,18 @@ runner_image_1='github-hosted-runner-20260823.283.1|github-actions|ubuntu-24.04-
 runner_image_2='github-hosted-runner-20260831.293.1|github-actions|ubuntu-24.04-20260831.293.1-runner-2.337.0|hosted-compute-agent-20260828.587-commit-abac92662cab4cc7352de4f9f9d2e2419aad9c29-release-ubuntu24-20260831.293|GitHub-Actions-service-terms-plus-runner-images-MIT|https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260831.293|runs-on-ubuntu-24.04-and-assert-ImageOS-ImageVersion-membership|external-attested-noncertifying'
 [ "$(grep -Fxc "$runner_image_1" "$class_b_inventory")" -eq 1 ] || fail "Class B inventory omits or duplicates the first runner rollout identity"
 [ "$(grep -Fxc "$runner_image_2" "$class_b_inventory")" -eq 1 ] || fail "Class B inventory omits or duplicates the second runner rollout identity"
+[ "$(sed -n '17,18p' "$class_b_inventory")" = "$runner_image_1
+$runner_image_2" ] || fail "Class B runner rollout identities are not adjacent and ordered"
 [ "$(grep -c '^github-hosted-runner-' "$class_b_inventory")" -eq 2 ] || fail "Class B runner rollout identity set is not closed"
-[ "$(sed -n '29,31p' tools/toolchain/host-tools.manifest)" = 'ci_runner_image_count=2
+[ "$(sed -n '29,32p' tools/toolchain/host-tools.manifest)" = 'ci_runner_image_count=2
 ci_runner_image_1=ubuntu-24.04-20260823.283.1
-ci_runner_image_2=ubuntu-24.04-20260831.293.1' ] || fail "host tool manifest runner rollout set is not exact and ordered"
+ci_runner_image_2=ubuntu-24.04-20260831.293.1
+ci_runner_status=external-attested-noncertifying' ] || fail "host tool manifest runner rollout set and status are not exact and ordered"
+[ "$(grep -c '^ci_runner_' tools/toolchain/host-tools.manifest)" -eq 4 ] || fail "host tool manifest runner key set is not closed"
 [ "$(grep -c '^ci_runner_image_count=' tools/toolchain/host-tools.manifest)" -eq 1 ] || fail "host tool manifest runner image count is missing or duplicated"
 [ "$(grep -c '^ci_runner_image_[12]=' tools/toolchain/host-tools.manifest)" -eq 2 ] || fail "host tool manifest runner rollout identities are missing or duplicated"
 [ "$(grep -c '^ci_runner_image=' tools/toolchain/host-tools.manifest)" -eq 0 ] || fail "host tool manifest retains a singular runner image identity"
+[ "$(grep -Fxc 'ci_runner_status=external-attested-noncertifying' tools/toolchain/host-tools.manifest)" -eq 1 ] || fail "host tool manifest runner status is not exactly noncertifying"
 [ "$(grep -Fxc 'ci_orchestration_boundary=github-runner-ubuntu-24.04-rollout-set-20260823.283.1+20260831.293.1-external-attested-noncertifying' tools/toolchain/dependencies.r0)" -eq 1 ] || fail "dependency inventory runner rollout boundary is not exact"
 [ "$(grep -c '^ci_orchestration_boundary=' tools/toolchain/dependencies.r0)" -eq 1 ] || fail "dependency inventory runner boundary is missing or duplicated"
 grep -qx 'ci_checkout=actions-checkout-v7.0.1-git-sha1-3d3c42e5aac5ba805825da76410c181273ba90b1' \

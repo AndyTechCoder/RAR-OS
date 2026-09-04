@@ -1328,26 +1328,56 @@ fn class_b_host_inventory_is_complete_canonical_and_traceable() {
         "oci-index-sha256-f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3"
     ));
     assert!(input.contains("git-sha1-3d3c42e5aac5ba805825da76410c181273ba90b1"));
-    assert!(input
-        .lines()
-        .any(|line| line == "github-hosted-runner-20260823.283.1|github-actions|ubuntu-24.04-20260823.283.1-runner-2.337.0|hosted-compute-agent-20260819.586-commit-3cc4a88dfa507ef76119ad1bb3eccc6378bb2b76-release-ubuntu24-20260823.283|GitHub-Actions-service-terms-plus-runner-images-MIT|https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260823.283|runs-on-ubuntu-24.04-and-assert-ImageOS-ImageVersion-membership|external-attested-noncertifying"));
-    assert!(input
-        .lines()
-        .any(|line| line == "github-hosted-runner-20260831.293.1|github-actions|ubuntu-24.04-20260831.293.1-runner-2.337.0|hosted-compute-agent-20260828.587-commit-abac92662cab4cc7352de4f9f9d2e2419aad9c29-release-ubuntu24-20260831.293|GitHub-Actions-service-terms-plus-runner-images-MIT|https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260831.293|runs-on-ubuntu-24.04-and-assert-ImageOS-ImageVersion-membership|external-attested-noncertifying"));
+    let runner_image_1 = "github-hosted-runner-20260823.283.1|github-actions|ubuntu-24.04-20260823.283.1-runner-2.337.0|hosted-compute-agent-20260819.586-commit-3cc4a88dfa507ef76119ad1bb3eccc6378bb2b76-release-ubuntu24-20260823.283|GitHub-Actions-service-terms-plus-runner-images-MIT|https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260823.283|runs-on-ubuntu-24.04-and-assert-ImageOS-ImageVersion-membership|external-attested-noncertifying";
+    let runner_image_2 = "github-hosted-runner-20260831.293.1|github-actions|ubuntu-24.04-20260831.293.1-runner-2.337.0|hosted-compute-agent-20260828.587-commit-abac92662cab4cc7352de4f9f9d2e2419aad9c29-release-ubuntu24-20260831.293|GitHub-Actions-service-terms-plus-runner-images-MIT|https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260831.293|runs-on-ubuntu-24.04-and-assert-ImageOS-ImageVersion-membership|external-attested-noncertifying";
+    let ordered_runner_rows = format!("{runner_image_1}\n{runner_image_2}\n");
+    assert!(input.contains(&ordered_runner_rows));
     assert!(!input
         .lines()
         .any(|line| line.starts_with("github-hosted-runner|")));
+    let reordered_runner_rows = format!("{runner_image_2}\n{runner_image_1}\n");
+    let reordered_inventory = input.replacen(&ordered_runner_rows, &reordered_runner_rows, 1);
+    assert!(!reordered_inventory.contains(&ordered_runner_rows));
 
     let manifest = fs::read_to_string(root().join("tools/toolchain/host-tools.manifest"))
         .expect("read host tool manifest");
     assert!(manifest.starts_with("schema=rar-host-tool-manifest-v4\n"));
     assert!(manifest.contains("class_b_inventory=tools/toolchain/class-b-host-tools.v1\n"));
-    assert!(manifest.contains(
-        "ci_runner_image_count=2\nci_runner_image_1=ubuntu-24.04-20260823.283.1\nci_runner_image_2=ubuntu-24.04-20260831.293.1\n"
-    ));
-    assert!(!manifest
+    let expected_runner_manifest = [
+        "ci_runner_image_count=2",
+        "ci_runner_image_1=ubuntu-24.04-20260823.283.1",
+        "ci_runner_image_2=ubuntu-24.04-20260831.293.1",
+        "ci_runner_status=external-attested-noncertifying",
+    ];
+    let observed_runner_manifest = manifest
         .lines()
-        .any(|line| line.starts_with("ci_runner_image=")));
+        .filter(|line| line.starts_with("ci_runner_"))
+        .collect::<Vec<_>>();
+    assert_eq!(observed_runner_manifest, expected_runner_manifest);
+    let extra_image_manifest = manifest.replacen(
+        "ci_runner_status=external-attested-noncertifying",
+        "ci_runner_image_3=ubuntu-24.04-unapproved\nci_runner_status=external-attested-noncertifying",
+        1,
+    );
+    assert_ne!(
+        extra_image_manifest
+            .lines()
+            .filter(|line| line.starts_with("ci_runner_"))
+            .collect::<Vec<_>>(),
+        expected_runner_manifest
+    );
+    let certifying_manifest = manifest.replacen(
+        "ci_runner_status=external-attested-noncertifying",
+        "ci_runner_status=certifying",
+        1,
+    );
+    assert_ne!(
+        certifying_manifest
+            .lines()
+            .filter(|line| line.starts_with("ci_runner_"))
+            .collect::<Vec<_>>(),
+        expected_runner_manifest
+    );
     let dependencies = fs::read_to_string(root().join("tools/toolchain/dependencies.r0"))
         .expect("read dependency inventory");
     assert!(dependencies
