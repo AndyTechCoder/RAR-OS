@@ -48,6 +48,22 @@ rar_load_selected_bootstrap_root "$root" || exit 2
 rar_verify_selected_bootstrap_root || exit 2
 [ "${RAR_CI_BOOTSTRAP_IMAGE-}" = sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 ] || exit 2
 rar_verify_ci_execution_boundary || exit 2
+for allowed_image_version in 20260823.283.1 20260831.293.1; do
+    (
+        RAR_CI_RUNNER_IMAGE_VERSION=$allowed_image_version
+        export RAR_CI_RUNNER_IMAGE_VERSION
+        rar_verify_ci_execution_boundary
+    ) || exit 2
+done
+for rejected_image_version in '' 20260816.1.1 20260830.999.1 20260907.1.1 1..2; do
+    (
+        RAR_CI_RUNNER_IMAGE_VERSION=$rejected_image_version
+        export RAR_CI_RUNNER_IMAGE_VERSION
+        if rar_verify_ci_execution_boundary; then
+            exit 1
+        fi
+    ) || exit 2
+done
 for boundary_variable in \
     RAR_CI_RUNNER_OS \
     RAR_CI_RUNNER_ARCH \

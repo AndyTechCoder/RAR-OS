@@ -436,7 +436,10 @@ rar_verify_ci_execution_boundary() {
     [ "${RAR_CI_RUNNER_OS-}" = Linux ] || return 1
     [ "${RAR_CI_RUNNER_ARCH-}" = X64 ] || return 1
     [ "${RAR_CI_RUNNER_IMAGE_OS-}" = ubuntu24 ] || return 1
-    [ "${RAR_CI_RUNNER_IMAGE_VERSION-}" = 20260831.293.1 ] || return 1
+    case "${RAR_CI_RUNNER_IMAGE_VERSION-}" in
+        20260823.283.1 | 20260831.293.1) ;;
+        *) return 1 ;;
+    esac
     [ "$bootstrap_lock_sha256" = 6752b1b21ac8fa93a671ff9444173e4c3bbc4cdcbe4cf5cd39820371dc79aa24 ] || return 1
     rar_validate_git_object_id "${RAR_EXPECTED_SOURCE_REVISION-}" || return 1
     rar_verify_read_only_ci_tool_mounts
