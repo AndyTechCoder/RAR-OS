@@ -7,7 +7,9 @@ set -eu
 [ -f /artifact/boot.img ] && [ ! -L /artifact/boot.img ]
 [ "$(stat -c %s /artifact/boot.img)" -eq 16777216 ]
 sha256sum -c /opt/identities.sha256 >&2
-ulimit -f 512
+ulimit -f 65536
+mkdir /tmp/rar-snapshot
+export TMPDIR=/tmp/rar-snapshot
 cp /usr/share/OVMF/OVMF_VARS.fd /tmp/OVMF_VARS.fd
 exec timeout --signal=TERM --kill-after=2 25 \
   /usr/bin/qemu-system-x86_64 \
@@ -17,4 +19,4 @@ exec timeout --signal=TERM --kill-after=2 25 \
   -sandbox on,obsolete=deny,elevateprivileges=deny,spawn=deny,resourcecontrol=deny \
   -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE.fd \
   -drive if=pflash,format=raw,file=/tmp/OVMF_VARS.fd \
-  -drive if=ide,format=raw,readonly=on,file=/artifact/boot.img
+  -drive if=ide,format=raw,snapshot=on,file=/artifact/boot.img

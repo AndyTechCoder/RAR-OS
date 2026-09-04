@@ -18,3 +18,10 @@ print("Foundation controller: 26 negative safety tests passed")
 grep -Fq -- '-C link-arg=/timestamp:0 -C link-arg=/DEBUG:NONE' tools/rar-lab/foundation/build.sh
 grep -Fq -- 'cp /usr/share/OVMF/OVMF_VARS.fd /tmp/OVMF_VARS.fd' tools/rar-lab/foundation/launch.sh
 grep -Fq -- '-drive if=pflash,format=raw,file=/tmp/OVMF_VARS.fd' tools/rar-lab/foundation/launch.sh
+
+grep -Fq -- 'export TMPDIR=/tmp/rar-snapshot' tools/rar-lab/foundation/launch.sh
+grep -Fq -- '-drive if=ide,format=raw,snapshot=on,file=/artifact/boot.img' tools/rar-lab/foundation/launch.sh
+
+grep -Fq -- 'ulimit -f 65536' tools/rar-lab/foundation/launch.sh
+grep -Fq -- 'mkdir /tmp/rar-snapshot' tools/rar-lab/foundation/launch.sh
+grep -Fq -- '-drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE.fd' tools/rar-lab/foundation/launch.sh
