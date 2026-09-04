@@ -2,6 +2,9 @@
 
 RAR OS is a from-scratch, privacy-first, adaptable operating system intended to scale from tiny ecosystem devices to personal computers, robots, vehicles, servers, and future hardware categories.
 
+Gate 0 was approved on 2026-07-16. That historical approval remains recorded;
+ADR 0032 now governs the Fast-Track Alpha milestones.
+
 Fast-Track Alpha Milestone 1 implements an experimental x86_64 UEFI foundation:
 RAR-owned boot code, private page tables, memory/frame allocation, a bounded heap,
 serial diagnostics, fatal exception handling and a basic hardware timer.
