@@ -24,10 +24,41 @@ POLICY = dict(network="none", readonly=True, user="65532:65532",
               privilege="no-new-privileges", guest_network=False,
               passthrough=False, credentials=False, raw_disk=False)
 
-def source_kind(base_has_kernel, source_has_kernel):
-    if base_has_kernel and not source_has_kernel:
+def source_kind(base_state, source_state, changed):
+    if "partial" in (base_state, source_state):
+        raise ValueError("incomplete or malformed Foundation source")
+    if base_state == "complete" and source_state == "absent":
         raise ValueError("proposal removes the existing Foundation kernel")
-    return "target" if source_has_kernel else "controller-only"
+    if source_state == "complete":
+        return "target"
+    if base_state != "absent" or source_state != "absent":
+        raise ValueError("unknown source classification")
+    allowed_files = {".github/workflows/foundation.yml", "tools/ci/check-sprint-static.sh",
+                     "README.md", "SPRINT_STATUS.md"}
+    if any(p not in allowed_files and not p.startswith(("tools/rar-lab/foundation/", "docs/"))
+           for p in changed):
+        raise ValueError("kernel-absent proposal is not controller-only")
+    return "controller-only"
+
+def kernel_state(tree):
+    prefix = "nucleus/foundation/"
+    present = any(p == "nucleus/foundation" or p.startswith(prefix) for p in tree)
+    if not present:
+        return "absent"
+    required = ("main.rs", "model.rs", "boot.rs", "paging.rs", "interrupts.rs", "image.rs")
+    return "complete" if all(tree.get(prefix + p, ("", ""))[0] in ("100644", "100755")
+                             for p in required) else "partial"
+
+def git_tree(root):
+    _, data = run(["git", "-C", str(root), "ls-tree", "-rz", "HEAD"], 15, 1048576)
+    result = {}
+    for entry in data.split(b"\0"):
+        if not entry:
+            continue
+        metadata, path = entry.split(b"\t", 1)
+        mode, kind, sha = metadata.decode("ascii").split()
+        result[path.decode("utf-8")] = (mode, sha) if kind == "blob" else ("invalid", sha)
+    return result
 
 def digest(data):
     return hashlib.sha256(data).hexdigest()
@@ -115,15 +146,21 @@ def negative_tests():
         else:
             raise AssertionError("invalid transfer accepted")
     transcript("normal", ("\n".join(READY) + "\n").encode())
-    assert source_kind(False, False) == "controller-only"
-    assert source_kind(False, True) == "target"
-    assert source_kind(True, True) == "target"
-    try:
-        source_kind(True, False)
-    except ValueError:
-        rejected += 1
-    else:
-        raise AssertionError("kernel removal incorrectly classified as infrastructure")
+    assert source_kind("absent", "absent", ["tools/rar-lab/foundation/build.sh"]) == "controller-only"
+    assert source_kind("absent", "complete", []) == "target"
+    assert source_kind("complete", "complete", []) == "target"
+    for base, source, changed in [
+        ("complete", "absent", []), ("absent", "partial", []),
+        ("partial", "absent", []), ("absent", "absent", ["nucleus/other.rs"]),
+    ]:
+        try:
+            source_kind(base, source, changed)
+        except ValueError:
+            rejected += 1
+        else:
+            raise AssertionError("invalid proposal classified as infrastructure")
+    assert kernel_state({}) == "absent"
+    assert kernel_state({"nucleus/foundation/main.rs": ("120000", "x")}) == "partial"
     return rejected
 
 def run(argv, timeout, limit, allowed=(0,), log_path=None):
@@ -190,8 +227,10 @@ def main():
     def save():
         (evidence / "manifest.json").write_text(json.dumps(summary, indent=2) + "\n")
     save()
-    kind = source_kind((controller / "nucleus/foundation/main.rs").is_file(),
-                       (source / "nucleus/foundation/main.rs").is_file())
+    base_tree = git_tree(controller)
+    source_tree = git_tree(source)
+    changed = [p for p in base_tree.keys() | source_tree.keys() if base_tree.get(p) != source_tree.get(p)]
+    kind = source_kind(kernel_state(base_tree), kernel_state(source_tree), changed)
     if kind == "controller-only":
         summary["status"] = "controller-only"
         summary["target_execution"] = "not-applicable: base and proposal contain no kernel"

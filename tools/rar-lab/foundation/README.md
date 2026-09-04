@@ -71,3 +71,9 @@ controller-only and makes no build/boot claim. A proposal removing an existing
 kernel is rejected. Any proposal containing the kernel must run the complete
 reproducibility and boot gate. This avoids reporting a missing-source compiler
 failure as a kernel failure while the first controller is being established.
+
+Classification uses the two exact Git trees, including file modes, rather than
+proposal-reported status or only a main.rs existence check. Partial source,
+symlinked required modules, removal of an existing kernel, and non-controller
+changes while the kernel is absent fail closed. The controller-only case permits
+only the Foundation workflow/tools, its static-check hook and documentation.
