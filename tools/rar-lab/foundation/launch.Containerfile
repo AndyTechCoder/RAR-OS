@@ -5,7 +5,7 @@ RUN set -eu; \
     apt-get -o Acquire::Check-Valid-Until=false update; \
     DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
       qemu-system-x86=1:7.2+dfsg-7+deb12u18+b3 ovmf=2022.11-6+deb12u2; \
-    sha256sum /usr/bin/qemu-system-x86_64 /usr/share/OVMF/OVMF_CODE.fd > /opt/identities.sha256
+    sha256sum /usr/bin/qemu-system-x86_64 /usr/share/OVMF/OVMF_CODE.fd /usr/share/OVMF/OVMF_VARS.fd > /opt/identities.sha256
 COPY launch.sh /opt/rar-launch.sh
 USER 65532:65532
 ENTRYPOINT ["/bin/sh", "/opt/rar-launch.sh"]

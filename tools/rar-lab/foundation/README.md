@@ -48,3 +48,32 @@ Changing this controller requires review of the actual resulting commands and
 negative tests. Do not broaden resource limits or omit failed records to obtain
 a passing run. Foundation completion additionally requires integrated independent
 review, malformed memory/handoff tests and documented unsafe-code invariants.
+
+## Reproducible PE linking and firmware scratch
+
+Rust 1.95's MSVC-style link path enables PDB output even when Rust debuginfo is
+zero and symbols are stripped. The embedded CodeView identifier then depends on
+temporary object paths. Cloud runs 33918813996 and 33919158210 identified this
+mismatch; their PE headers and code-block fingerprints were otherwise equal.
+The builder explicitly overrides this with /DEBUG:NONE while retaining the zero
+COFF timestamp. No artifact bytes are normalized or excluded from comparison.
+See [Rust linker behavior](https://github.com/rust-lang/rust/blob/1.95.0/compiler/rustc_codegen_ssa/src/back/linker.rs#L1073)
+and [LLD option precedence](https://github.com/llvm/llvm-project/blob/llvmorg-22.1.0/lld/COFF/Driver.cpp#L1760).
+
+Each launch copies the pinned OVMF variable-store template into private bounded
+container tmpfs. The code pflash stays read-only; only this disposable variable
+file is writable to firmware. Both templates are included in the recorded tool
+hashes. Nothing is persisted across profiles or exposed to the owner device.
+
+Controller-only bootstrap proposals are identified only when neither the trusted
+base nor the proposed source contains a Foundation kernel. Their evidence says
+controller-only and makes no build/boot claim. A proposal removing an existing
+kernel is rejected. Any proposal containing the kernel must run the complete
+reproducibility and boot gate. This avoids reporting a missing-source compiler
+failure as a kernel failure while the first controller is being established.
+
+Classification uses the two exact Git trees, including file modes, rather than
+proposal-reported status or only a main.rs existence check. Partial source,
+symlinked required modules, removal of an existing kernel, and non-controller
+changes while the kernel is absent fail closed. The controller-only case permits
+only the Foundation workflow/tools, its static-check hook and documentation.
