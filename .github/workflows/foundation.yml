@@ -2,6 +2,7 @@ name: Foundation
 run-name: Foundation ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
 on:
   pull_request_target:
+    branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
     paths: ['nucleus/foundation/**', 'tools/rar-lab/foundation/**', '.github/workflows/foundation.yml']
   workflow_dispatch:
@@ -12,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   foundation:
-    if: github.repository == 'AndyTechCoder/RAR-OS' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
+    if: github.repository == 'AndyTechCoder/RAR-OS' && ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     env:

@@ -112,7 +112,7 @@ def negative_tests():
     transcript("normal", ("\n".join(READY) + "\n").encode())
     return rejected
 
-def run(argv, timeout, limit, allowed=(0,)):
+def run(argv, timeout, limit, allowed=(0,), log_path=None):
     # Bounded pipe capture; no shell, source-selected commands or environment.
     child = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     output = bytearray()
@@ -137,6 +137,8 @@ def run(argv, timeout, limit, allowed=(0,)):
             child.kill()
             child.wait()
         poll.close()
+    if log_path is not None:
+        log_path.write_bytes(output)
     if code not in allowed:
         print(bytes(output[-12000:]).decode("utf-8", errors="replace"), flush=True)
         raise RuntimeError("command failed: " + str(argv[:3]) + " exit=" + str(code))
@@ -182,7 +184,7 @@ def main():
             print("Provisioning pinned " + name + " tool image", flush=True)
             _, log = run(["docker", "build", "--pull=false", "--tag", tag,
                           "--file", str(context / (name + ".Containerfile")), str(context)],
-                         900, 2097152)
+                         900, 2097152, log_path=evidence / (name + "-image.log"))
             (evidence / (name + "-image.log")).write_bytes(log)
             _, identity = run(["docker", "image", "inspect", "--format", "{{.Id}}", tag], 10, 1024)
             image = identity.decode().strip()
@@ -210,6 +212,7 @@ def main():
                 "if [ \"$result\" -ne 0 ]; then tail -c 12000 /tmp/build.log; exit \"$result\"; fi"]
             print("Independent build " + str(index), flush=True)
             _, encoded = run(argv, 240, 75497472)
+            # Full successful transfer becomes bounded decoded artifacts below.
             build = unpack(encoded)
             builds.append(build)
             summary["build_" + str(index)] = {n: digest(b) for n, b in build.items() if n != "model-tests.log"}
@@ -230,7 +233,7 @@ def main():
                 "--mount", "type=bind,src=" + str(directory) + ",dst=/artifact,readonly",
                 summary["launch_image"]]
             print("Booting " + profile + " profile in isolated RAR Lab", flush=True)
-            code, serial = run(argv, 35, 262144, (124,))
+            code, serial = run(argv, 35, 262144, (124,), directory / "serial.log")
             (directory / "serial.log").write_bytes(serial)
             records = transcript(profile, serial)
             summary["boots"][profile] = dict(exit=code, records=records, serial_sha256=digest(serial),
