@@ -814,7 +814,7 @@ grep -qx 'license_2=ISC' "$crypto_refs" || fail 'libsodium reference license mis
 class_b_inventory=tools/toolchain/class-b-host-tools.v1
 [ "$(sed -n '1p' "$class_b_inventory")" = 'schema=rar-class-b-host-tool-inventory-v1' ] || fail "Class B inventory schema is invalid"
 [ "$(sed -n '2p' "$class_b_inventory")" = 'id|platform|version|integrity|license|provenance|setup|status' ] || fail "Class B inventory header is invalid"
-[ "$(sed -n '3,$p' "$class_b_inventory" | awk 'END { print NR + 0 }')" -eq 16 ] || fail "Class B inventory entry count is invalid"
+[ "$(sed -n '3,$p' "$class_b_inventory" | awk 'END { print NR + 0 }')" -eq 17 ] || fail "Class B inventory entry count is invalid"
 
 class_b_ids='macos-sealed-bootstrap
 macos-apple-git
@@ -830,7 +830,8 @@ ci-git
 ci-linux-sysroot
 actions-checkout
 actions-upload-artifact
-github-hosted-runner
+github-hosted-runner-20260823.283.1
+github-hosted-runner-20260831.293.1
 github-runner-container-engine'
 printf '%s\n' "$class_b_ids" | while IFS= read -r id; do
     [ "$(grep -c "^$id|" "$class_b_inventory")" -eq 1 ] || fail "Class B inventory ID is missing or duplicated: $id"
@@ -853,7 +854,24 @@ grep -q 'f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3' "$cla
 grep -q '3d3c42e5aac5ba805825da76410c181273ba90b1' "$class_b_inventory" || fail "Class B inventory omits the checkout action commit"
 grep -Fqx 'actions-upload-artifact|github-actions|v4.6.2|git-sha1-ea165f8d65b6e75b540449e92b4886f43607fa02|MIT|https://github.com/actions/upload-artifact|pin-full-commit-in-controller-helper-closure-observer-workflow-candidate-retention-only|pinned-orchestrator' "$class_b_inventory" || fail "Class B inventory omits the exact candidate-retention upload action"
 grep -q 'ea165f8d65b6e75b540449e92b4886f43607fa02' "$class_b_inventory" || fail "Class B inventory omits the upload action commit"
-grep -q 'ubuntu-24.04-20260831.293.1' "$class_b_inventory" || fail "Class B inventory omits the runner image version"
+runner_image_1='github-hosted-runner-20260823.283.1|github-actions|ubuntu-24.04-20260823.283.1-runner-2.337.0|hosted-compute-agent-20260819.586-commit-3cc4a88dfa507ef76119ad1bb3eccc6378bb2b76-release-ubuntu24-20260823.283|GitHub-Actions-service-terms-plus-runner-images-MIT|https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260823.283|runs-on-ubuntu-24.04-and-assert-ImageOS-ImageVersion-membership|external-attested-noncertifying'
+runner_image_2='github-hosted-runner-20260831.293.1|github-actions|ubuntu-24.04-20260831.293.1-runner-2.337.0|hosted-compute-agent-20260828.587-commit-abac92662cab4cc7352de4f9f9d2e2419aad9c29-release-ubuntu24-20260831.293|GitHub-Actions-service-terms-plus-runner-images-MIT|https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260831.293|runs-on-ubuntu-24.04-and-assert-ImageOS-ImageVersion-membership|external-attested-noncertifying'
+[ "$(grep -Fxc "$runner_image_1" "$class_b_inventory")" -eq 1 ] || fail "Class B inventory omits or duplicates the first runner rollout identity"
+[ "$(grep -Fxc "$runner_image_2" "$class_b_inventory")" -eq 1 ] || fail "Class B inventory omits or duplicates the second runner rollout identity"
+[ "$(sed -n '17,18p' "$class_b_inventory")" = "$runner_image_1
+$runner_image_2" ] || fail "Class B runner rollout identities are not adjacent and ordered"
+[ "$(grep -c '^github-hosted-runner-' "$class_b_inventory")" -eq 2 ] || fail "Class B runner rollout identity set is not closed"
+[ "$(sed -n '29,32p' tools/toolchain/host-tools.manifest)" = 'ci_runner_image_count=2
+ci_runner_image_1=ubuntu-24.04-20260823.283.1
+ci_runner_image_2=ubuntu-24.04-20260831.293.1
+ci_runner_status=external-attested-noncertifying' ] || fail "host tool manifest runner rollout set and status are not exact and ordered"
+[ "$(grep -c '^ci_runner_' tools/toolchain/host-tools.manifest)" -eq 4 ] || fail "host tool manifest runner key set is not closed"
+[ "$(grep -c '^ci_runner_image_count=' tools/toolchain/host-tools.manifest)" -eq 1 ] || fail "host tool manifest runner image count is missing or duplicated"
+[ "$(grep -c '^ci_runner_image_[12]=' tools/toolchain/host-tools.manifest)" -eq 2 ] || fail "host tool manifest runner rollout identities are missing or duplicated"
+[ "$(grep -c '^ci_runner_image=' tools/toolchain/host-tools.manifest)" -eq 0 ] || fail "host tool manifest retains a singular runner image identity"
+[ "$(grep -Fxc 'ci_runner_status=external-attested-noncertifying' tools/toolchain/host-tools.manifest)" -eq 1 ] || fail "host tool manifest runner status is not exactly noncertifying"
+[ "$(grep -Fxc 'ci_orchestration_boundary=github-runner-ubuntu-24.04-rollout-set-20260823.283.1+20260831.293.1-external-attested-noncertifying' tools/toolchain/dependencies.r0)" -eq 1 ] || fail "dependency inventory runner rollout boundary is not exact"
+[ "$(grep -c '^ci_orchestration_boundary=' tools/toolchain/dependencies.r0)" -eq 1 ] || fail "dependency inventory runner boundary is missing or duplicated"
 grep -qx 'ci_checkout=actions-checkout-v7.0.1-git-sha1-3d3c42e5aac5ba805825da76410c181273ba90b1' \
     tools/toolchain/host-tools.manifest || fail "host tool manifest checkout identity is stale"
 
@@ -922,7 +940,7 @@ grep -Fqx 'D0 only registers and byte-binds this packet. D0 grants no C3VA, C3VB
 grep -Fqx 'After D0, C3V has three separately reviewed and merged subphases:' docs/tasks/sprint-alpha-controller-helper-c3v-verifier.md || fail "ADR 0024 C3V packet lost phase sequence"
 grep -Fqx 'Owner authorization for this bounded recovery was recorded on 2026-09-03 under the delegated safe-direction authority. This erratum supersedes only the earlier C3VA clauses that say C3VA makes no workflow or container change and that no other runner behavior or confinement exception changes. All other requirements remain authoritative.' docs/tasks/sprint-alpha-controller-helper-c3v-verifier.md || fail "ADR 0024 C3VA recovery erratum lost bounded supersession"
 grep -Fqx 'C3VA may additionally change the literal path `.github/workflows/specifications.yml` only to increase the existing Specifications mutation-policy container'\''s `/tmp` tmpfs from exactly `128m` to exactly `512m`. The primary validation container remains exactly `128m`; the mutation container remains read-only, networkless, unprivileged, capability-free, PID-bounded, and memory-bounded at 2048 MiB, and every other workflow trigger, job, command, mount, resource control, permission, checkout, and authority gate remains byte-unchanged.' docs/tasks/sprint-alpha-controller-helper-c3v-verifier.md || fail "ADR 0024 C3VA recovery erratum lost exact workflow boundary"
-[ "$(grep -Fxc 'No directory or descriptive ownership is granted.' docs/tasks/sprint-alpha-controller-helper-c3v-verifier.md)" -eq 3 ] || fail "ADR 0024 C3V packet has nonliteral ownership"
+[ "$(grep -Fxc 'No directory or descriptive ownership is granted.' docs/tasks/sprint-alpha-controller-helper-c3v-verifier.md)" -eq 2 ] || fail "ADR 0024 C3V packet has nonliteral ownership"
 grep -Fqx 'Only `tools/ci/test-controller-helper-closure-verifier-evidence-policy.sh` may use `/dev/zero`, and only through its three already reviewed, read-only `dd` input lines that construct the two exact 440401920-byte physical-line boundary fixtures. The confinement checker must require each complete physical line exactly once, require exactly three total `/dev/zero` occurrences, and retain the generic ban on every other `/dev`, `/proc`, `/sys`, and `/run` path. It must bind the primary 128 MiB and mutation 512 MiB tmpfs lines to their respective Docker spans, require exactly one file-limit row with the exact value, and exercise canonical-pass, wrong-mutation-size, and swapped-association inputs through the same inline POSIX-AWK state machine.' docs/tasks/sprint-alpha-controller-helper-c3v-verifier.md || fail "ADR 0024 C3VA recovery erratum lost closed-world confinement"
 grep -Fqx 'This erratum creates no new workflow, trigger, job, container, verifier execution, target execution, compiler use, helper use, network access, credential, device write, Mac/SSD execution, public format, acceptance, signing, release, or readiness authority. The packet-only amendment must merge after exact-head architecture, correctness, and security review. Its resulting-main run may retain only the already identified confinement failure from run `33801818662`; the three-file implementation must follow immediately with no unrelated main work and must pass a distinct exact-main Specifications run including the complete mutation suite.' docs/tasks/sprint-alpha-controller-helper-c3v-verifier.md || fail "ADR 0024 C3VA recovery erratum expanded authority"
 grep -Fqx 'Owner authorization for this bounded recovery is recorded on 2026-09-03 under the delegated safe-direction authority after exact-main runs proved that GitHub concurrently schedules two released images behind the `ubuntu-24.04` label. Run `33806231004` used image `20260831.293.1`; run `33815290752` used image `20260823.283.1`. Retrying until one image happens to pass is prohibited and is not acceptance evidence.' docs/tasks/sprint-alpha-controller-helper-c3v-verifier.md || fail "ADR 0024 C3VA runner-rollout evidence is not exact"

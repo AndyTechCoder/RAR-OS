@@ -11,5 +11,5 @@ host_tools=macos-sealed-shell-hasher-bounds,macos-mkdir-rm-env,rustc-1.95.0,rust
 class_b_inventory=tools/toolchain/class-b-host-tools.v1
 host_optional_discovery=clang,lld,qemu
 ci_host_test_root=rust-1.95.0-oci-sha256-f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3
-ci_orchestration_boundary=github-runner-ubuntu-24.04-20260831.293.1-external-attested-noncertifying
+ci_orchestration_boundary=github-runner-ubuntu-24.04-rollout-set-20260823.283.1+20260831.293.1-external-attested-noncertifying
 runtime_distribution=none
