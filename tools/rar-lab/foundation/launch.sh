@@ -8,6 +8,7 @@ set -eu
 [ "$(stat -c %s /artifact/boot.img)" -eq 16777216 ]
 sha256sum -c /opt/identities.sha256 >&2
 ulimit -f 512
+cp /usr/share/OVMF/OVMF_VARS.fd /tmp/OVMF_VARS.fd
 exec timeout --signal=TERM --kill-after=2 25 \
   /usr/bin/qemu-system-x86_64 \
   -machine q35,accel=tcg -cpu qemu64 -smp 1 -m 256M \
@@ -15,4 +16,5 @@ exec timeout --signal=TERM --kill-after=2 25 \
   -nic none -no-reboot -no-shutdown \
   -sandbox on,obsolete=deny,elevateprivileges=deny,spawn=deny,resourcecontrol=deny \
   -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE.fd \
+  -drive if=pflash,format=raw,file=/tmp/OVMF_VARS.fd \
   -drive if=ide,format=raw,readonly=on,file=/artifact/boot.img
