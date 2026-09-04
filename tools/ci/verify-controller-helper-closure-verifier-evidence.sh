@@ -194,7 +194,8 @@ trap cleanup EXIT HUP INT TERM
 : > "$pass_two"
 
 line_number=0
-IFS= read -r header < "$evidence" || fail 'header unavailable'
+exec 5< "$evidence"
+IFS= read -r header <&5 || fail 'header unavailable'
 line_number=1
 [ "${#header}" -le 8192 ] || fail 'header oversized'
 oldifs=$IFS
@@ -757,7 +758,8 @@ EOF
             ;;
         *) fail 'unknown or reordered record type' ;;
     esac
-done < "$evidence"
+done <&5
+exec 5<&-
 finalize_blob
 [ "$blob_seen" -eq 709 ] && [ "$chunk_seen" -eq "$chunk_count" ] &&
     [ "$normalized_seen" -eq 209 ] ||
