@@ -14,7 +14,7 @@ rustc --edition 2024 -C opt-level=2 /source/nucleus/foundation/image.rs -o /tmp/
 for profile in normal panic exception; do
     rustc --edition 2024 --target x86_64-unknown-uefi \
       -C opt-level=2 -C panic=abort -C no-redzone=yes \
-      -C debuginfo=0 -C strip=symbols -C link-arg=/timestamp:0 \
+      -C debuginfo=0 -C strip=symbols -C link-arg=/timestamp:0 -C link-arg=/DEBUG:NONE \
       --remap-path-prefix=/source=rar-source --remap-path-prefix=/tmp=rar-build \
       --cfg "rar_profile=\"$profile\"" \
       /source/nucleus/foundation/main.rs -o "/tmp/$profile.efi"

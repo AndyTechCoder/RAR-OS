@@ -14,3 +14,7 @@ args = scope["sandbox"](scope["POLICY"])
 assert "--read-only" in args and args[args.index("--network")+1] == "none"
 print("Foundation controller: 22 negative safety tests passed")
 '
+
+grep -Fq -- '-C link-arg=/timestamp:0 -C link-arg=/DEBUG:NONE' tools/rar-lab/foundation/build.sh
+grep -Fq -- 'cp /usr/share/OVMF/OVMF_VARS.fd /tmp/OVMF_VARS.fd' tools/rar-lab/foundation/launch.sh
+grep -Fq -- '-drive if=pflash,format=raw,file=/tmp/OVMF_VARS.fd' tools/rar-lab/foundation/launch.sh
