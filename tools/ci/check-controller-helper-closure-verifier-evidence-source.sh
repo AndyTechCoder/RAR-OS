@@ -21,7 +21,7 @@ done
     fail 'evidence contract bytes escaped review'
 [ "$(sha_file "$validator")" = 6456dcb67a4b32c5d38c0711ca0f8d16c06c23d104eaeb919cf019860c62128c ] ||
     fail 'evidence validator bytes escaped review'
-[ "$(sha_file "$policy")" = e8ec8f16eafadaab57d4be18b14335f8a7a13edaa15c9c736b260b85358fd966 ] ||
+[ "$(sha_file "$policy")" = e84439e78b54984c322887582c9990be0c14fa681f6282b02a8688adc2cdb3d8 ] ||
     fail 'evidence policy bytes escaped review'
 [ "$(sha_file "$valid")" = cc5bda22d4bba1eeb7e53d9604fcef23b0eabfc7402216826dcd124d89c6072c ] ||
     fail 'valid seed bytes escaped review'
