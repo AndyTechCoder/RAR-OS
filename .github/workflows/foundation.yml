@@ -1,0 +1,42 @@
+name: Foundation
+run-name: Foundation ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths: ['nucleus/foundation/**', 'tools/rar-lab/foundation/**', '.github/workflows/foundation.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: foundation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  foundation:
+    if: github.repository == 'AndyTechCoder/RAR-OS' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      RAR_SOURCE_SHA: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+      RAR_CONTROLLER_SHA: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.RAR_CONTROLLER_SHA }}
+          persist-credentials: false
+          path: controller
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.RAR_SOURCE_SHA }}
+          persist-credentials: false
+          path: source
+      - name: Reproduce and boot through trusted RAR Lab controller
+        run: python3 -I controller/tools/rar-lab/foundation/controller.py
+      - name: Retain bounded evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: foundation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: foundation-evidence/
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 6
