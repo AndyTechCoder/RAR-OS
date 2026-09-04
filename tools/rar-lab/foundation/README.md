@@ -91,3 +91,7 @@ introduced. The firmware variable copy remains separately disposable. The QEMU
 monitor is disabled, so no commit command is available; the read-only base mount
 also prevents writes to the source artifact. Base hashes and strict boot gates
 remain unchanged. See [QEMU snapshot mode](https://www.qemu.org/docs/master/system/images.html#snapshot-mode).
+
+Pinned-version behavior: [QEMU 7.2 temporary directory handling](https://github.com/qemu/qemu/blob/v7.2.0/block.c#L876),
+[read-only snapshot backing](https://github.com/qemu/qemu/blob/v7.2.0/block.c#L3868),
+and [IDE writable-backend requirement](https://github.com/qemu/qemu/blob/v7.2.0/hw/ide/qdev.c#L206).

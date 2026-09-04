@@ -24,3 +24,4 @@ grep -Fq -- '-drive if=ide,format=raw,snapshot=on,file=/artifact/boot.img' tools
 
 grep -Fq -- 'ulimit -f 65536' tools/rar-lab/foundation/launch.sh
 grep -Fq -- 'mkdir /tmp/rar-snapshot' tools/rar-lab/foundation/launch.sh
+grep -Fq -- '-drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE.fd' tools/rar-lab/foundation/launch.sh
