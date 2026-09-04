@@ -77,3 +77,17 @@ proposal-reported status or only a main.rs existence check. Partial source,
 symlinked required modules, removal of an existing kernel, and non-controller
 changes while the kernel is absent fail closed. The controller-only case permits
 only the Foundation workflow/tools, its static-check hook and documentation.
+
+## Disposable boot-disk writes
+
+Cloud run 33921010406 proved both builds byte-identical, then QEMU rejected the
+read-only IDE device before guest execution. IDE requires a writable block node.
+The boot drive now uses per-drive snapshot=on: its input remains a read-only
+container mount, while writes go only into a temporary overlay in the existing
+bounded /tmp tmpfs (TMPDIR is fixed to /tmp/rar-snapshot; QEMU redirects the
+literal /tmp to /var/tmp). A 32 MiB per-file cap accommodates the 16 MiB disk and
+qcow2 metadata, within the existing 64 MiB container hard cap and 256 MiB tmpfs. No host disk or persistent writable mount is
+introduced. The firmware variable copy remains separately disposable. The QEMU
+monitor is disabled, so no commit command is available; the read-only base mount
+also prevents writes to the source artifact. Base hashes and strict boot gates
+remain unchanged. See [QEMU snapshot mode](https://www.qemu.org/docs/master/system/images.html#snapshot-mode).
