@@ -673,7 +673,8 @@ EOF
             case "$payload" in
                 ''|*[!A-Za-z0-9+/=]*) fail 'Base64 alphabet invalid' ;;
             esac
-            [ $(("${#payload}" % 4)) -eq 0 ] || fail 'Base64 length invalid'
+            payload_length=${#payload}
+            [ $((payload_length % 4)) -eq 0 ] || fail 'Base64 length invalid'
             [ "${#payload}" -le 1916 ] || fail 'chunk payload oversized'
             printf '%s' "$payload" > "$encoded"
             /usr/bin/base64 --decode "$encoded" > "$chunk" 2>/dev/null ||
