@@ -1,6 +1,9 @@
 # RAR Foundation: experimental x86_64 UEFI nucleus
 
-Status: implementation under cloud validation; no working-OS or completion claim.
+Status: real cloud boot and reproducibility verified on 2026-09-04.
+See [the evidence record](../../docs/evidence/foundation-milestone-1.md) for exact
+source, artifact identities and the final delivery gate. This is a serial-only
+experimental foundation, not a usable desktop or production OS.
 
 This implements Fast-Track Alpha Milestone 1 using RAR-owned Rust and limited
 assembly. It is an early nucleus, not a hosted program or Linux distribution.

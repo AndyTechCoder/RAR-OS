@@ -4,7 +4,12 @@
 
 - Current milestone: Fast-Track Alpha Milestone 1 — Foundation.
 - Authority: ADR 0032 and `docs/tasks/fast-track-alpha-milestone-1.md`.
-- Implementation evidence: none; a working OS is not yet claimed.
+- Runtime evidence: source `42be166b38790f18cf5cb7d2d1b4632e06f87e33` passed cloud run `33923002436`:
+  two byte-identical builds, 11 tests per build, 26 negative controller tests,
+  normal readiness, deterministic panic and invalid-instruction containment.
+- Delivery gate: final documentation/review/checks, PR #149 merge and release
+  publication. See `docs/evidence/foundation-milestone-1.md` for exact proof.
+- This is a serial-only foundation, not a graphical or production OS.
 - Local safety: GitHub-only mutations; no local target build or execution.
 - Historic status follows unchanged.
 
