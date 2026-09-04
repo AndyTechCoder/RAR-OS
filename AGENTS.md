@@ -1,5 +1,33 @@
 # RAR OS Agent Instructions
 
+## Active Fast-Track Alpha authority
+
+ADR 0032 and `docs/tasks/fast-track-alpha-milestone-1.md` are the owner-approved
+execution authority for Fast-Track Alpha. They supersede the historic
+packet → activation → verifier → retirement chains and prompt-number sequencing
+for new work. Historic documents remain evidence, not active blockers.
+
+Before changing code, read the constitution, from-scratch policy, architecture,
+security/recovery and interface contracts, then ADR 0032, the active milestone
+contract, this file, and the host-safety policy. When older process text
+conflicts with ADR 0032, ADR 0032 controls process only; technical and security
+promises remain binding.
+
+The current implementation scope is Milestone 1: Foundation on the certified
+x86_64 UEFI cloud profile. Do not implement GUI, applications, networking,
+agents, broad hardware support, persistent filesystems, or production services.
+
+For the current owner-directed session, all repository mutations use GitHub.
+Do not create, change, move, or delete files on the Mac or attached SSD. Never
+build, link, package, mount, boot, or execute RAR OS locally. Cloud validation
+and guest execution are limited to the certified disposable profile in the
+active milestone contract.
+
+Use a small number of meaningful vertical pull requests. Apply quick checks
+during implementation, one integrated independent architecture/correctness/
+security review near milestone completion, and one consolidated remediation
+pass where practical. Merge only after relevant checks and findings pass.
+
 ## Before changing code
 
 Read, in order:

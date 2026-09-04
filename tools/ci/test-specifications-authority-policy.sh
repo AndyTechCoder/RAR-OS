@@ -80,9 +80,9 @@ run_checker "$trusted" "$source" "$output" "$controller_sha" "$source_sha" "$can
 /usr/bin/printf '%s\n' '# proposed validator change' >> "$source/tools/validator.sh"
 commit_all "$source" proposed-change
 source_sha=$(git_clean -C "$source" rev-parse HEAD)
-output=$work/deferred.output
+output=$work/isolated-proposal.output
 run_checker "$trusted" "$source" "$output" "$controller_sha" "$source_sha" "$canonical" "$canonical" >/dev/null
-[ "$(/usr/bin/sed -n '1p' "$output")" = execution=deferred ] || exit 1
+[ "$(/usr/bin/sed -n '1p' "$output")" = execution=isolated-proposal ] || exit 1
 
 zeros=0000000000000000000000000000000000000000
 expect_rejected malformed-controller "$trusted" "$source" "$work/malformed-controller.output" bad "$source_sha" "$canonical" "$canonical"

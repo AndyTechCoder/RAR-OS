@@ -1,5 +1,12 @@
 # RAR OS Sprint Alpha 0.1
 
+## Active process supersession
+
+The product requirements in this document remain direction. ADR 0032 replaces
+its expired time box and historic A–G authorization mechanics with five
+Fast-Track Alpha milestones. Milestone 1 proves only the authentic bootable
+Foundation; GUI and the remaining requirements follow in later milestones.
+
 Status: Owner-approved end-of-week rebaseline — 2026-08-25
 Time box: ends 2026-08-30 at 23:59 in America/Los_Angeles
 

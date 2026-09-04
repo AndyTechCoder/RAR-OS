@@ -93,6 +93,6 @@ if [ "$trusted_index" = "$source_index" ]; then
     /usr/bin/printf '%s\n' 'execution=full' >> "$output"
     /usr/bin/printf '%s\n' 'Specifications authority: trusted closure is byte-identical; executable validation enabled'
 else
-    /usr/bin/printf '%s\n' 'execution=deferred' >> "$output"
-    /usr/bin/printf '%s\n' 'Specifications authority: controller change detected; proposal code remains data-only and validation is deferred to the resulting main commit'
+    /usr/bin/printf '%s\n' 'execution=isolated-proposal' >> "$output"
+    /usr/bin/printf '%s\n' 'Specifications authority: controller change detected; trusted workflow permits only isolated proposal validation'
 fi

@@ -1,5 +1,13 @@
 # Sprint Alpha 0.1 Status
 
+## Active Fast-Track status — 2026-09-04
+
+- Current milestone: Fast-Track Alpha Milestone 1 — Foundation.
+- Authority: ADR 0032 and `docs/tasks/fast-track-alpha-milestone-1.md`.
+- Implementation evidence: none; a working OS is not yet claimed.
+- Local safety: GitHub-only mutations; no local target build or execution.
+- Historic status follows unchanged.
+
 - Date: 2026-09-03
 - Current milestone: post-P0 pre-Milestone A controller, machine-evidence, and
   SSD-confinement gates; acceptance-v2 publication/recovery remains a separate
