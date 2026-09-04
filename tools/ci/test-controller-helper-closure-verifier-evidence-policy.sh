@@ -575,6 +575,7 @@ while IFS='|' read -r marker id class expected; do
     if /bin/sh "$validator" "$mutated" "$cases" "$validator_scratch" >/dev/null 2>&1; then
         fail "$id $class mutation was accepted"
     fi
+    /bin/rm -f -- "$mutated"
     executed=$((executed + 1))
 done < "$policy_cases"
 [ "$executed" -eq 20 ] || fail 'not all evidence policy mutations executed'
@@ -640,6 +641,7 @@ for semantic_mode in observer tool-pins candidate-receipt topology manifest mani
     fi
     /usr/bin/grep -Fq "$semantic_expected_error" "$semantic_error" ||
         fail "semantic mutation did not reach intended rejection: $semantic_mode"
+    /bin/rm -f -- "$first" "$mutated" "$semantic_error"
     semantic_executed=$((semantic_executed + 1))
 done
 [ "$semantic_executed" -eq 6 ] || fail 'semantic receipt mutation count mismatch'

@@ -165,9 +165,9 @@ trap cleanup EXIT HUP INT TERM
     BEGIN { blob=2; logical=0; runtime=0; residual=0 }
     /^case\|[VQX][0-9][0-9][0-9]\|/ {
         logical++
-        expected=(logical<=147 ? sprintf("V%03d",logical) :
-            logical<=197 ? sprintf("Q%03d",logical-147) :
-            sprintf("X%03d",logical-197))
+        if (logical<=147) expected=sprintf("V%03d",logical)
+        else if (logical<=197) expected=sprintf("Q%03d",logical-147)
+        else expected=sprintf("X%03d",logical-197)
         if ($2!=expected) exit 1
         if ($3 ~ /-residual$/) {
             residual++; blob++
@@ -194,7 +194,8 @@ trap cleanup EXIT HUP INT TERM
 : > "$pass_two"
 
 line_number=0
-IFS= read -r header < "$evidence" || fail 'header unavailable'
+exec 5< "$evidence"
+IFS= read -r header <&5 || fail 'header unavailable'
 line_number=1
 [ "${#header}" -le 8192 ] || fail 'header oversized'
 oldifs=$IFS
@@ -672,7 +673,8 @@ EOF
             case "$payload" in
                 ''|*[!A-Za-z0-9+/=]*) fail 'Base64 alphabet invalid' ;;
             esac
-            [ $(("${#payload}" % 4)) -eq 0 ] || fail 'Base64 length invalid'
+            payload_length=${#payload}
+            [ $((payload_length % 4)) -eq 0 ] || fail 'Base64 length invalid'
             [ "${#payload}" -le 1916 ] || fail 'chunk payload oversized'
             printf '%s' "$payload" > "$encoded"
             /usr/bin/base64 --decode "$encoded" > "$chunk" 2>/dev/null ||
@@ -757,7 +759,8 @@ EOF
             ;;
         *) fail 'unknown or reordered record type' ;;
     esac
-done < "$evidence"
+done <&5
+exec 5<&-
 finalize_blob
 [ "$blob_seen" -eq 709 ] && [ "$chunk_seen" -eq "$chunk_count" ] &&
     [ "$normalized_seen" -eq 209 ] ||

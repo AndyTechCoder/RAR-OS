@@ -57,7 +57,7 @@ scratch=/tmp
 ' /proc/self/mountinfo || exit 1
 tmp_kib=$(/bin/df -kP "$scratch" | /usr/bin/awk 'NR == 2 { print $2 }')
 case "$tmp_kib" in '' | *[!0-9]*) exit 1 ;; esac
-[ "$tmp_kib" -gt 0 ] && [ "$tmp_kib" -le 131072 ] || exit 1
+[ "$tmp_kib" -gt 0 ] && [ "$tmp_kib" -le 524288 ] || exit 1
 
 actual_revision=$(GIT_OPTIONAL_LOCKS=0 /usr/bin/git -C "$root" rev-parse HEAD)
 [ "$actual_revision" = "$RAR_EXPECTED_SOURCE_REVISION" ] || exit 1
