@@ -71,6 +71,9 @@ extern "sysv64" fn kernel_entry(info:*const boot::BootInfo)->! {
     // SAFETY: the boot adapter owns and mapped the immutable handoff object.
     let info=unsafe {&*info};
     if info.magic!=boot::MAGIC || info.count==0 || info.count>model::MAX_REGIONS || info.table_used==0 || info.table_used>256 || info.arena%4096!=0 {fatal("RAR-PANIC:CODE=HANDOFF");}
+    let active_root:u64;
+    unsafe {asm!("mov {}, cr3",out(reg)active_root,options(nostack));}
+    if active_root!=info.arena {fatal("RAR-PANIC:CODE=ADDRESS-SPACE");}
     let mut frames=model::Frames::new(&info.regions[..info.count])
         .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=MEMORY-MAP"));
     let frame=frames.allocate().unwrap_or_else(|_|fatal("RAR-PANIC:CODE=NO-FRAME"));

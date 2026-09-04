@@ -142,6 +142,9 @@ pub unsafe fn start(image:usize,system:*const SystemTable)->! {
         let lo:u32;let hi:u32;
         asm!("rdmsr",in("ecx")0xc0000080u32,out("eax")lo,out("edx")hi,options(nostack));
         asm!("wrmsr",in("ecx")0xc0000080u32,in("eax")(lo|1<<11),in("edx")hi,options(nostack));
+        // Remove inherited global translations before switching to private tables.
+        let cr4:u64;asm!("mov {}, cr4",out(reg)cr4,options(nostack));
+        asm!("mov cr4, {}",in(reg)(cr4&!(1<<7)),options(nostack));
         let cr0:u64;asm!("mov {}, cr0",out(reg)cr0,options(nostack));
         asm!("mov cr0, {}",in(reg)(cr0|1<<16),options(nostack));
         crate::enter(tables.root(),arena+STACK_TOP,info)

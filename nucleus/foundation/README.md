@@ -79,7 +79,9 @@ not acceptance evidence. The final ready state intentionally halts.
    is fatal; a partially constructed address space is never reused.
 4. CR3 activation occurs in a naked thunk that sets the new aligned stack before
    calling Rust. Code, data, handoff and stack are all mapped in the new tables.
-   EFER.NXE and CR0.WP enforce the requested permissions.
+   EFER.NXE and CR0.WP enforce the requested permissions. Clearing CR4.PGE
+   flushes inherited global translations before CR3 activation; the kernel
+   verifies the active root before its memory self-test.
 5. Descriptor tables are initialized with IF clear. Exception paths use a guarded
    IST stack and never return; the timer stub preserves RAX, touches no SIMD state
    and returns with IRETQ. This profile has one CPU and no userspace context.
