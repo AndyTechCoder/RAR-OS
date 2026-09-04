@@ -165,9 +165,9 @@ trap cleanup EXIT HUP INT TERM
     BEGIN { blob=2; logical=0; runtime=0; residual=0 }
     /^case\|[VQX][0-9][0-9][0-9]\|/ {
         logical++
-        expected=(logical<=147 ? sprintf("V%03d",logical) :
-            logical<=197 ? sprintf("Q%03d",logical-147) :
-            sprintf("X%03d",logical-197))
+        if (logical<=147) expected=sprintf("V%03d",logical)
+        else if (logical<=197) expected=sprintf("Q%03d",logical-147)
+        else expected=sprintf("X%03d",logical-197)
         if ($2!=expected) exit 1
         if ($3 ~ /-residual$/) {
             residual++; blob++
