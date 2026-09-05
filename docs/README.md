@@ -106,3 +106,6 @@ permanently irreplaceable.
 - [Historical proposal 0031](proposals/0031-alpha-compact-pci-bdf-encoding.md)
 - [Alpha Decision Integration Plan](proposals/alpha-decision-integration-plan.md)
 - [Sprint Alpha Completion Evidence Map](tasks/sprint-alpha-completion-evidence-map.md)
+
+- [Desktop implementation and limitations](desktop-implementation.md)
+- [Desktop evidence publication guide](evidence/desktop-milestone-3.md)

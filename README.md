@@ -14,8 +14,13 @@ The release record binds final merge and exact-main validation.
 
 Platform is released as [v0.2.0-platform-alpha](https://github.com/AndyTechCoder/RAR-OS/releases/tag/v0.2.0-platform-alpha).
 The owner-directed [Milestone 3 graphical alpha](docs/tasks/fast-track-alpha-milestone-3.md)
-is now in development; a working desktop is not yet claimed. Networking,
-persistent storage, signed-layer updates and additional hardware remain later work.
+has a Desktop-v0 implementation: keyboard launcher, protected compositor,
+Files, Settings and Terminal with a shared temporary workspace. The
+[v0.3.0-usable-alpha release](https://github.com/AndyTechCoder/RAR-OS/releases/tag/v0.3.0-usable-alpha)
+is its completion record **only once published**, with exact-main cloud proof;
+before that it remains a candidate. See [desktop guide](docs/desktop-implementation.md).
+Networking, persistent storage, signed-layer updates and additional hardware
+remain later work.
 Never build or execute RAR OS on the owner's Mac or SSD. Only the documented
 isolated cloud profile is authorized for this milestone.
 

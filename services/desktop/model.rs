@@ -84,7 +84,7 @@ impl Keyboard {
     pub fn feed(&mut self,byte:u8)->Option<u8> {
         if self.skip>0 {
             let expected=[0x1d,0x45,0xe1,0x9d,0xc5][(5-self.skip) as usize];
-            if byte!=expected{self.reset();}else{self.skip-=1;}return None;
+            if byte!=expected{self.reset();}else{self.skip-=1;if self.skip==0{self.reset();}}return None;
         }
         if byte==0xe1 {self.extended=false;self.skip=5;return None;}
         if byte==0xe0 {self.extended=true;return None;}
@@ -194,6 +194,13 @@ impl Keyboard {
         assert_eq!(k.feed(0x1e),Some(b'a'));
         k.reset();k.feed(0xe1);k.feed_status(0x21,0x1d);
         assert_eq!(k.feed_status(1,0x1e),Some(b'a'));
+    }
+
+    #[test] fn completed_pause_clears_held_caps_and_repeat_state() {
+        let mut k=Keyboard::new();k.feed(0x2a);k.feed(0x3a);k.feed(0x1e);
+        for byte in [0xe1,0x1d,0x45,0xe1,0x9d,0xc5]{assert_eq!(k.feed(byte),None);}
+        assert_eq!(k.feed(0x1e),Some(b'a'));
+        assert_eq!(k.feed(0x1e),None);k.feed(0x9e);assert_eq!(k.feed(0x1e),Some(b'a'));
     }
 
 }
