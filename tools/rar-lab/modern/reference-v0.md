@@ -167,7 +167,7 @@ it is not runtime acceptance or permission to invoke a candidate image.
 ### Deterministic cross-check corpus (source only)
 
 `reference_corpus.py` provides 146 public cases: SHA256/SHA512 boundary messages
-with independent controller-library expected digests; all five pure-Ed25519
+with controller-computed golden digests (hashlib may itself use OpenSSL); all five pure-Ed25519
 RFC8032 section7.1 vectors with scalar mutation/noncanonical negatives; RFC8439
 section2.8.2 seal/open, every tag-byte mutation and representative key/nonce/AAD/
 ciphertext mutations; and 70 AEAD padding/block/maximum-length combinations.

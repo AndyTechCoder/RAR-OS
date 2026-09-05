@@ -1,5 +1,5 @@
 """Pure deterministic crypto cross-check corpus, never a process runner.
-Public RFC fixtures only; no signing, source access, execution or image authority.
+Public deterministic fixtures, including RFC vectors; no signing or execution authority.
 """
 from dataclasses import dataclass
 import hashlib
@@ -95,6 +95,14 @@ def check_expected(case, status, value):
 def self_test():
     import unittest
     class Tests(unittest.TestCase):
+        def test_rfc_vector_lengths(self):
+            vectors = json.loads(ED25519)
+            self.assertEqual([v[0] for v in vectors], ["1", "2", "3", "1024", "SHA(abc)"])
+            self.assertEqual([len(bytes.fromhex(v[2])) for v in vectors], [0, 1, 2, 1023, 64])
+            for _, key, message, signature in vectors:
+                self.assertEqual(len(bytes.fromhex(key)), 32)
+                self.assertEqual(len(bytes.fromhex(signature)), 64)
+            self.assertEqual(bytes.fromhex(vectors[-1][2]), hashlib.sha512(b"abc").digest())
         def test_fixed_bounded_unique_cases(self):
             items = cases()
             self.assertEqual(len(items), 146)
