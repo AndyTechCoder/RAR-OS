@@ -133,3 +133,16 @@ retain process/crash/timeout/cleanup tests. This helper does not provision or
 activate any image, compare results itself, or authorize target OS execution.
 Current CI checks only policy construction and default-denial with process
 creation mocked; real process and confinement evidence remains outstanding.
+
+## Image inventory candidate
+
+`reference_inventory.py` parses a bounded Docker-save archive entirely as data,
+without extracting files or executing them. It verifies the config image digest
+and every uncompressed layer digest, requires the amd64/Linux scratch-role
+configuration, and permits only the two static ELF executables and two license
+files. It rejects dynamic/interpreter segments, writable executable segments,
+unsafe paths/types/permissions, replacement files and duplicate identities.
+Synthetic fixtures exercise these checks in the existing cloud test wrapper.
+Actual image acquisition, two independent provisions, Docker archive-format
+compatibility and reproducibility remain unverified. Timestamp normalization in
+the recipe is only a candidate mechanism, not a reproducibility result.

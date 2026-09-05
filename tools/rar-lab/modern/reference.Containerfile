@@ -1,4 +1,5 @@
 # Provision only in the reviewed cloud controller. No target source in context.
+ARG SOURCE_DATE_EPOCH=1785715200
 FROM rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 AS provision
 ENV SOURCE_DATE_EPOCH=1785715200 LC_ALL=C LANG=C TZ=UTC
 COPY openssl.tar.gz libsodium.tar.gz /inputs/
@@ -35,6 +36,8 @@ RUN for name in reference-sodium reference-openssl; do \
  ! grep -q INTERP /build/$name.program-headers && \
  ! grep -q NEEDED /build/$name.dynamic || exit 1; \
  done
+RUN touch --date="@1785715200" /reference-sodium /reference-openssl \
+ /build/openssl/LICENSE.txt /build/sodium/LICENSE
 FROM scratch
 COPY --from=provision /reference-sodium /reference-sodium
 COPY --from=provision /reference-openssl /reference-openssl

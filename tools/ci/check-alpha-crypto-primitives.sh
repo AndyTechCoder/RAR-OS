@@ -46,6 +46,9 @@ printf '%s\n' 'Modern reference protocol: bounded framing/comparison tests passe
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/reference_runner.py" --self-test
 printf '%s\n' 'Modern reference runner: command-policy tests passed; real process/cleanup evidence pending'
 
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/reference_inventory.py" --self-test
+printf '%s\n' 'Modern reference inventory: synthetic negative tests passed; real image identity/reproducibility pending'
+
 # Keep at most one stripped test executable and one no_std library in the
 # existing cloud-only tmpfs; no owner files or retained evidence are affected.
 set -- $(/usr/bin/du -sk "$work")
