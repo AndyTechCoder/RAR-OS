@@ -117,7 +117,9 @@ Required tests include:
   external socket/capture paths, unpinned inputs and unbounded resources.
 
 No missing input event, failed screenshot, lost task, unexpected panic,
-timeout or static-only result may count as completion.
+timeout before the required proofs complete, or static-only result may count as
+completion. Expected trusted harness termination after complete proof must be
+classified separately and explicitly; it is not a missing-proof timeout.
 
 ## Delivery and review
 
