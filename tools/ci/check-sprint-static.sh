@@ -13,6 +13,7 @@ ulimit -f 131072
 tools/ci/check-specs.sh
 /bin/sh tools/rar-lab/foundation/check.sh
 /bin/sh tools/rar-lab/platform/check.sh
+/bin/sh tools/rar-lab/desktop/check.sh
 /bin/sh -n \
     tools/ci/check-sprint-static.sh \
     tools/ci/check-local-sprint-preflight.sh \

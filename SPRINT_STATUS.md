@@ -1,6 +1,20 @@
 # Sprint Alpha 0.1 Status
 
-## Active Fast-Track status — 2026-09-05
+## Active milestone — Usable Graphical Alpha
+
+- Milestone 3 explicitly requested by the owner on 2026-09-05 UTC.
+- Baseline: Platform released at `61916ca3a17c2f7013205c91afb3117dbb03cbc0`,
+  tag `v0.2.0-platform-alpha`; exact-main Platform33936996571,
+  Foundation33937001375, Specifications33936983957 and Observer33936983954 passed.
+- Current work: reviewed Desktop-v0 composition and bounded cloud multi-scene
+  controller, followed by one coherent graphical implementation.
+- Completion: real isolated shell/compositor/Files/Settings/Terminal interaction,
+  volatile shared test-file readback, post-fault GUI behavior and release evidence.
+- No GUI completion claim yet. No Mac/SSD mutations or local target execution.
+- Contract: `docs/tasks/fast-track-alpha-milestone-3.md`.
+- Previous milestone status below is retained as historical provenance.
+
+## Historical Fast-Track status — 2026-09-05
 
 - Current milestone: Fast-Track Alpha Milestone 2 — Platform (runtime demonstrated; release promotion gates apply).
 - Foundation: complete, merged at `27ce297f4ed67117bb9176b98fd3817d095dd29a`,

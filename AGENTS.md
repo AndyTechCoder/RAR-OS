@@ -2,7 +2,7 @@
 
 ## Active Fast-Track Alpha authority
 
-ADR 0032 and `docs/tasks/fast-track-alpha-milestone-2.md` are the owner-approved
+ADR 0032 and `docs/tasks/fast-track-alpha-milestone-3.md` are the owner-approved
 execution authority for Fast-Track Alpha. They supersede the historic
 packet → activation → verifier → retirement chains and prompt-number sequencing
 for new work. Historic documents remain evidence, not active blockers.
@@ -13,14 +13,14 @@ contract, this file, and the host-safety policy. When older process text
 conflicts with ADR 0032, ADR 0032 controls process only; technical and security
 promises remain binding.
 
-Milestone 2 Platform behavior and independent remediation are demonstrated in
-`docs/evidence/platform-milestone-2.md`; remaining work is evidence-gated release
-promotion on the reviewed x86_64 UEFI cloud profile. Foundation remains the
-preserved regression baseline. The next milestone is Usable Alpha, but it is
-not authorized or started merely by completing Platform. Do not implement
-a GUI shell, applications, networking, agents, broad hardware support,
-persistent filesystems, or production services. Review the fixed cloud-only
-input/display profile extension before its controller becomes trusted on main.
+Foundation and Platform are complete and released. The owner now explicitly
+directs Milestone 3, Usable Graphical Alpha, in
+`docs/tasks/fast-track-alpha-milestone-3.md`. Read ADR0033 and
+`docs/interfaces/desktop-runtime-v0.md` for its reviewed bounded composition.
+GUI shell and built-in Files/Settings/Terminal are in scope; networking, agents,
+persistent filesystems, production services and broad hardware remain out.
+Review the multi-scene cloud controller before it becomes trusted on main.
+Do not reinterpret the preserved Platform profile's per-caller storage contract.
 
 For the current owner-directed session, all repository mutations use GitHub.
 Do not create, change, move, or delete files on the Mac or attached SSD. Never
