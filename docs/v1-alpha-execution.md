@@ -1,6 +1,15 @@
 # V1 Alpha Codex Execution Runbook
 
-## Current owner-directed milestone
+## Current owner-directed Milestone 4
+
+Execute `tasks/fast-track-alpha-milestone-4.md` under ADR0032. M3 is published
+as v0.3.0-usable-alpha. Continue implementation in the M4 branch, couple contracts,
+code and tests, review meaningful security boundaries, and retain cloud runtime
+evidence before release. Standalone models/primitives do not complete M4.
+No local changes/execution or implicit new profile authority are allowed.
+Older M3/M2/prompt sequencing below remains historical context only.
+
+## Historical Milestone 3 scope
 
 Milestone 3 Usable Graphical Alpha is now active under
 `docs/tasks/fast-track-alpha-milestone-3.md`, ADR0032 and the reviewed ADR0033

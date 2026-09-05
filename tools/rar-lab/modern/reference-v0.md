@@ -95,8 +95,92 @@ builds, inventories, compiler-role absence and trusted-controller integration
 remain required. The separate manual candidate-provision workflow only constructs reference
 images; no reference runtime, disk access or VM profile is enabled here.
 
+## Controller comparison implementation
 
-See [candidate provisioning](reference-provision-v0.md) for construction and
-retained evidence. RAR runtime adapters/comparison and activation remain in the
-separate, incomplete Milestone4 implementation; they are not part of this
-provisioning-only change.
+reference_protocol.py validates both wire directions and compares the frozen RAR
+result (implementation ID3) with independent reference results (IDs1 and2) in
+exact order. It checks process exits, empty stderr, identities, input hashes,
+status/length rules and byte equality. It has no process, file, network or launch
+operations. Self-tests run only in the existing read-only cloud Specifications
+sandbox using its digest-pinned Python runtime with isolated mode and bytecode
+writes disabled. The RAR executable adapter and provisioning controller remain
+separate required implementation; protocol tests alone are not interoperability.
+
+The host-only target_reference.rs adapter invokes the exact RAR SHA256/SHA512,
+Ed25519 and AEAD modules and emits implementation ID3 under the same framing.
+Its std I/O wrapper is not linked into the OS. It accepts one stdin request,
+no extra argv, and bounded output; actual reference-free compiler/runtime image
+isolation and differential execution remain to be demonstrated.
+
+## Bounded adapter invocation candidate
+
+`reference_runner.py` is an unactivated trusted-controller helper. It accepts
+only immutable image IDs, three fixed entrypoints and bounded binary input.
+Runtime arguments deny networking, persistent writes, user mounts, host-device
+passthrough and extra privileges,
+core dumps and image pulls; CPU, memory, process, descriptor, stream and wall
+limits apply. Separate stdout/stderr and exact stdin EOF are retained. Creation is separate from execution: the daemon-returned full container ID,
+image, random ownership label and name are verified before starting by ID.
+Cleanup removes only that verified ID and requires a successful empty ID query.
+An ambiguous create result is never executed or deleted by name: the caller
+must fail and tear down the entire disposable cloud job, without retrying.
+Docker standard /dev surfaces remain; --ipc=none disables shared-memory IPC.
+Empty image CMD/ENV and the fixed entrypoint are checked before execution.
+
+The environment check is a misuse guard, not a sandbox or authorization proof.
+The future trusted-main controller must verify reviewed image inventories and
+its own source identity, freeze RAR results before reference execution, and
+retain process/crash/timeout/cleanup tests. This helper does not provision or
+activate any image, compare results itself, or authorize target OS execution.
+Current CI checks only policy construction and default-denial with process
+creation mocked; real process and confinement evidence remains outstanding.
+
+## Image inventory candidate
+
+`reference_inventory.py` parses a bounded Docker-save archive entirely as data,
+without extracting files or executing them. It verifies the config image digest
+and every uncompressed layer digest, requires the amd64/Linux scratch-role
+configuration, and permits only the two static ELF executables and two license
+files. It rejects dynamic/interpreter segments, writable executable segments,
+unsafe paths/types/permissions, replacement files and duplicate identities.
+Synthetic fixtures exercise these checks in the existing cloud test wrapper.
+Actual image acquisition, two independent provisions, Docker archive-format
+compatibility and reproducibility remain unverified. Timestamp normalization in
+the recipe is only a candidate mechanism, not a reproducibility result.
+
+Before start, the runner also checks effective daemon HostConfig for network,
+IPC, read-only root, capabilities, privilege, mounts/devices, resource limits,
+core dumps, logging and restart policy. Unknown/mismatched values fail closed;
+actual pinned-Docker compatibility remains a live-validation requirement.
+
+### Exact pre-start environment
+
+All three future adapter images must explicitly declare the sole environment
+entry `PATH=/nonexistent` and working directory `/`. The invocation helper
+checks those exact effective values before start, rejecting empty, duplicated,
+additional or alternate environment entries. Fixed absolute entrypoints do not
+use executable search. Pure lifecycle fixtures demonstrate rejected process
+configurations are never started and only the owned container ID is cleaned up.
+This keeps the unactivated helper consistent with the reference image contract;
+it is not runtime acceptance or permission to invoke a candidate image.
+
+### Deterministic cross-check corpus (source only)
+
+`reference_corpus.py` provides 146 public cases: SHA256/SHA512 boundary messages
+with controller-computed golden digests (hashlib may itself use OpenSSL); all five pure-Ed25519
+RFC8032 section7.1 vectors with scalar mutation/noncanonical negatives; RFC8439
+section2.8.2 seal/open, every tag-byte mutation and representative key/nonce/AAD/
+ciphertext mutations; and 70 AEAD padding/block/maximum-length combinations.
+No signature is generated. Test sealing nonces are unique per test key.
+
+After freezing RAR output and obtaining three-way seal agreement, the caller
+can derive successful-decrypt and invalid-tag cases for every seal boundary.
+The derived plaintext expectation comes from the original fixture, not from
+an oracle. This is not a substitute for independent agreement, protocol result
+validation, malformed-request testing, fuzzing, constant-time analysis or
+production crypto review. The pure helper performs no file/process/network
+operation and cannot establish that a future caller followed invocation order.
+Its self-tests validate corpus shape, fixture bounds, expected-result rejection
+and derived framing, not live cross-implementation correctness.
+Sources: https://www.rfc-editor.org/rfc/rfc8032#section-7.1 and
+https://www.rfc-editor.org/rfc/rfc8439#section-2.8.2 .

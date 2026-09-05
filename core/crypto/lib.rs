@@ -4,3 +4,5 @@
 #![forbid(unsafe_code)]
 pub mod sha512;
 pub mod ed25519;
+pub mod sha256;
+pub mod chacha20poly1305;
