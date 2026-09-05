@@ -111,3 +111,5 @@ permanently irreplaceable.
 
 - [Desktop implementation and limitations](desktop-implementation.md)
 - [Desktop evidence publication guide](evidence/desktop-milestone-3.md)
+
+- [Modern-v0 candidate System contract](interfaces/modern-system-v0.md)

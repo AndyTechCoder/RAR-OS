@@ -47,3 +47,12 @@ closure. Two independently maintained host-reference comparisons, broader
 malformed-point corpus, retained bounded fuzzing, resource measurements and
 specialist review still gate any use in a signed loader. No key is trusted by
 this primitive alone; publisher authorization belongs to a separate policy layer.
+
+## SHA256 content identities
+
+core/crypto/sha256.rs adapts the existing RAR-owned host SHA256 implementation
+for checked, non-mutating counter-overflow errors and no_std use. The historical
+host module remains unchanged. Official vectors, streaming/padding boundaries
+and overflow tests accompany it. Modern candidate metadata and journal models
+reuse it; no new OS image links it yet. All independent-reference and runtime
+gates above remain applicable.

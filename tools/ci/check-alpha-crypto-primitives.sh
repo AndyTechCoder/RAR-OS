@@ -19,3 +19,7 @@ work=$(mktemp -d /build/rar-crypto-tests.XXXXXXXX)
 "$work/crypto-tests"
 /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --crate-type lib -D warnings core/crypto/lib.rs -o "$work/libcrypto.rlib"
 printf '%s\n' 'Alpha crypto: SHA-512/Ed25519 initial focused tests and no_std compile passed; signing/runtime gates not claimed'
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --test -C opt-level=1 -C debug-assertions=yes -C overflow-checks=yes core/modern/lib.rs -o "$work/modern-tests"
+"$work/modern-tests"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --crate-type lib -D warnings core/modern/lib.rs -o "$work/libmodern.rlib"
+printf '%s\n' 'Modern core: focused manifest/journal model tests and no_std compile passed; disk/lifecycle/runtime gates not claimed'
