@@ -23,7 +23,7 @@ const KERNEL_TOP:u64=0x151000;
 const BOOT:u64=0x160000;
 const STACK_VA:u64=0x600000;
 const STACK_END:u64=0x610000;
-const FAULT_MASK:u16=(1<<6)|(1<<7)|(1<<8)|(1<<9)|(1<<11)|(1<<12)|(1<<13);
+const FAULT_MASK:u16=(1<<6)|(1<<7)|(1<<8)|(1<<9)|(1<<11)|(1<<12)|(1<<13)|(1<<14);
 const EMPTY_RANGE:UserRange=UserRange{start:0,end:0,writable:false,executable:false};
 static SERVICE:&[u8]=include_bytes!("/tmp/platform-service.efi");
 #[derive(Clone,Copy)]
@@ -44,10 +44,10 @@ impl Process{
 }
 struct Runtime{
     processes:[Process;TASKS],current:usize,arena:u64,faults:u16,proofs:u16,phase:u8,
-    bad_caps:u32,bad_buffers:u32,full_queues:u32,self_received:u32,survivor:bool,peer_death:bool,failed:bool,
+    context_seen:u8,bad_caps:u32,bad_buffers:u32,full_queues:u32,self_received:u32,survivor:bool,peer_death:bool,failed:bool,full_replies:u32,exit_replies:u32,fault_replies:u32,context_blocked:bool,context_woken:bool,
 }
 static mut RUNTIME:Runtime=Runtime{processes:[Process::EMPTY;TASKS],current:0,arena:0,faults:0,proofs:0,phase:0,
-    bad_caps:0,bad_buffers:0,full_queues:0,self_received:0,survivor:false,peer_death:false,failed:false};
+    context_seen:0,bad_caps:0,bad_buffers:0,full_queues:0,self_received:0,survivor:false,peer_death:false,failed:false,full_replies:0,exit_replies:0,fault_replies:0,context_blocked:false,context_woken:false};
 fn private_region(arena:u64,index:usize)->u64{arena+PRIVATE_BASE+index as u64*STRIDE}
 fn omit(arena:u64,address:u64)->bool{
     let offset=address-arena;
@@ -93,14 +93,18 @@ pub unsafe fn start(info:&boot::BootInfo)->!{
                 (physical+IMAGE+section.virtual_offset as u64)as *mut u8,section.file_size);}
         }
         let mut handoff=abi::Boot{magic:abi::MAGIC,role:index as u64,generation:1,entry:layout.entry,kernel_probe:info.arena,peer_probe:private_region(info.arena,0)+USER_STACK,
-            framebuffer:0,width:0,height:0,pitch:0,format:0,caps:[0;10]};
-        if [0,1,10].contains(&index){handoff.caps[abi::SELF_RECV]=grant(process,abi::SELF_RECV,endpoint(index),model::RECEIVE);}
-        if [0,10].contains(&index){handoff.caps[abi::STORAGE]=grant(process,abi::STORAGE,endpoint(1),model::SEND);}
+            framebuffer:0,width:0,height:0,pitch:0,format:0,caps:[0;11]};
+        if [0,1,4,10,14,15].contains(&index){handoff.caps[abi::SELF_RECV]=grant(process,abi::SELF_RECV,endpoint(index),model::RECEIVE);}
+        if [0,10,14,15].contains(&index){handoff.caps[abi::STORAGE]=grant(process,abi::STORAGE,endpoint(1),model::SEND);}
         if index==1{
+            process.queue=Queue::with_sender_limit(2).unwrap_or_else(|_|fatal("RAR-PANIC:CODE=QUEUE-QUOTA"));
+            handoff.caps[abi::AUXILIARY]=grant(process,abi::AUXILIARY,endpoint(15),model::SEND);
+            handoff.caps[abi::FAULT_REPLY]=grant(process,abi::FAULT_REPLY,endpoint(14),model::SEND);
             handoff.caps[abi::CLIENT]=grant(process,abi::CLIENT,endpoint(0),model::SEND);
             handoff.caps[abi::SECOND_CLIENT]=grant(process,abi::SECOND_CLIENT,endpoint(10),model::SEND);
         }
         if index==0{
+            handoff.caps[abi::AUXILIARY]=grant(process,abi::AUXILIARY,endpoint(4),model::SEND);
             handoff.caps[abi::DEAD_PEER]=grant(process,abi::DEAD_PEER,endpoint(6),model::SEND);
             handoff.caps[abi::SELF_SEND]=grant(process,abi::SELF_SEND,endpoint(0),model::SEND);
             handoff.caps[abi::STALE]=grant(process,abi::STALE,Object::Input,model::PORT_READ);
@@ -178,7 +182,10 @@ impl Runtime{
                 let Object::Endpoint{task,generation}=self.resolve(frame.rdi,model::SEND)? else{return Err(Error::Denied);};
                 let target=task as usize;
                 if self.processes[target].state==State::Dead||self.processes[target].generation!=generation{
-                    if current==0{self.peer_death=true;}return Err(Error::Stale);
+                    if current==0{self.peer_death=true;}
+                    if current==1&&target==15{self.exit_replies=self.exit_replies.saturating_add(1);}
+                    if current==1&&target==14{self.fault_replies=self.fault_replies.saturating_add(1);}
+                    return Err(Error::Stale);
                 }
                 let length=usize::try_from(frame.rdx).map_err(|_|Error::Invalid)?;
                 if length==0||length>128{return Err(Error::Invalid);}
@@ -187,8 +194,12 @@ impl Runtime{
                 let message=Message::from_kernel_sender(current,self.processes[current].generation,bytes)?;
                 let result=self.processes[target].queue.push(message);
                 if result==Err(Error::Full)&&current==0{self.full_queues=self.full_queues.saturating_add(1);}
+                if result==Err(Error::Full)&&current==1&&target==15{self.full_replies=self.full_replies.saturating_add(1);}
                 result?;
-                if self.processes[target].state==State::Blocked{self.processes[target].state=State::Runnable;}
+                if self.processes[target].state==State::Blocked{
+                    self.processes[target].state=State::Runnable;
+                    if target==4&&current==0{self.context_woken=true;}
+                }
                 Ok(0)
             }
             abi::RECEIVE=>{
@@ -198,7 +209,13 @@ impl Runtime{
                 self.buffer(frame.rsi,144,true)?;
                 let message=match self.processes[current].queue.peek(){
                     Ok(value)=>value,
-                    Err(Error::Empty)=>{if frame.r10==1{self.processes[current].state=State::Blocked;}return Err(Error::Empty);}
+                    Err(Error::Empty)=>{
+                        if frame.r10==1{
+                            self.processes[current].state=State::Blocked;
+                            if current==4{self.context_blocked=true;}
+                        }
+                        return Err(Error::Empty);
+                    }
                     Err(error)=>return Err(error),
                 };
                 let envelope=abi::Envelope{sender:message.sender as u64,generation:message.generation,
@@ -206,7 +223,7 @@ impl Runtime{
                 // Single CPU, IF=0: the validated mappings cannot change mid-copy.
                 unsafe{ptr::copy_nonoverlapping((&envelope as *const abi::Envelope).cast::<u8>(),frame.rsi as *mut u8,144);}
                 self.processes[current].queue.pop()?;
-                if current==0&&message.sender==1&&self.faults==FAULT_MASK&&self.processes[5].preemptions>=2{self.survivor=true;}
+                if current==0&&message.sender==1&&self.faults==FAULT_MASK&&self.processes[5].preemptions>=2&&self.full_replies>0&&self.exit_replies>0&&self.fault_replies>0{self.survivor=true;}
                 if current==0&&message.sender==0{self.self_received=self.self_received.saturating_add(1);}
                 Ok(message.length as u64)
             }
@@ -216,11 +233,14 @@ impl Runtime{
             }
             abi::REPORT=>{
                 let code=frame.rdi;
+                if code==10&&current==15&&self.full_replies==0{return Err(Error::Empty);}
+                if code==11&&current==0&&!self.context_blocked{return Err(Error::Empty);}
+                if code==3&&current==0&&!self.survivor{return Err(Error::Empty);}
                 let allowed=match code{
                     1=>current==0&&self.bad_caps>=3&&self.bad_buffers>=3,
                     2=>current==0&&self.full_queues>=1&&self.self_received==4&&self.bad_buffers>=4,
-                    3=>current==0,4=>current==4&&self.processes[4].preemptions>=2,
-                    5=>current==3,6=>current==2,7=>current==2&&self.phase==1,8=>current==10,
+                    3=>current==0,4=>current==4&&self.processes[4].preemptions>=2&&self.context_seen==3&&self.context_blocked&&self.context_woken,
+                    5=>current==3,6=>current==2,7=>current==2&&self.phase==1,8=>current==10,10=>current==15,11=>current==0,
                     _=>false,
                 };
                 if !allowed{self.failed=true;record("RAR-PLATFORM:TEST-FAILED");return Err(Error::Denied);}
@@ -245,7 +265,7 @@ impl Runtime{
     fn progress(&mut self){
         let required=(1<<1)|(1<<2)|(1<<3)|(1<<4)|(1<<5)|(1<<6)|(1<<8);
         if !self.failed&&self.phase==0&&self.proofs&required==required&&self.faults==FAULT_MASK&&
-            self.processes[5].preemptions>=2&&self.survivor&&self.peer_death{
+            self.processes[5].preemptions>=2&&self.survivor&&self.peer_death&&self.full_replies>0&&self.exit_replies>0&&self.fault_replies>0{
             for line in ["RAR-PLATFORM:PREEMPTION-PASS","RAR-PLATFORM:CONTEXT-PASS",
                 "RAR-PLATFORM:CAPABILITIES-PASS","RAR-PLATFORM:IPC-PASS","RAR-PLATFORM:STORAGE-PASS",
                 "RAR-PLATFORM:FAULT-CONTAINMENT-PASS"]{record(line);}
@@ -253,6 +273,12 @@ impl Runtime{
         }
     }
 }
+fn user_return_valid(process:&Process,ret:&arch::Trap)->bool{
+    ret.cs==0x1b&&ret.ss==0x23&&(STACK_VA..=STACK_END).contains(&ret.rsp)&&
+        process.ranges[..process.range_count].iter().any(|r|r.executable&&r.start<=ret.rip&&ret.rip<r.end)&&
+        [ret.ds,ret.es,ret.fs,ret.gs].iter().all(|s|[0,0x1b,0x23].contains(s))
+}
+
 /// Called only by the assembly trap gate. Kernel faults are fatal. User faults
 /// destroy only their process authority; unrelated services remain scheduled.
 pub extern "sysv64" fn trap(frame:*mut arch::Trap,saved:u64)->u64{
@@ -268,6 +294,14 @@ pub extern "sysv64" fn trap(frame:*mut arch::Trap,saved:u64)->u64{
     match f.vector{
         32=>{
             unsafe{crate::out(0x20,0x20);}
+            if current==4{
+                let other=f.rbx==0x1111&&f.rdx==0x2222&&f.rsi==0x3333&&f.rdi==0x4444&&f.rbp==0x5555&&
+                    f.r8==0x6666&&f.r9==0x7777&&f.r10==0x8888&&f.r11==0x9999&&f.r12==0xaaaa&&
+                    f.r13==0xbbbb&&f.r14==0xcccc;
+                let mxcsr=unsafe{((saved+24)as *const u32).read()};
+                let simd=unsafe{core::slice::from_raw_parts((saved+160)as *const u8,256)}.iter().all(|&b|b==0xff);
+                state.context_seen|=model::context_phase(f.rax,f.rcx,f.r15,other,f.flags,mxcsr,simd);
+            }
             state.processes[current].preemptions=state.processes[current].preemptions.saturating_add(1);
         }
         128=>{
@@ -290,20 +324,40 @@ pub extern "sysv64" fn trap(frame:*mut arch::Trap,saved:u64)->u64{
         }
         _=>fatal("RAR-PANIC:CODE=TRAP-VECTOR"),
     }
-    state.progress();
-    let states=core::array::from_fn(|index|state.processes[index].state);
-    let next=model::next(&states,current).unwrap_or_else(|_|fatal("RAR-PANIC:CODE=NO-RUNNABLE"));
-    let process=&state.processes[next];
-    let ret=unsafe{&mut *((process.frame+512)as *mut arch::Trap)};
-    if ret.cs!=0x1b||ret.ss!=0x23||!(STACK_VA..=STACK_END).contains(&ret.rsp)||
-        !process.ranges[..process.range_count].iter().any(|r|r.executable&&r.start<=ret.rip&&ret.rip<r.end)||
-        ![ret.ds,ret.es,ret.fs,ret.gs].iter().all(|s|[0,0x1b,0x23].contains(s)){
-        fatal("RAR-PANIC:CODE=USER-RETURN");
+    // Classify the current invalid user frame immediately, before another
+    // service can attempt a response to its now-dead endpoint.
+    if state.processes[current].state!=State::Dead&&!user_return_valid(&state.processes[current],f){
+        if current==14&&f.rsp==0&&f.vector==128{state.faults|=1<<14;}
+        else{state.failed=true;record("RAR-PLATFORM:INVALID-USER-RETURN");}
+        state.kill(current);
     }
-    // Preserve arithmetic condition flags and DF; deny privileged/tracing modes.
-    ret.flags=(ret.flags&0xcd5)|0x202;
-    let (root,stack,result)=(process.root,process.kernel_top,process.frame);
-    state.current=next;
-    unsafe{arch::activate(root,stack);}
-    result
+    state.progress();
+    // Invalid user return registers are user faults, never a kernel-wide panic.
+    // Kernel-owned frame/root/stack corruption remains a fatal invariant failure.
+    let mut cursor=current;
+    for _ in 0..TASKS{
+        let states=core::array::from_fn(|index|state.processes[index].state);
+        let next=model::next(&states,cursor).unwrap_or_else(|_|fatal("RAR-PANIC:CODE=NO-RUNNABLE"));
+        let process=&state.processes[next];
+        let expected=private_region(state.arena,next);
+        if process.root!=expected||process.kernel_bottom!=expected+KERNEL_BOTTOM||
+            process.kernel_top!=expected+KERNEL_TOP||process.frame%16!=0||
+            process.frame<process.kernel_bottom||process.frame.checked_add(720).is_none_or(|end|end>process.kernel_top){
+            fatal("RAR-PANIC:CODE=OWNED-RETURN-FRAME");
+        }
+        let ret=unsafe{&mut *((process.frame+512)as *mut arch::Trap)};
+        let valid=user_return_valid(process,ret);
+        if !valid{
+            if next==14&&ret.rsp==0&&ret.vector==128{state.faults|=1<<14;}
+            else{state.failed=true;record("RAR-PLATFORM:INVALID-USER-RETURN");}
+            state.kill(next);cursor=next;state.progress();continue;
+        }
+        // Preserve arithmetic condition flags and DF; deny privileged/tracing modes.
+        ret.flags=(ret.flags&0xcd5)|0x202;
+        let (root,stack,result)=(process.root,process.kernel_top,process.frame);
+        state.current=next;
+        unsafe{arch::activate(root,stack);}
+        return result;
+    }
+    fatal("RAR-PANIC:CODE=RETURN-SELECTION")
 }

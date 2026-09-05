@@ -79,7 +79,20 @@ fn client(boot:&Boot)->!{
         check(result==0||result==-4);yield_now();
     }
     check(dead);
-    report(3);
+    // Wake the context fixture only after its actual blocking receive.
+    loop{
+        let result=syscall(REPORT,11,0,0,0);
+        if result==0{break;}
+        check(result==-5);check(call(boot,services::READ,b"alpha",b"")[16]==1);yield_now();
+    }
+    send(boot.caps[AUXILIARY],&data);
+    loop{
+        check(call(boot,services::READ,b"alpha",b"")[16]==1);
+        check(call(boot,services::LIST,b"",b"")[1]==4);
+        let result=syscall(REPORT,3,0,0,0);
+        if result==0{break;}
+        check(result==-5);yield_now();
+    }
     // Remain live after the fault fixtures and non-yielding peer are preempted.
     loop{yield_now();}
 }
@@ -107,6 +120,19 @@ pub extern "efiapi" fn efi_main()->!{
         11=>{unsafe{(boot.entry as *mut u8).write_volatile(0);}fail()},
         12=>{let _=unsafe{(boot.peer_probe as *const u64).read_volatile()};fail()},
         13=>unsafe{let value:u64;asm!("mov {},cr3",out(reg)value,options(nostack));let _=value;fail()},
+        14=>{
+            let request=services::request(services::READ,b"missing",b"").unwrap_or_else(||fail());
+            send(boot.caps[STORAGE],&request);
+            // Invalid return state is revoked in this trap, before storage can
+            // send its reply. The request remains a valid sender-stamped message.
+            unsafe{asm!("xor eax,eax","xor esp,esp","int 0x80","ud2",options(noreturn));}
+        }
+        15=>{
+            let request=services::request(services::READ,b"missing",b"").unwrap_or_else(||fail());
+            for _ in 0..8{send(boot.caps[STORAGE],&request);}
+            loop{let result=syscall(REPORT,10,0,0,0);if result==0{break;}check(result==-5);yield_now();}
+            send(boot.caps[STORAGE],&request);exit()
+        }
         _=>fail(),
     }
 }

@@ -1,6 +1,6 @@
 //! Private Platform-v0 mechanism model; no stable public ABI or allocation.
-pub const TASKS: usize = 14;
-pub const CAP_SLOTS: usize = 10;
+pub const TASKS: usize = 16;
+pub const CAP_SLOTS: usize = 11;
 pub const MESSAGE_BYTES: usize = 128;
 pub const QUEUE_DEPTH: usize = 4;
 pub const SEND: u8 = 1;
@@ -69,11 +69,19 @@ impl Message {
     }
 }
 #[derive(Clone, Copy)]
-pub struct Queue { entries: [Message; QUEUE_DEPTH], head: usize, length: usize }
+pub struct Queue { entries: [Message; QUEUE_DEPTH], head: usize, length: usize, sender_limit:usize }
 impl Queue {
-    pub const fn new() -> Self { Self { entries: [Message::EMPTY; QUEUE_DEPTH], head: 0, length: 0 } }
+    pub const fn new() -> Self { Self { entries: [Message::EMPTY; QUEUE_DEPTH], head: 0, length: 0, sender_limit:QUEUE_DEPTH } }
+    pub fn with_sender_limit(limit:usize)->Result<Self,Error>{
+        if limit==0||limit>QUEUE_DEPTH{return Err(Error::Invalid);}
+        Ok(Self{sender_limit:limit,..Self::new()})
+    }
     pub fn push(&mut self, value: Message) -> Result<(), Error> {
-        if self.length == QUEUE_DEPTH { return Err(Error::Full); }
+        let same=(0..self.length).filter(|&i|{
+            let old=self.entries[(self.head+i)%QUEUE_DEPTH];
+            old.sender==value.sender&&old.generation==value.generation
+        }).count();
+        if self.length == QUEUE_DEPTH || same>=self.sender_limit { return Err(Error::Full); }
         self.entries[(self.head + self.length) % QUEUE_DEPTH] = value; self.length += 1; Ok(())
     }
     pub fn peek(&self) -> Result<Message, Error> {
@@ -184,5 +192,44 @@ mod display_tests{
             (640,480,640,0,0xfffff000,2000000),(640,480,640,0,0x80000000,100)]{
             assert!(framebuffer_span(w,h,p,f,b,n).is_err());
         }
+    }
+}
+
+
+/// Timer evidence distinguishes the two all-register fixture phases by R15.
+/// Each phase is credited only while all other sentinel state is live.
+pub fn context_phase(rax:u64,rcx:u64,r15:u64,others:bool,flags:u64,mxcsr:u32,simd:bool)->u8{
+    if !others||flags&0x401!=0x401||mxcsr!=0x3f80||!simd{return 0;}
+    if r15==0xdddd&&rax==0xeeee&&(1..=10_000_000).contains(&rcx){1}
+    else if r15==0xddde&&rcx==0xffff&&(1..=10_000_000).contains(&rax){2}
+    else{0}
+}
+#[cfg(test)]
+mod context_tests{
+    use super::*;
+    #[test]fn timer_phase_evidence_cannot_credit_both_phases(){
+        assert_eq!(context_phase(0xeeee,100,0xdddd,true,0x401,0x3f80,true),1);
+        assert_eq!(context_phase(100,0xffff,0xddde,true,0x401,0x3f80,true),2);
+        assert_eq!(context_phase(0xeeee,0xffff,0xdddd,true,0x401,0x3f80,true),1);
+        assert_eq!(context_phase(0xeeee,0xffff,0xddde,true,0x401,0x3f80,true),2);
+        assert_eq!(context_phase(0xeeee,0,0xdddd,true,0x401,0x3f80,true),0);
+        assert_eq!(context_phase(0xeeee,100,0xdddd,false,0x401,0x3f80,true),0);
+        assert_eq!(context_phase(0xeeee,100,0xdddd,true,0x400,0x3f80,true),0);
+        assert_eq!(context_phase(0xeeee,100,0xdddd,true,0x401,0x1f80,true),0);
+        assert_eq!(context_phase(0xeeee,100,0xdddd,true,0x401,0x3f80,false),0);
+    }
+}
+
+#[cfg(test)]
+mod queue_quota_tests{
+    use super::*;
+    #[test]fn one_sender_cannot_fill_shared_service_queue(){
+        let mut q=Queue::with_sender_limit(2).unwrap();
+        let a=Message::from_kernel_sender(0,1,&[1]).unwrap();
+        let b=Message::from_kernel_sender(10,1,&[2]).unwrap();
+        q.push(a).unwrap();q.push(a).unwrap();assert_eq!(q.push(a),Err(Error::Full));
+        q.push(b).unwrap();q.push(b).unwrap();
+        assert!(Queue::with_sender_limit(0).is_err());
+        assert!(Queue::with_sender_limit(5).is_err());
     }
 }

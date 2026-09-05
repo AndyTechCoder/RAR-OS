@@ -1,13 +1,16 @@
 //! Actual ring3 storage/input/framebuffer service policy. No nucleus linkage.
-use crate::{abi::*,services,send,receive,check,fail,report,yield_now,syscall};
+use crate::{abi::*,services,receive,check,fail,report,yield_now,syscall};
 pub fn storage(boot:&Boot)->!{
     let mut store=services::Store::new();
     loop{
         let message=receive(boot.caps[SELF_RECV]);
         check(message.length==128&&message.generation==1);
         let reply=store.process(services::Owner{task:message.sender as u8,generation:message.generation},&message.bytes);
-        let handle=match message.sender{0=>boot.caps[CLIENT],10=>boot.caps[SECOND_CLIENT],_=>fail()};
-        send(handle,&reply);
+        let handle=match message.sender{0=>boot.caps[CLIENT],10=>boot.caps[SECOND_CLIENT],
+            14=>boot.caps[FAULT_REPLY],15=>boot.caps[AUXILIARY],_=>fail()};
+        // A reply is attempted once. Dead/backpressured clients cannot block or
+        // terminate this shared service; their undeliverable reply is discarded.
+        match syscall(SEND,handle,reply.as_ptr() as u64,128,0){0|-3|-4=>{},_=>fail()}
     }
 }
 pub fn keyboard(boot:&Boot)->!{

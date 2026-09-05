@@ -9,13 +9,17 @@ decoding and pixel drawing execute as separate ring3 roles from
 `services/platform/runtime.rs`. The native fixture/client runtime is under
 `core/platform/`; it is not a stable application ABI.
 
-Fourteen fixed processes use private address spaces, private writable PE sections
-and user stacks. Seven adversarial fixtures cover kernel-memory access, NX,
+Sixteen fixed processes use private address spaces, private writable PE sections
+and user stacks. Eight adversarial fixtures cover kernel-memory access, NX,
 user-stack guards, port access, text writes, another process's private memory and
-a privileged CR3 read. A non-yielding task and two clients exercise preemption
+a privileged CR3 read, and an invalid user return stack pointer. A non-yielding task and two clients exercise preemption
 and post-fault service communication. A two-phase assembly fixture checks all
 general registers, stack, condition flags/DF, XMM0–15, MXCSR and x87 over real
-timer preemption.
+timer preemption, credited separately only while each phase's sentinels are live.
+A third check verifies supported context across an actual yield syscall and a genuinely blocked/woken receive.
+A deliberately backpressured client exits with outstanding storage requests;
+the invalid-return client faults with a pending request. Shared storage drops
+undeliverable replies and continues serving the healthy client's retained state.
 
 Kernel and user stack guard pages remain unmapped. User executable storage has
 no writable supervisor alias in any active process root; original bootstrap

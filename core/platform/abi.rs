@@ -16,12 +16,14 @@ pub const FRAMEBUFFER:usize=5;
 pub const SELF_SEND:usize=6;
 pub const STALE:usize=7;
 pub const DEAD_PEER:usize=8;
+pub const AUXILIARY:usize=9;
+pub const FAULT_REPLY:usize=10;
 #[repr(C)]
 #[derive(Clone,Copy)]
 pub struct Boot {
     pub magic:u64,pub role:u64,pub generation:u64,pub entry:u64,pub kernel_probe:u64,pub peer_probe:u64,
     pub framebuffer:u64,pub width:u64,pub height:u64,pub pitch:u64,pub format:u64,
-    pub caps:[u64;10],
+    pub caps:[u64;11],
 }
 #[repr(C)]
 #[derive(Clone,Copy)]

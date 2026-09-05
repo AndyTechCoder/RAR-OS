@@ -5,7 +5,7 @@ pub const MAGIC:u64=0x5241525f424f4f31;
 #[cfg(not(rar_platform))]
 pub const ARENA_PAGES:usize=1024;
 #[cfg(rar_platform)]
-pub const ARENA_PAGES:usize=8192;
+pub const ARENA_PAGES:usize=9216;
 pub const STACK_GUARD:u64=0x100000;
 pub const STACK_TOP:u64=0x121000;
 pub const HEAP_OFFSET:u64=0x140000;

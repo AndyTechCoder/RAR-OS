@@ -20,10 +20,10 @@ delay imports. It is not a general PE/Windows compatibility claim.
 Headers are RO+NX, sections use checked permissions; writable sections are private
 per process. No allocator, external boot library or third-party target crate.
 
-Each of 14 fixed processes receives its own read-only Boot structure at 0x700000.
+Each of 16 fixed processes receives its own read-only Boot structure at 0x700000.
 All fields are little-endian u64 in the order declared by
 `core/platform/abi.rs::Boot`: magic, role, generation, entry, kernel probe,
-peer-private probe, framebuffer, width, height, pitch, format, ten handles.
+peer-private probe, framebuffer, width, height, pitch, format, eleven handles.
 Probe addresses exist solely for negative fixtures, not a production discovery API.
 Only the display role receives an RW+NX framebuffer mapping at 0x800000.
 
@@ -36,7 +36,7 @@ null/user-code/user-data selector set. Arithmetic flags and DF are preserved;
 IF is enabled on return; tracing, IOPL, NT, VM, AC and unsupported modes are
 cleared. This is not a promise to preserve unsupported CPU extension state.
 
-The 32 MiB kernel-owned boot arena reserves 4 MiB for Foundation and 14 private
+The 36 MiB kernel-owned boot arena reserves 4 MiB for Foundation and 16 private
 2 MiB task regions. Each region has a 1 MiB page-table budget, 128 KiB private
 image area, 64 KiB user stack, guarded 64 KiB kernel stack and 4 KiB bootstrap page.
 All roots independently map supervisor kernel sections and kernel-owned arena
@@ -48,7 +48,9 @@ Assembly saves every GPR and data selector before Rust, saves supported FPU/SIMD
 clears DF and restores a kernel floating-point environment. Scheduling runs with
 IF=0; CR3/TSS.RSP0 change while kernel code/data/stacks remain identically mapped.
 Return validates executable RIP, user stack and selectors before IRETQ.
-User faults revoke only that task; kernel faults/double faults/NMI are fatal.
+User faults, including invalid user-controlled return registers, revoke only
+that task. Return selection is bounded by the task count. Corrupted kernel-owned
+frames, kernel faults, double faults and NMI remain fatal.
 
 ## Private syscalls and capabilities
 
@@ -61,14 +63,17 @@ arbitrary logging or privileged service APIs.
 Results are zero/success or received length; negative i64 errors are -1 invalid,
 -2 denied, -3 stale, -4 full, -5 empty, -6 exhausted. A blocking empty receive
 returns -5 after the process is awakened so the fixture retries explicitly.
-Send accepts 1–128 bytes. Per-process receive queues hold four messages.
+Send accepts 1–128 bytes. Per-process receive queues hold four messages. The shared service endpoint
+admits at most two queued messages per sender+generation so one client cannot
+consume all request capacity. This is a bounded endpoint mechanism, not storage
+payload policy.
 The receive envelope is exactly 144 bytes: sender u64, generation u32, length
 u32, zero-padded payload128. Identity comes only from kernel process state.
 Receive validates writable destination before dequeue; failed copies do not
 consume messages. Single CPU with IF=0 prevents remapping races during copies.
 
 Handles encode generation in high32 and slot+1 in low32, interpreted only in the
-caller's ten-slot table. Rights are send1, receive2, port-read4, draw8, constrained
+caller's eleven-slot table. Rights are send1, receive2, port-read4, draw8, constrained
 by object type. Revocation increments slot generation; exhaustion retires the slot.
 Endpoint target generation is checked on use; no process restarts/delegation API.
 On exit/fault the queue and capabilities are revoked; other callers see stale.
@@ -89,14 +94,20 @@ There are 16 total slots, at most four files and 128 bytes per caller namespace,
 64 bytes per file. Writes replace contents; failures leave old contents intact.
 Reply128: status u8 (ok0/invalid1/missing2/exists3/quota4), list count u8, data
 length u8, reserved zero. Read data starts16; list starts4 with repeated
-length-prefixed names. There is no deletion, durable disk, owner data, hierarchy,
+length-prefixed names. The service attempts each reply once: stale endpoints or full client queues
+cause that undeliverable reply to be dropped, never a retry loop or service exit.
+Request effects may have completed even when a reply is undeliverable; there is
+no exactly-once or reliable-delivery promise. Tests cover a full abandoned reply
+queue, an exiting client, a faulted client and healthy-client read/list afterward.
+There is no deletion, durable disk, owner data, hierarchy,
 snapshot or persistence promise.
 
 ## Evidence and unsafe review requirements
 
-Ten kernel-model/loader/display tests and five service-model tests accompany the
+Twelve kernel-model/loader/display/context/queue tests and five service-model tests accompany the
 implementation. Runtime must prove actual user/kernel and peer isolation,
-preemption/context, capability failures and peer death, bounded IPC, namespaces/
+phase-specific timer and explicit immediate/blocked syscall context preservation, invalid-return
+containment, capability failures and peer death, bounded IPC, namespaces/
 quotas/readback, post-fault communication, one synthetic A make/break and captured
 640x480 pixels. The cloud controller validates its fixed ordered records and every
 pixel independently; missing/failed proof never counts as completion.
