@@ -41,7 +41,7 @@ addition follows the established complete formulas. Scalars are public; the
 implementation intentionally does not claim constant-time secret-key operations.
 Do not reuse it for signing, key derivation or secret scalar multiplication.
 
-The first three RFC8032 section7.1 known-answer tests and initial invalid-input/
+All five pure-Ed25519 RFC8032 section7.1 known-answer tests and initial invalid-input/
 carry/inversion tests are included. This is NOT complete vector/reference/fuzz
 closure. Two independently maintained host-reference comparisons, broader
 malformed-point corpus, retained bounded fuzzing, resource measurements and
