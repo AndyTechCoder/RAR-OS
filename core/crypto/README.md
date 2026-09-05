@@ -1,7 +1,7 @@
 # RAR Alpha cryptographic building blocks
 
-Status: initial SHA-512 implementation; not a complete signing verifier.
-No production audit, Ed25519, encryption or target integration is claimed.
+Status: experimental SHA-512 and Ed25519 building blocks, not activated.
+No production audit, encryption, signed loader or target integration is claimed.
 
 The source is RAR-authored from the established FIPS 180-4 SHA-512 algorithm.
 It allocates no memory, has no unsafe code or external crate dependency, and
@@ -23,3 +23,27 @@ Replacement boundary: keep algorithm code independent of key custody, manifest
 encoding, rollback policy and lifecycle authority. This SHA-512 function alone
 does not authenticate a layer. It must not be used as a home-grown signature,
 password hash, keyed hash or production cryptographic module.
+
+## Ed25519 candidate verifier
+
+An experimental public-input verifier now accompanies SHA-512. It is RAR-authored
+from RFC8032 sections5.1.1-5.1.7, not copied reference implementation source.
+It implements pure Ed25519 only, with messages bounded to4096bytes, canonical
+scalar S<L, canonical point decoding, nonidentity prime-subgroup publisher key
+and prime-subgroup R. This deliberately strict acceptance profile must be
+reviewed and bound to the future manifest contract before activation.
+It does not accept Ed25519ph/ctx or expose signing/private-key operations.
+
+Field arithmetic uses five canonical51-bit limbs and u128 intermediates modulo
+2^255-19. Three carry sweeps plus final conditional subtraction maintain canonical
+representation; multiplication coefficients remain below2^110. Extended Edwards
+addition follows the established complete formulas. Scalars are public; the
+implementation intentionally does not claim constant-time secret-key operations.
+Do not reuse it for signing, key derivation or secret scalar multiplication.
+
+The first three RFC8032 section7.1 known-answer tests and initial invalid-input/
+carry/inversion tests are included. This is NOT complete vector/reference/fuzz
+closure. Two independently maintained host-reference comparisons, broader
+malformed-point corpus, retained bounded fuzzing, resource measurements and
+specialist review still gate any use in a signed loader. No key is trusted by
+this primitive alone; publisher authorization belongs to a separate policy layer.

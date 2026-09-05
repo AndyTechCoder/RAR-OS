@@ -10,7 +10,7 @@
 - Completed baseline: real graphical desktop, protected built-in apps and
   volatile files. Persistent data, signed updates and recovery are not present.
 - Current M4 step: proposed Modern architecture and causal recovery contract;
-  initial RAR-owned SHA-512 primitive and focused cloud tests are in review.
+  initial RAR-owned SHA-512/Ed25519 primitives and focused cloud tests are in review.
   Real signed loading, persistence and component replacement remain unimplemented.
 - Contract: `docs/tasks/fast-track-alpha-milestone-4.md`.
 - ADR0034 is proposed; no new cloud disk/launch authority is active.
