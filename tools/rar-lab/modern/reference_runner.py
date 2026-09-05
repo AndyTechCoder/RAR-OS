@@ -185,7 +185,8 @@ def execute(image: str, implementation: int, request: bytes) -> tuple[int, int, 
         if (type(state) is not dict or config.get("User") != "65532:65532" or
             config.get("Entrypoint") != [expected_entry] or
             config.get("Cmd") not in (None, []) or
-            config.get("Env") not in (None, []) or
+            config.get("Env") != ["PATH=/nonexistent"] or
+            config.get("WorkingDir") != "/" or
             state.get("Status") != "created" or state.get("Running") is not False):
             raise RunFailure("unexpected pre-start process state")
         code, output, error = exchange(
@@ -244,7 +245,7 @@ def self_test() -> None:
             item = {"Id": cid, "Image": image, "Name": "/" + name,
                     "Config": {"Labels": {"rar.modern.owner": name},
                                "User": "65532:65532", "Entrypoint": ["/reference-sodium"],
-                               "Cmd": None, "Env": None},
+                               "Cmd": None, "Env": ["PATH=/nonexistent"], "WorkingDir": "/"},
                     "State": {"Status": "created", "Running": False}}
             module = __name__
             with patch(module + ".cloud_guard"), patch(module + ".uuid.uuid4") as uid:
@@ -254,6 +255,21 @@ def self_test() -> None:
                         self.assertEqual(execute(image, 1, bytes(16)), (1, 0, b"result", b""))
                         self.assertEqual(ex.call_args_list[1].args[0][-4:], ["start", "--attach", "--interactive", cid])
                         self.assertEqual(ctl.call_args_list[1].args[0], ["container", "rm", "--force", cid])
+                for key, value in (("Env", None), ("Env", []), ("Env", ["PATH=/bin"]),
+                                   ("Env", ["PATH=/nonexistent", "LD_PRELOAD=/x"]),
+                                   ("Env", ["PATH=/nonexistent", "PATH=/nonexistent"]),
+                                   ("WorkingDir", "/tmp")):
+                    original = item["Config"][key]
+                    item["Config"][key] = value
+                    with patch(module + ".confined_container"), patch(module + ".exchange",
+                            return_value=(0, (cid + chr(10)).encode(), b"")) as ex:
+                        with patch(module + ".control",
+                                side_effect=[json.dumps([item]).encode(), b"", b""]) as ctl:
+                            with self.assertRaises(RunFailure): execute(image, 1, bytes(16))
+                            self.assertEqual(ex.call_count, 1)  # Never start rejected config.
+                            self.assertEqual(ctl.call_args_list[1].args[0],
+                                             ["container", "rm", "--force", cid])
+                    item["Config"][key] = original
                 for effect in (RunFailure("timeout"), (1, b"", b"collision")):
                     with patch(module + ".exchange") as ex, patch(module + ".control") as ctl:
                         if isinstance(effect, Exception): ex.side_effect = effect

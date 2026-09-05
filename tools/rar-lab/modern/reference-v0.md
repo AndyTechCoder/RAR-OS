@@ -152,3 +152,14 @@ Before start, the runner also checks effective daemon HostConfig for network,
 IPC, read-only root, capabilities, privilege, mounts/devices, resource limits,
 core dumps, logging and restart policy. Unknown/mismatched values fail closed;
 actual pinned-Docker compatibility remains a live-validation requirement.
+
+### Exact pre-start environment
+
+All three future adapter images must explicitly declare the sole environment
+entry `PATH=/nonexistent` and working directory `/`. The invocation helper
+checks those exact effective values before start, rejecting empty, duplicated,
+additional or alternate environment entries. Fixed absolute entrypoints do not
+use executable search. Pure lifecycle fixtures demonstrate rejected process
+configurations are never started and only the owned container ID is cleaned up.
+This keeps the unactivated helper consistent with the reference image contract;
+it is not runtime acceptance or permission to invoke a candidate image.
