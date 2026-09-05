@@ -1,6 +1,23 @@
 # Sprint Alpha 0.1 Status
 
-## Active milestone — Usable Graphical Alpha
+## Active milestone — Modern Architecture
+
+- Owner requested Milestone 4 on 2026-09-05 UTC.
+- Milestone 3 is published: [v0.3.0-usable-alpha](https://github.com/AndyTechCoder/RAR-OS/releases/tag/v0.3.0-usable-alpha)
+  at `06ecaaad61ab40f4c90ee73df85ee3493c89ccc1`.
+- Exact-main proof: Desktop33942770980, Platform33942785130,
+  Foundation33942785929 and Specifications33942705881 passed.
+- Completed baseline: real graphical desktop, protected built-in apps and
+  volatile files. Persistent data, signed updates and recovery are not present.
+- Current M4 step: proposed Modern architecture and causal recovery contract;
+  initial RAR-owned SHA-512/Ed25519 primitives and focused cloud tests are in review.
+  Real signed loading, persistence and component replacement remain unimplemented.
+- Contract: `docs/tasks/fast-track-alpha-milestone-4.md`.
+- ADR0034 is proposed; no new cloud disk/launch authority is active.
+- No Mac/SSD mutations, local builds or local target execution.
+- Historical sections below are provenance, not current feature status.
+
+## Historical milestone — Usable Graphical Alpha
 
 - Milestone 3 explicitly requested by the owner on 2026-09-05 UTC.
 - Baseline: Platform released at `61916ca3a17c2f7013205c91afb3117dbb03cbc0`,
