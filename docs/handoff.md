@@ -1,6 +1,14 @@
 # Implementation Handoff
 
-## Current owner-directed milestone
+## Current owner-directed milestone — Modern Architecture
+
+Milestone 3 was published as [v0.3.0-usable-alpha](https://github.com/AndyTechCoder/RAR-OS/releases/tag/v0.3.0-usable-alpha)
+at `06ecaaad61ab40f4c90ee73df85ee3493c89ccc1`. The owner now directs Milestone 4.
+Use `docs/tasks/fast-track-alpha-milestone-4.md`; ADR0034 is proposed, not yet
+accepted. No new persistent cloud profile or target behavior is active yet.
+Preserve the published Desktop and cloud-only/no-local-write constraints.
+
+## Historical Milestone 3 handoff
 
 Milestone 3 Usable Graphical Alpha is now active under
 `docs/tasks/fast-track-alpha-milestone-3.md`, ADR0032 and the reviewed ADR0033
