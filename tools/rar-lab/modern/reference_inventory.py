@@ -76,6 +76,8 @@ def static_elf(raw: bytes) -> None:
     for index in range(count):
         at = offset + index * size
         typ, flags, off, _, _, filesz, memsz, _ = struct.unpack_from("<IIQQQQQQ", raw, at)
+        if flags & 3 == 3:
+            raise Invalid("ELF writable executable segment/stack")
         if typ in (2, 3):
             raise Invalid("ELF dynamic/interpreter")
         if off + filesz > len(raw):
@@ -132,7 +134,8 @@ def inspect(raw: bytes, image: str) -> dict:
             if member.uid != 0 or member.gid != 0 or member.mode & 0o7022:
                 raise Invalid("ownership or unsafe permissions")
             if member.isdir():
-                if name != "licenses" or (name in directories and directories[name] != metadata):
+                if (name != "licenses" or member.mode & 0o555 != 0o555 or
+                    (name in directories and directories[name] != metadata)):
                     raise Invalid("unexpected directory")
                 directories[name] = metadata
             else:
@@ -142,7 +145,8 @@ def inspect(raw: bytes, image: str) -> dict:
                     if member.mode & 0o555 != 0o555:
                         raise Invalid("adapter executable mode")
                     static_elf(content)
-                elif not 1 <= len(content) <= 65536 or member.mode & 0o111:
+                elif (not 1 <= len(content) <= 65536 or member.mode & 0o111 or
+                      member.mode & 0o444 != 0o444):
                     raise Invalid("license size/mode")
                 final[name] = {"sha256": hashlib.sha256(content).hexdigest(),
                                "size": len(content), "metadata": metadata}
@@ -205,6 +209,8 @@ def self_test():
                 lambda e: e + [e[0]],
                 lambda e: e[1:],
                 lambda e: [(e[0][0], e[0][1], 0o777, e[0][3])] + e[1:],
+                lambda e: e[:2] + [(e[2][0], e[2][1], 0, e[2][3])] + e[3:],
+                lambda e: e[:3] + [(e[3][0], e[3][1], 0, e[3][3])] + e[4:],
                 lambda e: [("../escape", b"x", 0o644, tarfile.REGTYPE)] + e,
                 lambda e: [("link", b"", 0o644, tarfile.SYMTYPE)] + e,
                 lambda e: [(e[0][0], b"not ELF", e[0][2], e[0][3])] + e[1:],
@@ -216,10 +222,16 @@ def self_test():
             good = executable()
             for offset, fmt, value in ((16, "<H", 3), (18, "<H", 183),
                                        (64, "<I", 2), (64, "<I", 3), (68, "<I", 7),
-                                       (32, "<Q", 2**63), (56, "<H", 55), (58, "<H", 129)):
+                                       (32, "<Q", 2**63), (54, "<H", 55), (56, "<H", 129)):
                 bad = bytearray(good)
                 struct.pack_into(fmt, bad, offset, value)
                 with self.assertRaises(Invalid): static_elf(bytes(bad))
+            stack = bytearray(good + bytes(56))
+            struct.pack_into("<H", stack, 56, 2)
+            struct.pack_into("<IIQQQQQQ", stack, 120, 0x6474e551, 7, 0, 0, 0, 0, 0, 16)
+            with self.assertRaises(Invalid): static_elf(bytes(stack))
+            struct.pack_into("<I", stack, 124, 6)
+            static_elf(bytes(stack))
             for n in range(len(good)):
                 with self.assertRaises(Invalid): static_elf(good[:n])
         def test_duplicate_json_and_archive_limits(self):

@@ -146,3 +146,8 @@ Synthetic fixtures exercise these checks in the existing cloud test wrapper.
 Actual image acquisition, two independent provisions, Docker archive-format
 compatibility and reproducibility remain unverified. Timestamp normalization in
 the recipe is only a candidate mechanism, not a reproducibility result.
+
+Before start, the runner also checks effective daemon HostConfig for network,
+IPC, read-only root, capabilities, privilege, mounts/devices, resource limits,
+core dumps, logging and restart policy. Unknown/mismatched values fail closed;
+actual pinned-Docker compatibility remains a live-validation requirement.

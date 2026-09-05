@@ -122,6 +122,40 @@ def owned_container(raw, cid, name, image):
         raise RunFailure("container ownership identity")
     return item
 
+def confined_container(item):
+    """Verify effective daemon configuration, not just requested CLI flags."""
+    host = item.get("HostConfig")
+    if type(host) is not dict:
+        raise RunFailure("missing effective confinement")
+    exact = {"NetworkMode": "none", "IpcMode": "none", "ReadonlyRootfs": True,
+             "Privileged": False, "NanoCpus": 1000000000, "Memory": 134217728,
+             "MemorySwap": 134217728, "PidsLimit": 16, "PublishAllPorts": False,
+             "AutoRemove": False}
+    for key, value in exact.items():
+        if host.get(key) != value or type(host.get(key)) is not type(value):
+            raise RunFailure("effective confinement: " + key)
+    for key in ("Binds", "Mounts", "VolumesFrom", "Devices", "DeviceRequests",
+                "Links", "ExtraHosts", "PortBindings", "CapAdd"):
+        if host.get(key) not in (None, [], {}):
+            raise RunFailure("unexpected host resource: " + key)
+    if item.get("Mounts") not in (None, []):
+        raise RunFailure("unexpected effective mount")
+    if (host.get("CapDrop") != ["ALL"] or
+        host.get("SecurityOpt") != ["no-new-privileges"] or
+        host.get("PidMode") not in (None, "") or
+        host.get("UTSMode") not in (None, "") or
+        host.get("UsernsMode") not in (None, "") or
+        host.get("LogConfig") != {"Type": "none", "Config": {}} or
+        host.get("RestartPolicy") != {"Name": "no", "MaximumRetryCount": 0}):
+        raise RunFailure("effective isolation/log/restart policy")
+    limits = host.get("Ulimits")
+    if type(limits) is not list or len(limits) != 2:
+        raise RunFailure("effective resource limits")
+    required = [{"Name": "core", "Soft": 0, "Hard": 0},
+                {"Name": "nofile", "Soft": 64, "Hard": 64}]
+    if any(type(x) is not dict for x in limits) or any(x not in limits for x in required):
+        raise RunFailure("effective core/descriptor limits")
+
 def execute(image: str, implementation: int, request: bytes) -> tuple[int, int, bytes, bytes]:
     """Create, verify ownership, then start by ID. Any failure is job-fatal.
     Caller must terminate the disposable job on error, not catch/retry/continue.
@@ -144,10 +178,11 @@ def execute(image: str, implementation: int, request: bytes) -> tuple[int, int, 
         cid = raw[:-1].decode("ascii")
         item = owned_container(control(["container", "inspect", cid]), cid, name, image)
         owned = True
+        confined_container(item)
         config = item["Config"]
         state = item.get("State", {})
         expected_entry = {1: "/reference-sodium", 2: "/reference-openssl", 3: "/target-reference"}[implementation]
-        if (config.get("User") != "65532:65532" or
+        if (type(state) is not dict or config.get("User") != "65532:65532" or
             config.get("Entrypoint") != [expected_entry] or
             config.get("Cmd") not in (None, []) or
             config.get("Env") not in (None, []) or
@@ -214,7 +249,7 @@ def self_test() -> None:
             module = __name__
             with patch(module + ".cloud_guard"), patch(module + ".uuid.uuid4") as uid:
                 uid.return_value.hex = "b" * 32
-                with patch(module + ".exchange", side_effect=[(0, (cid + chr(10)).encode(), b""), (0, b"result", b"")]) as ex:
+                with patch(module + ".confined_container"), patch(module + ".exchange", side_effect=[(0, (cid + chr(10)).encode(), b""), (0, b"result", b"")]) as ex:
                     with patch(module + ".control", side_effect=[json.dumps([item]).encode(), b"", b""]) as ctl:
                         self.assertEqual(execute(image, 1, bytes(16)), (1, 0, b"result", b""))
                         self.assertEqual(ex.call_args_list[1].args[0][-4:], ["start", "--attach", "--interactive", cid])
@@ -231,6 +266,33 @@ def self_test() -> None:
                         with self.assertRaises(RunFailure): execute(image, 1, bytes(16))
                         self.assertEqual(ex.call_count, 1)
                         self.assertEqual(ctl.call_count, 1)
+        def test_effective_confinement_field_mutations(self):
+            import copy
+            host = {"NetworkMode": "none", "IpcMode": "none", "ReadonlyRootfs": True,
+                    "Privileged": False, "NanoCpus": 1000000000, "Memory": 134217728,
+                    "MemorySwap": 134217728, "PidsLimit": 16, "PublishAllPorts": False,
+                    "AutoRemove": False, "CapDrop": ["ALL"],
+                    "SecurityOpt": ["no-new-privileges"],
+                    "LogConfig": {"Type": "none", "Config": {}},
+                    "RestartPolicy": {"Name": "no", "MaximumRetryCount": 0},
+                    "Ulimits": [{"Name": "core", "Soft": 0, "Hard": 0},
+                                {"Name": "nofile", "Soft": 64, "Hard": 64}]}
+            confined_container({"HostConfig": host, "Mounts": []})
+            for key in host:
+                changed = copy.deepcopy(host)
+                changed[key] = None
+                with self.assertRaises(RunFailure): confined_container({"HostConfig": changed})
+            for key in ("Binds", "Mounts", "VolumesFrom", "Devices", "DeviceRequests",
+                        "Links", "ExtraHosts", "PortBindings", "CapAdd"):
+                changed = copy.deepcopy(host)
+                changed[key] = ["unexpected"]
+                with self.assertRaises(RunFailure): confined_container({"HostConfig": changed})
+            with self.assertRaises(RunFailure):
+                confined_container({"HostConfig": host, "Mounts": [{"Source": "/host"}]})
+        def test_missing_confinement_fails(self):
+            for item in ({}, {"HostConfig": None}, {"HostConfig": {}},
+                         {"HostConfig": {"NetworkMode": "host"}}):
+                with self.assertRaises(RunFailure): confined_container(item)
         def test_default_environment_cannot_launch(self):
             with patch.dict(os.environ, {}, clear=True):
                 with self.assertRaises(RunFailure): cloud_guard()

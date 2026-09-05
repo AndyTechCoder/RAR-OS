@@ -36,13 +36,16 @@ RUN for name in reference-sodium reference-openssl; do \
  ! grep -q INTERP /build/$name.program-headers && \
  ! grep -q NEEDED /build/$name.dynamic || exit 1; \
  done
-RUN touch --date="@1785715200" /reference-sodium /reference-openssl \
- /build/openssl/LICENSE.txt /build/sodium/LICENSE
+RUN mkdir -p /final/licenses && \
+ cp /reference-sodium /reference-openssl /final/ && \
+ cp /build/openssl/LICENSE.txt /final/licenses/openssl.txt && \
+ cp /build/sodium/LICENSE /final/licenses/libsodium.txt && \
+ chmod 0555 /final /final/licenses /final/reference-sodium /final/reference-openssl && \
+ chmod 0444 /final/licenses/openssl.txt /final/licenses/libsodium.txt && \
+ touch --date="@1785715200" /final /final/licenses /final/reference-sodium \
+ /final/reference-openssl /final/licenses/openssl.txt /final/licenses/libsodium.txt
 FROM scratch
-COPY --from=provision /reference-sodium /reference-sodium
-COPY --from=provision /reference-openssl /reference-openssl
-COPY --from=provision /build/openssl/LICENSE.txt /licenses/openssl.txt
-COPY --from=provision /build/sodium/LICENSE /licenses/libsodium.txt
+COPY --from=provision /final/ /
 USER 65532:65532
 WORKDIR /
 ENTRYPOINT ["/reference-sodium"]
