@@ -63,3 +63,11 @@ envelopes are discarded by receivers rather than terminating shared services.
 No Mac/SSD writes, local compilation or target execution are part of this work.
 Production security, persistence, mouse/touch, dynamic loading, networking,
 SDK stability, AI, updates and recovery remain later milestones.
+
+Focused unsafe evidence includes the inherited Platform copy bounds/readonly/
+overflow/guard tests, framebuffer metadata rejection and PE mapping tests; the
+retained Foundation mapping suite; Desktop bootstrap size/alignment/identity
+tests; and cloud memory-intrinsic canary, overlap, zero-length and comparison
+tests. Invalid host pointers are never dereferenced as a test technique. These
+checks complement, not replace, the kernel/unsafe source review and actual
+isolated cloud process execution.

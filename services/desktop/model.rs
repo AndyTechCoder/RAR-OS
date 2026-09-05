@@ -82,12 +82,20 @@ impl Keyboard {
         self.feed(byte)
     }
     pub fn feed(&mut self,byte:u8)->Option<u8> {
-        if self.skip>0 {self.skip-=1;return None;}
+        if self.skip>0 {
+            let expected=[0x1d,0x45,0xe1,0x9d,0xc5][(5-self.skip) as usize];
+            if byte!=expected{self.reset();}else{self.skip-=1;}return None;
+        }
         if byte==0xe1 {self.extended=false;self.skip=5;return None;}
         if byte==0xe0 {self.extended=true;return None;}
         if byte==0||byte==255 {self.reset();return None;}
         let ext=self.extended;self.extended=false;
-        let scan=byte&0x7f;let index=scan as usize+if ext{128}else{0};
+        let scan=byte&0x7f;
+        let known=if ext{matches!(scan,0x48|0x50)}else{
+            matches!(scan,1..=14|16..=28|30..=41|42..=54|57..=61)
+        };
+        if !known{self.reset();return None;}
+        let index=scan as usize+if ext{128}else{0};
         if byte&0x80!=0 {self.down[index]=false;return None;}
         if self.down[index] {return None;}self.down[index]=true;
         if ext {return match scan{0x48=>Some(0x84),0x50=>Some(0x85),_=>None};}
@@ -177,4 +185,17 @@ impl Keyboard {
         assert_eq!(k.feed_status(1,0x1e),Some(b'a'));
     }
 
+    #[test] fn unknown_sequences_reset_held_and_prefix_state() {
+        let mut k=Keyboard::new();k.feed(0x2a);k.feed(0xe0);k.feed(0x37);
+        assert_eq!(k.feed(0x1e),Some(b'a'));
+        k.reset();k.feed(0xe1);k.feed(0x1d);k.feed(0x00);
+        assert_eq!(k.feed(0x1e),Some(b'a'));
+        k.reset();k.feed(0x2a);k.feed(0xff);
+        assert_eq!(k.feed(0x1e),Some(b'a'));
+        k.reset();k.feed(0xe1);k.feed_status(0x21,0x1d);
+        assert_eq!(k.feed_status(1,0x1e),Some(b'a'));
+    }
+
 }
+
+#[cfg(test)] #[path="../../core/desktop/memory.rs"] mod memory_tests;

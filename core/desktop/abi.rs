@@ -27,3 +27,5 @@ pub struct Boot {
 #[derive(Clone,Copy)]
 pub struct Envelope {pub sender:u64,pub generation:u32,pub length:u32,pub bytes:[u8;128]}
 impl Envelope {pub const EMPTY:Self=Self{sender:0,generation:0,length:0,bytes:[0;128]};}
+
+pub fn valid_boot(boot:&Boot)->bool {boot.magic==MAGIC&&boot.generation==1&&boot.role<8}

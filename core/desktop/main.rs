@@ -2,6 +2,7 @@
 #![no_main]
 #![deny(unsafe_op_in_unsafe_fn)]
 mod abi;
+mod memory;
 #[path="../../services/desktop/model.rs"] mod services;
 #[path="../../services/desktop/runtime.rs"] mod drivers;
 #[path="../../apps/desktop/runtime.rs"] mod apps;
@@ -57,21 +58,10 @@ fn publish(boot:&Boot,version:&mut u32,view:&services::apps::View) {
 #[unsafe(no_mangle)] pub extern "efiapi" fn efi_main()->! {
     // Fixed kernel-owned read-only bootstrap mapping, no firmware pointer.
     let boot=unsafe{(BOOT_ADDRESS as *const Boot).read()};
-    check(boot.magic==MAGIC&&boot.generation==1);
+    check(valid_boot(&boot));
     match boot.role {
         0=>apps::shell(&boot),1=>drivers::storage(&boot),2=>drivers::keyboard(&boot),
         3=>drivers::compositor(&boot),4=>apps::files(&boot),5=>apps::settings(&boot),
         6=>apps::terminal(&boot),7=>loop{yield_now();},_=>fail(),
     }
 }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn memcpy(d:*mut u8,s:*const u8,n:usize)->*mut u8{for i in 0..n{unsafe{d.add(i).write_volatile(s.add(i).read_volatile());}}d}
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn memset(d:*mut u8,v:i32,n:usize)->*mut u8{for i in 0..n{unsafe{d.add(i).write_volatile(v as u8);}}d}
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn memmove(d:*mut u8,s:*const u8,n:usize)->*mut u8{
-    if (d as usize)<(s as usize){for i in 0..n{unsafe{d.add(i).write_volatile(s.add(i).read_volatile());}}}
-    else{for i in (0..n).rev(){unsafe{d.add(i).write_volatile(s.add(i).read_volatile());}}}d
-}
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn memcmp(a:*const u8,b:*const u8,n:usize)->i32{for i in 0..n{let x=unsafe{a.add(i).read_volatile()};let y=unsafe{b.add(i).read_volatile()};if x!=y{return x as i32-y as i32;}}0}

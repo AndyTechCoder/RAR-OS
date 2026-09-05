@@ -27,3 +27,18 @@ pub fn send_target(role:usize,slot:usize)->Option<usize>{
         for role in 0..16 {assert_eq!(receives(role),[0,1,3,4,5,6].contains(&role));}
     }
 }
+
+#[cfg(test)] #[path="../../core/desktop/abi.rs"] mod desktop_abi;
+#[cfg(test)] mod bootstrap_tests {
+    use super::desktop_abi::*;
+    #[test] fn fixed_boot_layout_and_identity() {
+        assert_eq!(core::mem::size_of::<Boot>(),176);
+        assert_eq!(core::mem::size_of::<Envelope>(),144);
+        assert_eq!(BOOT_ADDRESS%core::mem::align_of::<Boot>(),0);
+        let mut b=Boot{magic:MAGIC,role:0,generation:1,entry:0,kernel_probe:0,peer_probe:0,
+            framebuffer:0,width:0,height:0,pitch:0,format:0,caps:[0;11]};
+        for role in 0..8{b.role=role;assert!(valid_boot(&b));}
+        b.role=8;assert!(!valid_boot(&b));b.role=0;b.generation=2;assert!(!valid_boot(&b));
+        b.generation=1;b.magic=0;assert!(!valid_boot(&b));
+    }
+}

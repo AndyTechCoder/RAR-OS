@@ -60,6 +60,14 @@ fn omit(arena:u64,address:u64)->bool{
 fn mapping(v:u64,p:u64,pages:u64,w:bool,x:bool)->Mapping{
     Mapping{virtual_start:v,physical_start:p,pages,writable:w,executable:x}
 }
+/// Safety: tables owns the current process's kernel-only page-table allocation;
+/// p/pages designate validated private arena or validated GOP bytes. Virtual and
+/// physical spans are aligned and non-overflowing, W+X is forbidden by map_user.
+/// The caller alone selects device=true for compositor's fixed framebuffer.
+/// Mapping and range registration finish before any user instruction executes.
+/// Reused Platform copy_bounds_readonly_overflow_and_guards and
+/// malformed_framebuffer_metadata tests plus Foundation map-user tests exercise
+/// rejection boundaries without dereferencing invalid host pointers.
 unsafe fn add(tables:&mut Tables,process:&mut Process,v:u64,p:u64,pages:u64,w:bool,x:bool,device:bool){
     unsafe{tables.map_user(mapping(v,p,pages,w,x),p,p+pages*4096,device)}
         .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=USER-MAP"));
