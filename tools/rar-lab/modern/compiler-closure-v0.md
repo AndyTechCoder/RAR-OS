@@ -87,3 +87,16 @@ obligations still need a distribution check. The final independent inventory
 must verify every runtime/notice byte, config and empty directory. Actual
 isolated static compilation and reproducibility remain mandatory. No workflow
 invokes the recipe in this source change.
+
+### Embedded dynamic-loader authority
+
+The exporter rejects ELF AUDIT/DEPAUDIT as well as FILTER/AUXILIARY tags.
+RPATH/RUNPATH are parsed, not silently ignored: only the exact nonempty forms
+$ORIGIN, $ORIGIN/../lib and $ORIGIN/../../.. are admitted. Every component is
+expanded separately for canonical and exported alias locations, normalized,
+checked against the immutable toolchain/system-library path domains, and required
+to name a directory actually present in the positive export. Empty components,
+CWD-relative entries, arbitrary tokens, writable source/build paths, malformed
+tags and duplicates fail. This prevents a writable compiler scratch directory
+from becoming library-search authority; it does not replace final-image inspection
+and runtime confinement checks.

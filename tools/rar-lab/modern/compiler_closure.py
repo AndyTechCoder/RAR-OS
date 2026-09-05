@@ -95,7 +95,30 @@ def trace_paths(text):
             raise Invalid("unrecognized or unresolved loader trace")
     return paths, resolved
 
-def dynamic_metadata(program, dynamic):
+def dynamic_search_paths(dynamic, origin):
+    paths = []
+    tags = set()
+    for line in dynamic.splitlines():
+        if "AUDIT" in line or "DEPAUDIT" in line:
+            raise Invalid("embedded audit library forbidden")
+        if "RPATH" not in line and "RUNPATH" not in line:
+            continue
+        match = re.fullmatch(r"0x[0-9a-fA-F]+[ \t]+\((RPATH|RUNPATH)\)[ \t]+Library (?:rpath|runpath): \[([^\]]*)\]", line.strip())
+        if match is None or match.group(1) in tags or not isinstance(origin, Path):
+            raise Invalid("dynamic search-path metadata")
+        tags.add(match.group(1))
+        entries = match.group(2).split(":")
+        if not 1 <= len(entries) <= 8 or len(set(entries)) != len(entries):
+            raise Invalid("dynamic search-path count")
+        for entry in entries:
+            if entry not in ("$ORIGIN", "$ORIGIN/../lib", "$ORIGIN/../../.."):
+                raise Invalid("unapproved dynamic search path")
+            expanded = os.path.normpath(str(origin) + entry[len("$ORIGIN"):])
+            paths.append(str(safe_path(expanded)))
+    return paths
+
+def dynamic_metadata(program, dynamic, origin=None):
+    search_paths = dynamic_search_paths(dynamic, origin)
     interpreters = []
     for line in program.splitlines():
         if "Requesting program interpreter" not in line:
@@ -125,7 +148,7 @@ def dynamic_metadata(program, dynamic):
         if re.fullmatch("[A-Za-z0-9_.+-]+", name) is None or any(
             x in name.lower() for x in ("crypto", "ssl", "sodium")):
             raise Invalid("unexpected dynamic dependency")
-    return interpreter, needed
+    return interpreter, needed, search_paths
 
 def select_backend(entries):
     # Rust1.95's LLVM feature provides a builtin backend in rustc_driver.
@@ -255,7 +278,9 @@ def main():
             raise Invalid("compiler runtime ELF platform")
         program = run(["/usr/bin/readelf", "-lW", str(actual)])
         dynamic = run(["/usr/bin/readelf", "-dW", str(actual)])
-        interpreter, needed = dynamic_metadata(program, dynamic)
+        interpreter, needed, search_paths = dynamic_metadata(program, dynamic, actual.parent)
+        # A dereferenced alias can have a different runtime ORIGIN; validate it too.
+        alias_search_paths = dynamic_search_paths(dynamic, path.parent)
         dependencies = set()
         if needed or interpreter:
             trace, resolved = trace_paths(run(["/usr/bin/ldd", str(actual)]))
@@ -268,7 +293,8 @@ def main():
         # Preserve canonical source locations too, without exporting symlinks.
         export(actual, True)
         graph[str(path)] = {"needed": needed, "interpreter": str(interpreter) if interpreter else None,
-                            "resolved": sorted(str(x) for x in dependencies)}
+                            "resolved": sorted(str(x) for x in dependencies),
+                            "search_paths": sorted(set(search_paths + alias_search_paths))}
         pending.extend(dependencies - seen)
     if not MUSL.is_dir() or MUSL.is_symlink():
         raise Invalid("musl sysroot missing")
@@ -287,6 +313,10 @@ def main():
         if path.suffix not in (".rlib", ".rmeta", ".a", ".o"):
             raise Invalid("unexpected musl sysroot file")
         export(path, False)
+    for record in graph.values():
+        for directory in record["search_paths"]:
+            if not (root / directory.lstrip("/")).is_dir():
+                raise Invalid("dynamic search directory absent from positive export")
     # Inert notices never add executable closure authority.
     notices = {}
     notice_bytes = 0
@@ -418,7 +448,8 @@ def self_test():
         def test_dynamic_metadata(self):
             program = "[Requesting program interpreter: /lib64/ld-linux-x86-64.so.2]"
             dynamic = "0x1 (NEEDED) Shared library: [libc.so.6]"
-            interpreter, needed = dynamic_metadata(program, dynamic)
+            interpreter, needed, search_paths = dynamic_metadata(program, dynamic)
+            self.assertEqual(search_paths, [])
             self.assertEqual(str(interpreter), "/lib64/ld-linux-x86-64.so.2")
             self.assertEqual(needed, ["libc.so.6"])
             for bad in (dynamic + chr(10) + dynamic,
@@ -456,6 +487,23 @@ def self_test():
                 with self.assertRaises(Invalid): validate_backend_probe(bad, cpus)
             for bad in ("", "x86-64", cpus.replace("x86-64", "arm64")):
                 with self.assertRaises(Invalid): validate_backend_probe(version, bad)
+        def test_dynamic_search_and_audit_tags(self):
+            origin = SYSROOT / "bin"
+            good = "0x1 (RUNPATH) Library runpath: [$ORIGIN/../lib]"
+            self.assertEqual(dynamic_search_paths(good, origin), [str(SYSROOT / "lib")])
+            good_rpath = "0x1 (RPATH) Library rpath: [$ORIGIN]"
+            self.assertEqual(dynamic_search_paths(good_rpath, origin), [str(origin)])
+            for entry in ("", ":", "/build", "/source", ".", "relative", "$LIB",
+                          "$ORIGIN:", "$ORIGIN/../../../../../../build", "$ORIGIN:$ORIGIN",
+                          "/usr/local/rustup/toolchains/other/lib"):
+                bad = "0x1 (RUNPATH) Library runpath: [" + entry + "]"
+                with self.assertRaises(Invalid): dynamic_search_paths(bad, origin)
+            for bad in ("0x1 (AUDIT) Audit library: [libx.so]",
+                        "0x1 (DEPAUDIT) Dependency audit library: [libx.so]",
+                        "RUNPATH truncated", good + "\n" + good):
+                with self.assertRaises(Invalid): dynamic_search_paths(bad, origin)
+            with self.assertRaises(Invalid): dynamic_search_paths(good, None)
+            with self.assertRaises(Invalid): dynamic_search_paths(good_rpath, Path("/build"))
         def test_malformed_metadata_is_not_empty_closure(self):
             for dynamic in ("NEEDED unknown", "0x1 (NEEDED) truncated",
                             "0x1 (FILTER) Shared library: [a.so]",
