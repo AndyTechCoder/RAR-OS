@@ -26,9 +26,9 @@ general-purpose filesystem before any update demonstration. Too broad for Alpha.
 C. Demonstrate signatures only on the host, retain all state in RAM, or change a
 palette and call it an OS update. Rejected: it does not meet Milestone4.
 
-## Proposed decision
+## Decision
 
-Implement A without reinterpreting Desktop-v0 or historical Alpha bytes. The
+Proposed only, not accepted or active. Implement A without reinterpreting Desktop-v0 or historical Alpha bytes. The
 nucleus provides checked memory/process/capability mechanisms; filesystem,
 signature/update policy and application behavior remain outside the kernel.
 Settings is the first real replaceable code component, not a permanently special

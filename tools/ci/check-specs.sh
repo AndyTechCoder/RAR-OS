@@ -676,7 +676,7 @@ duplicates=$(printf '%s\n' "$index_targets" | sort | uniq -d)
 
 adr_files=$(sed -n 's/^- \[ADR [^]]*\](\(adr\/[^)]*\.md\))$/docs\/\1/p' docs/README.md)
 adr_count=$(printf '%s\n' "$adr_files" | awk 'NF { count++ } END { print count + 0 }')
-[ "$adr_count" -eq 32 ] || fail "expected exactly 32 indexed ADRs"
+[ "$adr_count" -eq 33 ] || fail "expected exactly 33 indexed ADRs"
 
 approval_date=$(sed -n 's/^Date: //p' docs/approval-record.md)
 case "$approval_date" in
@@ -742,6 +742,10 @@ done
 
 printf '%s\n' "$adr_files" | while IFS= read -r adr; do
     [ -s "$adr" ] || fail "missing or empty indexed ADR: $adr"
+    if [ "$adr" = docs/adr/0034-modern-alpha-update-and-recovery.md ]; then
+        [ "$(grep -c '^Status:' "$adr")" -eq 1 ] || fail "Modern proposal status is ambiguous"
+        grep -qx 'Status: Proposed — independent architecture/security review pending' "$adr" || fail "Modern proposal must not claim accepted authority"
+    else
     case "$adr" in
         docs/adr/0013-* | docs/adr/0014-* | docs/adr/0015-* | docs/adr/0016-*) adr_approval_date=2026-07-17 ;;
         docs/adr/0017-*) adr_approval_date=2026-08-20 ;;
@@ -755,6 +759,7 @@ printf '%s\n' "$adr_files" | while IFS= read -r adr; do
         *) adr_approval_date=$approval_date ;;
     esac
     grep -qx "Status: Accepted — $adr_approval_date" "$adr" || fail "ADR status mismatch: $adr"
+    fi
 
     for heading in \
         '## Context' \
