@@ -31,3 +31,10 @@ Pure self-tests exercise metadata/loader-path parsing, reference-path rejection,
 unresolved/ambiguous dependencies and default-denied entry. They do not execute
 provision tools or export files. Actual compiler/runtime dependency compatibility
 remains unverified until the later reviewed cloud construction job runs.
+
+The explicitly loaded LLVM codegen backend is an additional closure root, not
+assumed to appear in rustc DT_NEEDED. Exactly one expected regular, non-symlink
+backend under the fixed host codegen-backends directory is required. Its ELF
+closure is inspected too. Malformed interpreter/NEEDED lines and unsupported
+FILTER/AUXILIARY tags fail instead of being mistaken for an empty dependency
+set. A real bounded musl compile remains mandatory before image usability.

@@ -96,11 +96,29 @@ def trace_paths(text):
     return paths, resolved
 
 def dynamic_metadata(program, dynamic):
-    interpreters = re.findall(r"\[Requesting program interpreter: ([^\]]+)\]", program)
+    interpreters = []
+    for line in program.splitlines():
+        if "Requesting program interpreter" not in line:
+            continue
+        match = re.fullmatch(r"\[Requesting program interpreter: ([^\]]+)\]", line.strip())
+        if match is None:
+            raise Invalid("malformed interpreter metadata")
+        interpreters.append(match.group(1))
     if len(interpreters) > 1:
         raise Invalid("multiple interpreters")
+    if any(line.split()[:1] == ["INTERP"] for line in program.splitlines()) and not interpreters:
+        raise Invalid("missing interpreter metadata")
     interpreter = safe_path(interpreters[0]) if interpreters else None
-    needed = re.findall(r"\(NEEDED\).*Shared library: \[([^\]]+)\]", dynamic)
+    needed = []
+    for line in dynamic.splitlines():
+        if "FILTER" in line or "AUXILIARY" in line:
+            raise Invalid("unsupported dynamic dependency tag")
+        if "NEEDED" not in line:
+            continue
+        match = re.fullmatch(r"0x[0-9a-fA-F]+[ \t]+\(NEEDED\)[ \t]+Shared library: \[([^\]]+)\]", line.strip())
+        if match is None:
+            raise Invalid("malformed dynamic dependency metadata")
+        needed.append(match.group(1))
     if len(needed) > 128 or len(set(needed)) != len(needed):
         raise Invalid("dependency count/duplicates")
     for name in needed:
@@ -108,6 +126,16 @@ def dynamic_metadata(program, dynamic):
             x in name.lower() for x in ("crypto", "ssl", "sodium")):
             raise Invalid("unexpected dynamic dependency")
     return interpreter, needed
+
+def select_backend(entries):
+    if type(entries) is not list or len(entries) != 1:
+        raise Invalid("exactly one LLVM backend required")
+    name, regular, symlink = entries[0]
+    if (type(name) is not str or len(name) > 128 or
+        re.fullmatch(r"librustc_codegen_llvm(?:-[0-9a-f]+)?\.so", name) is None or
+        regular is not True or symlink is not False):
+        raise Invalid("LLVM backend type/name")
+    return name
 
 def main():
     if (os.uname().sysname != "Linux" or os.uname().machine != "x86_64" or
@@ -155,7 +183,16 @@ def main():
         os.utime(destination, (EPOCH, EPOCH))
         files[str(path)] = {"source": str(actual), "sha256": digest.hexdigest(),
                             "size": size, "mode": 0o555 if executable else 0o444}
-    pending = [RUSTC, LLD]
+    backend_root = SYSROOT / "lib/rustlib/x86_64-unknown-linux-gnu/codegen-backends"
+    if backend_root.is_symlink() or not backend_root.is_dir():
+        raise Invalid("LLVM backend directory")
+    entries = []
+    for path in backend_root.iterdir():
+        entries.append((path.name, path.is_file(), path.is_symlink()))
+        if len(entries) > 1:
+            raise Invalid("ambiguous codegen backend directory")
+    backend = backend_root / select_backend(entries)
+    pending = [RUSTC, LLD, backend]
     seen = set()
     while pending:
         path = safe_path(str(pending.pop()))
@@ -210,7 +247,7 @@ def main():
     root.chmod(0o555)
     os.utime(root, (EPOCH, EPOCH))
     report = {"state": "private-closure-export-only", "files": files, "graph": graph,
-              "total_bytes": total, "runtime_libraries": sorted(str(x.parent) for x in seen),
+              "total_bytes": total, "codegen_backend": str(backend),
               "licenses": "must be completed and reviewed before image publication",
               "target_execution": False, "accepted_compiler_image": False}
     Path("/build/compiler-closure.json").write_text(json.dumps(report, sort_keys=True, indent=2) + chr(10))
@@ -251,6 +288,22 @@ def self_test():
                         "0x1 (NEEDED) Shared library: [../lib.so]"):
                 with self.assertRaises(Invalid): dynamic_metadata(program, bad)
             with self.assertRaises(Invalid): dynamic_metadata(program + program, dynamic)
+        def test_codegen_backend_selection(self):
+            good = ("librustc_codegen_llvm-abcdef123456.so", True, False)
+            self.assertEqual(select_backend([good]), good[0])
+            for values in ([], [good, good], [(good[0], True, True)],
+                           [(good[0], False, False)], [("other.so", True, False)],
+                           [("librustc_codegen_llvm-abc.so.extra", True, False)]):
+                with self.assertRaises(Invalid): select_backend(values)
+        def test_malformed_metadata_is_not_empty_closure(self):
+            for dynamic in ("NEEDED unknown", "0x1 (NEEDED) truncated",
+                            "0x1 (FILTER) Shared library: [a.so]",
+                            "0x1 (AUXILIARY) Shared library: [a.so]"):
+                with self.assertRaises(Invalid): dynamic_metadata("", dynamic)
+            for program in ("prefix [Requesting program interpreter: /lib/ld.so]",
+                            "[Requesting program interpreter: /lib/ld.so",
+                            "INTERP 0x0 0x0"):
+                with self.assertRaises(Invalid): dynamic_metadata(program, "")
         def test_default_guard_never_inspects_or_exports(self):
             with patch.dict(os.environ, {}, clear=True), patch(__name__ + ".run") as runner:
                 with self.assertRaises(Invalid): main()
