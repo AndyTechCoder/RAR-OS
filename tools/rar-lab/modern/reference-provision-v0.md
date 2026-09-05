@@ -83,3 +83,36 @@ torn down; uploading failure evidence does not prove early daemon cancellation.
 Such a run never establishes candidate success and must not be automatically
 retried or used for activation. Cancellation/teardown closure remains required
 before accepting the later runtime profile.
+
+## Buildx client-state compatibility fix
+
+The first real run33956829038 stopped at Buildx inspection because the empty
+Docker config path was unwritable. The controller now creates one fresh, empty,
+mode0700 `modern-reference-docker-config/` directory under the disposable cloud
+workspace. Buildx may write its own client metadata there. It is not the runner's
+normal Docker config, receives no copied credentials/configuration, is never
+mounted into construction or runtime containers, and is not retained as an
+artifact. The complete child environment still comes from a fixed dictionary.
+Git global/system config remains disabled. No permission elevation, host config
+fallback, reference/target execution or sandbox relaxation is introduced.
+The evidence manifest now labels identity/acquisition/inventory/build phases and
+marks the final stage complete only on candidate success.
+
+## Explicit reference process environment and failure evidence
+
+Cloud run 33957914221 built the first candidate successfully, then rejected its
+process configuration. The previous empty-environment assumption is unsuitable
+for BuildKit, which supplies a default PATH even for a scratch image. The final
+stage now explicitly sets exactly `PATH=/nonexistent`; inventory requires this
+single entry, rejects duplicate or additional entries, and retains all previous
+user, entrypoint, command, mount and executable restrictions. The absent search
+directory grants no executable lookup authority. Adapters use fixed absolute
+entrypoints. This does not activate an execution role; any future role must
+validate the same exact environment before starting a container.
+
+Each bounded candidate archive is retained before inventory validation, with the
+manifest stage identifying the inventory attempt. A retained archive is not
+acceptance: only successful inventories enter the builds list, and the status
+remains failed unless two complete inventories reproduce. No candidate is run.
+The earlier failed run did not retain its candidate config, so the injected PATH
+is the source-backed explanation, not a recovered byte-for-byte config claim.
