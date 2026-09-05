@@ -32,10 +32,10 @@ unresolved/ambiguous dependencies and default-denied entry. They do not execute
 provision tools or export files. Actual compiler/runtime dependency compatibility
 remains unverified until the later reviewed cloud construction job runs.
 
-The explicitly loaded LLVM codegen backend is an additional closure root, not
-assumed to appear in rustc DT_NEEDED. Exactly one expected regular, non-symlink
-backend under the fixed host codegen-backends directory is required. Its ELF
-closure is inspected too. Malformed interpreter/NEEDED lines and unsupported
+Any separately loaded LLVM codegen backend is an additional closure root, not
+assumed to appear in rustc DT_NEEDED. The fixed host codegen-backends directory
+may be absent/empty for the builtin backend, or contain exactly one recognized
+regular non-symlink backend. Any separate backend's ELF closure is inspected too. Malformed interpreter/NEEDED lines and unsupported
 FILTER/AUXILIARY tags fail instead of being mistaken for an empty dependency
 set. A real bounded musl compile remains mandatory before image usability.
 
@@ -58,3 +58,6 @@ driver/LLVM dynamic dependency graph remains fully inspected; no arbitrary
 library-directory copy is added. A real isolated static compile and final-image
 closure/reproducibility checks are still mandatory before image acceptance.
 This correction does not activate the exporter or any runtime profile.
+
+The exact CPU-probe header is bound to pinned upstream output:
+https://github.com/rust-lang/rust/blob/1.95.0/compiler/rustc_codegen_llvm/src/llvm_util.rs#L540 .

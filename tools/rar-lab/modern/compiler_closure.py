@@ -153,7 +153,7 @@ def validate_backend_probe(version, cpus):
     if len(llvm) != 1 or re.fullmatch(r"LLVM version: [0-9]+\.[0-9]+\.[0-9]+", llvm[0]) is None:
         raise Invalid("LLVM version")
     cpu_lines = cpus.splitlines()
-    if (not cpu_lines or cpu_lines[0] != "The following CPUs are supported by this target:" or
+    if (not cpu_lines or cpu_lines[0] != "Available CPUs for this target:" or
         not any(line.strip().split()[:1] == ["x86-64"] for line in cpu_lines[1:])):
         raise Invalid("LLVM target CPU probe")
     return {"llvm_version": llvm[0][14:],
@@ -325,7 +325,7 @@ def self_test():
                 with self.assertRaises(Invalid): select_backend(values)
         def test_positive_backend_probe_required(self):
             version = "rustc 1.95.0 (fixture)\nhost: x86_64-unknown-linux-gnu\nrelease: 1.95.0\nLLVM version: 22.1.0\n"
-            cpus = "The following CPUs are supported by this target:\n    x86-64\n"
+            cpus = "Available CPUs for this target:\n    x86-64\n"
             result = validate_backend_probe(version, cpus)
             self.assertEqual(result["llvm_version"], "22.1.0")
             for bad in ("", version.replace("1.95.0", "1.94.0"),
