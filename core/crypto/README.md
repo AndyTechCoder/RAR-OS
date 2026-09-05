@@ -1,7 +1,7 @@
 # RAR Alpha cryptographic building blocks
 
-Status: experimental SHA-512 and Ed25519 building blocks, not activated.
-No production audit, encryption, signed loader or target integration is claimed.
+Status: experimental hash, Ed25519 and AEAD building blocks, not activated.
+No production audit, active encryption, signed loader or target integration is claimed.
 
 The source is RAR-authored from the established FIPS 180-4 SHA-512 algorithm.
 It allocates no memory, has no unsafe code or external crate dependency, and
@@ -56,3 +56,29 @@ host module remains unchanged. Official vectors, streaming/padding boundaries
 and overflow tests accompany it. Modern candidate metadata and journal models
 reuse it; no new OS image links it yet. All independent-reference and runtime
 gates above remain applicable.
+
+## ChaCha20-Poly1305 candidate
+
+RAR-owned RFC8439 implementation, unactivated. seal/open accept 32-byte keys,
+12-byte nonces, at most4096 data bytes and256 associated-data bytes. Full16-byte
+tags are checked before any decryption; all errors leave input unchanged.
+No raw stream-cipher or standalone Poly1305 public API is exposed.
+
+Poly1305 uses five26-bit limbs, bounded u64 multiplication, three fixed carry
+sweeps and branchless canonical reduction. ChaCha uses fixed rounds and public
+indices. This source-level design is not proof of compiled constant-time
+behavior. No secret-memory zeroization, key custody, production privacy or
+side-channel certification is claimed. Normative source:
+https://www.rfc-editor.org/rfc/rfc8439.html
+
+Tests include the RFC quarter-round, block, key-generation, MAC and AEAD vectors,
+all11 AppendixA.3 carry/reduction vectors, every single-byte corruption of the
+AEAD fixture's ciphertext/tag/AAD/nonce/key, and bounded padding/length cases.
+Two pinned independent reference comparisons, retained fuzzing, resource and
+compiled-code review are still mandatory before activation.
+
+Nonce uniqueness is a caller obligation across abandoned writes, crashes and
+rollback. The future Data protocol must durably reserve counters before use,
+refuse ambiguous/exhausted state, and never derive uniqueness from a rewound
+filesystem generation. Whole-volume rollback cannot be prevented by metadata
+on that same volume. No Data writer or recovery integration exists yet.
