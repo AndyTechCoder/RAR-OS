@@ -8,6 +8,9 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 [ "$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")" = /tmp ] || exit 1
 ulimit -f 860160
 
+# Primitive host tests use the already approved executable /build tmpfs.
+/bin/sh "$root/tools/ci/check-alpha-crypto-primitives.sh"
+
 /bin/sh "$root/tools/ci/test-accepted-evidence-v0-policy.sh"
 /bin/sh "$root/tools/ci/test-alpha-crypto-reference-policy.sh"
 /bin/sh "$root/tools/ci/test-alpha-dependency-policy.sh"

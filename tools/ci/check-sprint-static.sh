@@ -11,10 +11,6 @@ case "$root" in '/Volumes/Z Slim/Andy’s folder/Codex/RAR OS Alpha/'*) budget_c
 ulimit -f 131072
 
 tools/ci/check-specs.sh
-# Modern Alpha primitive tests run only inside the isolated cloud job.
-if [ "${GITHUB_ACTIONS-}" = true ] && [ "${CI-}" = true ]; then
-    /bin/sh tools/ci/check-alpha-crypto-primitives.sh
-fi
 /bin/sh tools/rar-lab/foundation/check.sh
 /bin/sh tools/rar-lab/platform/check.sh
 /bin/sh tools/rar-lab/desktop/check.sh

@@ -16,7 +16,7 @@ for the required independent reference, fuzz, specialist or runtime gates.
 
 Validation is cloud-only through the existing isolated Specifications controller.
 tools/ci/check-alpha-crypto-primitives.sh runs focused host model tests and a
-no_std library compilation in disposable cloud scratch, never an OS image.
+no_std library compilation in the existing executable /build cloud tmpfs, never an OS image.
 It refuses non-CI/non-Linux invocation. Do not run it on the owner's Mac or SSD.
 
 Replacement boundary: keep algorithm code independent of key custody, manifest
