@@ -19,3 +19,9 @@ work=$(mktemp -d /build/rar-crypto-tests.XXXXXXXX)
 "$work/crypto-tests"
 /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --crate-type lib -D warnings core/crypto/lib.rs -o "$work/libcrypto.rlib"
 printf '%s\n' 'Alpha crypto: SHA-512/Ed25519 initial focused tests and no_std compile passed; signing/runtime gates not claimed'
+
+# Data-only candidate provisioning checks. No network, Docker or target launch.
+[ -x /usr/bin/python3 ]
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/reference_inventory.py" --self-test
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/provision_reference.py" --self-test
+printf '%s\n' 'Modern reference provisioning: pure inventory/acquisition/guard tests passed; candidate construction and activation not claimed'
