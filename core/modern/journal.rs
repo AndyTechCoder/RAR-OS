@@ -211,13 +211,23 @@ mod tests {
         assert!(Record::decode(&[0;SIZE+1]).is_err());
     }
     #[test] fn torn_selector_publication_selects_only_complete_old_or_new() {
-        let (a,b,c)=chain();
-        // Sector0 is older A; B in sector1 remains untouched during C publication.
-        for cut in 0..=SIZE {
-            let mut sector=a.encode(); sector[..cut].copy_from_slice(&c.encode()[..cut]);
-            let selected=select([&sector,&b.encode()]).unwrap();
-            assert!(selected.record==b || selected.record==c,"cut {cut}");
-            if cut==SIZE {assert_eq!(selected.record,c);}
+        let (a,b,c)=chain(); let fallback=b.fallback().unwrap();
+        // First install, subsequent install, and rollback publication all differ.
+        for (old_sectors,current,next,target) in [
+            ([a.encode(),[0;SIZE]],a,b,1usize),
+            ([a.encode(),b.encode()],b,c,0),
+            ([a.encode(),b.encode()],b,fallback,0),
+        ] {
+            let complete=next.encode();
+            for cut in 0..=SIZE {
+                let mut sectors=old_sectors;
+                sectors[target][..cut].copy_from_slice(&complete[..cut]);
+                let selected=select([&sectors[0],&sectors[1]]).unwrap();
+                // A shorter prefix can already be complete if the untouched
+                // suffix equals the successor. Judge actual bytes, not cut count.
+                let expected=if sectors[target]==complete {next}else{current};
+                assert_eq!(selected.record,expected,"kind {:?}, cut {cut}",next.kind);
+            }
         }
     }
     #[test] fn missing_conflicting_forked_and_gapped_records_fail_closed() {

@@ -47,8 +47,8 @@ I/O, keys with real secrecy, kernel capabilities or execution occurs here.
 
 The digest is SHA256(bytes[0..288]). The digest and signature fields are entirely
 absent from that preimage, not replaced by zeros. Signed bytes are exactly the
-19 bytes ASCII RAR-LAYER-ALPHA-V0 plus zero, then the 32-byte manifest digest:
-51 bytes total, as required by ADR0019. This is PureEd25519, not Ed25519ph/ctx.
+18 ASCII bytes RAR-LAYER-ALPHA-V0, followed by one zero byte (a 19-byte
+domain prefix), then the 32-byte manifest digest: 51 bytes total, as required by ADR0019. This is PureEd25519, not Ed25519ph/ctx.
 
 The laboratory public key is RFC8032 section7.1 TEST1's
 d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a.

@@ -1,5 +1,19 @@
 # Sprint Alpha 0.1 Status
 
+## Current M4 implementation checkpoint
+
+- Baseline: M3 release preserved at 06ecaaad61ab40f4c90ee73df85ee3493c89ccc1.
+- M4 signing foundation merged in PR157 at 3bcf638a87007aee8320079132b42fb15395bcc8;
+  exact-main Specifications33947755718 passed.
+- Continuing PR158: bounded manifest validation, System journal selection,
+  SHA256 adapter and logical lifecycle mechanism models with matching contracts
+  and cloud tests. Candidate only; not linked into a running OS.
+- Still required: positive signed packages and independent reference closure,
+  actual sealed loading/PIO storage, encrypted Data, durable transactions,
+  GUI live replacement, reboot/fault/recovery evidence and M4 release gate.
+- Mac/SSD unchanged; no local builds or RAR execution.
+
+
 ## Active milestone — Modern Architecture
 
 - Owner requested Milestone 4 on 2026-09-05 UTC.

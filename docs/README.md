@@ -113,3 +113,5 @@ permanently irreplaceable.
 - [Desktop evidence publication guide](evidence/desktop-milestone-3.md)
 
 - [Modern-v0 candidate System contract](interfaces/modern-system-v0.md)
+
+- [Modern-v0 candidate lifecycle contract](interfaces/modern-lifecycle-v0.md)
