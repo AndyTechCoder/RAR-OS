@@ -10,7 +10,7 @@ import subprocess
 import sys
 import time
 
-protocol = {}
+protocol = {"__file__": str(Path(__file__).resolve().parent / "protocol.py")}
 exec(compile((Path(__file__).resolve().parent / "protocol.py").read_text(),
              "desktop-protocol.py", "exec"), protocol)
 
@@ -67,6 +67,8 @@ def read_frame():
             raise ValueError("capture is not the fixed bounded regular file")
         with os.fdopen(fd, "rb", closefd=False) as stream:
             frame = stream.read(protocol["FRAME_BYTES"] + 1)
+        if len(frame) != protocol["FRAME_BYTES"] or not frame.startswith(protocol["FRAME_HEADER"]):
+            raise ValueError("capture header or actual read length mismatch")
         return frame
     finally:
         os.close(fd)
@@ -194,4 +196,61 @@ def main():
             except subprocess.TimeoutExpired:
                 child.kill();child.wait(timeout=2)
 
+
+def self_test():
+    """In-memory parser/file-adapter faults; never starts a VM or writes a file."""
+    import io
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    rejected=0
+    class Fake:
+        def __init__(self,chunks): self.chunks=list(chunks);self.sent=[]
+        def settimeout(self,value): assert 0<value<=2
+        def recv(self,size):
+            if not self.chunks: return b""
+            value=self.chunks.pop(0)
+            if isinstance(value,Exception): raise value
+            return value
+        def sendall(self,value): self.sent.append(value)
+    def reject(fn):
+        nonlocal rejected
+        try: fn()
+        except (ValueError,TimeoutError,OSError): rejected+=1
+        else: raise AssertionError("malformed QMP/capture accepted")
+    for chunks in ([b'{"x":1,"x":2}\n'],[b'[]\n'],[b'!\n'],
+                   [b"x"*16385],[b""],[TimeoutError("fixture")]):
+        reject(lambda chunks=chunks: Qmp(Fake(chunks),time.monotonic()+1).receive())
+    nonce="abcdefgh"
+    for chunks in ([b'{"return":{},"id":2}\n'],[b'{"return":{},"id":true}\n'],
+                   [b'{"error":{},"id":1}\n'],[b'{"return":{},"id":1,"extra":1}\n'],
+                   [b'{"return":{"x":1},"id":1}\n'],
+                   [b'{"event":"TEST"}\n']*33):
+        reject(lambda chunks=chunks: Qmp(Fake(chunks),time.monotonic()+1).request("capture",1,nonce))
+    reject(lambda: Qmp(Fake([]),time.monotonic()-1).request("capture",1,nonce))
+    good=Fake([b'{"ret',b'urn":{},',b'"id":1}\n'])
+    Qmp(good,time.monotonic()+1).request("capture",1,nonce)
+    assert json.loads(good.sent[0])["arguments"]=={"filename":protocol["FRAME_PATH"]}
+    frame=protocol["oracle"]["expected"](0,nonce)
+    def capture(mode,size,data,opening=None):
+        def opened(path,flags):
+            assert path==protocol["FRAME_PATH"] and flags & os.O_NOFOLLOW
+            if opening: raise opening
+            return 71
+        with patch.object(os,"open",opened),patch.object(os,"close",lambda fd:None), \
+             patch.object(os,"fstat",lambda fd:SimpleNamespace(st_mode=mode,st_size=size)), \
+             patch.object(os,"fdopen",lambda *args,**kwargs:io.BytesIO(data)):
+            return read_frame()
+    regular=stat.S_IFREG|0o600
+    for error in (FileNotFoundError("missing"),OSError(40,"symlink refused")):
+        reject(lambda error=error:capture(regular,len(frame),frame,error))
+    reject(lambda:capture(stat.S_IFDIR, len(frame),frame))
+    reject(lambda:capture(regular,len(frame)-1,frame))
+    reject(lambda:capture(regular,len(frame),b"X"+frame[1:]))
+    reject(lambda:capture(regular,len(frame),frame[:-1]))
+    reject(lambda:capture(regular,len(frame),frame+b"x"))
+    assert capture(regular,len(frame),frame)==frame
+    assert rejected==20
+    return rejected
+
 if __name__=="__main__": main()
+

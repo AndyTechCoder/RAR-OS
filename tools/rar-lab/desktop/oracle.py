@@ -14,7 +14,7 @@ def plan(nonce):
         return ["spc" if c==" " else "ret" if c=="\n" else c for c in s]
     return ([],["f1"],["f2"],["spc"],["esc"],["f3"],
             typed("write note "+nonce+"x")+["backspace","ret"],typed("read note\n"),
-            ["f1","down"],typed("crash\n")+["f3"],["f1"],["f2","spc"])
+            ["f1","down"],["f3"]+typed("crash\n")+["f3"],["f1"],["f2","spc"])
 
 def scene(index,nonce):
     plan(nonce)
@@ -23,12 +23,12 @@ def scene(index,nonce):
     order=() if index==0 else (4,) if index in (1,4) else (4,5) if index in (2,3) else (4,6) if 5<=index<=7 else (6,4) if index==8 else (4,) if index in (9,10) else (4,5)
     focus=order[-1] if order else 0
     lines={
-      4:["TEMPORARY WORKSPACE","WELCOME","RAR OS ALPHA","UP/DOWN SELECT  F1 REFRESH","RAM ONLY - LOST ON STOP"],
+      4:["TEMPORARY WORKSPACE","WELCOME","SELECTED: WELCOME","RAR OS ALPHA","UP/DOWN SELECT  F1 REFRESH","RAM ONLY - LOST ON STOP"],
       5:["APPEARANCE","LIGHT" if light else "DARK","SPACE TO CHANGE THEME","SESSION ONLY"],
       6:["RAR TERMINAL","HELP LIST READ WRITE CRASH","","> "],
     }
     if index>=6: lines[6]=["RAR TERMINAL","SAVED NOTE" if index==6 else "NOTE",nonce,"> "]
-    if index>=8: lines[4]=["TEMPORARY WORKSPACE","NOTE",nonce,"UP/DOWN SELECT  F1 REFRESH","RAM ONLY - LOST ON STOP"]
+    if index>=8: lines[4]=["TEMPORARY WORKSPACE","WELCOME NOTE","SELECTED: NOTE",nonce,"UP/DOWN SELECT  F1 REFRESH","RAM ONLY - LOST ON STOP"]
     return light,order,focus,lines,index>=9
 
 def expected(index,nonce):

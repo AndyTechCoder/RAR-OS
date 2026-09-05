@@ -9,7 +9,7 @@ HERE = Path(__file__).resolve().parent
 helpers = {"__name__": "trusted_foundation_helpers"}
 exec(compile((HERE.parent / "foundation/controller.py").read_text(),
              "trusted-foundation-controller.py", "exec"), helpers)
-protocol = {"__name__": "trusted_desktop_protocol"}
+protocol = {"__name__": "trusted_desktop_protocol", "__file__": str(HERE / "protocol.py")}
 exec(compile((HERE / "protocol.py").read_text(), "trusted-desktop-protocol.py", "exec"), protocol)
 run, digest, sandbox = (helpers[name] for name in ("run", "digest", "sandbox"))
 POLICY = helpers["POLICY"]
@@ -66,7 +66,9 @@ def unpack(data):
     return result
 
 def self_test():
-    rejected = protocol["self_test"]() + helpers["negative_tests"]()
+    import runpy
+    launcher=runpy.run_path(str(HERE/"launch.py"),run_name="desktop_launcher_test")
+    rejected = protocol["self_test"]() + helpers["negative_tests"]() + launcher["self_test"]()
     assert source_kind("absent", "absent", ["docs/tasks/a.md"]) == "controller-only"
     assert source_kind("absent", "complete", []) == "target"
     assert source_kind("complete", "complete", []) == "target"

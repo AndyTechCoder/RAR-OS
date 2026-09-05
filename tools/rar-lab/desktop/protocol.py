@@ -153,6 +153,27 @@ def self_test():
     reject(validate_result,b'{"qemu_exit":0,"qemu_exit":124}')
     reject(validate_result,b"["*2000)
     reject(validate_result,b"x"*(RESULT_LIMIT+1))
+    focus=0
+    typed=""
+    crashed=False
+    for index,keys in enumerate(oracle["plan"](nonce)):
+        for key in keys:
+            if key in ("f1","f2","f3"):
+                focus={"f1":4,"f2":5,"f3":6}[key]
+                if focus==6 and crashed: focus=4
+            elif key=="esc": focus=4
+            elif key=="down": assert focus==4
+            elif focus==5: assert key=="spc"
+            else:
+                assert focus==6, "text must reach Terminal, never another focused app"
+                if key=="backspace": typed=typed[:-1]
+                elif key=="ret":
+                    assert typed=={6:"write note "+nonce,7:"read note",9:"crash"}[index]
+                    if typed=="crash": crashed=True
+                    typed=""
+                else: typed+=" " if key=="spc" else key
+        assert focus==oracle["scene"](index,nonce)[2]
+    assert crashed and oracle["plan"](nonce)[9][-1]=="f3"
     assert len(oracle["plan"](nonce))<=16
     assert sum(map(len,oracle["plan"](nonce)))<=256
     return rejected

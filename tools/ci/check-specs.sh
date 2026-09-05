@@ -676,7 +676,7 @@ duplicates=$(printf '%s\n' "$index_targets" | sort | uniq -d)
 
 adr_files=$(sed -n 's/^- \[ADR [^]]*\](\(adr\/[^)]*\.md\))$/docs\/\1/p' docs/README.md)
 adr_count=$(printf '%s\n' "$adr_files" | awk 'NF { count++ } END { print count + 0 }')
-[ "$adr_count" -eq 31 ] || fail "expected exactly 31 indexed ADRs"
+[ "$adr_count" -eq 32 ] || fail "expected exactly 32 indexed ADRs"
 
 approval_date=$(sed -n 's/^Date: //p' docs/approval-record.md)
 case "$approval_date" in
@@ -751,6 +751,7 @@ printf '%s\n' "$adr_files" | while IFS= read -r adr; do
         docs/adr/0027-* | docs/adr/0028-* | docs/adr/0029-*) adr_approval_date=2026-08-30 ;;
         docs/adr/0031-*) adr_approval_date=2026-08-31 ;;
         docs/adr/0032-*) adr_approval_date=2026-09-04 ;;
+        docs/adr/0033-*) adr_approval_date=2026-09-05 ;;
         *) adr_approval_date=$approval_date ;;
     esac
     grep -qx "Status: Accepted — $adr_approval_date" "$adr" || fail "ADR status mismatch: $adr"

@@ -27,6 +27,9 @@ Status: Gate 0 approved on 2026-07-16
 - [Gate 0 Approval Record](approval-record.md)
 - [Initial Publication Record](publication-record.md)
 - [Fast-Track Alpha Milestone 1](tasks/fast-track-alpha-milestone-1.md)
+- [Fast-Track Alpha Milestone 2](tasks/fast-track-alpha-milestone-2.md)
+- [Fast-Track Alpha Milestone 3](tasks/fast-track-alpha-milestone-3.md)
+- [Desktop-v0 private runtime contract](interfaces/desktop-runtime-v0.md)
 - [Release 0 Task Packets](tasks/release-0.md)
 - [Sprint Alpha Vertical Implementation Packet](tasks/sprint-alpha-vertical.md)
 - [Sprint Alpha Milestone A execution map](tasks/sprint-alpha-milestone-a-execution-map.md)
@@ -80,6 +83,7 @@ Status: Gate 0 approved on 2026-07-16
 - [ADR 0029: Alpha State Ticket Lifecycle](adr/0029-alpha-state-ticket-lifecycle.md)
 - [ADR 0031: Alpha Compact PCI BDF Encoding](adr/0031-alpha-compact-pci-bdf-encoding.md)
 - [ADR 0032: Fast-Track Alpha Milestone Governance](adr/0032-fast-track-alpha.md)
+- [ADR 0033: Bounded Usable Alpha Composition](adr/0033-usable-alpha-composition.md)
 
 Gate 0 approval covers ADRs 0001–0016 and the Release 0 task packet. Later
 indexed ADRs are authoritative only through their separately recorded approval

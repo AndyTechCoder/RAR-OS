@@ -10,6 +10,6 @@ for name in ("oracle", "protocol", "controller", "launch"):
     path=Path("tools/rar-lab/desktop")/(name+".py")
     compile(path.read_text(),str(path),"exec")
 scope=runpy.run_path("tools/rar-lab/desktop/controller.py",run_name="desktop_controller_test")
-assert scope["self_test"]()==66
-print("Desktop controller: 66 negative tests passed; no target execution")
+assert scope["self_test"]()==86
+print("Desktop controller: 86 negative tests passed; no target execution")
 '
