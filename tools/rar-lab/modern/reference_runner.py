@@ -139,7 +139,7 @@ def execute(image: str, implementation: int, request: bytes) -> tuple[int, int, 
     result = None
     try:
         code, raw, error = exchange(argv, b"", 10, 65, 1024)
-        if code != 0 or error or re.fullmatch(b"[0-9a-f]{64}\\n", raw) is None:
+        if code != 0 or error or re.fullmatch(b"[0-9a-f]{64}" + bytes([10]), raw) is None:
             raise RunFailure("ambiguous create; terminate disposable job")
         cid = raw[:-1].decode("ascii")
         item = owned_container(control(["container", "inspect", cid]), cid, name, image)
@@ -214,7 +214,7 @@ def self_test() -> None:
             module = __name__
             with patch(module + ".cloud_guard"), patch(module + ".uuid.uuid4") as uid:
                 uid.return_value.hex = "b" * 32
-                with patch(module + ".exchange", side_effect=[(0, (cid + "\\n").encode(), b""), (0, b"result", b"")]) as ex:
+                with patch(module + ".exchange", side_effect=[(0, (cid + chr(10)).encode(), b""), (0, b"result", b"")]) as ex:
                     with patch(module + ".control", side_effect=[json.dumps([item]).encode(), b"", b""]) as ctl:
                         self.assertEqual(execute(image, 1, bytes(16)), (1, 0, b"result", b""))
                         self.assertEqual(ex.call_args_list[1].args[0][-4:], ["start", "--attach", "--interactive", cid])
@@ -226,7 +226,7 @@ def self_test() -> None:
                         with self.assertRaises(RunFailure): execute(image, 1, bytes(16))
                         ctl.assert_not_called()
                 item["Config"]["Labels"] = {"rar.modern.owner": "someone-else"}
-                with patch(module + ".exchange", return_value=(0, (cid + "\\n").encode(), b"")) as ex:
+                with patch(module + ".exchange", return_value=(0, (cid + chr(10)).encode(), b"")) as ex:
                     with patch(module + ".control", return_value=json.dumps([item]).encode()) as ctl:
                         with self.assertRaises(RunFailure): execute(image, 1, bytes(16))
                         self.assertEqual(ex.call_count, 1)
