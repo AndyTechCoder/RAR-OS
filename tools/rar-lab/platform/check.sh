@@ -1,13 +1,15 @@
 #!/bin/sh
-# Host-only bounded Platform parser tests inside the existing cloud validator.
-# Never compile or execute a RAR target, emulator or VM from this check.
+# Pure host-model/protocol checks inside the existing trusted cloud CI sandbox.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd -P)
 cd "$root"
 python3 -I -B -c '
 from pathlib import Path
-scope = {"__name__": "platform_protocol_test"}
-exec(compile(Path("tools/rar-lab/platform/protocol.py").read_text(), "platform-protocol.py", "exec"), scope)
-assert scope["self_test"]() == 28
-print("Platform protocol: 28 negative tests passed; no target execution")
+import runpy
+for name in ("protocol", "controller", "launch"):
+    path=Path("tools/rar-lab/platform")/(name+".py")
+    compile(path.read_text(),str(path),"exec")
+scope=runpy.run_path("tools/rar-lab/platform/controller.py",run_name="platform_controller_test")
+assert scope["self_test"]()==63
+print("Platform controller: 63 negative tests passed; no target execution")
 '
