@@ -179,17 +179,27 @@ def file_identity(path, maximum):
             digest.update(part)
     return {"sha256": digest.hexdigest(), "size": size}
 
+def child_environment(workspace):
+    if not workspace.is_absolute() or ".." in workspace.parts:
+        raise Invalid("cloud workspace path")
+    return {"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C", "TZ": "UTC",
+            "DOCKER_CONFIG": str(workspace / "modern-reference-docker-config"),
+            "DOCKER_BUILDKIT": "1", "BUILDX_BUILDER": "default",
+            "SOURCE_DATE_EPOCH": str(EPOCH), "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": "/nonexistent", "GIT_ATTR_NOSYSTEM": "1"}
+
 def main():
     workspace, source, sha, run_id, attempt = guard()
     runner_image = os.environ["ImageVersion"]
     # Child tools receive no user Docker/Git/proxy/plugin/TLS configuration.
     # This changes only this cloud process, never workflow-wide settings.
+    environment = child_environment(workspace)
+    config = Path(environment["DOCKER_CONFIG"])
+    config.mkdir(mode=0o700, exist_ok=False)
+    if config.is_symlink() or config.stat().st_mode & 0o777 != 0o700 or any(config.iterdir()):
+        raise Invalid("private empty Docker client state")
     os.environ.clear()
-    os.environ.update({"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C", "TZ": "UTC",
-                       "DOCKER_CONFIG": "/nonexistent", "DOCKER_BUILDKIT": "1",
-                       "BUILDX_BUILDER": "default", "SOURCE_DATE_EPOCH": str(EPOCH),
-                       "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/nonexistent",
-                       "GIT_ATTR_NOSYSTEM": "1"})
+    os.environ.update(environment)
     # All dynamic code is the same trusted-main checkout, never a PR checkout.
     foundation = load_module(source / "tools/rar-lab/foundation/controller.py", "foundation")
     run = foundation.run
@@ -219,13 +229,19 @@ def main():
     try:
         # Network is used only for fixed, hash-pinned acquisition. No source
         # checkout/credentials are mounted into construction or final images.
+        summary["stage"] = "docker-identity"
+        save()
         _, version = run(docker + ["version", "--format", "{{json .}}"], 15, 65536)
         (evidence / "docker-version.json").write_bytes(version)
         _, info = run(docker + ["info", "--format",
                     "{{.ServerVersion}}|{{.Architecture}}|{{.OSType}}|{{.NCPU}}|{{.MemTotal}}|{{json .SecurityOptions}}"], 15, 65536)
         (evidence / "docker-platform.txt").write_bytes(info)
+        summary["stage"] = "base-acquisition"
+        save()
         run(docker + ["pull", "--platform=linux/amd64", BASE], 180, 1048576,
             log_path=evidence / "base-acquisition.log")
+        summary["stage"] = "base-and-builder-identity"
+        save()
         _, pulled = run(docker + ["image", "inspect", "--format",
             '{"Id":{{json .Id}},"Architecture":{{json .Architecture}},"Os":{{json .Os}},"RepoDigests":{{json .RepoDigests}}}', BASE], 15, 65536)
         base_identity = json.loads(pulled)
@@ -243,7 +259,11 @@ def main():
         (evidence / "buildx-version.txt").write_bytes(buildx)
         archives = {}
         for name in SOURCES:
+            summary["stage"] = "acquire-" + name
+            save()
             raw = acquire(name)
+            summary["stage"] = "inventory-" + name
+            save()
             index = archive_inventory(raw)
             archives[name] = raw
             (evidence / name).write_bytes(raw)
@@ -290,6 +310,7 @@ def main():
             save()
         if summary["builds"][0] != summary["builds"][1]:
             raise Invalid("independent provisions differ")
+        summary["stage"] = "complete"
         summary["status"] = "candidate-reproduced-not-activated"
         save()
         print("Reference candidate reproduced; no target or reference execution/activation.", flush=True)
@@ -349,6 +370,18 @@ def self_test():
             with self.assertRaises(Invalid): bounded.read(1)
             with self.assertRaises(Invalid): BoundedInflation(io.BytesIO(b"")).read(-1)
             self.assertEqual(BoundedInflation(io.BytesIO(b"abc")).read(65536), b"abc")
+        def test_private_child_environment_without_inheritance(self):
+            with patch.dict(os.environ, {"DOCKER_CONFIG": "/owner",
+                                         "DOCKER_HOST": "tcp://untrusted",
+                                         "HTTPS_PROXY": "https://private",
+                                         "GIT_CONFIG_COUNT": "1"}, clear=True):
+                value = child_environment(Path("/cloud/job"))
+                self.assertEqual(value["DOCKER_CONFIG"], "/cloud/job/modern-reference-docker-config")
+                self.assertEqual(value["GIT_CONFIG_GLOBAL"], "/nonexistent")
+                for key in ("DOCKER_HOST", "HTTPS_PROXY", "GIT_CONFIG_COUNT", "HOME"):
+                    self.assertNotIn(key, value)
+            for path in (Path("relative"), Path("/cloud/../owner")):
+                with self.assertRaises(Invalid): child_environment(path)
         def test_no_local_default_entry(self):
             with patch.dict(os.environ, {}, clear=True):
                 with self.assertRaises(Invalid): guard()

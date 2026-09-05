@@ -83,3 +83,17 @@ torn down; uploading failure evidence does not prove early daemon cancellation.
 Such a run never establishes candidate success and must not be automatically
 retried or used for activation. Cancellation/teardown closure remains required
 before accepting the later runtime profile.
+
+## Buildx client-state compatibility fix
+
+The first real run33956829038 stopped at Buildx inspection because the empty
+Docker config path was unwritable. The controller now creates one fresh, empty,
+mode0700 `modern-reference-docker-config/` directory under the disposable cloud
+workspace. Buildx may write its own client metadata there. It is not the runner's
+normal Docker config, receives no copied credentials/configuration, is never
+mounted into construction or runtime containers, and is not retained as an
+artifact. The complete child environment still comes from a fixed dictionary.
+Git global/system config remains disabled. No permission elevation, host config
+fallback, reference/target execution or sandbox relaxation is introduced.
+The evidence manifest now labels identity/acquisition/inventory/build phases and
+marks the final stage complete only on candidate success.
