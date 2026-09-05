@@ -247,3 +247,17 @@ ADR 0032 approval: approved
 ADR 0032 approver: Andy / RAR project owner
 ADR 0032 date: 2026-09-04
 ADR 0032 decision: Alternative A
+
+## Fast-Track Alpha Milestone 2 direction
+
+Status: Owner-directed implementation
+Recorded: 2026-09-05 UTC
+
+After Foundation was completed and released, the owner directed: "Next, let's
+reach the second milestone. Start working with the same core principles."
+This authorizes Platform work under ADR 0032, not local execution, deletion,
+external target dependencies or weaker privacy/security/data promises.
+The bounded implementation and evidence requirements are documented in
+`docs/tasks/fast-track-alpha-milestone-2.md`. Engineering choices remain subject
+to independent review; this record does not claim that the owner separately
+selected every technical detail or that Milestone 2 is already complete.

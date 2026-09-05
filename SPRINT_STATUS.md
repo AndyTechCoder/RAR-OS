@@ -2,7 +2,12 @@
 
 ## Active Fast-Track status — 2026-09-04
 
-- Current milestone: Fast-Track Alpha Milestone 1 — Foundation.
+- Current milestone: Fast-Track Alpha Milestone 2 — Platform (implementation starting).
+- Foundation: complete, merged at `27ce297f4ed67117bb9176b98fd3817d095dd29a`,
+  released as `v0.1.0-foundation-alpha`; all final and exact-main checks passed.
+- Platform implementation evidence: none yet; no completion claim.
+- Platform contract: `docs/tasks/fast-track-alpha-milestone-2.md`.
+- Foundation closure history follows for provenance.
 - Authority: ADR 0032 and `docs/tasks/fast-track-alpha-milestone-1.md`.
 - Runtime evidence: source `42be166b38790f18cf5cb7d2d1b4632e06f87e33` passed cloud run `33923002436`:
   two byte-identical builds, 11 tests per build, 26 negative controller tests,
