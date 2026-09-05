@@ -97,3 +97,22 @@ Git global/system config remains disabled. No permission elevation, host config
 fallback, reference/target execution or sandbox relaxation is introduced.
 The evidence manifest now labels identity/acquisition/inventory/build phases and
 marks the final stage complete only on candidate success.
+
+## Explicit reference process environment and failure evidence
+
+Cloud run 33957914221 built the first candidate successfully, then rejected its
+process configuration. The previous empty-environment assumption is unsuitable
+for BuildKit, which supplies a default PATH even for a scratch image. The final
+stage now explicitly sets exactly `PATH=/nonexistent`; inventory requires this
+single entry, rejects duplicate or additional entries, and retains all previous
+user, entrypoint, command, mount and executable restrictions. The absent search
+directory grants no executable lookup authority. Adapters use fixed absolute
+entrypoints. This does not activate an execution role; any future role must
+validate the same exact environment before starting a container.
+
+Each bounded candidate archive is retained before inventory validation, with the
+manifest stage identifying the inventory attempt. A retained archive is not
+acceptance: only successful inventories enter the builds list, and the status
+remains failed unless two complete inventories reproduce. No candidate is run.
+The earlier failed run did not retain its candidate config, so the injected PATH
+is the source-backed explanation, not a recovered byte-for-byte config claim.
