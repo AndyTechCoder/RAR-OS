@@ -160,6 +160,27 @@ def validate_backend_probe(version, cpus):
             "version_sha256": hashlib.sha256(version.encode("ascii")).hexdigest(),
             "target_cpus_sha256": hashlib.sha256(cpus.encode("ascii")).hexdigest()}
 
+def package_owner(text, queried):
+    owners = []
+    for line in text.splitlines():
+        match = re.fullmatch(r"([a-z0-9][a-z0-9+.-]*(?::[a-z0-9][a-z0-9-]*)?): (/.+)", line)
+        if match is None or match.group(2) != queried:
+            raise Invalid("package ownership record")
+        owners.append(match.group(1))
+    if len(owners) != 1:
+        raise Invalid("ambiguous package ownership")
+    return owners[0]
+
+def notice_source(path):
+    value = str(path)
+    roots = (str(SYSROOT / "share/doc/rust") + "/",
+             "/usr/share/doc/", "/usr/share/common-licenses/")
+    if not any(value.startswith(root) for root in roots):
+        raise Invalid("notice source domain")
+    if any(x in ("", ".", "..") for x in value.split("/")[1:]):
+        raise Invalid("notice source path")
+    return path
+
 def main():
     if (os.uname().sysname != "Linux" or os.uname().machine != "x86_64" or
         os.geteuid() != 0 or Path(__file__).resolve() != Path("/build/compiler_closure.py") or
@@ -266,6 +287,95 @@ def main():
         if path.suffix not in (".rlib", ".rmeta", ".a", ".o"):
             raise Invalid("unexpected musl sysroot file")
         export(path, False)
+    # Inert notices never add executable closure authority.
+    notices = {}
+    notice_bytes = 0
+    def copy_notice(source, relative):
+        nonlocal notice_bytes
+        if (re.fullmatch(r"[A-Za-z0-9_.+/-]+", relative) is None or
+            relative.startswith("/") or any(x in ("", ".", "..") for x in relative.split("/")) or
+            len(relative) > 256 or relative in notices):
+            raise Invalid("notice destination")
+        actual = notice_source(source.resolve(strict=True))
+        if not actual.is_file():
+            raise Invalid("notice type")
+        size = actual.stat().st_size
+        if not 1 <= size <= 1048576 or len(notices) >= 512:
+            raise Invalid("notice bounds")
+        with actual.open("rb") as source_stream:
+            raw = source_stream.read(size + 1)
+        notice_bytes += len(raw)
+        if len(raw) != size or notice_bytes > 16777216:
+            raise Invalid("notice size/budget")
+        destination = root / "licenses" / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with destination.open("xb") as output:
+            output.write(raw)
+        destination.chmod(0o444)
+        os.utime(destination, (EPOCH, EPOCH))
+        notices[relative] = {"source": str(actual), "size": size,
+                             "sha256": hashlib.sha256(raw).hexdigest(), "mode": 0o444}
+    rust_docs = SYSROOT / "share/doc/rust"
+    for name in ("LICENSE-APACHE", "LICENSE-MIT", "COPYRIGHT.html"):
+        copy_notice(rust_docs / name, "rust/" + name)
+    extra = rust_docs / "licenses"
+    if extra.is_symlink():
+        raise Invalid("Rust notice directory symlink")
+    if extra.exists():
+        if not extra.is_dir():
+            raise Invalid("Rust notice directory")
+        count = 0
+        for path in extra.rglob("*"):
+            count += 1
+            if count > 512 or path.is_symlink():
+                raise Invalid("Rust notice tree bounds/type")
+            if path.is_dir():
+                continue
+            copy_notice(path, "rust/licenses/" + path.relative_to(extra).as_posix())
+    packages = {}
+    for actual_name in sorted({record["source"] for record in files.values()}):
+        if actual_name.startswith(str(SYSROOT) + "/"):
+            continue
+        aliases = [actual_name]
+        if actual_name.startswith("/usr/lib/"):
+            aliases.append(actual_name[4:])
+        elif actual_name.startswith("/lib/"):
+            aliases.append("/usr" + actual_name)
+        owner = None
+        for queried in aliases:
+            try:
+                ownership = run(["/usr/bin/dpkg-query", "-S", queried])
+            except Invalid:
+                continue
+            owner = package_owner(ownership, queried)
+            break
+        if owner is None:
+            raise Invalid("runtime file package provenance missing")
+        if owner not in packages:
+            identity = run(["/usr/bin/dpkg-query", "-W", "-f=${binary:Package}\\t${Version}\\n", owner])
+            lines = identity.splitlines()
+            if (len(lines) != 1 or len(lines[0]) > 512 or
+                re.fullmatch(re.escape(owner) + r"\t[^\s]+", lines[0]) is None):
+                raise Invalid("package version record")
+            packages[owner] = {"identity": lines[0], "files": []}
+            package_name = owner.split(":")[0]
+            copy_notice(Path("/usr/share/doc") / package_name / "copyright",
+                        "packages/" + owner.replace(":", "-") + ".copyright")
+        packages[owner]["files"].append(actual_name)
+    common = Path("/usr/share/common-licenses")
+    if common.is_symlink() or not common.is_dir():
+        raise Invalid("common licenses missing")
+    common_entries = []
+    for path in common.iterdir():
+        common_entries.append(path)
+        if len(common_entries) > 64:
+            raise Invalid("common license count")
+    if not common_entries:
+        raise Invalid("common license count")
+    for path in sorted(common_entries):
+        if not path.is_file():
+            raise Invalid("common license type")
+        copy_notice(path, "common/" + path.name)
     for path in sorted(root.rglob("*"), reverse=True):
         if path.is_dir():
             path.chmod(0o555)
@@ -275,7 +385,8 @@ def main():
     report = {"state": "private-closure-export-only", "files": files, "graph": graph,
               "total_bytes": total, "codegen_backend": str(backend) if backend else "builtin-in-driver",
               "backend_probe": backend_probe,
-              "licenses": "must be completed and reviewed before image publication",
+              "licenses": {"state": "captured-not-legally-certified", "files": notices,
+                           "total_bytes": notice_bytes, "runtime_packages": packages},
               "target_execution": False, "accepted_compiler_image": False}
     Path("/build/compiler-closure.json").write_text(json.dumps(report, sort_keys=True, indent=2) + chr(10))
 
@@ -323,6 +434,16 @@ def self_test():
                            [(good[0], False, False)], [("other.so", True, False)],
                            [("librustc_codegen_llvm-abc.so.extra", True, False)]):
                 with self.assertRaises(Invalid): select_backend(values)
+        def test_package_owner_and_notice_domains(self):
+            path = "/usr/lib/x86_64-linux-gnu/libc.so.6"
+            self.assertEqual(package_owner("libc6:amd64: " + path, path), "libc6:amd64")
+            for text in ("", "bad output", "libc6:amd64: /other",
+                         "libc6:amd64: " + path + "\nlibc6:amd64: " + path):
+                with self.assertRaises(Invalid): package_owner(text, path)
+            for path in (Path("/etc/passwd"), Path("/usr/share/doc/../secret")):
+                with self.assertRaises(Invalid): notice_source(path)
+            self.assertEqual(notice_source(Path("/usr/share/common-licenses/MIT")),
+                             Path("/usr/share/common-licenses/MIT"))
         def test_positive_backend_probe_required(self):
             version = "rustc 1.95.0 (fixture)\nhost: x86_64-unknown-linux-gnu\nrelease: 1.95.0\nLLVM version: 22.1.0\n"
             cpus = "Available CPUs for this target:\n    x86-64\n"

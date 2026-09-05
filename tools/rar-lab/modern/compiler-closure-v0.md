@@ -22,8 +22,8 @@ operation; reproduce the image; add the bounded source/scratch compiler runner;
 build and inspect the static one-executable adapter image. Reference/target
 runtime images, source mounts and activation are absent from this change.
 
-The private report says private-closure-export-only and explicitly leaves license
-closure and accepted image identity false. Its own JSON is construction evidence,
+The private report says private-closure-export-only and records captured notices without legal certification and leaves
+accepted image identity false. Its own JSON is construction evidence,
 not authority supplied by untrusted RAR source. The final image must not be
 published/accepted from this report alone.
 
@@ -61,3 +61,29 @@ This correction does not activate the exporter or any runtime profile.
 
 The exact CPU-probe header is bound to pinned upstream output:
 https://github.com/rust-lang/rust/blob/1.95.0/compiler/rustc_codegen_llvm/src/llvm_util.rs#L540 .
+
+## Construction recipe and notice capture (not activated)
+
+The private compiler.Containerfile recipe uses the same pinned Rust base and
+exact Rust1.95 musl std archive, SHA256
+aee540abf132920f791ef781489851a078d69dff493fb628d49c1d573f92bb3a.
+Before invoking it with network disabled, the controller must bound and inventory
+the archive and provide only the archive, recipe and exporter as context. The
+archive's own pinned installer is a ClassB bootstrap tool, not RAR target code.
+
+The scratch candidate contains only the positive compiler/runtime/musl closure,
+bounded inert notices, an evidence report and empty source/build directories.
+The fixed process is nonroot rustc, with an absent executable-search PATH and
+only the fixed toolchain library path. No shell, Python, package manager,
+reference implementation or proposal source enters the final candidate. The
+recipe does not compile or execute a RAR adapter and activates no runner.
+
+Each external runtime file must have one identified installed package/version;
+its copyright notice is captured. The Rust copyright/licenses and bounded
+common-license texts are copied and hashed. Resolved notice sources are confined
+to the fixed notice directories; their contents cannot add executable authority.
+Capture is not legal certification: upstream distribution/source-offer
+obligations still need a distribution check. The final independent inventory
+must verify every runtime/notice byte, config and empty directory. Actual
+isolated static compilation and reproducibility remain mandatory. No workflow
+invokes the recipe in this source change.
