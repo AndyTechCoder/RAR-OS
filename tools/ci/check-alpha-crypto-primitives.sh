@@ -49,6 +49,9 @@ printf '%s\n' 'Modern reference runner: command-policy tests passed; real proces
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/reference_inventory.py" --self-test
 printf '%s\n' 'Modern reference inventory: synthetic negative tests passed; real image identity/reproducibility pending'
 
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/compiler_closure.py" --self-test
+printf '%s\n' 'Modern compiler closure: pure parser/guard tests passed; actual tool/image closure not claimed'
+
 # Keep at most one stripped test executable and one no_std library in the
 # existing cloud-only tmpfs; no owner files or retained evidence are affected.
 set -- $(/usr/bin/du -sk "$work")
