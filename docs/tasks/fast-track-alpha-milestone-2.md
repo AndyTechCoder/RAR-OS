@@ -1,6 +1,8 @@
 # Fast-Track Alpha Milestone 2: Platform
 
-Status: Owner-directed implementation; completion requires runtime evidence.
+Status: required behavior demonstrated by independently reviewed runtime proof;
+final-head, merge, exact-main and publication gates remain mandatory. See
+`../evidence/platform-milestone-2.md` for immutable evidence and promotion rules.
 Owner direction: 2026-09-05 UTC, "Next, let's reach the second milestone.
 Start working with the same core principles."
 

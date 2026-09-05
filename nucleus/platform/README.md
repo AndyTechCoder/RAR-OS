@@ -1,7 +1,7 @@
 # Experimental Platform runtime
 
-Status: implementation proposal; cloud compilation, boot and independent review
-are required before claiming Milestone 2 completion.
+Status: reviewed runtime behavior demonstrated; final release promotion is bound
+to [the evidence record](../../docs/evidence/platform-milestone-2.md).
 
 The nucleus owns page tables, privilege transitions, process/capability state,
 bounded IPC and the narrow PS/2 read broker. Actual volatile storage, keyboard

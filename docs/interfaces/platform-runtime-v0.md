@@ -1,6 +1,7 @@
 # Platform-v0 internal native fixture contract
 
-Status: implementation proposal for independent review. This is a private,
+Status: independently reviewed experimental fixture contract; exact source and
+runtime evidence are bound in `../evidence/platform-milestone-2.md`. This is a private,
 replaceable Milestone-2 fixture convention, not RCI/RID/RBC, a persistent format,
 a general application loader, or a stable SDK. Existing public contracts remain
 unchanged. All data in the fixture guest is synthetic and volatile.

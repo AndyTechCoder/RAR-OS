@@ -9,6 +9,9 @@ historic sequence remains a record. Execute the five milestones in
 number of vertical pull requests, one serious integrated review near milestone
 completion, and consolidated remediation. Passing specifications alone is not
 OS functionality; runtime claims require retained certified-cloud evidence.
+Platform's reviewed runtime proof and release promotion requirements are in
+`evidence/platform-milestone-2.md`. Usable Alpha remains the next owner-directed
+milestone, not an automatically started expansion.
 
 Status: Approved for execution; begins after repository publication and GitHub authentication
 
