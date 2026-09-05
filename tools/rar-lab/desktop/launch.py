@@ -73,9 +73,12 @@ def read_frame():
     finally:
         os.close(fd)
 
+def check_host():
+    if sys.platform != "linux" or len(sys.argv) != 1 or os.getuid() != 65532:
+        raise ValueError("fixed cloud container entrypoint only")
+
 def main():
-    if len(sys.argv) != 1 or os.getuid() != 65532 or sys.desktop != "linux":
-        raise SystemExit("fixed cloud container entrypoint only")
+    check_host()
     if not Path("/opt/rar-desktop-container").is_file():
         raise SystemExit("trusted tool-image identity absent")
     work = Path("/tmp/rar-desktop")
@@ -220,6 +223,11 @@ def self_test():
     for chunks in ([b'{"x":1,"x":2}\n'],[b'[]\n'],[b'!\n'],
                    [b"x"*16385],[b""],[TimeoutError("fixture")]):
         reject(lambda chunks=chunks: Qmp(Fake(chunks),time.monotonic()+1).receive())
+    with patch.object(sys,"argv",["rar-launch"]),patch.object(os,"getuid",lambda:65532),patch.object(sys,"platform","linux"):
+        check_host()
+        with patch.object(sys,"platform","darwin"): reject(check_host)
+        with patch.object(sys,"argv",["rar-launch","extra"]): reject(check_host)
+        with patch.object(os,"getuid",lambda:0): reject(check_host)
     nonce="abcdefgh"
     for chunks in ([b'{"return":{},"id":2}\n'],[b'{"return":{},"id":true}\n'],
                    [b'{"error":{},"id":1}\n'],[b'{"return":{},"id":1,"extra":1}\n'],
@@ -249,7 +257,7 @@ def self_test():
     reject(lambda:capture(regular,len(frame),frame[:-1]))
     reject(lambda:capture(regular,len(frame),frame+b"x"))
     assert capture(regular,len(frame),frame)==frame
-    assert rejected==20
+    assert rejected==23
     return rejected
 
 if __name__=="__main__": main()

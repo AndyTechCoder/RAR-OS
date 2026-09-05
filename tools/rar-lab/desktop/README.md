@@ -31,7 +31,7 @@ remain separate mandatory release regressions.
 
 Validation command (certified cloud validation container only):
 `/bin/sh tools/rar-lab/desktop/check.sh`.
-The 86 refusal tests cover protocol, source classification, bounded transfer,
+The 89 refusal tests cover protocol, source classification, bounded transfer,
 inherited sandbox constraints, wrong scenes/keys, invalid nonce, paths and JSON, parser fragmentation/EOF/timeout, fake capture
 metadata/read failures and launcher bootstrap. Capture-file fault tests use
 in-memory adapters; actual fixed-path I/O is proven only in the cloud boot.
@@ -39,3 +39,6 @@ Controller-only proposals do not claim a target build or boot.
 
 QMP semantics reference: [official QEMU QMP manual](https://www.qemu.org/docs/master/interop/qemu-qmp-ref.html).
 This source is an API reference, not a target runtime dependency.
+
+The launcher host guard is exercised directly with in-memory Linux/non-Linux,
+argument-count and UID cases before any file or subprocess operation.
