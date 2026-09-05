@@ -32,9 +32,21 @@ fn receive(handle:u64)->Envelope {
     let mut envelope=Envelope::EMPTY;
     loop {
         let status=syscall(RECEIVE,handle,(&mut envelope as *mut Envelope) as u64,144,1);
-        if status==128 {check(envelope.length==128);return envelope;}
+        if (1..=128).contains(&status) {
+            // SEND accepts bounded short messages. Discard noncanonical Desktop
+            // lengths after dequeue; malformed peers must not kill a service.
+            if status==128&&envelope.length==128{return envelope;}
+            continue;
+        }
         if status != -5 {fail();}
     }
+}
+fn poll(handle:u64)->Option<Envelope> {
+    let mut envelope=Envelope::EMPTY;
+    let status=syscall(RECEIVE,handle,(&mut envelope as *mut Envelope) as u64,144,0);
+    if status==128&&envelope.length==128{return Some(envelope);}
+    if status==-5||(1..=128).contains(&status){return None;}
+    fail()
 }
 fn publish(boot:&Boot,version:&mut u32,view:&services::apps::View) {
     *version=version.checked_add(1).unwrap_or_else(||fail());

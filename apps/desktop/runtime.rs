@@ -1,24 +1,39 @@
 //! Desktop application policy. Device access stays in separate services.
-use crate::{abi::*,services,receive,deliver,send,publish,check,fail};
+use crate::{abi::*,services,receive,poll,yield_now,deliver,send,publish,check,fail};
 use services::apps::*;
 use services::storage as fs;
 fn activated(m:&[u8;128])->bool {m[0]==2&&m[1..].iter().all(|&b|b==0)}
-fn event(boot:&Boot,pending:&mut Pending)->[u8;128] {
-    if let Some(m)=pending.pop(){return m;}
+struct Io { pending:Pending, storage_live:bool }
+impl Io { fn new()->Self{Self{pending:Pending::new(),storage_live:true}} }
+fn event(boot:&Boot,pending:&mut Io)->[u8;128] {
+    if let Some(m)=pending.pending.pop(){return m;}
     loop {let e=receive(boot.caps[SELF_RECV]);if e.sender==0&&e.generation==1{return e.bytes;}}
 }
-fn call(boot:&Boot,pending:&mut Pending,op:u8,name:&[u8],data:&[u8])->[u8;128] {
+fn call(boot:&Boot,pending:&mut Io,op:u8,name:&[u8],data:&[u8])->[u8;128] {
+    let mut failed=[0;128];failed[0]=fs::INVALID;
+    if !pending.storage_live{return failed;}
     let request=fs::request(op,name,data).unwrap_or_else(||fail());
     deliver(boot.caps[STORAGE],&request);
-    loop {
-        let e=receive(boot.caps[SELF_RECV]);
-        if e.generation!=1{continue;}
-        if e.sender==1{return e.bytes;}
-        if e.sender==0&&(activated(&e.bytes)||key_decode(&e.bytes).is_some()) {
-            check(pending.push(e.bytes));
+    for _ in 0..256 {
+        if let Some(e)=poll(boot.caps[SELF_RECV]) {
+            if e.generation==1 {
+                if e.sender==1 {
+                    if reply_valid(op,&e.bytes){return e.bytes;}
+                    pending.storage_live=false;return failed;
+                }
+                if e.sender==0&&(activated(&e.bytes)||key_decode(&e.bytes).is_some()) {
+                    check(pending.pending.push(e.bytes));
+                }
+            }
         }
+        yield_now();
     }
+    // No correlation IDs in this private protocol. Do not retry or allow a late
+    // reply to be mistaken for a later operation: disable this app's storage
+    // channel for the session, return a visible error, keep its UI responsive.
+    pending.storage_live=false;failed
 }
+
 fn route(boot:&Boot,w:&mut Windows,role:u8,m:&[u8;128])->bool {
     let slot=match role{4=>FILES,5=>SETTINGS,6=>TERMINAL,_=>fail()};
     match send(boot.caps[slot],m) {
@@ -52,9 +67,12 @@ pub fn shell(boot:&Boot)->! {
         }
     }
 }
-fn files_view(boot:&Boot,pending:&mut Pending,selected:&mut usize)->View {
+fn files_view(boot:&Boot,pending:&mut Io,selected:&mut usize)->View {
     let reply=call(boot,pending,fs::LIST,b"",b"");
-    let names=Names::decode(&reply).unwrap_or_else(||fail());
+    let Some(names)=Names::decode(&reply) else{
+        let mut view=View::EMPTY;view.line(0,b"TEMPORARY WORKSPACE");
+        view.line(1,b"STORAGE UNAVAILABLE");view.line(5,b"RAM ONLY - LOST ON STOP");return view;
+    };
     if *selected>=names.count{*selected=0;}
     let mut view=View::EMPTY;
     view.line(0,b"TEMPORARY WORKSPACE");view.lines[1]=names.display();
@@ -67,7 +85,7 @@ fn files_view(boot:&Boot,pending:&mut Pending,selected:&mut usize)->View {
     view.line(4,b"UP/DOWN SELECT  F1 REFRESH");view.line(5,b"RAM ONLY - LOST ON STOP");view
 }
 pub fn files(boot:&Boot)->! {
-    let mut pending=Pending::new();let mut selected=0;let mut version=0;
+    let mut pending=Io::new();let mut selected=0;let mut version=0;
     let view=files_view(boot,&mut pending,&mut selected);publish(boot,&mut version,&view);
     loop {
         let m=event(boot,&mut pending);
@@ -80,7 +98,7 @@ pub fn files(boot:&Boot)->! {
     }
 }
 pub fn settings(boot:&Boot)->! {
-    let mut light=false;let mut version=0;let mut pending=Pending::new();
+    let mut light=false;let mut version=0;let mut pending=Io::new();
     let mut view=View::EMPTY;view.line(0,b"APPEARANCE");view.line(1,b"DARK");
     view.line(2,b"SPACE TO CHANGE THEME");view.line(3,b"SESSION ONLY");publish(boot,&mut version,&view);
     loop {
@@ -94,7 +112,7 @@ pub fn settings(boot:&Boot)->! {
     }
 }
 pub fn terminal(boot:&Boot)->! {
-    let mut editor=Editor::new();let mut version=0;let mut pending=Pending::new();
+    let mut editor=Editor::new();let mut version=0;let mut pending=Io::new();
     let mut view=View::EMPTY;view.line(0,b"RAR TERMINAL");view.line(1,b"HELP LIST READ WRITE CRASH");
     editor.prompt(&mut view);publish(boot,&mut version,&view);
     loop {
@@ -110,7 +128,7 @@ pub fn terminal(boot:&Boot)->! {
                     Command::Help=>{view.line(1,b"HELP LIST READ WRITE CRASH");view.line(2,b"WRITE NAME TEXT - TEMPORARY FILES");}
                     Command::List=>{
                         let reply=call(boot,&mut pending,fs::LIST,b"",b"");
-                        let names=Names::decode(&reply).unwrap_or_else(||fail());view.lines[1]=names.display();
+                        if let Some(names)=Names::decode(&reply){view.lines[1]=names.display();}else{view.line(1,b"STORAGE UNAVAILABLE");}
                     }
                     Command::Read(name)=>{
                         let reply=call(boot,&mut pending,fs::READ,name,b"");

@@ -53,6 +53,13 @@ validate 12 complete guest-rendered scenes including a newly typed synthetic
 value and post-fault readback. Retained Foundation and Platform regressions and
 independent correctness/security review are required before merge.
 
+Storage replies are operation-specifically validated, including status, reserved
+bytes and padding. An app waits at most 256 nonblocking receive/yield rounds.
+After timeout or malformed reply it disables its own storage channel for the
+session and displays an error; its GUI remains responsive. It does not retry
+uncorrelated requests or mistake a late reply for a later operation. Short IPC
+envelopes are discarded by receivers rather than terminating shared services.
+
 No Mac/SSD writes, local compilation or target execution are part of this work.
 Production security, persistence, mouse/touch, dynamic loading, networking,
 SDK stability, AI, updates and recovery remain later milestones.

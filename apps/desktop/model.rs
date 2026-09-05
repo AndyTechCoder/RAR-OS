@@ -130,6 +130,22 @@ impl Names {
         text
     }
 }
+/// Canonical response validation is operation-specific; sender authority alone
+/// does not make service bytes structurally valid.
+pub fn reply_valid(op:u8,m:&[u8;128])->bool {
+    let status=m[0];
+    let allowed=match op{1=>matches!(status,0|1|3|4),2=>matches!(status,0|1|2|4),
+        3=>matches!(status,0|1|2),4=>matches!(status,0|1),_=>false};
+    if !allowed{return false;}
+    if status!=0{return m[1..].iter().all(|&b|b==0);}
+    match op {
+        1|2=>m[1..].iter().all(|&b|b==0),
+        3=>m[1]==0&&m[2]<=64&&m[3..16].iter().all(|&b|b==0)&&
+            m[16+m[2] as usize..].iter().all(|&b|b==0),
+        4=>Names::decode(m).is_some(),
+        _=>false,
+    }
+}
 /// Bound input received while waiting for a storage reply; no unbounded allocation.
 pub struct Pending { values:[[u8;128];16],head:usize,len:usize }
 impl Pending {
@@ -192,4 +208,15 @@ impl Pending {
         m[127]=1;assert!(Names::decode(&m).is_none());m[127]=0;m[4]=255;
         assert!(Names::decode(&m).is_none());m[4]=4;m[1]=255;assert!(Names::decode(&m).is_none());
     }
+    #[test] fn canonical_replies_reject_reserved_lengths_and_status() {
+        let mut r=[0;128];
+        for op in 1..=4{assert!(reply_valid(op,&r));}
+        r[127]=1;for op in 1..=4{assert!(!reply_valid(op,&r));}
+        r=[0;128];r[2]=65;assert!(!reply_valid(3,&r));
+        r[2]=3;r[16..19].copy_from_slice(b"abc");assert!(reply_valid(3,&r));
+        r[3]=1;assert!(!reply_valid(3,&r));
+        r=[0;128];r[0]=3;assert!(reply_valid(1,&r));assert!(!reply_valid(3,&r));
+        r[0]=255;for op in 1..=4{assert!(!reply_valid(op,&r));}
+    }
+
 }
