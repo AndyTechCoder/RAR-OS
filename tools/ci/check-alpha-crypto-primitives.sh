@@ -33,6 +33,15 @@ printf '%s\n' 'Modern lifecycle: focused mechanism model tests and no_std compil
 /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --crate-type lib -D warnings services/modern/lib.rs -o "$work/focused.rlib"
 printf '%s\n' 'Modern PIO: bounded transport tests and no_std compile passed; device/runtime integration not claimed'
 
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --test -C strip=symbols -C debuginfo=0 -C opt-level=1 -C debug-assertions=yes -C overflow-checks=yes tools/rar-lab/modern/target_reference.rs -o "$work/focused-tests"
+"$work/focused-tests"
+printf '%s\n' 'Modern RAR adapter: framing and crypto tests passed; independent reference comparison not claimed'
+
+# Pure controller protocol tests; no reference library, provisioning or launch.
+[ -x /usr/bin/python3 ]
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/reference_protocol.py" --self-test
+printf '%s\n' 'Modern reference protocol: bounded framing/comparison tests passed; oracle runtime closure not claimed'
+
 # Keep at most one stripped test executable and one no_std library in the
 # existing cloud-only tmpfs; no owner files or retained evidence are affected.
 set -- $(/usr/bin/du -sk "$work")

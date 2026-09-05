@@ -93,3 +93,20 @@ Compile/runtime parser negatives, published vectors, independent target-result
 comparisons, malformed-input/resource/fuzz coverage, two reproducible image
 builds, inventories, compiler-role absence and trusted-controller integration
 remain required. No new workflow, disk access or VM profile is enabled here.
+
+## Controller comparison implementation
+
+reference_protocol.py validates both wire directions and compares the frozen RAR
+result (implementation ID3) with independent reference results (IDs1 and2) in
+exact order. It checks process exits, empty stderr, identities, input hashes,
+status/length rules and byte equality. It has no process, file, network or launch
+operations. Self-tests run only in the existing read-only cloud Specifications
+sandbox using its digest-pinned Python runtime with isolated mode and bytecode
+writes disabled. The RAR executable adapter and provisioning controller remain
+separate required implementation; protocol tests alone are not interoperability.
+
+The host-only target_reference.rs adapter invokes the exact RAR SHA256/SHA512,
+Ed25519 and AEAD modules and emits implementation ID3 under the same framing.
+Its std I/O wrapper is not linked into the OS. It accepts one stdin request,
+no extra argv, and bounded output; actual reference-free compiler/runtime image
+isolation and differential execution remain to be demonstrated.
