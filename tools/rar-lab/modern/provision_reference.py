@@ -302,8 +302,12 @@ def main():
             if re.fullmatch("sha256:[0-9a-f]{64}", image) is None:
                 raise Invalid("constructed image identity")
             _, raw = run(docker + ["image", "save", image], 60, inventory.LIMIT)
-            inspected = inventory.inspect(raw, image)
+            # Retain bounded, unaccepted bytes before validation for diagnosis.
+            # Only a successful inventory is appended to accepted build evidence.
             (evidence / ("reference-" + str(number) + ".tar")).write_bytes(raw)
+            summary["stage"] = "inventory-" + str(number)
+            save()
+            inspected = inventory.inspect(raw, image)
             (evidence / ("inventory-" + str(number) + ".json")).write_text(
                 json.dumps(inspected, sort_keys=True, indent=2) + chr(10))
             summary["builds"].append(inspected)

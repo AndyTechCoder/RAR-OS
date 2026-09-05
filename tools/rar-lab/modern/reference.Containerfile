@@ -49,6 +49,8 @@ RUN mkdir -p /final/licenses && \
  touch --date="@1785715200" /final /final/licenses /final/reference-sodium \
  /final/reference-openssl /final/licenses/openssl.txt /final/licenses/libsodium.txt
 FROM scratch
+# Disable executable search; both adapters are invoked by fixed absolute paths.
+ENV PATH=/nonexistent
 COPY --from=provision /final/ /
 USER 65532:65532
 WORKDIR /

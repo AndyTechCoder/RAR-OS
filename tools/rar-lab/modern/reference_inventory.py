@@ -113,8 +113,9 @@ def inspect(raw: bytes, image: str) -> dict:
     process = config.get("config")
     if (type(process) is not dict or process.get("User") != "65532:65532" or
         process.get("WorkingDir") != "/" or process.get("Entrypoint") != ["/reference-sodium"] or
+        process.get("Env") != ["PATH=/nonexistent"] or
         any(process.get(key) not in (None, [], {}) for key in
-            ("Cmd", "Env", "Volumes", "ExposedPorts", "OnBuild", "Healthcheck"))):
+            ("Cmd", "Volumes", "ExposedPorts", "OnBuild", "Healthcheck"))):
         raise Invalid("image process config")
     layers = entry.get("Layers")
     rootfs = config.get("rootfs")
@@ -175,7 +176,7 @@ def self_test():
         struct.pack_into("<HHH", raw, 52, 64, 56, 1)
         struct.pack_into("<IIQQQQQQ", raw, 64, 1, 5, 0, 0, 0, 120, 120, 4096)
         return bytes(raw)
-    def fixture(change=None):
+    def fixture(change=None, process_change=None):
         content = executable()
         entries = [(name, content, 0o755, tarfile.REGTYPE)
                    for name in ("reference-sodium", "reference-openssl")]
@@ -187,9 +188,11 @@ def self_test():
         layer = tar(entries)
         config = {"architecture": "amd64", "os": "linux",
                   "config": {"User": "65532:65532", "WorkingDir": "/",
-                             "Entrypoint": ["/reference-sodium"]},
+                             "Entrypoint": ["/reference-sodium"], "Env": ["PATH=/nonexistent"]},
                   "rootfs": {"type": "layers",
                              "diff_ids": ["sha256:" + hashlib.sha256(layer).hexdigest()]}}
+        if process_change is not None:
+            process_change(config["config"])
         config_raw = json.dumps(config, sort_keys=True).encode()
         identity = "sha256:" + hashlib.sha256(config_raw).hexdigest()
         manifest = json.dumps([{"Config": "config.json", "Layers": ["layer.tar"]}]).encode()
@@ -203,6 +206,16 @@ def self_test():
             result = inspect(raw, identity)
             self.assertEqual(set(result["files"]), FILES)
             with self.assertRaises(Invalid): inspect(raw, "sha256:" + "f" * 64)
+        def test_exact_process_environment(self):
+            for value in (None, [], {}, ["PATH=/bin"], ["PATH=/nonexistent", "LD_PRELOAD=/x"],
+                          ["PATH=/nonexistent", "PATH=/nonexistent"]):
+                raw, identity = fixture(process_change=lambda p: p.update(Env=value))
+                with self.assertRaises(Invalid): inspect(raw, identity)
+            for key, value in (("Cmd", ["/bin/sh"]), ("User", "0"),
+                               ("WorkingDir", "/tmp"), ("Entrypoint", ["/bin/sh"]),
+                               ("Volumes", {"/tmp": {}}), ("Healthcheck", {"Test": ["NONE"]})):
+                raw, identity = fixture(process_change=lambda p: p.update({key: value}))
+                with self.assertRaises(Invalid): inspect(raw, identity)
         def test_unexpected_replaced_missing_or_writable_files(self):
             changes = [
                 lambda e: e + [("bin/sh", b"x", 0o755, tarfile.REGTYPE)],
