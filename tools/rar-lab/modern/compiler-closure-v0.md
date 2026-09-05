@@ -38,3 +38,23 @@ backend under the fixed host codegen-backends directory is required. Its ELF
 closure is inspected too. Malformed interpreter/NEEDED lines and unsupported
 FILTER/AUXILIARY tags fail instead of being mistaken for an empty dependency
 set. A real bounded musl compile remains mandatory before image usability.
+
+## Rust1.95 builtin LLVM correction (pre-activation)
+
+The pinned upstream source explicitly selects the builtin LLVM backend when the
+`llvm` feature is enabled; external backend lookup is the alternate path:
+https://github.com/rust-lang/rust/blob/1.95.0/compiler/rustc_interface/src/util.rs#L328 .
+Thus requiring a separate backend file for all compiler distributions was an
+incorrect packaging assumption. The exporter now accepts either no external
+backend or one exact upstream-recognized LLVM filename; ambiguous, symlinked,
+foreign or wrongly named files still fail. Optional separate backend files are
+exported and recursively inspected just like the driver and linker.
+
+Absence alone is never a usability claim: fixed bounded `rustc -vV` and musl
+`--print target-cpus` probes must report the exact release/host, an LLVM version,
+and x86-64 target support before export. These private construction probes take
+no source input and generate no executable. Their hashes are recorded. The
+driver/LLVM dynamic dependency graph remains fully inspected; no arbitrary
+library-directory copy is added. A real isolated static compile and final-image
+closure/reproducibility checks are still mandatory before image acceptance.
+This correction does not activate the exporter or any runtime profile.

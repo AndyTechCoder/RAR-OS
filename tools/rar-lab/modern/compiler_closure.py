@@ -128,22 +128,46 @@ def dynamic_metadata(program, dynamic):
     return interpreter, needed
 
 def select_backend(entries):
-    if type(entries) is not list or len(entries) != 1:
-        raise Invalid("exactly one LLVM backend required")
+    # Rust1.95's LLVM feature provides a builtin backend in rustc_driver.
+    # An empty directory is therefore not proof that code generation is absent.
+    if type(entries) is not list or len(entries) > 1:
+        raise Invalid("ambiguous LLVM backend")
+    if not entries:
+        return None
     name, regular, symlink = entries[0]
-    if (type(name) is not str or len(name) > 128 or
-        re.fullmatch(r"librustc_codegen_llvm(?:-[0-9a-f]+)?\.so", name) is None or
+    if (name not in ("librustc_codegen_llvm.so", "librustc_codegen_llvm-1.95.0.so") or
         regular is not True or symlink is not False):
         raise Invalid("LLVM backend type/name")
     return name
+
+def validate_backend_probe(version, cpus):
+    if (type(version) is not str or type(cpus) is not str or
+        len(version) > 4096 or len(cpus) > 1048576 or
+        not version.startswith("rustc 1.95.0 (")):
+        raise Invalid("compiler version/probe")
+    lines = version.splitlines()
+    if (lines.count("release: 1.95.0") != 1 or
+        lines.count("host: x86_64-unknown-linux-gnu") != 1):
+        raise Invalid("compiler release/host")
+    llvm = [line for line in lines if line.startswith("LLVM version: ")]
+    if len(llvm) != 1 or re.fullmatch(r"LLVM version: [0-9]+\.[0-9]+\.[0-9]+", llvm[0]) is None:
+        raise Invalid("LLVM version")
+    cpu_lines = cpus.splitlines()
+    if (not cpu_lines or cpu_lines[0] != "The following CPUs are supported by this target:" or
+        not any(line.strip().split()[:1] == ["x86-64"] for line in cpu_lines[1:])):
+        raise Invalid("LLVM target CPU probe")
+    return {"llvm_version": llvm[0][14:],
+            "version_sha256": hashlib.sha256(version.encode("ascii")).hexdigest(),
+            "target_cpus_sha256": hashlib.sha256(cpus.encode("ascii")).hexdigest()}
 
 def main():
     if (os.uname().sysname != "Linux" or os.uname().machine != "x86_64" or
         os.geteuid() != 0 or Path(__file__).resolve() != Path("/build/compiler_closure.py") or
         os.environ.get("RAR_COMPILER_PROVISION") != "pinned-rust-1.95.0"):
         raise Invalid("private cloud construction stage only")
-    if not run([str(RUSTC), "--version"]).startswith("rustc 1.95.0 ("):
-        raise Invalid("compiler version")
+    version = run([str(RUSTC), "--version", "--verbose"])
+    cpus = run([str(RUSTC), "--print", "target-cpus", "--target", "x86_64-unknown-linux-musl"])
+    backend_probe = validate_backend_probe(version, cpus)
     root = Path("/compiler-root")
     root.mkdir(mode=0o700, exist_ok=False)
     files = {}
@@ -184,15 +208,17 @@ def main():
         files[str(path)] = {"source": str(actual), "sha256": digest.hexdigest(),
                             "size": size, "mode": 0o555 if executable else 0o444}
     backend_root = SYSROOT / "lib/rustlib/x86_64-unknown-linux-gnu/codegen-backends"
-    if backend_root.is_symlink() or not backend_root.is_dir():
+    if backend_root.is_symlink() or (backend_root.exists() and not backend_root.is_dir()):
         raise Invalid("LLVM backend directory")
     entries = []
-    for path in backend_root.iterdir():
-        entries.append((path.name, path.is_file(), path.is_symlink()))
-        if len(entries) > 1:
-            raise Invalid("ambiguous codegen backend directory")
-    backend = backend_root / select_backend(entries)
-    pending = [RUSTC, LLD, backend]
+    if backend_root.exists():
+        for path in backend_root.iterdir():
+            entries.append((path.name, path.is_file(), path.is_symlink()))
+            if len(entries) > 1:
+                raise Invalid("ambiguous codegen backend directory")
+    backend_name = select_backend(entries)
+    backend = backend_root / backend_name if backend_name is not None else None
+    pending = [RUSTC, LLD] + ([backend] if backend is not None else [])
     seen = set()
     while pending:
         path = safe_path(str(pending.pop()))
@@ -247,7 +273,8 @@ def main():
     root.chmod(0o555)
     os.utime(root, (EPOCH, EPOCH))
     report = {"state": "private-closure-export-only", "files": files, "graph": graph,
-              "total_bytes": total, "codegen_backend": str(backend),
+              "total_bytes": total, "codegen_backend": str(backend) if backend else "builtin-in-driver",
+              "backend_probe": backend_probe,
               "licenses": "must be completed and reviewed before image publication",
               "target_execution": False, "accepted_compiler_image": False}
     Path("/build/compiler-closure.json").write_text(json.dumps(report, sort_keys=True, indent=2) + chr(10))
@@ -289,12 +316,25 @@ def self_test():
                 with self.assertRaises(Invalid): dynamic_metadata(program, bad)
             with self.assertRaises(Invalid): dynamic_metadata(program + program, dynamic)
         def test_codegen_backend_selection(self):
-            good = ("librustc_codegen_llvm-abcdef123456.so", True, False)
+            good = ("librustc_codegen_llvm-1.95.0.so", True, False)
             self.assertEqual(select_backend([good]), good[0])
-            for values in ([], [good, good], [(good[0], True, True)],
+            self.assertIsNone(select_backend([]))
+            for values in ([good, good], [(good[0], True, True)],
                            [(good[0], False, False)], [("other.so", True, False)],
                            [("librustc_codegen_llvm-abc.so.extra", True, False)]):
                 with self.assertRaises(Invalid): select_backend(values)
+        def test_positive_backend_probe_required(self):
+            version = "rustc 1.95.0 (fixture)\nhost: x86_64-unknown-linux-gnu\nrelease: 1.95.0\nLLVM version: 22.1.0\n"
+            cpus = "The following CPUs are supported by this target:\n    x86-64\n"
+            result = validate_backend_probe(version, cpus)
+            self.assertEqual(result["llvm_version"], "22.1.0")
+            for bad in ("", version.replace("1.95.0", "1.94.0"),
+                        version.replace("x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"),
+                        version.replace("LLVM version: 22.1.0", "LLVM version: unknown"),
+                        version + "LLVM version: 22.1.0\n"):
+                with self.assertRaises(Invalid): validate_backend_probe(bad, cpus)
+            for bad in ("", "x86-64", cpus.replace("x86-64", "arm64")):
+                with self.assertRaises(Invalid): validate_backend_probe(version, bad)
         def test_malformed_metadata_is_not_empty_closure(self):
             for dynamic in ("NEEDED unknown", "0x1 (NEEDED) truncated",
                             "0x1 (FILTER) Shared library: [a.so]",
