@@ -163,3 +163,24 @@ use executable search. Pure lifecycle fixtures demonstrate rejected process
 configurations are never started and only the owned container ID is cleaned up.
 This keeps the unactivated helper consistent with the reference image contract;
 it is not runtime acceptance or permission to invoke a candidate image.
+
+### Deterministic cross-check corpus (source only)
+
+`reference_corpus.py` provides 146 public cases: SHA256/SHA512 boundary messages
+with independent controller-library expected digests; all five pure-Ed25519
+RFC8032 section7.1 vectors with scalar mutation/noncanonical negatives; RFC8439
+section2.8.2 seal/open, every tag-byte mutation and representative key/nonce/AAD/
+ciphertext mutations; and 70 AEAD padding/block/maximum-length combinations.
+No signature is generated. Test sealing nonces are unique per test key.
+
+After freezing RAR output and obtaining three-way seal agreement, the caller
+can derive successful-decrypt and invalid-tag cases for every seal boundary.
+The derived plaintext expectation comes from the original fixture, not from
+an oracle. This is not a substitute for independent agreement, protocol result
+validation, malformed-request testing, fuzzing, constant-time analysis or
+production crypto review. The pure helper performs no file/process/network
+operation and cannot establish that a future caller followed invocation order.
+Its self-tests validate corpus shape, fixture bounds, expected-result rejection
+and derived framing, not live cross-implementation correctness.
+Sources: https://www.rfc-editor.org/rfc/rfc8032#section-7.1 and
+https://www.rfc-editor.org/rfc/rfc8439#section-2.8.2 .

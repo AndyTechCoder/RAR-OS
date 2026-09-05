@@ -42,6 +42,9 @@ printf '%s\n' 'Modern RAR adapter: framing and crypto tests passed; independent 
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/reference_protocol.py" --self-test
 printf '%s\n' 'Modern reference protocol: bounded framing/comparison tests passed; oracle runtime closure not claimed'
 
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/reference_corpus.py" --self-test
+printf '%s\n' 'Modern reference corpus: pure public fixture tests passed; live comparisons pending'
+
 # Policy-only runner checks: subprocess launch is mocked, no image activation.
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/reference_runner.py" --self-test
 printf '%s\n' 'Modern reference runner: command-policy tests passed; real process/cleanup evidence pending'
