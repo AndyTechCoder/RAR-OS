@@ -110,3 +110,26 @@ Ed25519 and AEAD modules and emits implementation ID3 under the same framing.
 Its std I/O wrapper is not linked into the OS. It accepts one stdin request,
 no extra argv, and bounded output; actual reference-free compiler/runtime image
 isolation and differential execution remain to be demonstrated.
+
+## Bounded adapter invocation candidate
+
+`reference_runner.py` is an unactivated trusted-controller helper. It accepts
+only immutable image IDs, three fixed entrypoints and bounded binary input.
+Runtime arguments deny networking, persistent writes, user mounts, host-device
+passthrough and extra privileges,
+core dumps and image pulls; CPU, memory, process, descriptor, stream and wall
+limits apply. Separate stdout/stderr and exact stdin EOF are retained. Creation is separate from execution: the daemon-returned full container ID,
+image, random ownership label and name are verified before starting by ID.
+Cleanup removes only that verified ID and requires a successful empty ID query.
+An ambiguous create result is never executed or deleted by name: the caller
+must fail and tear down the entire disposable cloud job, without retrying.
+Docker standard /dev surfaces remain; --ipc=none disables shared-memory IPC.
+Empty image CMD/ENV and the fixed entrypoint are checked before execution.
+
+The environment check is a misuse guard, not a sandbox or authorization proof.
+The future trusted-main controller must verify reviewed image inventories and
+its own source identity, freeze RAR results before reference execution, and
+retain process/crash/timeout/cleanup tests. This helper does not provision or
+activate any image, compare results itself, or authorize target OS execution.
+Current CI checks only policy construction and default-denial with process
+creation mocked; real process and confinement evidence remains outstanding.
