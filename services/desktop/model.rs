@@ -17,7 +17,7 @@ impl Surface {
         match m[0] {
             0x20=>{
                 if m[1]>6||m[2]!=0||m[3]!=0||m[8..].iter().any(|&b|b!=0)||
-                    version==0||version<=self.committed_version||version<=self.staged_version{return Err(());}
+                    version==0||version<=self.committed_version{return Err(());}
                 self.staged=View::EMPTY;self.staged_version=version;self.count=m[1];self.seen=0;self.open=true;Ok(false)
             }
             0x21=>{
@@ -75,7 +75,12 @@ impl DesktopStore {
 pub struct Keyboard { extended:bool,skip:u8,down:[bool;256],caps:bool }
 impl Keyboard {
     pub const fn new()->Self {Self{extended:false,skip:0,down:[false;256],caps:false}}
-    pub fn reset(&mut self) {self.extended=false;self.skip=0;self.down=[false;256];}
+    pub fn reset(&mut self) {self.extended=false;self.skip=0;self.down=[false;256];self.caps=false;}
+    pub fn feed_status(&mut self,status:u8,byte:u8)->Option<u8> {
+        if status&0xe0!=0{self.reset();return None;}
+        if status&1==0{return None;}
+        self.feed(byte)
+    }
     pub fn feed(&mut self,byte:u8)->Option<u8> {
         if self.skip>0 {self.skip-=1;return None;}
         if byte==0xe1 {self.extended=false;self.skip=5;return None;}
@@ -155,4 +160,21 @@ impl Keyboard {
         k.reset();k.feed(0xe1);for b in [0x1d,0x45,0xe1,0x9d,0xc5]{assert_eq!(k.feed(b),None);}
         assert_eq!(k.feed(0x1e),Some(b'a'));k.reset();k.feed(0x3a);assert_eq!(k.feed(0x1e),Some(b'A'));
     }
+    #[test] fn replacement_begin_only_compares_committed_version() {
+        let mut c=Compositor::new();put(&mut c,4,1,b"OLD");
+        c.apply(4,1,&begin(u32::MAX)).unwrap();
+        put(&mut c,4,2,b"RECOVERED");
+        assert_eq!(c.view(4).unwrap().lines[0].as_bytes(),b"RECOVERED");
+        assert!(c.apply(4,1,&begin(2)).is_err());
+    }
+    #[test] fn auxiliary_and_error_status_reset_decoder_state() {
+        for status in [0x21,0x41,0x81] {
+            let mut k=Keyboard::new();k.feed(0x2a);k.feed(0x3a);k.feed(0xe0);
+            assert_eq!(k.feed_status(status,0x50),None);
+            assert_eq!(k.feed_status(1,0x1e),Some(b'a'));
+        }
+        let mut k=Keyboard::new();assert_eq!(k.feed_status(0,0x1e),None);
+        assert_eq!(k.feed_status(1,0x1e),Some(b'a'));
+    }
+
 }

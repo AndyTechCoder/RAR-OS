@@ -18,11 +18,8 @@ pub fn keyboard(boot:&Boot)->! {
         let status=syscall(PORT_READ,boot.caps[INPUT],0x64,0,0);check(status>=0);
         if status&1!=0 {
             let value=syscall(PORT_READ,boot.caps[INPUT],0x60,0,0);check(value>=0);
-            if status&0xc0!=0{decoder.reset();}
-            else if status&0x20==0 {
-                if let Some(key)=decoder.feed(value as u8){
-                    if let Some(m)=services::apps::key_wire(key){deliver(boot.caps[SHELL],&m);}
-                }
+            if let Some(key)=decoder.feed_status(status as u8,value as u8){
+                if let Some(m)=services::apps::key_wire(key){deliver(boot.caps[SHELL],&m);}
             }
         }
         yield_now();
