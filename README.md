@@ -12,8 +12,10 @@ fault/client tests and actual captured pixels are recorded in the Platform
 evidence. Foundation normal/panic/exception boots remain regression-tested.
 The release record binds final merge and exact-main validation.
 
-This is not a usable desktop or production OS. GUI, applications, networking,
-persistent storage, signed-layer updates and additional hardware come later.
+Platform is released as [v0.2.0-platform-alpha](https://github.com/AndyTechCoder/RAR-OS/releases/tag/v0.2.0-platform-alpha).
+The owner-directed [Milestone 3 graphical alpha](docs/tasks/fast-track-alpha-milestone-3.md)
+is now in development; a working desktop is not yet claimed. Networking,
+persistent storage, signed-layer updates and additional hardware remain later work.
 Never build or execute RAR OS on the owner's Mac or SSD. Only the documented
 isolated cloud profile is authorized for this milestone.
 

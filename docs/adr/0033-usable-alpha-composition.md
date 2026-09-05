@@ -36,14 +36,20 @@ to shell. Each app can submit content only for itself; neither app payload IDs
 nor visual position grant authority. Kernel-stamped sender/generation is checked.
 
 Files and Terminal explicitly share one volatile demonstration namespace through
-a storage service policy mapping of those two boot-approved principals. No other
+a distinct Desktop-v0 storage endpoint/profile adapter mapping those two
+boot-approved principals. The released Platform-v0 service retains its original
+per-caller namespaces unchanged and its complete regression proof remains required. No other
 role gets its endpoint. This is a narrowly declared shared object, not a global
 filesystem, user account model, implicit cross-app access or persistent schema.
 Settings changes only session-local appearance; shell/compositor accept that
 message only from Settings.
 
 Closing a window hides it; reopening preserves the still-running app's state.
-A deliberate terminal fault stops only that process. Other apps remain usable.
+A deliberate terminal fault stops only that process. The shell labels it stopped
+only after its next operation on that boot-granted endpoint returns the kernel's
+stale error, never a pre-fault app message, elapsed time or controller sequence.
+Fresh post-fault keys must cause Files readback and Settings redraw.
+Other apps remain usable.
 Restart/replace/update/recovery promises remain later gates, not fake successes.
 
 ## Security and compatibility
@@ -76,6 +82,9 @@ scenes, unpredictable synthetic file readback across apps, and post-fault UI
 progress, with independent capture validation and preserved earlier regressions.
 
 Future RID/RCI-backed apps replace the private fixture launcher and messages via
-an explicit adapter/contract change. Persistent storage needs separately reviewed
+an explicit adapter/contract change with side-by-side conformance of old/new
+bindings before retiring fixed role/image conventions. Desktop-v0 window/session
+and RAM workspace state is discarded on reboot or runtime replacement, never
+promoted or migrated into persistent owner data. Persistent storage needs separately reviewed
 transactional formats and data/recovery separation. No migration of owner data
 is needed because none is accepted and all experiment state is volatile.

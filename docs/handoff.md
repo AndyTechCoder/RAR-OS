@@ -1,5 +1,15 @@
 # Implementation Handoff
 
+## Current owner-directed milestone
+
+Milestone 3 Usable Graphical Alpha is now active under
+`docs/tasks/fast-track-alpha-milestone-3.md`, ADR0032 and the reviewed ADR0033
+composition. Platform was published as `v0.2.0-platform-alpha` at
+`61916ca3a17c2f7013205c91afb3117dbb03cbc0`; Foundation remains preserved.
+Earlier current-scope wording below is historical. No graphical completion is
+claimed until actual cloud interaction and all release gates pass.
+
+
 ## Active Fast-Track Alpha handoff
 
 ADR 0032 is the active process authority. Work proceeds by evidence milestones,
