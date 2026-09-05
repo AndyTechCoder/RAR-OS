@@ -2,6 +2,10 @@
 ARG SOURCE_DATE_EPOCH=1785715200
 FROM rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3 AS provision
 ENV SOURCE_DATE_EPOCH=1785715200 LC_ALL=C LANG=C TZ=UTC
+RUN set -eu; printf 'RAR-CONSTRUCTION-TOOLS-BEGIN\n'; \
+ for tool in cc ld as make perl ar ranlib strip; do \
+ path=$(command -v "$tool"); readlink -f "$path"; sha256sum "$path"; \
+ "$tool" --version; done; printf 'RAR-CONSTRUCTION-TOOLS-END\n'
 COPY openssl.tar.gz libsodium.tar.gz /inputs/
 RUN printf '%s\n' \
  '88525753f79d3bec27d2fa7c66aa0b92b3aa9498dafd93d7cfa4b3780cdae313  /inputs/openssl.tar.gz' \

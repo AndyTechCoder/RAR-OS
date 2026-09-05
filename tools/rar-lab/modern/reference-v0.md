@@ -92,7 +92,8 @@ development evidence, never production trust or permission to activate code.
 Compile/runtime parser negatives, published vectors, independent target-result
 comparisons, malformed-input/resource/fuzz coverage, two reproducible image
 builds, inventories, compiler-role absence and trusted-controller integration
-remain required. No new workflow, disk access or VM profile is enabled here.
+remain required. The separate manual candidate-provision workflow only constructs reference
+images; no reference runtime, disk access or VM profile is enabled here.
 
 ## Controller comparison implementation
 

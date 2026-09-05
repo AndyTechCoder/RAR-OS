@@ -1,0 +1,34 @@
+name: Modern reference candidate
+run-name: Modern reference candidate ${{ github.sha }}
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: modern-reference-candidate
+  cancel-in-progress: false
+jobs:
+  provision:
+    if: github.repository == 'AndyTechCoder/RAR-OS' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CI: 'true'
+      SOURCE_DATE_EPOCH: '1785715200'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          path: controller
+      - name: Provision two reference candidates without target or reference execution
+        run: /usr/bin/python3 -I -B controller/tools/rar-lab/modern/provision_reference.py
+      - name: Retain candidate evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: modern-reference-${{ github.run_id }}-${{ github.run_attempt }}
+          path: modern-reference-evidence/
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 6
