@@ -6,8 +6,10 @@
 - Baseline: Platform released at `61916ca3a17c2f7013205c91afb3117dbb03cbc0`,
   tag `v0.2.0-platform-alpha`; exact-main Platform33936996571,
   Foundation33937001375, Specifications33936983957 and Observer33936983954 passed.
-- Current work: reviewed Desktop-v0 composition and bounded cloud multi-scene
-  controller, followed by one coherent graphical implementation.
+- Implementation: Desktop-v0 protected graphical roles and built-in apps are
+  present. The reviewed cloud controller validates 12 real interaction scenes.
+- Completion record: v0.3.0-usable-alpha, only once published with passing
+  exact-main runs and durable proof assets. Until publication this is a candidate.
 - Completion: real isolated shell/compositor/Files/Settings/Terminal interaction,
   volatile shared test-file readback, post-fault GUI behavior and release evidence.
 - No GUI completion claim yet. No Mac/SSD mutations or local target execution.
