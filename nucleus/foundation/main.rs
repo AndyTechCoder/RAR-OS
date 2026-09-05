@@ -5,6 +5,9 @@ mod model;
 mod boot;
 mod paging;
 mod interrupts;
+#[cfg(rar_platform)]
+#[path="../platform/main.rs"]
+mod platform;
 use core::{arch::{asm,naked_asm}, panic::PanicInfo, sync::atomic::{AtomicUsize,Ordering}};
 
 static LOG_BYTES: AtomicUsize=AtomicUsize::new(0);
@@ -107,6 +110,9 @@ extern "sysv64" fn kernel_entry(info:*const boot::BootInfo)->! {
     if interrupts::ticks()<3 {fatal("RAR-PANIC:CODE=TIMER");}
     record("RAR-TIMER:READY");
     record("RAR-FOUNDATION-READY");
+    #[cfg(rar_platform)]
+    unsafe {platform::start(info)}
+    #[cfg(not(rar_platform))]
     halt()
 }
 

@@ -2,7 +2,10 @@
 use crate::{fatal,model::{Region,Mapping,MAX_REGIONS},paging::Tables};
 use core::{arch::asm,mem,ptr};
 pub const MAGIC:u64=0x5241525f424f4f31;
+#[cfg(not(rar_platform))]
 pub const ARENA_PAGES:usize=1024;
+#[cfg(rar_platform)]
+pub const ARENA_PAGES:usize=8192;
 pub const STACK_GUARD:u64=0x100000;
 pub const STACK_TOP:u64=0x121000;
 pub const HEAP_OFFSET:u64=0x140000;
@@ -29,9 +32,14 @@ struct LoadedImage {
 pub struct BootInfo {
     pub magic:u64,pub arena:u64,pub table_used:usize,pub count:usize,
     pub regions:[Region;MAX_REGIONS],
+    #[cfg(rar_platform)]
+    pub platform:crate::platform::BootHardware,
 }
 static mut INFO:BootInfo=BootInfo{magic:MAGIC,arena:0,table_used:0,count:0,
-    regions:[Region{start:0,pages:0,kind:0};MAX_REGIONS]};
+    regions:[Region{start:0,pages:0,kind:0};MAX_REGIONS],
+    #[cfg(rar_platform)]
+    platform:crate::platform::BootHardware::EMPTY,
+};
 #[repr(C,align(8))]
 struct MapBuffer([u8;65536]);
 static mut MAP:MapBuffer=MapBuffer([0;65536]);
@@ -50,7 +58,7 @@ unsafe fn header(pointer:*const Header,signature:u64,minimum:usize) {
 fn value32(bytes:&[u8],offset:usize)->u32 {
     u32::from_le_bytes(bytes.get(offset..offset+4).unwrap_or_else(||fatal("RAR-PANIC:CODE=PE-BOUNDS")).try_into().unwrap())
 }
-unsafe fn map_image(tables:&mut Tables,base:u64,size:u64) {
+pub(crate) unsafe fn map_image(tables:&mut Tables,base:u64,size:u64) {
     if base==0 || base%4096!=0 || size<4096 || size>8*1024*1024 ||
         base.checked_add(size).is_none_or(|e|e>0x1_0000_0000) {fatal("RAR-PANIC:CODE=IMAGE-RANGE");}
     let bytes=unsafe {core::slice::from_raw_parts(base as *const u8,size as usize)};
@@ -97,6 +105,8 @@ pub unsafe fn start(image:usize,system:*const SystemTable)->! {
         fatal("RAR-PANIC:CODE=LOADED-IMAGE");
     }
     let (base,size)=unsafe {((*loaded).base,(*loaded).size)};
+    #[cfg(rar_platform)]
+    let platform_hardware=unsafe {crate::platform::display::configure(f,base,size)};
     let mut arena=0xffff_ffff;
     if unsafe {allocate(1,2,ARENA_PAGES,&mut arena)}!=0 || arena%4096!=0 {
         fatal("RAR-PANIC:CODE=ARENA");
@@ -114,6 +124,8 @@ pub unsafe fn start(image:usize,system:*const SystemTable)->! {
     unsafe {map_image(&mut tables,base,size);}
     let info=ptr::addr_of_mut!(INFO);
     unsafe {(*info).arena=arena;(*info).table_used=tables.used();}
+    #[cfg(rar_platform)]
+    unsafe {(*info).platform=platform_hardware;}
     let buffer=ptr::addr_of_mut!(MAP).cast::<u8>();
     let mut exited=false;
     for _ in 0..3 {

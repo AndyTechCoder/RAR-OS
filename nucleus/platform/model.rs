@@ -1,6 +1,6 @@
 //! Private Platform-v0 mechanism model; no stable public ABI or allocation.
-pub const TASKS: usize = 12;
-pub const CAP_SLOTS: usize = 8;
+pub const TASKS: usize = 14;
+pub const CAP_SLOTS: usize = 10;
 pub const MESSAGE_BYTES: usize = 128;
 pub const QUEUE_DEPTH: usize = 4;
 pub const SEND: u8 = 1;
@@ -150,6 +150,39 @@ mod tests {
         assert!(user_buffer(&ranges,0x600000,128,true).is_ok());
         for (p,n) in [(0,1),(0x5fffff,2),(0x600fff,2),(u64::MAX,2),(0x600000,0),(0x600000,145)] {
             assert!(user_buffer(&ranges,p,n,true).is_err());
+        }
+    }
+}
+
+#[path="pe.rs"]
+pub mod pe;
+
+
+/// Untrusted protocol metadata is reduced to one bounded MMIO span before use.
+pub fn framebuffer_span(width:u32,height:u32,pitch:u32,format:u32,base:u64,bytes:u64)->Result<u64,Error>{
+    if width!=640||height!=480||!(640..=4096).contains(&pitch)||format>1||
+        base==0||base%4096!=0{return Err(Error::Invalid);}
+    let span=(pitch as u64).checked_mul(height as u64).and_then(|v|v.checked_mul(4)).ok_or(Error::Invalid)?;
+    let rounded=span.div_ceil(4096)*4096;
+    if rounded>8*1024*1024||rounded>bytes||base.checked_add(rounded).is_none_or(|end|end>0x1_0000_0000){
+        return Err(Error::Denied);
+    }
+    Ok(rounded)
+}
+#[cfg(test)]
+mod display_tests{
+    use super::*;
+    #[test]fn validated_fixed_framebuffer_span(){
+        assert_eq!(framebuffer_span(640,480,640,0,0x80000000,1228800),Ok(1228800));
+        assert!(framebuffer_span(640,480,640,1,0x80000000,1228800).is_ok());
+    }
+    #[test]fn malformed_framebuffer_metadata(){
+        for (w,h,p,f,b,n) in [(800,480,800,0,0x80000000,2000000),(640,600,640,0,0x80000000,2000000),
+            (640,480,639,0,0x80000000,2000000),(640,480,u32::MAX,0,0x80000000,u64::MAX),
+            (640,480,640,2,0x80000000,2000000),(640,480,640,3,0x80000000,2000000),
+            (640,480,640,0,0,2000000),(640,480,640,0,0x80000001,2000000),
+            (640,480,640,0,0xfffff000,2000000),(640,480,640,0,0x80000000,100)]{
+            assert!(framebuffer_span(w,h,p,f,b,n).is_err());
         }
     }
 }
