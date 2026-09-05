@@ -104,7 +104,7 @@ def dynamic_search_paths(dynamic, origin):
         if "RPATH" not in line and "RUNPATH" not in line:
             continue
         match = re.fullmatch(r"0x[0-9a-fA-F]+[ \t]+\((RPATH|RUNPATH)\)[ \t]+Library (?:rpath|runpath): \[([^\]]*)\]", line.strip())
-        if match is None or match.group(1) in tags or not isinstance(origin, Path):
+        if match is None or bool(tags) or not isinstance(origin, Path):
             raise Invalid("dynamic search-path metadata")
         tags.add(match.group(1))
         entries = match.group(2).split(":")
@@ -500,7 +500,8 @@ def self_test():
                 with self.assertRaises(Invalid): dynamic_search_paths(bad, origin)
             for bad in ("0x1 (AUDIT) Audit library: [libx.so]",
                         "0x1 (DEPAUDIT) Dependency audit library: [libx.so]",
-                        "RUNPATH truncated", good + "\n" + good):
+                        "RUNPATH truncated", good + "\n" + good,
+                        good + "\n" + good_rpath):
                 with self.assertRaises(Invalid): dynamic_search_paths(bad, origin)
             with self.assertRaises(Invalid): dynamic_search_paths(good, None)
             with self.assertRaises(Invalid): dynamic_search_paths(good_rpath, Path("/build"))

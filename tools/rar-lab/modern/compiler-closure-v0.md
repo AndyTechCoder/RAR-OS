@@ -100,3 +100,7 @@ CWD-relative entries, arbitrary tokens, writable source/build paths, malformed
 tags and duplicates fail. This prevents a writable compiler scratch directory
 from becoming library-search authority; it does not replace final-image inspection
 and runtime confinement checks.
+
+At most one search-path tag is admitted: simultaneous RPATH and RUNPATH are
+rejected, avoiding cross-tag duplicates and ambiguous precedence. A mixed-tag
+negative fixture enforces this restriction.
