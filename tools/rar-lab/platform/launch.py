@@ -160,6 +160,12 @@ def main():
         raw = json.dumps(result, separators=(",", ":")).encode()
         protocol["validate_result"](raw)
         sys.stdout.buffer.write(raw + b"\n")
+    except BaseException as error:
+        # Retain bounded guest diagnostics without treating them as trusted proof.
+        diagnostic = dict(status="failed", error=str(error)[:2048],
+                          serial_b64=base64.b64encode(serial[:protocol["SERIAL_LIMIT"]]).decode())
+        sys.stderr.write(json.dumps(diagnostic, separators=(",", ":")) + "\n")
+        raise
     finally:
         connection.close()
         poll.close()

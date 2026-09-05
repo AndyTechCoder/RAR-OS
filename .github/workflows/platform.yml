@@ -4,7 +4,7 @@ on:
   pull_request_target:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
-    paths: ['nucleus/platform/**', 'nucleus/foundation/**', 'core/platform/**', 'services/platform/**', 'tools/rar-lab/platform/**', '.github/workflows/platform.yml']
+    paths: ['nucleus/platform/**', 'nucleus/foundation/**', 'core/platform/**', 'services/platform/**', 'tools/rar-lab/platform/**', 'tools/rar-lab/foundation/**', '.github/workflows/platform.yml']
   workflow_dispatch:
 permissions:
   contents: read

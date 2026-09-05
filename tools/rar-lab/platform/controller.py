@@ -182,7 +182,7 @@ def main():
         print("Booting isolated Platform with fixed synthetic input/capture", flush=True)
         _, result = run(["docker", "run", "--name", name] + sandbox(POLICY) + [
             "--mount", "type=bind,src=" + str(directory) + ",dst=/artifact,readonly",
-            summary["launch_image"]], 35, protocol["RESULT_LIMIT"])
+            summary["launch_image"]], 35, protocol["RESULT_LIMIT"], log_path=directory / "launch-result.log")
         serial, frame, records = protocol["validate_result"](result)
         (directory / "serial.log").write_bytes(serial)
         (directory / "frame.ppm").write_bytes(frame)

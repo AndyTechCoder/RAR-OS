@@ -45,7 +45,8 @@ The outer trusted controller independently revalidates serial and pixels.
 
 A 25-second proof deadline, 30-second container entrypoint deadline and 35-second
 outer launch deadline bound failures. Successful QMP quit must return zero;
-a timeout is a failure, never Platform success. Output and file sizes are bounded.
+a timeout is a failure, never Platform success. Output and file sizes are bounded. Failed launches retain bounded serial bytes
+and a diagnostic in the evidence bundle; failure is never relabelled success.
 Only this run's named disposable cloud containers are cleaned up; no repository,
 branch, tag, owner data, Mac or SSD file is deleted.
 
