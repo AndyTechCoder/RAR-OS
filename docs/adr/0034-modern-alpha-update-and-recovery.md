@@ -94,3 +94,29 @@ No model-only, host-forged file or screenshot fixture can count as guest proof.
 Keep block transport, filesystem/state, crypto verifier, manifest parser, lifecycle
 manager and UI behind documented bounded interfaces. Replace each independently
 with conformance and migration/failure tests, not cross-subsystem internals.
+
+## Review refinements — not activation
+
+Select separate fixed PIO-only System and Data adapters rather than uncontained
+DMA. Two independently instantiated ISA IDE controllers are the candidate device
+model; exact pinned-QEMU properties, collision checks and geometry still need
+the concrete profile review. No fallback to AHCI or shared unrestricted ports.
+A Modern-only runtime block contract would supersede ADR0026's no-runtime-block
+limit only for this profile; historical Alpha/Desktop contracts remain unchanged.
+
+Use a spare protected process for candidate Settings health testing, with no
+production surface, input, storage or raw-device authority. Logical endpoint
+rebinding must happen atomically with incarnation changes and stale-queue
+handling; a copied task number or unchanged old handle is not sufficient.
+The concrete lifecycle contract must specify rollback after post-cutover failure.
+
+The milestone's causal proof requirements include full VM destruction, fresh
+firmware state, boot-1-only unpredictable data, no alternate persistence channel,
+private synthetic disks and separate frozen-image verification.
+Security-generation checks are relative to intact committed local metadata;
+wholesale disk/snapshot rollback detection is explicitly not an Alpha claim.
+No hardware-backed or independent monotonic trust anchor is implemented.
+
+Architecture and security reviewers identified these requirements at baseline
+06ecaaad and proposed head2ec60aae. This refinement records the findings; it does
+not certify an unimplemented controller, crypto module, filesystem or runtime.

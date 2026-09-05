@@ -1,6 +1,7 @@
 # Fast-Track Alpha Milestone 4: Modern Architecture
 
-Status: owner-directed; contract design in progress, not implemented or complete.
+Status: owner-directed; contract design and initial crypto primitive work in progress.
+No Modern runtime implementation or Milestone4 completion is claimed.
 Direction: 2026-09-05 UTC, "Perfect. So then let's continue with the next, milestone 4".
 
 ## Baseline and purpose
@@ -106,3 +107,31 @@ runtime evidence. Networking, SDK, additional hardware profiles, AI/agents,
 production identity/hardware-backed secrets and an external cryptographic audit
 remain later work. A failure to finish any requirement is reported explicitly,
 not relabeled as successful Milestone 4.
+
+## Required causal persistence and fault evidence
+
+For the persistence scenario, kill the entire QEMU process and launch a fresh
+process against the same launcher-private synthetic images. Fresh OVMF variable
+bytes are created for each boot. No RAM snapshots, savevm/loadvm, retained NVRAM,
+TPM state, writable boot overlays or alternate cross-boot channels may carry the
+test file. No writable runner/source/host bind is allowed for System/Data.
+
+Generate an unpredictable challenge outside proposal authority, prove it absent
+from initial disk state, and type it only in boot 1. Freeze exact disk bytes
+after the cut. Boot 2 receives neither that challenge nor a command that can
+reconstruct it. A distinct trusted read-only oracle parses the frozen Data image
+and verifies the same committed value that the restarted guest displays.
+Retain exact process/command/input/fault evidence and whole-image hashes.
+
+Fault cuts must be controller-owned and observed at the block boundary; guest
+success markers do not schedule or prove durable writes. A reviewed bounded
+virtual backend defines short/error/torn/reordered writes and flush ordering.
+Corruption mutation is a separate test, not a substitute for interruption.
+The claim is virtual-device crash consistency, not physical power-loss safety.
+
+This Alpha demonstrates interrupted/failed-update recovery and rollback
+generation enforcement relative to intact local committed metadata. It does
+NOT detect wholesale rollback of all System/Data images or claim a persistent
+hardware/virtual monotonic trust anchor. That stronger claim needs a separately
+reviewed non-co-rollback Vault and remains future work; a counter on the same
+rollbackable disk must never be described as such an anchor.

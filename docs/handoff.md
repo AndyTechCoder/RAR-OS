@@ -20,15 +20,15 @@ v0.3.0-usable-alpha only after actual cloud interaction and all release gates pa
 before that publication the implementation remains a candidate.
 
 
-## Active Fast-Track Alpha handoff
+## Historical Milestone 2 handoff
 
 ADR 0032 is the active process authority. Work proceeds by evidence milestones,
-not prompt numbers or nested authorization packets. The current handoff is
+not prompt numbers or nested authorization packets. The handoff at that stage was
 [`Fast-Track Alpha Milestone 2`](tasks/fast-track-alpha-milestone-2.md).
 Platform implementation and independent remediation are demonstrated in
 [`the Platform evidence record`](evidence/platform-milestone-2.md). Its final-head,
 merge, exact-main and publication gates define release promotion. Foundation
-remains the preserved regression baseline. Usable Alpha is next, not yet started.
+remains the preserved regression baseline. Usable Alpha was the next milestone at that stage; it is now released.
 Keep public contracts replaceable, update tests and documentation with behavior,
 and retain all security, signing, isolation, recovery, rollback, dependency and
 data-separation requirements.
