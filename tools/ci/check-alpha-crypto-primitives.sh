@@ -9,7 +9,7 @@ set -eu
 ulimit -f 32768
 ulimit -t 60
 work=$(mktemp -d /tmp/rar-crypto-tests.XXXXXXXX)
-rustc --edition 2024 --test core/crypto/lib.rs -o "$work/crypto-tests"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --test core/crypto/lib.rs -o "$work/crypto-tests"
 "$work/crypto-tests"
-rustc --edition 2024 --crate-type lib -D warnings core/crypto/lib.rs -o "$work/libcrypto.rlib"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --crate-type lib -D warnings core/crypto/lib.rs -o "$work/libcrypto.rlib"
 printf '%s\n' 'Alpha crypto: SHA-512 focused tests and no_std compile passed; signing/runtime gates not claimed'
