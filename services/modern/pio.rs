@@ -34,7 +34,7 @@ impl<I:Io> Device<I> {
             if s==0||s==255{return Err(Error::Unavailable);}
             if s&0x80==0 {
                 if s&0x21!=0{return Err(Error::Device);}
-                if (s&8!=0)==drq{return Ok(());}
+                if s&0x40!=0 && (s&8!=0)==drq{return Ok(());}
             }
             if poll%16==15 {self.io.yield_cpu().map_err(|_|Error::Transport)?;}
         }
@@ -109,17 +109,29 @@ mod tests {
     use super::*;
     #[derive(Clone)]
     struct Fake {status:u8,command:Option<Command>,words:usize,reads:usize,yields:usize,
-        registers:Vec<(Register,u8)>,written:Vec<u16>,fail_word:Option<usize>,fail_command:bool}
+        registers:Vec<(Register,u8)>,written:Vec<u16>,fail_word:Option<usize>,fail_command:bool,
+        status_override:Option<(usize,u8)>,fail_status_at:Option<usize>,
+        fail_register_at:Option<usize>,fail_yield:bool,busy_until:usize,busy_per_command:usize}
     impl Fake {
         fn new()->Self {Self {status:0x40,command:None,words:0,reads:0,yields:0,
-            registers:vec![],written:vec![],fail_word:None,fail_command:false}}
+            registers:vec![],written:vec![],fail_word:None,fail_command:false,status_override:None,
+            fail_status_at:None,fail_register_at:None,fail_yield:false,busy_until:0,busy_per_command:0}}
     }
     impl Io for Fake {
-        fn status(&mut self)->Result<u8,()> {self.reads+=1;Ok(self.status)}
-        fn register(&mut self,r:Register,v:u8)->Result<(),()> {self.registers.push((r,v));Ok(())}
+        fn status(&mut self)->Result<u8,()> {
+            self.reads+=1;
+            if self.fail_status_at==Some(self.reads){return Err(());}
+            if self.reads<=self.busy_until{return Ok(0x80);}
+            if let Some((from,status))=self.status_override {if self.reads>=from{return Ok(status);}}
+            Ok(self.status)
+        }
+        fn register(&mut self,r:Register,v:u8)->Result<(),()> {
+            if self.fail_register_at==Some(self.registers.len()){return Err(());}
+            self.registers.push((r,v));Ok(())
+        }
         fn command(&mut self,c:Command)->Result<(),()> {
             if self.fail_command{return Err(());}
-            self.command=Some(c);self.words=0;
+            self.command=Some(c);self.words=0;self.busy_until=self.reads+self.busy_per_command;
             self.status=if matches!(c,Command::Read|Command::Write|Command::Identify){0x48}else{0x40};Ok(())
         }
         fn read_word(&mut self)->Result<u16,()> {
@@ -130,7 +142,7 @@ mod tests {
             if self.fail_word==Some(self.words){return Err(());}
             self.written.push(w);self.words+=1;if self.words==256{self.status=0x40;}Ok(())
         }
-        fn yield_cpu(&mut self)->Result<(),()> {self.yields+=1;Ok(())}
+        fn yield_cpu(&mut self)->Result<(),()> {self.yields+=1;if self.fail_yield{Err(())}else{Ok(())}}
     }
     #[test] fn exact_single_sector_little_endian_sequence() {
         let mut d=Device::new(Fake::new(),0x01020305).unwrap();
@@ -152,7 +164,8 @@ mod tests {
     }
     #[test] fn missing_faulted_busy_and_drq_stuck_are_bounded() {
         for (status,error) in [(0,Error::Unavailable),(255,Error::Unavailable),
-            (0x41,Error::Device),(0x60,Error::Device),(0x80,Error::Timeout),(0x48,Error::Timeout)] {
+            (0x41,Error::Device),(0x60,Error::Device),(0x80,Error::Timeout),(0x48,Error::Timeout),
+            (0x10,Error::Timeout),(0x02,Error::Timeout)] {
             let mut f=Fake::new();f.status=status;let mut d=Device::new(f,32).unwrap();
             assert_eq!(d.read512(0),Err(error));assert!(d.poisoned());
             assert!(d.io.reads<=POLLS);assert!(d.io.yields<=POLLS/16);
@@ -173,5 +186,49 @@ mod tests {
         }
         let mut f=Fake::new();f.fail_command=true;let mut d=Device::new(f,32).unwrap();
         assert_eq!(d.flush(),Err(Error::Transport));assert!(d.poisoned());
+    }
+    #[test] fn data_and_completion_phase_failures_never_report_success() {
+        for write in [false,true] {for (from,status,error,words) in [
+            (7,0x41,Error::Device,0),(7,0x80,Error::Timeout,0),(7,0x08,Error::Timeout,0),
+            (12,0x60,Error::Device,256),(12,0x48,Error::Timeout,256),(12,0x10,Error::Timeout,256),
+        ] {
+            let mut f=Fake::new();f.status_override=Some((from,status));
+            let mut d=Device::new(f,32).unwrap();
+            let result=if write{d.write512(0,&[9;512])}else{d.read512(0).map(|_|())};
+            assert_eq!(result,Err(error));assert!(d.poisoned());assert_eq!(d.io.words,words);
+            assert!(d.io.reads<=POLLS+15);
+            assert_eq!(d.flush(),Err(Error::Poisoned));
+        }}
+        for status in [0x41,0x60,0x80,0x48,0x10,0x02] {
+            let mut f=Fake::new();f.status_override=Some((2,status));
+            let mut d=Device::new(f,32).unwrap();
+            assert!(d.flush().is_err());assert!(d.poisoned());assert!(d.io.reads<=POLLS+5);
+            assert_eq!(d.io.command,Some(Command::Flush));
+        }
+    }
+    #[test] fn every_transport_boundary_fails_closed() {
+        for at in [1,7,12] {
+            let mut f=Fake::new();f.fail_status_at=Some(at);let mut d=Device::new(f,32).unwrap();
+            assert_eq!(d.read512(0),Err(Error::Transport));assert!(d.poisoned());
+        }
+        for at in 0..5 {
+            let mut f=Fake::new();f.fail_register_at=Some(at);let mut d=Device::new(f,32).unwrap();
+            assert_eq!(d.write512(0,&[0;512]),Err(Error::Transport));
+            assert!(d.poisoned());assert_eq!(d.io.command,None);
+        }
+        for write in [false,true] {
+            let mut f=Fake::new();f.fail_command=true;let mut d=Device::new(f,32).unwrap();
+            let result=if write{d.write512(0,&[0;512])}else{d.read512(0).map(|_|())};
+            assert_eq!(result,Err(Error::Transport));assert!(d.poisoned());assert_eq!(d.io.words,0);
+        }
+        let mut f=Fake::new();f.status=0x80;f.fail_yield=true;
+        let mut d=Device::new(f,32).unwrap();assert_eq!(d.read512(0),Err(Error::Transport));
+        assert_eq!(d.io.reads,16);assert_eq!(d.io.yields,1);assert!(d.poisoned());
+    }
+    #[test] fn busy_transitions_yield_then_complete_without_retry() {
+        let mut f=Fake::new();f.busy_until=20;f.busy_per_command=20;
+        let mut d=Device::new(f,32).unwrap();
+        assert!(d.read512(0).is_ok());assert!(d.io.yields>=2);
+        d.write512(0,&[1;512]).unwrap();d.flush().unwrap();assert!(!d.poisoned());
     }
 }

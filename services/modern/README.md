@@ -13,7 +13,8 @@ this instance. No ambiguous operation retries. Bounds errors touch no I/O.
 A completed write is not a durable write until flush succeeds.
 
 Proposed topology: System role9 owns 0x1f0..0x1f7 plus0x3f6; Data role1 owns
-0x170..0x177 plus0x376. Master only; IRQ14/15 masked; nIEN set; no DMA.
+0x170..0x177 plus0x376. Master only; the kernel bridge must mask IRQ14/15 and set nIEN before constructing Device;
+Io deliberately exposes no control-port write. No DMA.
 The immutable boot disk stays explicitly on Q35 AHCI, separate from both.
 This proposal does not activate or extend the existing Desktop profile.
 
@@ -30,3 +31,8 @@ Source basis:
 
 Tests use a deterministic in-memory fake only, in the cloud test sandbox.
 They are not physical disk, runtime isolation or persistence evidence.
+
+Successful polling requires DRDY as well as clear BSY/ERR/DF and the exact DRQ
+phase. Tests include absent DRDY, busy transitions, every partial data transfer,
+status/register/command/yield transport failures, and post-transfer/flush errors.
+Read data is a private temporary array and is returned only after completion.
