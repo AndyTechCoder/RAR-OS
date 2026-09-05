@@ -4,8 +4,8 @@
 
 ADR 0032 supersedes the staged prompt sequence below for new Alpha work. The
 historic sequence remains a record. Execute the five milestones in
-`release-roadmap.md`, beginning with
-`tasks/fast-track-alpha-milestone-1.md`. Use continuous bounded checks, a small
+`release-roadmap.md`. Foundation is complete; the owner-directed current scope is
+`tasks/fast-track-alpha-milestone-2.md`. Use continuous bounded checks, a small
 number of vertical pull requests, one serious integrated review near milestone
 completion, and consolidated remediation. Passing specifications alone is not
 OS functionality; runtime claims require retained certified-cloud evidence.

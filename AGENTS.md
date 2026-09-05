@@ -2,7 +2,7 @@
 
 ## Active Fast-Track Alpha authority
 
-ADR 0032 and `docs/tasks/fast-track-alpha-milestone-1.md` are the owner-approved
+ADR 0032 and `docs/tasks/fast-track-alpha-milestone-2.md` are the owner-approved
 execution authority for Fast-Track Alpha. They supersede the historic
 packet → activation → verifier → retirement chains and prompt-number sequencing
 for new work. Historic documents remain evidence, not active blockers.
@@ -13,9 +13,13 @@ contract, this file, and the host-safety policy. When older process text
 conflicts with ADR 0032, ADR 0032 controls process only; technical and security
 promises remain binding.
 
-The current implementation scope is Milestone 1: Foundation on the certified
-x86_64 UEFI cloud profile. Do not implement GUI, applications, networking,
-agents, broad hardware support, persistent filesystems, or production services.
+The current implementation scope is Milestone 2: Platform on the reviewed
+x86_64 UEFI cloud profile. Foundation is released and must remain reproducible.
+Implement protected processes, bounded scheduling/IPC/capabilities, explicitly
+volatile RAM storage and isolated input/framebuffer services. Do not implement
+a GUI shell, applications, networking, agents, broad hardware support,
+persistent filesystems, or production services. Review the fixed cloud-only
+input/display profile extension before its controller becomes trusted on main.
 
 For the current owner-directed session, all repository mutations use GitHub.
 Do not create, change, move, or delete files on the Mac or attached SSD. Never
