@@ -1,7 +1,8 @@
 # Platform trusted cloud controller
 
-Status: controller/contract proposal. No Platform target exists yet; no Platform
-boot or milestone-completion claim is made by this change.
+Status: independently reviewed controller merged in PR #152. Platform target
+runtime proof is recorded in `docs/evidence/platform-milestone-2.md`; only its
+exact source/controller-bound evidence can support a behavior claim.
 
 This is the consolidated trusted-main controller extension for
 [Milestone 2](../../../docs/tasks/fast-track-alpha-milestone-2.md).

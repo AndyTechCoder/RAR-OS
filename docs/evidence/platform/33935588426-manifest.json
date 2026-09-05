@@ -1,0 +1,64 @@
+{
+  "source": "d058cc32a7be13d2970c6c1be33bcf600abc2838",
+  "controller": "dcb61acf2c10344c0e0883cfae13138239f8e88d",
+  "run": "33935588426",
+  "attempt": "1",
+  "job": "platform",
+  "runner_image": "20260831.293.1",
+  "policy": {
+    "network": "none",
+    "readonly": true,
+    "user": "65532:65532",
+    "cpus": "2",
+    "memory": "1024m",
+    "pids": "64",
+    "capabilities": "ALL",
+    "privilege": "no-new-privileges",
+    "guest_network": false,
+    "passthrough": false,
+    "credentials": false,
+    "raw_disk": false
+  },
+  "negative_tests": 63,
+  "status": "passed",
+  "profile": "q35-tcg-ps2-vga-private-qmp-v1",
+  "build_image": "sha256:83bb6064ce2c68974ffeafa0fe8faa7a3baa01a6a2b2c0db976fc9d790396567",
+  "launch_image": "sha256:2dc79b5b226df1be04825927469cc310e2f8dce80c8878d5d01dc17f53c4e324",
+  "build_1": {
+    "platform.efi": "9fbb03bfec3192e25a50f91fb63b916cc57c87905eac2e34c5336bc02229f000",
+    "platform.img": "a17d5be016eabea88f0db5eac72b159c0c5beccdc46089e582229d35d63cc5d1",
+    "platform-service.efi": "222085311ddaf596913f6a8722e502a4a49e6e204af7a4814fdc0a68c4d41dc6"
+  },
+  "build_2": {
+    "platform.efi": "9fbb03bfec3192e25a50f91fb63b916cc57c87905eac2e34c5336bc02229f000",
+    "platform.img": "a17d5be016eabea88f0db5eac72b159c0c5beccdc46089e582229d35d63cc5d1",
+    "platform-service.efi": "222085311ddaf596913f6a8722e502a4a49e6e204af7a4814fdc0a68c4d41dc6"
+  },
+  "reproducible": true,
+  "records": [
+    "RAR-BOOT:UEFI",
+    "RAR-KERNEL:ENTRY",
+    "RAR-MEMORY:READY",
+    "RAR-ALLOCATOR:READY",
+    "RAR-INTERRUPTS:READY",
+    "RAR-TIMER:READY",
+    "RAR-FOUNDATION-READY",
+    "RAR-PLATFORM:PROCESSES-READY",
+    "RAR-PLATFORM:PREEMPTION-PASS",
+    "RAR-PLATFORM:CONTEXT-PASS",
+    "RAR-PLATFORM:CAPABILITIES-PASS",
+    "RAR-PLATFORM:IPC-PASS",
+    "RAR-PLATFORM:STORAGE-PASS",
+    "RAR-PLATFORM:FAULT-CONTAINMENT-PASS",
+    "RAR-PLATFORM:INPUT-WAIT",
+    "RAR-PLATFORM:INPUT-PASS",
+    "RAR-PLATFORM:CAPTURE",
+    "RAR-PLATFORM-READY"
+  ],
+  "serial_sha256": "fa50ca5d7f5bdefc367d2b0b4be4f72681aa6b70ed4f92202c0b43ccc55f6ded",
+  "frame_sha256": "b0fcaaf70dc00a65765312436037dee2409a3514321be14107769e5c8fa7ed27",
+  "qemu_exit": 0,
+  "injected_keys": [
+    "a"
+  ]
+}

@@ -1,11 +1,18 @@
 # Sprint Alpha 0.1 Status
 
-## Active Fast-Track status — 2026-09-04
+## Active Fast-Track status — 2026-09-05
 
-- Current milestone: Fast-Track Alpha Milestone 2 — Platform (implementation starting).
+- Current milestone: Fast-Track Alpha Milestone 2 — Platform (runtime demonstrated; release promotion gates apply).
 - Foundation: complete, merged at `27ce297f4ed67117bb9176b98fd3817d095dd29a`,
   released as `v0.1.0-foundation-alpha`; all final and exact-main checks passed.
-- Platform implementation evidence: none yet; no completion claim.
+- Platform reviewed source: `d058cc32a7be13d2970c6c1be33bcf600abc2838`.
+- Platform run `33935588426`: two matching builds, 12 kernel + 5 service tests per build,
+  63 controller negatives, actual isolated processes/context/IPC/storage/input/pixels.
+- Foundation regression run `33935588441`: normal/panic/exception passed.
+- Independent correctness/security findings closed in one consolidated remediation.
+- Closure: final-head checks, PR #153 merge, exact-main validation and durable release.
+  See `docs/evidence/platform-milestone-2.md` and release `v0.2.0-platform-alpha`.
+- Next milestone: Usable Alpha (GUI), not started by this session.
 - Platform contract: `docs/tasks/fast-track-alpha-milestone-2.md`.
 - Foundation closure history follows for provenance.
 - Authority: ADR 0032 and `docs/tasks/fast-track-alpha-milestone-1.md`.

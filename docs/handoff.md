@@ -5,7 +5,10 @@
 ADR 0032 is the active process authority. Work proceeds by evidence milestones,
 not prompt numbers or nested authorization packets. The current handoff is
 [`Fast-Track Alpha Milestone 2`](tasks/fast-track-alpha-milestone-2.md).
-The Foundation release is the preserved regression baseline.
+Platform implementation and independent remediation are demonstrated in
+[`the Platform evidence record`](evidence/platform-milestone-2.md). Its final-head,
+merge, exact-main and publication gates define release promotion. Foundation
+remains the preserved regression baseline. Usable Alpha is next, not yet started.
 Keep public contracts replaceable, update tests and documentation with behavior,
 and retain all security, signing, isolation, recovery, rollback, dependency and
 data-separation requirements.

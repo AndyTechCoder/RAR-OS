@@ -13,10 +13,11 @@ contract, this file, and the host-safety policy. When older process text
 conflicts with ADR 0032, ADR 0032 controls process only; technical and security
 promises remain binding.
 
-The current implementation scope is Milestone 2: Platform on the reviewed
-x86_64 UEFI cloud profile. Foundation is released and must remain reproducible.
-Implement protected processes, bounded scheduling/IPC/capabilities, explicitly
-volatile RAM storage and isolated input/framebuffer services. Do not implement
+Milestone 2 Platform behavior and independent remediation are demonstrated in
+`docs/evidence/platform-milestone-2.md`; remaining work is evidence-gated release
+promotion on the reviewed x86_64 UEFI cloud profile. Foundation remains the
+preserved regression baseline. The next milestone is Usable Alpha, but it is
+not authorized or started merely by completing Platform. Do not implement
 a GUI shell, applications, networking, agents, broad hardware support,
 persistent filesystems, or production services. Review the fixed cloud-only
 input/display profile extension before its controller becomes trusted on main.

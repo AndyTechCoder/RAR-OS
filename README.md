@@ -5,16 +5,23 @@ RAR OS is a from-scratch, privacy-first, adaptable operating system intended to 
 Gate 0 was approved on 2026-07-16. That historical approval remains recorded;
 ADR 0032 now governs the Fast-Track Alpha milestones.
 
-Fast-Track Alpha Milestone 1 implements an experimental x86_64 UEFI foundation:
-RAR-owned boot code, private page tables, memory/frame allocation, a bounded heap,
-serial diagnostics, fatal exception handling and a basic hardware timer.
-Acceptance requires the recorded reproducible cloud builds and three isolated
-boot profiles; see the Foundation evidence record for the exact verified state.
+RAR OS now has a real experimental x86_64 UEFI Platform: isolated user-mode
+processes, timer-preemptive scheduling, capability IPC, volatile storage,
+keyboard input and framebuffer drawing. Reproducible cloud builds, adversarial
+fault/client tests and actual captured pixels are recorded in the Platform
+evidence. Foundation normal/panic/exception boots remain regression-tested.
+The release record binds final merge and exact-main validation.
 
 This is not a usable desktop or production OS. GUI, applications, networking,
 persistent storage, signed-layer updates and additional hardware come later.
 Never build or execute RAR OS on the owner's Mac or SSD. Only the documented
 isolated cloud profile is authorized for this milestone.
+
+- [Platform evidence](docs/evidence/platform-milestone-2.md)
+- [Platform implementation](nucleus/platform/README.md)
+- [Platform private fixture contract](docs/interfaces/platform-runtime-v0.md)
+- [Platform milestone](docs/tasks/fast-track-alpha-milestone-2.md)
+- [Platform cloud lab](tools/rar-lab/platform/README.md)
 
 - [Foundation evidence](docs/evidence/foundation-milestone-1.md)
 - [Foundation implementation](nucleus/foundation/README.md)

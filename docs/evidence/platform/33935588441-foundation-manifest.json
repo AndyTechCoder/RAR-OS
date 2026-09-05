@@ -1,0 +1,89 @@
+{
+  "source": "d058cc32a7be13d2970c6c1be33bcf600abc2838",
+  "controller": "dcb61acf2c10344c0e0883cfae13138239f8e88d",
+  "run": "33935588441",
+  "attempt": "1",
+  "job": "foundation",
+  "runner_image": "20260831.293.1",
+  "status": "passed",
+  "policy": {
+    "network": "none",
+    "readonly": true,
+    "user": "65532:65532",
+    "cpus": "2",
+    "memory": "1024m",
+    "pids": "64",
+    "capabilities": "ALL",
+    "privilege": "no-new-privileges",
+    "guest_network": false,
+    "passthrough": false,
+    "credentials": false,
+    "raw_disk": false
+  },
+  "negative_tests": 26,
+  "build_image": "sha256:3b2b3b2ded68a6915c37b0fd60ab324253189ba69ab07b4f65f439c1b9ebdcec",
+  "launch_image": "sha256:e403d4029acb33ba4690374a62e784039bdebd81bc192b7f4f693ff8c6b4183e",
+  "build_1": {
+    "normal.efi": "947f1cf07750cb740a58b029441c2c9a7491b80722bd82ad0f7d7ce1eb07d336",
+    "normal.img": "7a1a1eeb6ee8051c84b37155282a86dd9ce4445122f0079d1bd0c31780d0f01d",
+    "panic.efi": "79d7904c16a346420af27d6a89018401ac64d64d3d2ea5083eaad2d99d30b87e",
+    "panic.img": "363b4d2d394ae33bb752f35c690caa9ac64de4de920e77285b5035ed37227141",
+    "exception.efi": "403ea688d14eaee9b823228c3c1099e79bebc666abdc7d02140d124948a7810f",
+    "exception.img": "dd862f5bbdc2eef3417d897177d40189321aa9aca9981228e461e2593ed2e168"
+  },
+  "build_2": {
+    "normal.efi": "947f1cf07750cb740a58b029441c2c9a7491b80722bd82ad0f7d7ce1eb07d336",
+    "normal.img": "7a1a1eeb6ee8051c84b37155282a86dd9ce4445122f0079d1bd0c31780d0f01d",
+    "panic.efi": "79d7904c16a346420af27d6a89018401ac64d64d3d2ea5083eaad2d99d30b87e",
+    "panic.img": "363b4d2d394ae33bb752f35c690caa9ac64de4de920e77285b5035ed37227141",
+    "exception.efi": "403ea688d14eaee9b823228c3c1099e79bebc666abdc7d02140d124948a7810f",
+    "exception.img": "dd862f5bbdc2eef3417d897177d40189321aa9aca9981228e461e2593ed2e168"
+  },
+  "reproducible": true,
+  "boots": {
+    "normal": {
+      "exit": 124,
+      "records": [
+        "RAR-BOOT:UEFI",
+        "RAR-KERNEL:ENTRY",
+        "RAR-MEMORY:READY",
+        "RAR-ALLOCATOR:READY",
+        "RAR-INTERRUPTS:READY",
+        "RAR-TIMER:READY",
+        "RAR-FOUNDATION-READY"
+      ],
+      "serial_sha256": "bf4c8367ae36d547eb6000e15cb2bb85f81eb57b1ffaa2edc27184ca585705c8",
+      "image_sha256": "7a1a1eeb6ee8051c84b37155282a86dd9ce4445122f0079d1bd0c31780d0f01d"
+    },
+    "panic": {
+      "exit": 124,
+      "records": [
+        "RAR-BOOT:UEFI",
+        "RAR-KERNEL:ENTRY",
+        "RAR-MEMORY:READY",
+        "RAR-ALLOCATOR:READY",
+        "RAR-PANIC:BEGIN",
+        "RAR-PANIC:CODE=SELFTEST",
+        "RAR-PANIC:HALT"
+      ],
+      "serial_sha256": "fd6c57cbd17c074525a65f132f8c021ad4d8a36a1bf3882c3fc4f19b71073fa7",
+      "image_sha256": "363b4d2d394ae33bb752f35c690caa9ac64de4de920e77285b5035ed37227141"
+    },
+    "exception": {
+      "exit": 124,
+      "records": [
+        "RAR-BOOT:UEFI",
+        "RAR-KERNEL:ENTRY",
+        "RAR-MEMORY:READY",
+        "RAR-ALLOCATOR:READY",
+        "RAR-INTERRUPTS:READY",
+        "RAR-EXCEPTION:VECTOR=6",
+        "RAR-PANIC:BEGIN",
+        "RAR-PANIC:CODE=EXCEPTION-06",
+        "RAR-PANIC:HALT"
+      ],
+      "serial_sha256": "13b37965521e211ce001263ea0cc093467012643a15ec6589c624f46ba80d6cd",
+      "image_sha256": "dd862f5bbdc2eef3417d897177d40189321aa9aca9981228e461e2593ed2e168"
+    }
+  }
+}

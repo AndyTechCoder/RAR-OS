@@ -15,9 +15,11 @@ milestones while preserving the technical roadmap below:
 
 The active contract is
 [`Fast-Track Alpha Milestone 2`](tasks/fast-track-alpha-milestone-2.md).
-Foundation is released as `v0.1.0-foundation-alpha`; Platform implementation is
-owner-directed. Its RAM-backed storage is explicitly volatile; persistence is
-not part of this milestone's completion claim.
+Foundation is released as `v0.1.0-foundation-alpha`. Platform runtime and
+independent remediation are demonstrated in
+[`Platform evidence`](evidence/platform-milestone-2.md), with evidence-gated
+promotion to `v0.2.0-platform-alpha`. Its RAM-backed storage is explicitly
+volatile; persistence is not part of this milestone's completion claim.
 Later milestones do not become current merely because interfaces are prepared.
 
 Status: Gate 0 approved direction — 2026-07-16

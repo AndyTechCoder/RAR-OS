@@ -60,4 +60,31 @@ impl Tables {
         unsafe {p.write(0);asm!("invlpg [{}]",in(reg)address,options(nostack,preserves_flags));}
         Ok(())
     }
+
+    /// Platform-only user mapping, built while this address space is inactive.
+    /// The caller owns the physical interval and has removed writable aliases of
+    /// executable pages. Intermediate U/S promotion never changes kernel leaves.
+    #[cfg(rar_platform)]
+    pub unsafe fn map_user(&mut self,m:Mapping,start:u64,end:u64,device:bool)->Result<(),Error>{
+        if device && (m.executable || !m.writable) {return Err(Error::Permission);}
+        unsafe{self.map(m,start,end)?;}
+        for i in 0..m.pages{
+            let address=m.virtual_start+i*4096;
+            let mut table=self.base;
+            for shift in [39,30,21]{
+                let p=(table as *mut u64).wrapping_add(((address>>shift)&511) as usize);
+                let e=unsafe{p.read()};
+                let next=e&ADDRESS;
+                if e&1==0 || e&0x80!=0 || next<self.base || next>=self.base+self.used as u64*4096 {
+                    return Err(Error::Permission);
+                }
+                unsafe{p.write(e|4);}
+                table=next;
+            }
+            let p=(table as *mut u64).wrapping_add(((address>>12)&511) as usize);
+            let e=unsafe{p.read()};
+            unsafe{p.write(e|4|if device{0x18}else{0});}
+        }
+        Ok(())
+    }
 }
