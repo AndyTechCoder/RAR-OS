@@ -52,17 +52,20 @@ This model does not promise delivery across a lifecycle cutover.
 ## Prepare, health and cutover
 
 Only an active principal8 with its Manager handle may begin, abort or cut over.
-Begin refuses concurrent trials, zero image-seal input, unavailable slots,
-invalid budget, stale previous binding or exhausted counters. It reserves a
+Begin refuses concurrent trials, unknown image seals, unavailable slots,
+invalid authenticated budgets, stale previous bindings, recovery-required state
+or exhausted counters. The caller supplies no execution budget. It reserves a
 vacant Settings slot, advances incarnation/token, clears its queue and grants
 only the exact one-shot health capability. It grants no production receive/
 send, surface, input, storage, port, framebuffer or management access.
 
-The image-seal number is currently a MODEL INPUT, not cryptographic evidence.
-Before connecting this method to a real kernel, the number must resolve in a
-kernel-owned table to immutable, fully staged bytes and a generation-bound seal.
-The policy service verifies those exact bytes and metadata; the kernel enforces
-the copy/mapping boundary and cannot trust an arbitrary nonzero userspace ID.
+A seal must match a private kernel-owned staged record binding digest,
+generation and signed trial budget. Begin derives all three from that record
+and consumes it; an arbitrary nonzero ID grants nothing. There is intentionally
+no production record-insertion API yet: only model tests create fixtures.
+The pending staging bridge must bind immutable, fully staged bytes to verified
+metadata. The policy service verifies those exact bytes; the kernel enforces
+the copy/mapping boundary. This private model gate is not an implemented seal.
 A real candidate is constructed unschedulable with zeroed private memory,
 guarded stack and final W^X mappings; writable aliases must be removed first.
 
@@ -95,7 +98,16 @@ commit ordering requires the integrated lifecycle/storage state machine.
 
 Abort, candidate fault and trial timeout revoke candidate caps, clear its state,
 consume the trial and preserve the previous active binding. A stale token never
-redeems. If the old active instance dies during a trial, cutover fails stale;
+redeems. Fault events carry the exact slot/incarnation endpoint; timer events
+also carry the trial token. Delayed events from an earlier occupant cannot kill
+or charge the current process in a reused slot.
+
+A lifecycle-manager fault cancels any Trial or Healthy candidate, clears staged
+state and marks controlled recovery required. The prior active Settings remains
+untouched. No replacement manager or new authority is implicitly created;
+further trial starts fail closed. Runtime-controlled recovery remains pending.
+
+If the old active instance dies during a trial, cutover fails stale;
 the manager must abort/reconcile, not silently reuse a changed binding.
 
 After active Settings faults, its binding becomes unavailable and all messages
@@ -116,7 +128,9 @@ Tests cover zero/wrong/stale handles and actors, concurrent trial refusal,
 production-access denial during health, one-shot ready, exact queue purge,
 named-send continuity, empty new receive queue, old-cap rejection, timeout,
 abort, faults before/after cutover, fresh recovery incarnation, independent
-principal preservation, counter exhaustion and queue/cap retirement.
+principal preservation, counter exhaustion and queue/cap retirement. Additional
+cases cover authenticated staging budgets, consumed seals, delayed events after
+slot reuse, and manager failure during Trial and Healthy.
 
 These are model tests, not a boot or isolation proof. Positive signed loading,
 actual sealing/W^X/private-memory clearing, timer/fault assembly integration,
