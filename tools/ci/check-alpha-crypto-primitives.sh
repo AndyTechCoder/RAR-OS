@@ -61,6 +61,9 @@ printf '%s\n' 'Modern reference acquisition: pure URL/archive/guard tests passed
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/compiler_archive.py" --self-test
 printf '%s\n' 'Modern compiler archive: pure bounded fixture tests passed; actual acquisition/provisioning pending'
 
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/compiler_elf.py" --self-test
+printf '%s\n' 'Modern compiler ELF: pure dependency-byte tests passed; actual image closure pending'
+
 # Keep at most one stripped test executable and one no_std library in the
 # existing cloud-only tmpfs; no owner files or retained evidence are affected.
 set -- $(/usr/bin/du -sk "$work")

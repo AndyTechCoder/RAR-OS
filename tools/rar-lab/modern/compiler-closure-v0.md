@@ -118,3 +118,21 @@ Per-file hashes, metadata and payload totals are recorded, with required
 installer and musl library anchors. Inspection never extracts or executes.
 The cloud controller still needs to acquire the fixed URL under bounded HTTPS,
 call verify, and keep the minimal construction context separate from RAR source.
+
+## Independent ELF byte inspection
+
+compiler_elf.py reads ELF64 little-endian x86-64 dependency metadata directly
+from bounded candidate bytes, not readelf text or the exporter's graph. It checks
+program-header/segment extents, unique dynamic/string-table load mappings,
+bounded and terminated tables/strings, dependency names, interpreter framing,
+SONAME and the same narrow search-path forms. Embedded audit/config/filter/
+auxiliary loading, mixed search tags, text relocations, W+X and executable-stack
+requests fail. This independently reports metadata for the final image inspector
+to cross-check against its complete positive filesystem and construction graph.
+It is not a loader, full ELF validity proof, or activation authority.
+
+ELF dynamic-tag constants follow the public ABI definitions documented in
+https://sourceware.org/git/?p=glibc.git;a=blob;f=elf/elf.h .
+Synthetic tests cover malformed tables, mapped ranges, loading authority,
+search-path rejection, bounds and header/segment mutations. Actual compiler-image
+bytes and runtime dependency equivalence remain unverified until construction.
