@@ -28,6 +28,31 @@ LIMIT = 2 * 1024 * 1024 * 1024
 class Invalid(ValueError):
     pass
 
+
+# Independently pinned distribution notices, not trusted from the exporter.
+ARCHIVE_NOTICE_ROOT = "/build/rust-std-1.95.0-x86_64-unknown-linux-musl"
+ARCHIVE_NOTICES = {
+    "LICENSE-APACHE": (9723, "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"),
+    "LICENSE-MIT": (1068, "b71bd43a069ca0641a9ecfe585ca7b3c53b5cc1608f8b68321168698e28b5ea1"),
+    "COPYRIGHT": (1571, "172020dbfd5b53a226dfde77616190a48dcff519b0bc0e6deb91a8450782c4af"),
+}
+INSTALLED_NOTICES = ("COPYRIGHT.html", "COPYRIGHT-library.html",
+                     "licenses/Apache-2.0.txt", "licenses/MIT.txt",
+                     "licenses/LLVM-exception.txt")
+
+def required_notices(notices):
+    for name, (size, sha256) in ARCHIVE_NOTICES.items():
+        entry = notices.get("rust/" + name)
+        if (type(entry) is not dict or entry.get("source") != ARCHIVE_NOTICE_ROOT + "/" + name or
+            type(entry.get("size")) is not int or entry["size"] != size or
+            entry.get("sha256") != sha256 or entry.get("mode") != 0o444):
+            raise Invalid("required pinned archive notice")
+    for name in INSTALLED_NOTICES:
+        entry = notices.get("rust/" + name)
+        if (type(entry) is not dict or
+            entry.get("source") != SYSROOT + "/share/doc/rust/" + name):
+            raise Invalid("required installed Rust notice")
+
 def unique_json(raw):
     def pairs(items):
         out = {}
@@ -100,6 +125,7 @@ def validate(config, report, files, directories):
     notices = license_report.get("files")
     if type(notices) is not dict or not 1 <= len(notices) <= 512:
         raise Invalid("notice inventory")
+    required_notices(notices)
     expected = {"evidence/compiler-closure.json"}
     total = 0
     for path, entry in declared.items():
@@ -378,7 +404,21 @@ def self_test():
     def fixture():
         payloads = {RUSTC[1:]: elf_fixture(), LLD[1:]: elf_fixture(),
                     (MUSL + "libstd-fixture.rlib")[1:]: b"!<arch>\nfixture",
-                    "licenses/rust/LICENSE-MIT": b"synthetic notice"}
+                    }
+        notice_values = unique_json(Path(__file__).with_name("compiler-notices.json").read_bytes())
+        notices = {}
+        for name, (size, sha256) in ARCHIVE_NOTICES.items():
+            value = notice_values[name].encode()
+            if len(value) != size or hashlib.sha256(value).hexdigest() != sha256:
+                raise Invalid("pinned test notice bytes")
+            payloads["licenses/rust/" + name] = value
+            notices["rust/" + name] = {"source": ARCHIVE_NOTICE_ROOT + "/" + name,
+                "size": size, "sha256": sha256, "mode": 0o444}
+        for name in INSTALLED_NOTICES:
+            value = ("synthetic installed notice: " + name).encode()
+            payloads["licenses/rust/" + name] = value
+            notices["rust/" + name] = {"source": SYSROOT + "/share/doc/rust/" + name,
+                "size": len(value), "sha256": hashlib.sha256(value).hexdigest(), "mode": 0o444}
         declared = {}
         graph = {}
         for path in (RUSTC, LLD, MUSL + "libstd-fixture.rlib"):
@@ -387,7 +427,6 @@ def self_test():
                               "mode": 0o555 if path in (RUSTC, LLD) else 0o444, "source": path}
         for path in (RUSTC, LLD):
             graph[path] = {"needed": [], "interpreter": None, "resolved": [], "search_paths": []}
-        notice = payloads["licenses/rust/LICENSE-MIT"]
         report = {"state": "private-closure-export-only", "target_execution": False,
                   "accepted_compiler_image": False, "files": declared, "graph": graph,
                   "omitted_musl_dynamic": [dict(OMITTED_MUSL)],
@@ -396,9 +435,8 @@ def self_test():
                                     "target_cpus_sha256": "2" * 64},
                   "total_bytes": sum(x["size"] for x in declared.values()),
                   "licenses": {"state": "captured-not-legally-certified",
-                    "files": {"rust/LICENSE-MIT": {"size": len(notice), "mode": 0o444,
-                              "sha256": hashlib.sha256(notice).hexdigest()}},
-                    "total_bytes": len(notice), "runtime_packages": {}}}
+                    "files": notices,
+                    "total_bytes": sum(x["size"] for x in notices.values()), "runtime_packages": {}}}
         config = {"architecture": "amd64", "os": "linux",
                   "config": {"User": "65532:65532", "WorkingDir": "/source",
                              "Entrypoint": [RUSTC],
@@ -483,8 +521,48 @@ def self_test():
             raw, identity = image_bytes(*fixture())
             result = inspect(raw, identity)
             self.assertEqual(result["state"], "inspected-not-activated")
-            self.assertEqual(len(result["files"]), 5)
+            self.assertEqual(len(result["files"]), 12)
             self.assertEqual(result["directories"]["build"], (0o700, 65532, 65532, EPOCH))
+
+        def test_required_notices_cannot_be_omitted_even_with_consistent_report(self):
+            for name in [*ARCHIVE_NOTICES, *INSTALLED_NOTICES]:
+                config, report, payloads = fixture()
+                entry = report["licenses"]["files"].pop("rust/" + name)
+                del payloads["licenses/rust/" + name]
+                report["licenses"]["total_bytes"] -= entry["size"]
+                with self.subTest(name=name), self.assertRaisesRegex(Invalid, "required"):
+                    inspect(*image_bytes(config, report, payloads))
+        def test_required_notice_sources_are_not_self_asserted(self):
+            for name in [*ARCHIVE_NOTICES, *INSTALLED_NOTICES]:
+                for source in (None, "/build/unrelated", SYSROOT + "/share/doc/rust/../COPYRIGHT"):
+                    config, report, payloads = fixture()
+                    report["licenses"]["files"]["rust/" + name]["source"] = source
+                    with self.subTest(name=name, source=source), self.assertRaisesRegex(Invalid, "required"):
+                        inspect(*image_bytes(config, report, payloads))
+        def test_archive_notice_mutation_cannot_be_report_rehashed(self):
+            for name in ARCHIVE_NOTICES:
+                for change_size in (False, True):
+                    config, report, payloads = fixture()
+                    key = "licenses/rust/" + name
+                    old = payloads[key]
+                    value = old + b"x" if change_size else b"x" + old[1:]
+                    payloads[key] = value
+                    report["licenses"]["files"]["rust/" + name].update(
+                        size=len(value), sha256=hashlib.sha256(value).hexdigest())
+                    report["licenses"]["total_bytes"] += len(value) - len(old)
+                    with self.subTest(name=name, change_size=change_size), self.assertRaisesRegex(Invalid, "required"):
+                        inspect(*image_bytes(config, report, payloads))
+        def test_required_notice_mode_and_actual_bytes_are_bound(self):
+            for name in [*ARCHIVE_NOTICES, *INSTALLED_NOTICES]:
+                config, report, payloads = fixture()
+                report["licenses"]["files"]["rust/" + name]["mode"] = 0o555
+                with self.assertRaises(Invalid):
+                    inspect(*image_bytes(config, report, payloads))
+                config, report, payloads = fixture()
+                payloads["licenses/rust/" + name] += b"x"
+                with self.assertRaises(Invalid):
+                    inspect(*image_bytes(config, report, payloads))
+
         def test_exact_empty_elf_search_directory_is_readonly(self):
             config, report, payloads = fixture()
             raw = bytearray(512); raw[:7] = b"\x7fELF\x02\x01\x01"

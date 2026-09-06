@@ -195,11 +195,24 @@ def package_owner(text, queried):
         raise Invalid("ambiguous package ownership")
     return owners[0]
 
+ARCHIVE_NOTICE_ROOT = Path("/build/rust-std-1.95.0-x86_64-unknown-linux-musl")
+ARCHIVE_NOTICES = {
+    "LICENSE-APACHE": (9723, "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"),
+    "LICENSE-MIT": (1068, "b71bd43a069ca0641a9ecfe585ca7b3c53b5cc1608f8b68321168698e28b5ea1"),
+    "COPYRIGHT": (1571, "172020dbfd5b53a226dfde77616190a48dcff519b0bc0e6deb91a8450782c4af"),
+}
+
+def archive_notice_identity(name, size, digest):
+    if name not in ARCHIVE_NOTICES or (size, digest) != ARCHIVE_NOTICES[name]:
+        raise Invalid("pinned archive notice identity")
+    return name
+
 def notice_source(path):
     value = str(path)
     roots = (str(SYSROOT / "share/doc/rust") + "/",
              "/usr/share/doc/", "/usr/share/common-licenses/")
-    if not any(value.startswith(root) for root in roots):
+    archive_notice = path.parent == ARCHIVE_NOTICE_ROOT and path.name in ARCHIVE_NOTICES
+    if not archive_notice and not any(value.startswith(root) for root in roots):
         raise Invalid("notice source domain")
     if any(x in ("", ".", "..") for x in value.split("/")[1:]):
         raise Invalid("notice source path")
@@ -364,9 +377,11 @@ def main():
             len(relative) > 256 or relative in notices):
             raise Invalid("notice destination")
         actual = notice_source(source.resolve(strict=True))
-        if not actual.is_file():
+        if not actual.is_file() or (source.parent == ARCHIVE_NOTICE_ROOT and source != actual):
             raise Invalid("notice type")
         size = actual.stat().st_size
+        print(json.dumps({"event": "compiler-notice", "source": str(actual),
+                          "size": size, "destination": relative}, sort_keys=True), flush=True)
         if not 1 <= size <= 1048576 or len(notices) >= 512:
             raise Invalid("notice bounds")
         with actual.open("rb") as source_stream:
@@ -374,6 +389,8 @@ def main():
         notice_bytes += len(raw)
         if len(raw) != size or notice_bytes > 16777216:
             raise Invalid("notice size/budget")
+        if source.parent == ARCHIVE_NOTICE_ROOT:
+            archive_notice_identity(source.name, len(raw), hashlib.sha256(raw).hexdigest())
         destination = root / "licenses" / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         with destination.open("xb") as output:
@@ -383,11 +400,13 @@ def main():
         notices[relative] = {"source": str(actual), "size": size,
                              "sha256": hashlib.sha256(raw).hexdigest(), "mode": 0o444}
     rust_docs = SYSROOT / "share/doc/rust"
-    for name in ("LICENSE-APACHE", "LICENSE-MIT", "COPYRIGHT.html"):
+    for name in sorted(ARCHIVE_NOTICES):
+        copy_notice(ARCHIVE_NOTICE_ROOT / name, "rust/" + name)
+    for name in ("COPYRIGHT.html", "COPYRIGHT-library.html"):
         copy_notice(rust_docs / name, "rust/" + name)
     extra = rust_docs / "licenses"
-    if extra.is_symlink():
-        raise Invalid("Rust notice directory symlink")
+    if extra.is_symlink() or not extra.is_dir():
+        raise Invalid("Rust notice directory missing/type")
     if extra.exists():
         if not extra.is_dir():
             raise Invalid("Rust notice directory")
@@ -399,6 +418,9 @@ def main():
             if path.is_dir():
                 continue
             copy_notice(path, "rust/licenses/" + path.relative_to(extra).as_posix())
+    for name in ("Apache-2.0.txt", "MIT.txt", "LLVM-exception.txt"):
+        if "rust/licenses/" + name not in notices:
+            raise Invalid("required installed Rust SPDX notice missing")
     packages = {}
     for actual_name in sorted({record["source"] for record in files.values()}):
         if actual_name.startswith(str(SYSROOT) + "/"):
@@ -564,6 +586,17 @@ def self_test():
                          (path, OMITTED_MUSL_SIZE + 1, OMITTED_MUSL_SHA256),
                          (path, OMITTED_MUSL_SIZE, "0" * 64)):
                 with self.assertRaises(Invalid): musl_omission(*args)
+        def test_pinned_archive_notice_layout_and_identity(self):
+            for name, (size, digest) in ARCHIVE_NOTICES.items():
+                path = ARCHIVE_NOTICE_ROOT / name
+                self.assertEqual(notice_source(path), path)
+                self.assertEqual(archive_notice_identity(name, size, digest), name)
+                for bad in ((name, size+1, digest), (name, size, "0"*64),
+                            ("unknown", size, digest)):
+                    with self.assertRaises(Invalid): archive_notice_identity(*bad)
+            for path in (ARCHIVE_NOTICE_ROOT / "install.sh", ARCHIVE_NOTICE_ROOT / "extra",
+                         ARCHIVE_NOTICE_ROOT / "../LICENSE-MIT"):
+                with self.assertRaises(Invalid): notice_source(path)
         def test_default_guard_never_inspects_or_exports(self):
             with patch.dict(os.environ, {}, clear=True), patch(__name__ + ".run") as runner:
                 with self.assertRaises(Invalid): main()
