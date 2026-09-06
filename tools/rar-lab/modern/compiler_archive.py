@@ -53,7 +53,7 @@ def inventory(raw):
                 if (not name or len(name) > 512 or name.startswith("/") or
                     re.fullmatch(r"[A-Za-z0-9_./+-]+", name) is None or
                     any(x in ("", ".", "..") for x in name.split("/")) or
-                    name.split("/")[0] != ROOT or name in found or item.sparse or
+                    name.split("/")[0] != ROOT or name in found or item.sparse is not None or
                     not (item.isfile() or item.isdir()) or item.mode & 0o7022 or
                     not 0 <= item.size <= 256 * 1024 * 1024 or
                     (item.isdir() and item.size != 0) or (item.isfile() and "/" not in name)):
@@ -85,7 +85,8 @@ def inventory(raw):
         raise Invalid("pinned installer missing or not executable")
     if (not any(name.startswith(LIB) and name.endswith(".rlib") and
                 info["kind"] == "file" and info["size"] > 0 for name, info in found.items()) or
-        found.get(LIB + "self-contained/libc.a", {}).get("kind") != "file"):
+        found.get(LIB + "self-contained/libc.a", {}).get("kind") != "file" or
+        found.get(LIB + "self-contained/libc.a", {}).get("size", 0) <= 0):
         raise Invalid("musl target payload incomplete")
     return {"entries": found, "expanded_bytes": len(expanded), "payload_bytes": total}
 
@@ -124,6 +125,7 @@ def self_test():
         def test_no_links_devices_escapes_duplicates_or_writable_members(self):
             bad = [
                 lambda e: e + [e[1]], lambda e: e[:1] + e[2:], lambda e: e[:-1],
+                lambda e: e[:-1] + [(e[-1][0], b"", e[-1][2], e[-1][3])],
                 lambda e: e + [(ROOT + "/../escape", b"x", 0o644, tarfile.REGTYPE)],
                 lambda e: e + [("/absolute", b"x", 0o644, tarfile.REGTYPE)],
                 lambda e: e + [(ROOT + "/link", b"", 0o644, tarfile.SYMTYPE)],
