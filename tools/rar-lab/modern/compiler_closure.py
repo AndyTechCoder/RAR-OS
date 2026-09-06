@@ -202,6 +202,17 @@ ARCHIVE_NOTICES = {
     "COPYRIGHT": (1571, "172020dbfd5b53a226dfde77616190a48dcff519b0bc0e6deb91a8450782c4af"),
 }
 
+
+# Generated aggregate Rust copyright reports are large inert HTML documents.
+# Only exact installed sources AND exact destinations receive the larger budget.
+NOTICE_TOTAL_LIMIT = 48 * 1024 * 1024
+def notice_limit(source, relative):
+    for name in ("COPYRIGHT.html", "COPYRIGHT-library.html"):
+        if (str(source) == str(SYSROOT) + "/share/doc/rust/" + name and
+            relative == "rust/" + name):
+            return 16 * 1024 * 1024
+    return 1024 * 1024
+
 def archive_notice_identity(name, size, digest):
     if name not in ARCHIVE_NOTICES or (size, digest) != ARCHIVE_NOTICES[name]:
         raise Invalid("pinned archive notice identity")
@@ -382,12 +393,12 @@ def main():
         size = actual.stat().st_size
         print(json.dumps({"event": "compiler-notice", "source": str(actual),
                           "size": size, "destination": relative}, sort_keys=True), flush=True)
-        if not 1 <= size <= 1048576 or len(notices) >= 512:
+        if not 1 <= size <= notice_limit(actual, relative) or len(notices) >= 512:
             raise Invalid("notice bounds")
         with actual.open("rb") as source_stream:
             raw = source_stream.read(size + 1)
         notice_bytes += len(raw)
-        if len(raw) != size or notice_bytes > 16777216:
+        if len(raw) != size or notice_bytes > NOTICE_TOTAL_LIMIT:
             raise Invalid("notice size/budget")
         if source.parent == ARCHIVE_NOTICE_ROOT:
             archive_notice_identity(source.name, len(raw), hashlib.sha256(raw).hexdigest())
@@ -586,6 +597,19 @@ def self_test():
                          (path, OMITTED_MUSL_SIZE + 1, OMITTED_MUSL_SHA256),
                          (path, OMITTED_MUSL_SIZE, "0" * 64)):
                 with self.assertRaises(Invalid): musl_omission(*args)
+
+        def test_generated_notice_budget_is_path_and_destination_specific(self):
+            for name in ("COPYRIGHT.html", "COPYRIGHT-library.html"):
+                source = str(SYSROOT) + "/share/doc/rust/" + name
+                self.assertEqual(notice_limit(source, "rust/" + name), 16 * 1024 * 1024)
+                for bad_source, bad_destination in (
+                    (source + ".extra", "rust/" + name),
+                    (source, "other/" + name),
+                    (source.replace("/rust/", "/rust/../rust/"), "rust/" + name),
+                    ("/build/" + name, "rust/" + name)):
+                    self.assertEqual(notice_limit(bad_source, bad_destination), 1024 * 1024)
+            self.assertEqual(NOTICE_TOTAL_LIMIT, 48 * 1024 * 1024)
+
         def test_pinned_archive_notice_layout_and_identity(self):
             for name, (size, digest) in ARCHIVE_NOTICES.items():
                 path = ARCHIVE_NOTICE_ROOT / name
