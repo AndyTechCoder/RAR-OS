@@ -124,8 +124,9 @@ def inspect(raw):
         for tag in (15, 29):
             if tag in tags:
                 entries = string(tags[tag]).split(":")
-                if (not 1 <= len(entries) <= 8 or len(set(entries)) != len(entries) or
-                    any(entry not in ("$ORIGIN", "$ORIGIN/../lib", "$ORIGIN/../../..") for entry in entries)):
+                normalized = [entry[:-1] if entry == "$ORIGIN/../../../" else entry for entry in entries]
+                if (not 1 <= len(entries) <= 8 or len(set(normalized)) != len(entries) or
+                    any(entry not in ("$ORIGIN", "$ORIGIN/../lib", "$ORIGIN/../../..") for entry in normalized)):
                     raise Invalid("unapproved dynamic search path")
                 search = {"kind": "RPATH" if tag == 15 else "RUNPATH", "entries": entries}
     return {"kind": kind, "interpreter": interpreter, "needed": needed,
@@ -173,6 +174,11 @@ def self_test():
                 with self.assertRaises(Invalid): inspect(fixture(strings=b"\0libc.so.6\0" + search + b"\0"))
             with self.assertRaises(Invalid):
                 inspect(fixture(strings=b"\0libssl.so\0$ORIGIN\0"))
+        def test_pinned_lld_trailing_slash_spelling(self):
+            result = inspect(fixture(strings=b"\0libc.so.6\0$ORIGIN/../../../\0"))
+            self.assertEqual(result["search"]["entries"], ["$ORIGIN/../../../"])
+            with self.assertRaises(Invalid):
+                inspect(fixture(strings=b"\0libc.so.6\0$ORIGIN/../../../:$ORIGIN/../../..\0"))
         def test_forbidden_soname(self):
             entries = [(14, 1), (5, 0x400180), (10, 19), (0, 0)]
             with self.assertRaises(Invalid):

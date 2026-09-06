@@ -222,3 +222,22 @@ coverage failures.
 Backend selection also binds the complete fixed backend-directory inventory:
 builtin permits no backend files; external permits exactly the selected node.
 Mixed or additional backend payloads fail, with positive/negative fixtures.
+
+## Real construction correction: pinned LLD RPATH spelling
+
+Cloud run34008664172 at04cb08fd passed actual pinned musl acquisition, SHA256,
+archive inventory and installation, then failed closed in dynamic-search-path
+admission before any candidate image or adapter execution. The original log did
+not retain the rejected raw string, so its exact value is not yet independently
+observed. The pinned upstream Rust1.95 build recipe explicitly emits the known
+LLD spelling $ORIGIN/../../../ with a trailing slash:
+https://github.com/rust-lang/rust/blob/1.95.0/src/bootstrap/src/core/build_steps/llvm.rs#L1343 .
+
+Both metadata inspectors now admit precisely that spelling as equivalent to the
+already admitted $ORIGIN/../../.., with identical normalized immutable-directory
+checks. Supplying both spellings in one list is rejected as a duplicate. No other
+path, token, relative location or writable domain is added. Positive and duplicate
+negative fixtures cover both parsers. Bounded pinned-tool program/dynamic metadata
+are printed on rejection to make any further compatibility failure diagnosable
+without broadening the gate. Real construction must still pass; upstream source
+is supporting diagnosis, not evidence that the cloud image has been accepted.
