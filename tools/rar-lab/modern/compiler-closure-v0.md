@@ -192,3 +192,29 @@ an adapter or RAR target. Success remains candidate-reproduced-not-activated.
 Real isolated compilation, static adapter inspection and three-way algorithm
 comparisons follow separately. This manual workflow must be reviewed and merged
 to main before dispatch; adding its source does not activate a guest profile.
+
+### Independent filename resolution and provenance
+
+A SONAME match is not accepted in place of the exact NEEDED filename. The
+positive candidate must provide the actual filename in a direct immutable
+search domain (fixed LD_LIBRARY_PATH, the object's admitted ORIGIN expansions,
+or the listed x86-64 GNU scratch default-library domains). Every same-named
+copy in the entire image must have identical bytes; differing shadows fail
+regardless of path precedence or inherited RPATH. The loader-visible bytes
+must also match a filename in the recorded trace. Cache-only and inherited-only
+resolution are deliberately not admitted; a real compile still validates the
+pinned loader's actual usability. No cache, preload file or writable library
+search path is present.
+
+This conservative gate follows GNU's requirement to install shared objects
+under their soname filenames, not treat the embedded name as filesystem lookup:
+https://sourceware.org/glibc/manual/2.40/html_node/Dynamic-Linker-Hardening.html .
+It is not an emulator for every glibc loader extension.
+
+Backend selection and positive probe digest/version shape are mandatory, as is
+complete, unique package/version/file coverage of every non-toolchain canonical
+runtime source with its captured notice. The inspector validates this evidence
+structure and file coverage; it does not independently rerun a compiler probe or
+legally certify a package. Dynamic synthetic ELF tests include logical/canonical
+aliases, missing/renamed or unreachable filenames, shadow bytes, and provenance
+coverage failures.

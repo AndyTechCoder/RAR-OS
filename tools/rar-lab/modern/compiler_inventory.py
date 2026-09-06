@@ -14,6 +14,11 @@ SYSROOT = "/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu"
 RUSTC = SYSROOT + "/bin/rustc"
 LLD = SYSROOT + "/lib/rustlib/x86_64-unknown-linux-gnu/bin/rust-lld"
 MUSL = SYSROOT + "/lib/rustlib/x86_64-unknown-linux-musl/lib/"
+# Positive scratch search domains for the pinned x86-64 GNU bootstrap.
+# All same-named ELF copies must be identical, so search precedence cannot
+# select different bytes. Inherited-only paths and cache-only resolution fail.
+DEFAULT_DIRS = ("/lib/x86_64-linux-gnu", "/usr/lib/x86_64-linux-gnu",
+                "/lib64", "/usr/lib64", "/lib", "/usr/lib")
 EPOCH = 1785715200
 LIMIT = 2 * 1024 * 1024 * 1024
 
@@ -132,11 +137,6 @@ def validate(config, report, files, directories):
             runtime_path(elf["interpreter"])
             if elf["interpreter"] not in resolved:
                 raise Invalid("interpreter missing from dependency set")
-        for name in elf["needed"]:
-            matches = [files[p[1:]]["sha256"] for p in resolved
-                       if posixpath.basename(p) == name or files[p[1:]]["elf"]["soname"] == name]
-            if not matches or len(set(matches)) != 1:
-                raise Invalid("missing or ambiguous direct dependency bytes")
         search = set()
         if elf["search"] is not None:
             for origin in (posixpath.dirname(path), posixpath.dirname(canonical)):
@@ -147,12 +147,64 @@ def validate(config, report, files, directories):
                     search.add(directory)
         if item.get("search_paths") != sorted(search):
             raise Invalid("ELF search paths differ")
+        for name in elf["needed"]:
+            # SONAME is not a pathname. The exact NEEDED filename must exist
+            # in a direct search directory; a claimed ldd path alone is not proof.
+            reachable = [directory + "/" + name
+                         for directory in [SYSROOT + "/lib", *sorted(search), *DEFAULT_DIRS]
+                         if (directory + "/" + name)[1:] in files]
+            matches = [files[p[1:]] for p in reachable]
+            same_named = [entry for filename, entry in files.items()
+                          if posixpath.basename(filename) == name]
+            if (not matches or any(entry["elf"] is None for entry in matches) or
+                any(entry["elf"]["soname"] not in (None, name) for entry in matches) or
+                len({entry["sha256"] for entry in same_named}) != 1):
+                raise Invalid("dependency filename missing or shadowed")
+            selected = matches[0]["sha256"]
+            if not any(files[p[1:]]["sha256"] == selected and
+                       posixpath.basename(p) == name for p in resolved):
+                raise Invalid("loader-visible dependency differs from trace")
+
     for path in set(declared) - set(graph) - aliases:
         if (not path.startswith(MUSL) or not path.endswith((".rlib", ".rmeta", ".a", ".o")) or
             declared[path]["mode"] != 0o444):
             raise Invalid("unexpected compiler payload outside runtime graph")
     if not any(path.startswith(MUSL) and path.endswith(".rlib") for path in declared):
         raise Invalid("musl sysroot missing")
+    backend = report.get("codegen_backend")
+    backend_dir = SYSROOT + "/lib/rustlib/x86_64-unknown-linux-gnu/codegen-backends/"
+    if backend != "builtin-in-driver":
+        if (backend not in (backend_dir + "librustc_codegen_llvm.so",
+                            backend_dir + "librustc_codegen_llvm-1.95.0.so") or backend not in graph):
+            raise Invalid("codegen backend evidence")
+    probe = report.get("backend_probe")
+    if (type(probe) is not dict or
+        set(probe) != {"llvm_version", "version_sha256", "target_cpus_sha256"} or
+        type(probe["llvm_version"]) is not str or
+        re.fullmatch(r"[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}", probe["llvm_version"]) is None or
+        not digest(probe["version_sha256"]) or not digest(probe["target_cpus_sha256"])):
+        raise Invalid("positive backend probe evidence")
+    packages = license_report.get("runtime_packages")
+    if type(packages) is not dict or len(packages) > 128:
+        raise Invalid("runtime package inventory")
+    external = {entry["source"] for entry in declared.values()
+                if not entry["source"].startswith(SYSROOT + "/")}
+    covered = set()
+    for owner, entry in packages.items():
+        if (type(owner) is not str or len(owner) > 128 or
+            re.fullmatch(r"[a-z0-9][a-z0-9+.-]*(?::[a-z0-9][a-z0-9-]*)?", owner) is None or
+            type(entry) is not dict or type(entry.get("identity")) is not str or
+            len(entry["identity"]) > 512 or
+            re.fullmatch(re.escape(owner) + r"\t[^\s]+", entry["identity"]) is None or
+            type(entry.get("files")) is not list or not 1 <= len(entry["files"]) <= 128 or
+            any(type(path) is not str for path in entry["files"]) or
+            len(set(entry["files"])) != len(entry["files"]) or
+            any(path not in external or path in covered for path in entry["files"]) or
+            "packages/" + owner.replace(":", "-") + ".copyright" not in notices):
+            raise Invalid("runtime package provenance")
+        covered.update(entry["files"])
+    if covered != external:
+        raise Invalid("runtime package coverage")
     notice_total = 0
     for relative, entry in notices.items():
         if (type(relative) is not str or len(relative) > 256 or
@@ -302,15 +354,55 @@ def self_test():
         notice = payloads["licenses/rust/LICENSE-MIT"]
         report = {"state": "private-closure-export-only", "target_execution": False,
                   "accepted_compiler_image": False, "files": declared, "graph": graph,
+                  "codegen_backend": "builtin-in-driver",
+                  "backend_probe": {"llvm_version": "22.1.0", "version_sha256": "1" * 64,
+                                    "target_cpus_sha256": "2" * 64},
                   "total_bytes": sum(x["size"] for x in declared.values()),
                   "licenses": {"state": "captured-not-legally-certified",
                     "files": {"rust/LICENSE-MIT": {"size": len(notice), "mode": 0o444,
                               "sha256": hashlib.sha256(notice).hexdigest()}},
-                    "total_bytes": len(notice)}}
+                    "total_bytes": len(notice), "runtime_packages": {}}}
         config = {"architecture": "amd64", "os": "linux",
                   "config": {"User": "65532:65532", "WorkingDir": "/source",
                              "Entrypoint": [RUSTC],
                              "Env": ["PATH=/nonexistent", "LD_LIBRARY_PATH=" + SYSROOT + "/lib"]}}
+        return config, report, payloads
+
+
+    def dynamic_fixture(logical="/lib/x86_64-linux-gnu/libfixture.so"):
+        config, report, payloads = fixture()
+        def dynamic_elf(tag):
+            raw = bytearray(512); raw[:7] = b"\x7fELF\x02\x01\x01"
+            struct.pack_into("<HHI", raw, 16, 3, 62, 1)
+            struct.pack_into("<Q", raw, 32, 64)
+            struct.pack_into("<HHH", raw, 52, 64, 56, 3)
+            struct.pack_into("<IIQQQQQQ", raw, 64, 1, 5, 0, 0x400000, 0, 512, 512, 4096)
+            struct.pack_into("<IIQQQQQQ", raw, 120, 2, 4, 256, 0x400100, 0, 64, 64, 8)
+            struct.pack_into("<IIQQQQQQ", raw, 176, 0x6474e551, 6, 0, 0, 0, 0, 0, 16)
+            strings = b"\0libfixture.so\0"
+            for index, (kind, value) in enumerate(((tag, 1), (5, 0x400180), (10, len(strings)), (0, 0))):
+                struct.pack_into("<QQ", raw, 256 + index * 16, kind, value)
+            raw[384:384 + len(strings)] = strings
+            return bytes(raw)
+        canonical = "/usr/lib/x86_64-linux-gnu/libfixture-real.so"
+        def add(path, value, source):
+            payloads[path[1:]] = value
+            report["files"][path] = {"source": source, "size": len(value),
+                "sha256": hashlib.sha256(value).hexdigest(), "mode": 0o555}
+        add(RUSTC, dynamic_elf(1), RUSTC)
+        add(logical, dynamic_elf(14), canonical)
+        add(canonical, dynamic_elf(14), canonical)
+        report["graph"][RUSTC]["needed"] = ["libfixture.so"]
+        report["graph"][RUSTC]["resolved"] = [logical]
+        report["graph"][logical] = {"needed": [], "interpreter": None, "resolved": [], "search_paths": []}
+        report["total_bytes"] = sum(x["size"] for x in report["files"].values())
+        value = b"synthetic runtime package notice"
+        payloads["licenses/packages/fixture-amd64.copyright"] = value
+        report["licenses"]["files"]["packages/fixture-amd64.copyright"] = {
+            "size": len(value), "mode": 0o444, "sha256": hashlib.sha256(value).hexdigest()}
+        report["licenses"]["total_bytes"] += len(value)
+        report["licenses"]["runtime_packages"] = {"fixture:amd64": {
+            "identity": "fixture:amd64\t1.0", "files": [canonical]}}
         return config, report, payloads
 
     def tar_bytes(entries):
@@ -399,6 +491,37 @@ def self_test():
             with self.assertRaises(Invalid): inspect(*image_bytes(config, report, payloads))
             config, report, payloads = fixture()
             report["licenses"]["files"]["../../escape"] = report["licenses"]["files"].pop("rust/LICENSE-MIT")
+            with self.assertRaises(Invalid): inspect(*image_bytes(config, report, payloads))
+
+        def test_dynamic_filename_alias_and_package_coverage(self):
+            result = inspect(*image_bytes(*dynamic_fixture()))
+            self.assertEqual(result["state"], "inspected-not-activated")
+            for path in ("/lib/x86_64-linux-gnu/libfixture-renamed.so",
+                         SYSROOT + "/lib/hidden/libfixture.so"):
+                with self.assertRaises(Invalid): inspect(*image_bytes(*dynamic_fixture(path)))
+            config, report, payloads = dynamic_fixture()
+            report["licenses"]["runtime_packages"] = {}
+            with self.assertRaises(Invalid): inspect(*image_bytes(config, report, payloads))
+            config, report, payloads = dynamic_fixture()
+            report["licenses"]["runtime_packages"]["fixture:amd64"]["files"].append("/lib/unrelated.so")
+            with self.assertRaises(Invalid): inspect(*image_bytes(config, report, payloads))
+        def test_different_loader_shadow_bytes_fail(self):
+            config, report, payloads = dynamic_fixture()
+            path = SYSROOT + "/lib/libfixture.so"
+            value = bytearray(payloads["lib/x86_64-linux-gnu/libfixture.so"]); value[-1] = 1
+            payloads[path[1:]] = bytes(value)
+            report["files"][path] = {"source": path, "size": len(value), "mode": 0o555,
+                                    "sha256": hashlib.sha256(value).hexdigest()}
+            report["graph"][path] = {"needed": [], "interpreter": None, "resolved": [], "search_paths": []}
+            report["total_bytes"] += len(value)
+            with self.assertRaises(Invalid): inspect(*image_bytes(config, report, payloads))
+        def test_provenance_required(self):
+            for field in ("backend_probe", "codegen_backend"):
+                config, report, payloads = fixture(); del report[field]
+                with self.assertRaises(Invalid): inspect(*image_bytes(config, report, payloads))
+            config, report, payloads = fixture(); del report["licenses"]["runtime_packages"]
+            with self.assertRaises(Invalid): inspect(*image_bytes(config, report, payloads))
+            config, report, payloads = fixture(); report["backend_probe"]["llvm_version"] = "unknown"
             with self.assertRaises(Invalid): inspect(*image_bytes(config, report, payloads))
         def test_image_identity_and_json(self):
             raw, identity = image_bytes(*fixture())
