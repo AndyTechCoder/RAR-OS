@@ -218,3 +218,37 @@ structure and file coverage; it does not independently rerun a compiler probe or
 legally certify a package. Dynamic synthetic ELF tests include logical/canonical
 aliases, missing/renamed or unreachable filenames, shadow bytes, and provenance
 coverage failures.
+
+Backend selection also binds the complete fixed backend-directory inventory:
+builtin permits no backend files; external permits exactly the selected node.
+Mixed or additional backend payloads fail, with positive/negative fixtures.
+
+## Inactive bounded compiler driver source
+
+compiler_driver.rs is RAR-owned host tooling, not an OS executable or adapter.
+It is not yet built into the candidate image or selected by any runner. Its
+purpose is to compile the five exact RAR adapter/source files in a confined
+compiler role, read one bounded regular ELF output from private tmpfs, and stream
+those bytes to the controller without executing them or requiring a writable host
+output mount. It admits no command-line parameters or input-selected tool/path.
+
+The proposed parent must enforce and inspect nonroot65532, read-only root/source,
+bounded noexec build tmpfs, no network, no capabilities, no-new-privileges, default
+seccomp, CPU/memory/PID/time and stdout/stderr budgets before start. The driver
+checks its fixed executable path and process status, an empty private build
+directory, and a complete bounded readonly source tree not owned by its user.
+It invokes only exact rustc/rust-lld/sysroot/flags with a cleared child environment.
+The source tree can be owned by the hosted controller; its immutable readonly
+mount and before/after byte identity remain mandatory parent responsibilities.
+
+Output is opened with Linux O_NOFOLLOW, required regular/single-link/owned and
+bounded, and checked for stable metadata and ELF magic before streaming.
+The parent must independently inspect the full returned static ELF, bind it to
+the exact source/compiler identity, reproduce it, and construct the separate
+one-executable adapter image. ELF magic is not acceptance. The parent also owns
+whole-container timeout/teardown, including compiler descendants, and must reject
+partial stdout or nonzero status. This source creates no runtime authorization.
+
+Pure driver tests cover fixed compiler arguments and refusal of privileged or
+unconfined process-status fixtures; they do not call the production entry path.
+Recipe integration and a focused driver/runner review remain outstanding.
