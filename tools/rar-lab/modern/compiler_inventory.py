@@ -119,6 +119,7 @@ def validate(config, report, files, directories):
         raise Invalid("runtime byte total")
     aliases = set()
     byte_edges = {}
+    inspected_search_directories = set()
     for path, item in graph.items():
         runtime_path(path)
         if path not in declared or type(item) is not dict:
@@ -156,6 +157,7 @@ def validate(config, report, files, directories):
                     if directory[1:] not in directories:
                         raise Invalid("search directory not exported")
                     search.add(directory)
+        inspected_search_directories.update(search)
         if item.get("search_paths") != sorted(search):
             raise Invalid("ELF search paths differ")
         for name in elf["needed"]:
@@ -261,6 +263,9 @@ def validate(config, report, files, directories):
     if set(files) != expected:
         raise Invalid("extra or missing image file")
     expected_dirs = {"source", "build"}
+    for directory in inspected_search_directories:
+        parts = directory[1:].split("/")
+        expected_dirs.update("/".join(parts[:n]) for n in range(1, len(parts)+1))
     for name in expected:
         parts = name.split("/")
         expected_dirs.update("/".join(parts[:n]) for n in range(1, len(parts)))
@@ -480,6 +485,33 @@ def self_test():
             self.assertEqual(result["state"], "inspected-not-activated")
             self.assertEqual(len(result["files"]), 5)
             self.assertEqual(result["directories"]["build"], (0o700, 65532, 65532, EPOCH))
+        def test_exact_empty_elf_search_directory_is_readonly(self):
+            config, report, payloads = fixture()
+            raw = bytearray(512); raw[:7] = b"\x7fELF\x02\x01\x01"
+            struct.pack_into("<HHI", raw, 16, 3, 62, 1)
+            struct.pack_into("<Q", raw, 32, 64)
+            struct.pack_into("<HHH", raw, 52, 64, 56, 3)
+            struct.pack_into("<IIQQQQQQ", raw, 64, 1, 5, 0, 0x400000, 0, 512, 512, 4096)
+            struct.pack_into("<IIQQQQQQ", raw, 120, 2, 4, 256, 0x400100, 0, 64, 64, 8)
+            struct.pack_into("<IIQQQQQQ", raw, 176, 0x6474e551, 6, 0, 0, 0, 0, 0, 16)
+            strings = b"\0$ORIGIN/../lib\0"
+            for index, (kind, value) in enumerate(((29, 1), (5, 0x400180), (10, len(strings)), (0, 0))):
+                struct.pack_into("<QQ", raw, 256 + index * 16, kind, value)
+            raw[384:384 + len(strings)] = strings
+            path = SYSROOT + "/lib/rustlib/x86_64-unknown-linux-gnu/lib"
+            payloads[LLD[1:]] = bytes(raw)
+            report["total_bytes"] += len(raw) - report["files"][LLD]["size"]
+            report["files"][LLD].update(size=len(raw), sha256=hashlib.sha256(raw).hexdigest())
+            report["graph"][LLD]["search_paths"] = [path]
+            with self.assertRaises(Invalid): inspect(*image_bytes(config, report, payloads))
+            entry = (path[1:], b"", 0o555, 0, 0, tarfile.DIRTYPE)
+            self.assertEqual(inspect(*image_bytes(config, report, payloads, extra=[entry]))["state"],
+                             "inspected-not-activated")
+            for mode, uid in ((0o777, 0), (0o555, 65532)):
+                bad = (path[1:], b"", mode, uid, 0, tarfile.DIRTYPE)
+                with self.assertRaises(Invalid): inspect(*image_bytes(config, report, payloads, extra=[bad]))
+            report["graph"][LLD]["search_paths"] = [path + "/unrelated"]
+            with self.assertRaises(Invalid): inspect(*image_bytes(config, report, payloads, extra=[entry]))
         def test_config_and_report_authority(self):
             for key, value in (("User", "0"), ("WorkingDir", "/build"),
                                ("Env", ["PATH=/usr/bin"]), ("Entrypoint", ["/bin/sh"]),

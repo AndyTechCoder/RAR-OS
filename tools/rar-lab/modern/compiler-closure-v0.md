@@ -275,3 +275,23 @@ Canonical byte-identical exported aliases remain declared-only where intended.
 Negative synthetic images cover both the exact omitted path and an unrelated
 sysroot shared object, with and without forged trace edges. Actual cloud tests
 and candidate construction remain required; these checks activate no runtime.
+
+## Actual empty search-directory correction
+
+Construction run34012445286 at a3aa69f2 passed the static-musl omission stage,
+then failed at the exporter requirement that each approved dynamic search
+directory already exist. No final image, adapter or RAR target was executed.
+Retained artifact9982882220 ZIP SHA256
+c1cf9dbb7f22da862ce00bdb796293a6fbe6f9520b74a468ee650251da572918.
+
+An admitted search location can be intentionally empty in a minimal positive
+closure. The exporter now creates precisely those previously validated
+ELF-derived directories (and required parents), with no source directory copy.
+Final normalization makes them root-owned0555 with the fixed timestamp.
+The independent image inspector derives the exact allowed directory set again
+from actual ELF bytes, not the construction report, and still rejects missing,
+extra, writable, wrong-owner or metadata-mismatched directories. No new loading
+token, library, source/scratch path or executable authority is added.
+Synthetic ELF fixtures exercise the empty-directory positive and missing,
+writable, wrong-owner and forged-path negatives. Real construction and actual
+static compilation remain mandatory; this is not runtime activation.
