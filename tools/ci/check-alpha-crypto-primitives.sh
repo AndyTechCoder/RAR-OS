@@ -75,6 +75,9 @@ printf '%s\n' 'Modern compiler provisioning: pure URL/context/guard tests passed
 "$work/focused-tests"
 printf '%s\n' 'Modern compiler driver: fixed arguments and status refusal fixtures passed; actual role not active'
 
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/source_snapshot.py" --self-test
+printf '%s\n' 'Modern source snapshot: pure immutable-layer fixtures passed; compiler role not active'
+
 # Keep at most one stripped test executable and one no_std library in the
 # existing cloud-only tmpfs; no owner files or retained evidence are affected.
 set -- $(/usr/bin/du -sk "$work")

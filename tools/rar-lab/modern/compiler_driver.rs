@@ -73,7 +73,7 @@ fn source_inventory() -> Result<(), Error> {
         count += 1;
         if count > 64 { return Err(Error::Source); }
         let info = fs::symlink_metadata(&path)?;
-        if info.uid() == 65532 || info.mode() & 0o7022 != 0 ||
+        if info.uid() != 0 || info.gid() != 0 || info.mode() & 0o7022 != 0 ||
             info.file_type().is_symlink() || fs::canonicalize(&path)? != path {
             return Err(Error::Source);
         }

@@ -236,10 +236,13 @@ The proposed parent must enforce and inspect nonroot65532, read-only root/source
 bounded noexec build tmpfs, no network, no capabilities, no-new-privileges, default
 seccomp, CPU/memory/PID/time and stdout/stderr budgets before start. The driver
 checks its fixed executable path and process status, an empty private build
-directory, and a complete bounded readonly source tree not owned by its user.
+directory, and a complete bounded root-owned readonly source tree.
 It invokes only exact rustc/rust-lld/sysroot/flags with a cleared child environment.
-The source tree can be owned by the hosted controller; its immutable readonly
-mount and before/after byte identity remain mandatory parent responsibilities.
+The source must be an immutable content-addressed image layer, not a host bind.
+Before/after bind hashes cannot exclude a change-and-restore during compilation.
+The parent binds the exact five Git blobs to TargetGitSha, includes their data-only
+layer in the accepted image identity, enforces read-only root and rejects all
+source/extra/nested mounts. Only the bounded build tmpfs may be writable.
 
 Output is opened with Linux O_NOFOLLOW, required regular/single-link/owned and
 bounded, and checked for stable metadata and ELF magic before streaming.
@@ -252,3 +255,11 @@ partial stdout or nonzero status. This source creates no runtime authorization.
 Pure driver tests cover fixed compiler arguments and refusal of privileged or
 unconfined process-status fixtures; they do not call the production entry path.
 Recipe integration and a focused driver/runner review remain outstanding.
+
+source_snapshot.py constructs that data-only layer in bounded memory: exact five
+nonempty byte inputs,256KiB per file,512KiB aggregate,1MiB resulting tar, fixed
+paths/modes/root ownership/time and no links, PAX attributes or execution.
+It records the target revision and per-file/layer identities and reproduces
+independently of mapping order. The parent must still prove the blobs correspond
+to the revision and append/inspect the layer without replacing compiler files.
+This pure helper does not import, load or start an image; tests use synthetic bytes.
