@@ -19,6 +19,9 @@ MUSL = SYSROOT + "/lib/rustlib/x86_64-unknown-linux-musl/lib/"
 # select different bytes. Inherited-only paths and cache-only resolution fail.
 DEFAULT_DIRS = ("/lib/x86_64-linux-gnu", "/usr/lib/x86_64-linux-gnu",
                 "/lib64", "/usr/lib64", "/lib", "/usr/lib")
+OMITTED_MUSL = {"source": MUSL + "libstd-286e4795762d614b.so", "size": 5369608,
+                "sha256": "5a1f8cfcc59c4cafc031df4f648b20fb1674cc190c8b40b8d391c33ad3e391d1",
+                "reason": "static-musl-only"}
 EPOCH = 1785715200
 LIMIT = 2 * 1024 * 1024 * 1024
 
@@ -81,6 +84,8 @@ def validate(config, report, files, directories):
     if (type(report) is not dict or report.get("state") != "private-closure-export-only" or
         report.get("target_execution") is not False or report.get("accepted_compiler_image") is not False):
         raise Invalid("construction report state")
+    if report.get("omitted_musl_dynamic") != [OMITTED_MUSL]:
+        raise Invalid("pinned static-only sysroot omission evidence")
     declared = report.get("files")
     graph = report.get("graph")
     license_report = report.get("licenses")
@@ -358,6 +363,7 @@ def self_test():
         notice = payloads["licenses/rust/LICENSE-MIT"]
         report = {"state": "private-closure-export-only", "target_execution": False,
                   "accepted_compiler_image": False, "files": declared, "graph": graph,
+                  "omitted_musl_dynamic": [dict(OMITTED_MUSL)],
                   "codegen_backend": "builtin-in-driver",
                   "backend_probe": {"llvm_version": "22.1.0", "version_sha256": "1" * 64,
                                     "target_cpus_sha256": "2" * 64},
@@ -537,6 +543,12 @@ def self_test():
             self.assertEqual(inspect(*image_bytes(config, report, payloads))["state"], "inspected-not-activated")
             add("librustc_codegen_llvm-1.95.0.so")
             with self.assertRaises(Invalid): inspect(*image_bytes(config, report, payloads))
+        def test_exact_omission_evidence_required(self):
+            for omitted in ([], [dict(OMITTED_MUSL, size=1)],
+                            [dict(OMITTED_MUSL), dict(OMITTED_MUSL)]):
+                config, report, payloads = fixture()
+                report["omitted_musl_dynamic"] = omitted
+                with self.assertRaises(Invalid): inspect(*image_bytes(config, report, payloads))
         def test_provenance_required(self):
             for field in ("backend_probe", "codegen_backend"):
                 config, report, payloads = fixture(); del report[field]

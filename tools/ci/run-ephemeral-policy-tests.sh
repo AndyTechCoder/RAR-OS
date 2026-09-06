@@ -8,37 +8,13 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 [ "$(/bin/sh "$root/tools/ci/require-ephemeral-policy-test-root.sh")" = /tmp ] || exit 1
 ulimit -f 860160
 
-# Primitive host tests use the already approved executable /build tmpfs.
+# Rust compilation remains serial within the existing /build budget.
 /bin/sh "$root/tools/ci/check-alpha-crypto-primitives.sh"
 
-/bin/sh "$root/tools/ci/test-accepted-evidence-v0-policy.sh"
-/bin/sh "$root/tools/ci/test-alpha-crypto-reference-policy.sh"
-/bin/sh "$root/tools/ci/test-alpha-dependency-policy.sh"
-/bin/sh "$root/tools/ci/test-alpha-preimplementation-contract-policy.sh"
-/bin/sh "$root/tools/ci/test-alpha-boot-platform-contract-policy.sh"
-/bin/sh "$root/tools/ci/test-controller-helper-evidence-v0-policy.sh"
-/bin/sh "$root/tools/ci/test-controller-helper-evidence-v1-policy.sh"
-/bin/sh "$root/tools/ci/test-controller-helper-inventory-v0-policy.sh"
-/bin/sh "$root/tools/ci/test-controller-helper-closure-observer-run-evidence-policy.sh"
-/bin/sh "$root/tools/ci/test-controller-helper-closure-observer-policy.sh"
-/bin/sh "$root/tools/ci/test-controller-helper-closure-verifier-evidence-policy.sh"
-/bin/sh "$root/tools/ci/test-development-controller-v2-policy.sh"
-/bin/sh "$root/tools/ci/test-development-image-policy.sh"
-/bin/sh "$root/tools/ci/test-development-lab-profile-policy.sh"
-/bin/sh "$root/tools/ci/test-development-lab-profile-v2-policy.sh"
-/bin/sh "$root/tools/ci/test-frozen-artifact-policy.sh"
-/bin/sh "$root/tools/ci/test-host-policy.sh"
-/bin/sh "$root/tools/ci/test-launch-evidence-policy.sh"
-/bin/sh "$root/tools/ci/test-launch-handshake-policy.sh"
-/bin/sh "$root/tools/ci/test-local-sprint-preflight-policy.sh"
-/bin/sh "$root/tools/ci/test-pinned-file-policy.sh"
-/bin/sh "$root/tools/ci/test-portable-stat-policy.sh"
-/bin/sh "$root/tools/ci/test-qmp-client-source-policy.sh"
-/bin/sh "$root/tools/ci/test-reference-evidence-v0-policy.sh"
-/bin/sh "$root/tools/ci/test-reference-verdict-v0-policy.sh"
+# Exactly28 private-fixture suites, split into two bounded, disjoint lanes.
+/usr/bin/python3 -I -B "$root/tools/ci/parallel-policy-tests.py" --run
+
+# This suite uses a fixed /build output path and must remain serial.
 /bin/sh "$root/tools/ci/test-release-0-reference-harness-policy.sh"
-/bin/sh "$root/tools/ci/test-specifications-authority-policy.sh"
-/bin/sh "$root/tools/ci/test-sprint-alpha-gate-report-v2-policy.sh"
-/bin/sh "$root/tools/ci/test-trusted-launcher-policy.sh"
 
 printf '%s\n' 'Ephemeral policy tests passed: executed=29 source=read-only scratch=tmpfs'

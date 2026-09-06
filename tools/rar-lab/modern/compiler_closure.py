@@ -205,6 +205,17 @@ def notice_source(path):
         raise Invalid("notice source path")
     return path
 
+OMITTED_MUSL_NAME = "libstd-286e4795762d614b.so"
+OMITTED_MUSL_SIZE = 5369608
+OMITTED_MUSL_SHA256 = "5a1f8cfcc59c4cafc031df4f648b20fb1674cc190c8b40b8d391c33ad3e391d1"
+
+def musl_omission(path, size, digest):
+    if (path != MUSL / OMITTED_MUSL_NAME or size != OMITTED_MUSL_SIZE or
+        digest != OMITTED_MUSL_SHA256):
+        raise Invalid("pinned unused musl dylib identity")
+    return {"source": str(path), "size": size, "sha256": digest,
+            "reason": "static-musl-only"}
+
 def main():
     if (os.uname().sysname != "Linux" or os.uname().machine != "x86_64" or
         os.geteuid() != 0 or Path(__file__).resolve() != Path("/build/compiler_closure.py") or
@@ -313,14 +324,24 @@ def main():
             raise Invalid("musl sysroot count")
     if not libraries:
         raise Invalid("musl sysroot count")
+    omitted_musl = []
     for path in sorted(libraries):
         if path.is_symlink():
             raise Invalid("unexpected musl symlink")
         if path.is_dir():
             continue
+        if path == MUSL / OMITTED_MUSL_NAME:
+            if not path.is_file() or path.stat().st_size != OMITTED_MUSL_SIZE:
+                raise Invalid("unused musl dylib size/type")
+            with path.open("rb") as stream:
+                raw = stream.read(OMITTED_MUSL_SIZE + 1)
+            omitted_musl.append(musl_omission(path, len(raw), hashlib.sha256(raw).hexdigest()))
+            continue
         if path.suffix not in (".rlib", ".rmeta", ".a", ".o"):
-            raise Invalid("unexpected musl sysroot file")
+            raise Invalid("unexpected musl sysroot file: " + str(path))
         export(path, False)
+    if len(omitted_musl) != 1:
+        raise Invalid("pinned musl dylib omission missing")
     for record in graph.values():
         for directory in record["search_paths"]:
             if not (root / directory.lstrip("/")).is_dir():
@@ -421,7 +442,7 @@ def main():
     root.chmod(0o555)
     os.utime(root, (EPOCH, EPOCH))
     report = {"state": "private-closure-export-only", "files": files, "graph": graph,
-              "total_bytes": total, "codegen_backend": str(backend) if backend else "builtin-in-driver",
+              "total_bytes": total, "omitted_musl_dynamic": omitted_musl, "codegen_backend": str(backend) if backend else "builtin-in-driver",
               "backend_probe": backend_probe,
               "licenses": {"state": "captured-not-legally-certified", "files": notices,
                            "total_bytes": notice_bytes, "runtime_packages": packages},
@@ -527,6 +548,14 @@ def self_test():
                             "[Requesting program interpreter: /lib/ld.so",
                             "INTERP 0x0 0x0"):
                 with self.assertRaises(Invalid): dynamic_metadata(program, "")
+        def test_only_exact_pinned_unused_musl_dylib_can_be_omitted(self):
+            path = MUSL / OMITTED_MUSL_NAME
+            record = musl_omission(path, OMITTED_MUSL_SIZE, OMITTED_MUSL_SHA256)
+            self.assertEqual(record["reason"], "static-musl-only")
+            for args in ((MUSL / "other.so", OMITTED_MUSL_SIZE, OMITTED_MUSL_SHA256),
+                         (path, OMITTED_MUSL_SIZE + 1, OMITTED_MUSL_SHA256),
+                         (path, OMITTED_MUSL_SIZE, "0" * 64)):
+                with self.assertRaises(Invalid): musl_omission(*args)
         def test_default_guard_never_inspects_or_exports(self):
             with patch.dict(os.environ, {}, clear=True), patch(__name__ + ".run") as runner:
                 with self.assertRaises(Invalid): main()
