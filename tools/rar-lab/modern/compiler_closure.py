@@ -108,9 +108,10 @@ def dynamic_search_paths(dynamic, origin):
             raise Invalid("dynamic search-path metadata")
         tags.add(match.group(1))
         entries = match.group(2).split(":")
-        if not 1 <= len(entries) <= 8 or len(set(entries)) != len(entries):
+        normalized = [entry[:-1] if entry == "$ORIGIN/../../../" else entry for entry in entries]
+        if not 1 <= len(entries) <= 8 or len(set(normalized)) != len(entries):
             raise Invalid("dynamic search-path count")
-        for entry in entries:
+        for entry in normalized:
             if entry not in ("$ORIGIN", "$ORIGIN/../lib", "$ORIGIN/../../.."):
                 raise Invalid("unapproved dynamic search path")
             expanded = os.path.normpath(str(origin) + entry[len("$ORIGIN"):])
@@ -278,7 +279,14 @@ def main():
             raise Invalid("compiler runtime ELF platform")
         program = run(["/usr/bin/readelf", "-lW", str(actual)])
         dynamic = run(["/usr/bin/readelf", "-dW", str(actual)])
-        interpreter, needed, search_paths = dynamic_metadata(program, dynamic, actual.parent)
+        try:
+            interpreter, needed, search_paths = dynamic_metadata(program, dynamic, actual.parent)
+        except Invalid:
+            # Bounded pinned-tool diagnostics, never proposal input or host data.
+            print(json.dumps({"event": "compiler-metadata-rejected", "file": str(actual),
+                              "program": program[:16384], "dynamic": dynamic[:16384]},
+                             sort_keys=True), flush=True)
+            raise
         # A dereferenced alias can have a different runtime ORIGIN; validate it too.
         alias_search_paths = dynamic_search_paths(dynamic, path.parent)
         dependencies = set()
@@ -491,6 +499,11 @@ def self_test():
             origin = SYSROOT / "bin"
             good = "0x1 (RUNPATH) Library runpath: [$ORIGIN/../lib]"
             self.assertEqual(dynamic_search_paths(good, origin), [str(SYSROOT / "lib")])
+            trailing = "0x1 (RUNPATH) Library runpath: [$ORIGIN/../../../]"
+            linker_origin = SYSROOT / "lib/rustlib/x86_64-unknown-linux-gnu/bin"
+            self.assertEqual(dynamic_search_paths(trailing, linker_origin), [str(SYSROOT / "lib")])
+            with self.assertRaises(Invalid):
+                dynamic_search_paths("0x1 (RUNPATH) Library runpath: [$ORIGIN/../../../:$ORIGIN/../../..]", linker_origin)
             good_rpath = "0x1 (RPATH) Library rpath: [$ORIGIN]"
             self.assertEqual(dynamic_search_paths(good_rpath, origin), [str(origin)])
             for entry in ("", ":", "/build", "/source", ".", "relative", "$LIB",
