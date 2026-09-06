@@ -241,3 +241,37 @@ negative fixtures cover both parsers. Bounded pinned-tool program/dynamic metada
 are printed on rejection to make any further compatibility failure diagnosable
 without broadening the gate. Real construction must still pass; upstream source
 is supporting diagnosis, not evidence that the cloud image has been accepted.
+
+## Actual musl dynamic-std input: static-only export
+
+Run34009791044 at16f92f18 passed the loader-metadata stage, then stopped on an
+unexpected sysroot file. Its retained pinned-archive inventory identifies exactly
+libstd-286e4795762d614b.so (5,369,608 bytes, SHA256
+5a1f8cfcc59c4cafc031df4f648b20fb1674cc190c8b40b8d391c33ad3e391d1).
+Artifact9982104279 ZIP SHA256:
+d0381deb80a814bc890deaf579c4c745ed7f5c599cc0a814347f7edcce9670c8.
+The measured controller peak at this failed construction stage was639,712KiB.
+
+The compiler role is static-musl-only. Its archive-provided shared std library
+is not exported or executed: the exporter verifies this one exact path/size/hash
+and records its intentional omission. Static rlib/rmeta/archive/object inputs
+remain required. No wildcard shared-library omission is allowed; any other
+unexpected sysroot file still fails with its path recorded. The complete image
+inspector requires the exact omission record and continues to reject arbitrary
+sysroot shared objects outside the inspected runtime graph. Pure identity and
+report mutations cover this distinction. This does not make RAR depend on a
+third-party OS or link any reference implementation into a target image.
+A successful real static adapter compile and independently inspected compiler
+candidate are still outstanding.
+
+### Independent omission and executable reachability
+
+The image validator explicitly rejects the omitted dynamic-std path in the
+report declarations, graph and actual filesystem. Every graph node must be
+reachable from fixed rustc/LLD/selected-backend roots through independently
+inspected ELF NEEDED/interpreter edges. A construction report cannot admit an
+extra executable by listing it as a disconnected node or forged resolved edge.
+Canonical byte-identical exported aliases remain declared-only where intended.
+Negative synthetic images cover both the exact omitted path and an unrelated
+sysroot shared object, with and without forged trace edges. Actual cloud tests
+and candidate construction remain required; these checks activate no runtime.

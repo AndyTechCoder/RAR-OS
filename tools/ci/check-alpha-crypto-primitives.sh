@@ -33,3 +33,7 @@ printf '%s\n' 'Modern reference provisioning: pure inventory/acquisition/guard t
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/compiler_inventory.py" --self-test
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/provision_compiler.py" --self-test
 printf '%s\n' 'Modern compiler provisioning: pure fixture and guard tests passed; actual construction and activation not claimed'
+
+# Supervisor fixtures spawn only tiny host Python test children in this container.
+/usr/bin/python3 -I -B "$root/tools/ci/parallel-policy-tests.py" --self-test
+printf '%s\n' 'Parallel policy supervisor: success/failure/timeout/output/signal fixtures passed'
