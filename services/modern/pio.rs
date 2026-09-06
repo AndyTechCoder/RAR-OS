@@ -249,7 +249,7 @@ mod tests {
     #[test] fn identify_rejects_wrong_device_features_geometry_and_text() {
         let (expected,words)=identity_fixture();
         for (index,value) in [(0,0x8040),(49,0),(83,0),(83,0xd400),(83,0x4400),
-            (86,0),(87,0),(60,31),(61,1),(100,31),(101,1),(102,1),(103,1),
+            (86,0),(87,0),(60,31),(61,1),(100,0),(100,31),(101,1),(102,1),(103,1),
             (106,0x4000),(106,0x7000),(106,0x6001),(106,0xffff),(117,256),(118,1),(10,0),(27,0)] {
             let mut bad=words;bad[index]=value;
             assert_eq!(identify_matches(&bad,&expected),Err(Error::Identity));
