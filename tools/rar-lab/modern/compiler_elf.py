@@ -21,6 +21,7 @@ def inspect(raw):
     loads = []
     dynamic = None
     interpreter = None
+    stacks = 0
     for n in range(phnum):
         typ, flags, offset, address, _, filesz, memsz, _ = struct.unpack_from(
             "<IIQQQQQQ", raw, phoff + n * phsize)
@@ -29,13 +30,15 @@ def inspect(raw):
         if typ == 1:
             if filesz > memsz or address + memsz > 2**64:
                 raise Invalid("ELF load range")
-            loads.append((offset, address, filesz))
+            loads.append((offset, address, filesz, flags))
         elif typ == 2:
-            if dynamic is not None or filesz == 0 or filesz % 16 or filesz > 16384:
+            if dynamic is not None or filesz == 0 or filesz > memsz or filesz % 16 or filesz > 16384:
                 raise Invalid("ELF dynamic table")
             dynamic = (offset, filesz, address)
-        elif typ == 0x6474e551 and flags & 1:
-            raise Invalid("executable stack")
+        elif typ == 0x6474e551:
+            stacks += 1
+            if flags != 6:
+                raise Invalid("stack must be explicitly read-write non-executable")
         elif typ == 3:
             if interpreter is not None or not 2 <= filesz <= 512:
                 raise Invalid("ELF interpreter extent")
@@ -50,14 +53,14 @@ def inspect(raw):
                 any(x in ("", ".", "..") for x in interpreter.split("/")[1:]) or
                 re.fullmatch(r"/[A-Za-z0-9_./+-]+", interpreter) is None):
                 raise Invalid("ELF interpreter path")
-    if not loads:
-        raise Invalid("ELF has no load segment")
+    if not loads or stacks != 1:
+        raise Invalid("ELF requires loads and exactly one explicit NX stack")
     tags = {}
     needed_offsets = []
     if dynamic is not None:
         offset, size, address = dynamic
-        mapped = [(off, addr) for off, addr, length in loads
-                  if off <= offset and offset + size <= off + length and address == addr + offset - off]
+        mapped = [(off, addr) for off, addr, length, flags in loads
+                  if flags & 4 and off <= offset and offset + size <= off + length and address == addr + offset - off]
         if len(mapped) != 1:
             raise Invalid("dynamic table outside unique load mapping")
         terminated = False
@@ -90,8 +93,8 @@ def inspect(raw):
         if 5 not in tags or 10 not in tags or not 1 <= tags[10] <= 64 * 1024 * 1024:
             raise Invalid("dynamic string table missing or oversized")
         table_address, table_size = tags[5], tags[10]
-        matches = [(off + table_address - addr) for off, addr, size in loads
-                   if addr <= table_address and table_address + table_size <= addr + size]
+        matches = [(off + table_address - addr) for off, addr, size, flags in loads
+                   if flags & 4 and addr <= table_address and table_address + table_size <= addr + size]
         if len(matches) != 1:
             raise Invalid("ambiguous or unmapped dynamic string table")
         start = matches[0]
@@ -115,7 +118,8 @@ def inspect(raw):
             needed.append(name)
         if 14 in tags:
             soname = string(tags[14])
-            if re.fullmatch(r"[A-Za-z0-9_.+-]+", soname) is None:
+            if (re.fullmatch(r"[A-Za-z0-9_.+-]+", soname) is None or
+                any(x in soname.lower() for x in ("crypto", "ssl", "sodium"))):
                 raise Invalid("SONAME")
         for tag in (15, 29):
             if tag in tags:
@@ -134,13 +138,14 @@ def self_test():
         raw[:7] = b"\x7fELF\x02\x01\x01"
         struct.pack_into("<HHI", raw, 16, 3, 62, 1)
         struct.pack_into("<Q", raw, 32, 64)
-        struct.pack_into("<HHH", raw, 52, 64, 56, 2)
+        struct.pack_into("<HHH", raw, 52, 64, 56, 3)
         struct.pack_into("<IIQQQQQQ", raw, 64, 1, 5, 0, 0x400000, 0, 512, 512, 4096)
         if entries is None:
             entries = [(1, 1), (5, 0x400180), (10, len(strings)), (29, 11), (0, 0)]
-        struct.pack_into("<IIQQQQQQ", raw, 120, 2, 4, 192, 0x4000c0, 0, len(entries) * 16, len(entries) * 16, 8)
+        struct.pack_into("<IIQQQQQQ", raw, 120, 2, 4, 256, 0x400100, 0, len(entries) * 16, len(entries) * 16, 8)
+        struct.pack_into("<IIQQQQQQ", raw, 176, 0x6474e551, 6, 0, 0, 0, 0, 0, 16)
         for index, (tag, value) in enumerate(entries):
-            struct.pack_into("<QQ", raw, 192 + index * 16, tag, value)
+            struct.pack_into("<QQ", raw, 256 + index * 16, tag, value)
         raw[384:384 + len(strings)] = strings
         return bytes(raw)
     class Tests(unittest.TestCase):
@@ -168,18 +173,26 @@ def self_test():
                 with self.assertRaises(Invalid): inspect(fixture(strings=b"\0libc.so.6\0" + search + b"\0"))
             with self.assertRaises(Invalid):
                 inspect(fixture(strings=b"\0libssl.so\0$ORIGIN\0"))
+        def test_forbidden_soname(self):
+            entries = [(14, 1), (5, 0x400180), (10, 19), (0, 0)]
+            with self.assertRaises(Invalid):
+                inspect(fixture(entries, strings=b"\0libssl.so\0$ORIGIN\0"))
         def test_headers_bounds_and_wx(self):
             raw = fixture()
             for offset, fmt, value in ((16, "<H", 1), (18, "<H", 183), (32, "<Q", 2**63),
                                        (54, "<H", 55), (56, "<H", 129), (68, "<I", 7),
-                                       (124, "<I", 7), (128, "<Q", 2**63)):
+                                       (124, "<I", 7), (128, "<Q", 2**63),
+                                       (56, "<H", 2), (68, "<I", 1), (68, "<I", 0),
+                                       (160, "<Q", 0)):
                 bad = bytearray(raw); struct.pack_into(fmt, bad, offset, value)
                 with self.assertRaises(Invalid): inspect(bytes(bad))
             stack = bytearray(raw)
-            struct.pack_into("<II", stack, 120, 0x6474e551, 5)
+            struct.pack_into("<I", stack, 180, 5)
             with self.assertRaises(Invalid): inspect(bytes(stack))
-            struct.pack_into("<I", stack, 124, 6)
-            self.assertEqual(inspect(bytes(stack))["needed"], [])
+            struct.pack_into("<I", stack, 180, 6)
+            self.assertEqual(inspect(bytes(stack))["needed"], ["libc.so.6"])
+            struct.pack_into("<II", stack, 120, 0x6474e551, 6)
+            with self.assertRaises(Invalid): inspect(bytes(stack))
             outside = bytearray(raw)
             struct.pack_into("<Q", outside, 136, 0x800000)
             with self.assertRaises(Invalid): inspect(bytes(outside))

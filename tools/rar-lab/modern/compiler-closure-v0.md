@@ -136,3 +136,9 @@ https://sourceware.org/git/?p=glibc.git;a=blob;f=elf/elf.h .
 Synthetic tests cover malformed tables, mapped ranges, loading authority,
 search-path rejection, bounds and header/segment mutations. Actual compiler-image
 bytes and runtime dependency equivalence remain unverified until construction.
+
+The byte inspector requires exactly one explicit read-write/non-executable
+GNU_STACK declaration; missing or duplicate declarations fail. Dynamic and
+string-table mappings must be readable, and the dynamic segment's file extent
+must fit its memory extent. Forbidden reference-library names are rejected in
+SONAME as well as NEEDED. Focused mutations cover each of these requirements.
