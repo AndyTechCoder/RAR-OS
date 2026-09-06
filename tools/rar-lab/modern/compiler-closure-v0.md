@@ -218,3 +218,7 @@ structure and file coverage; it does not independently rerun a compiler probe or
 legally certify a package. Dynamic synthetic ELF tests include logical/canonical
 aliases, missing/renamed or unreachable filenames, shadow bytes, and provenance
 coverage failures.
+
+Backend selection also binds the complete fixed backend-directory inventory:
+builtin permits no backend files; external permits exactly the selected node.
+Mixed or additional backend payloads fail, with positive/negative fixtures.

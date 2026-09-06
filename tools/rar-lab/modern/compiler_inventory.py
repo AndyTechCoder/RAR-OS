@@ -173,6 +173,10 @@ def validate(config, report, files, directories):
         raise Invalid("musl sysroot missing")
     backend = report.get("codegen_backend")
     backend_dir = SYSROOT + "/lib/rustlib/x86_64-unknown-linux-gnu/codegen-backends/"
+    backend_nodes = {path for path in set(declared) | set(graph) if path.startswith(backend_dir)}
+    expected_backends = set() if backend == "builtin-in-driver" else ({backend} if type(backend) is str else set())
+    if backend_nodes != expected_backends:
+        raise Invalid("backend selection differs from exported files")
     if backend != "builtin-in-driver":
         if (backend not in (backend_dir + "librustc_codegen_llvm.so",
                             backend_dir + "librustc_codegen_llvm-1.95.0.so") or backend not in graph):
@@ -514,6 +518,24 @@ def self_test():
                                     "sha256": hashlib.sha256(value).hexdigest()}
             report["graph"][path] = {"needed": [], "interpreter": None, "resolved": [], "search_paths": []}
             report["total_bytes"] += len(value)
+            with self.assertRaises(Invalid): inspect(*image_bytes(config, report, payloads))
+
+        def test_backend_selection_matches_actual_payload(self):
+            config, report, payloads = fixture()
+            directory = SYSROOT + "/lib/rustlib/x86_64-unknown-linux-gnu/codegen-backends/"
+            def add(name):
+                path = directory + name; value = elf_fixture()
+                payloads[path[1:]] = value
+                report["files"][path] = {"source": path, "size": len(value), "mode": 0o555,
+                                        "sha256": hashlib.sha256(value).hexdigest()}
+                report["graph"][path] = {"needed": [], "interpreter": None, "resolved": [], "search_paths": []}
+                report["total_bytes"] += len(value)
+                return path
+            selected = add("librustc_codegen_llvm.so")
+            with self.assertRaises(Invalid): inspect(*image_bytes(config, report, payloads))
+            report["codegen_backend"] = selected
+            self.assertEqual(inspect(*image_bytes(config, report, payloads))["state"], "inspected-not-activated")
+            add("librustc_codegen_llvm-1.95.0.so")
             with self.assertRaises(Invalid): inspect(*image_bytes(config, report, payloads))
         def test_provenance_required(self):
             for field in ("backend_probe", "codegen_backend"):
