@@ -39,3 +39,24 @@ Actual complete notice capture, candidate construction/reproducibility, static
 compilation and runtime comparison remain pending. Capture is not legal
 certification or a source-offer compliance opinion. No dependency policy,
 persistent-data contract, runtime profile or target linkage is changed.
+
+## Independent inventory remediation
+
+The image inspector now requires all eight promised Rust notice destinations.
+For the three archive-root notices it independently pins the exact source path,
+size, SHA256 and readonly mode; it does not trust self-consistent exporter claims.
+Both generated COPYRIGHT files and the three installed SPDX anchors require
+their exact installed source paths. Every required notice also passes the
+existing actual-image byte, ownership, mode, timestamp and non-ELF checks.
+
+The inert host-test data in tools/rar-lab/modern/compiler-notices.json contains
+the three Rust 1.95.0 root legal texts, fetched from the pinned upstream tag and
+verified to have the exact archive identities above. It is not target code and
+is not linked into RAR OS. Tests use real pinned root notice bytes and synthetic
+installed notice bytes; no test bypass or alternate production acceptance path
+is added.
+
+Full-image regressions cover each missing required notice with a correspondingly
+adjusted report, each redirected source, same-size and size-changing archive
+mutations with recomputed report hashes, wrong modes and mismatched image bytes.
+These tests require cloud CI before merge. Real construction remains pending.
