@@ -83,3 +83,6 @@ printf '%s\n' 'Modern source snapshot: pure immutable-layer fixtures passed; com
 set -- $(/usr/bin/du -sk "$work")
 [ "$1" -le 8192 ]
 printf 'Modern focused scratch KiB: %s (limit 8192)\n' "$1"
+
+# Deferred scheduler prototype self-tests only; production runner remains serial.
+/usr/bin/python3 -I -B "$root/tools/ci/parallel-policy-tests.py" --self-test

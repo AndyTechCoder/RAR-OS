@@ -36,3 +36,15 @@ Successful polling requires DRDY as well as clear BSY/ERR/DF and the exact DRQ
 phase. Tests include absent DRDY, busy transitions, every partial data transfer,
 status/register/command/yield transport failures, and post-transfer/flush errors.
 Read data is a private temporary array and is returned only after completion.
+
+## DataVault candidate
+
+vault.rs adds a bounded append-only encrypted full-snapshot store over an abstract
+Block trait. Its exact proposed schema, nonce lifecycle and crash rules are in
+docs/interfaces/modern-data-v0.md. Mount never writes or seals; publish reserves,
+flushes/readbacks, seals once, writes/flushes/verifies payload, then publishes the
+fixed commit marker. Consumed slots are not reused. Errors lock current-boot
+writes; exhaustion is read-only. No format/erase path exists.
+This remains unactivated model code, not actual guest persistence, independent
+crypto interoperability or M4 completion. Device/capability/profile integration
+and real cloud crash/persistence evidence remain required.

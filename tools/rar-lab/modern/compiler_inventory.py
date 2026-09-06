@@ -19,6 +19,9 @@ MUSL = SYSROOT + "/lib/rustlib/x86_64-unknown-linux-musl/lib/"
 # select different bytes. Inherited-only paths and cache-only resolution fail.
 DEFAULT_DIRS = ("/lib/x86_64-linux-gnu", "/usr/lib/x86_64-linux-gnu",
                 "/lib64", "/usr/lib64", "/lib", "/usr/lib")
+OMITTED_MUSL = {"source": MUSL + "libstd-286e4795762d614b.so", "size": 5369608,
+                "sha256": "5a1f8cfcc59c4cafc031df4f648b20fb1674cc190c8b40b8d391c33ad3e391d1",
+                "reason": "static-musl-only"}
 EPOCH = 1785715200
 LIMIT = 2 * 1024 * 1024 * 1024
 
@@ -81,6 +84,8 @@ def validate(config, report, files, directories):
     if (type(report) is not dict or report.get("state") != "private-closure-export-only" or
         report.get("target_execution") is not False or report.get("accepted_compiler_image") is not False):
         raise Invalid("construction report state")
+    if report.get("omitted_musl_dynamic") != [OMITTED_MUSL]:
+        raise Invalid("pinned static-only sysroot omission evidence")
     declared = report.get("files")
     graph = report.get("graph")
     license_report = report.get("licenses")
@@ -89,6 +94,9 @@ def validate(config, report, files, directories):
         RUSTC not in graph or LLD not in graph or
         type(license_report) is not dict or license_report.get("state") != "captured-not-legally-certified"):
         raise Invalid("construction report shape")
+    if (OMITTED_MUSL["source"] in declared or OMITTED_MUSL["source"] in graph or
+        OMITTED_MUSL["source"][1:] in files):
+        raise Invalid("omitted musl dynamic library present")
     notices = license_report.get("files")
     if type(notices) is not dict or not 1 <= len(notices) <= 512:
         raise Invalid("notice inventory")
@@ -110,11 +118,13 @@ def validate(config, report, files, directories):
     if total > 1610612736 or type(report.get("total_bytes")) is not int or report["total_bytes"] != total:
         raise Invalid("runtime byte total")
     aliases = set()
+    byte_edges = {}
     for path, item in graph.items():
         runtime_path(path)
         if path not in declared or type(item) is not dict:
             raise Invalid("graph node")
         actual = files[path[1:]]
+        byte_edges[path] = set()
         elf = actual["elf"]
         if elf is None or actual["mode"] != 0o555:
             raise Invalid("graph file is not an inspected executable")
@@ -131,12 +141,13 @@ def validate(config, report, files, directories):
             raise Invalid("resolved dependency set")
         for dep in resolved:
             runtime_path(dep)
-            if dep not in declared or files[dep[1:]]["elf"] is None:
+            if dep not in graph or dep not in declared or files[dep[1:]]["elf"] is None:
                 raise Invalid("missing resolved dependency")
         if elf["interpreter"] is not None:
             runtime_path(elf["interpreter"])
             if elf["interpreter"] not in resolved:
                 raise Invalid("interpreter missing from dependency set")
+            byte_edges[path].add(elf["interpreter"])
         search = set()
         if elf["search"] is not None:
             for origin in (posixpath.dirname(path), posixpath.dirname(canonical)):
@@ -164,6 +175,10 @@ def validate(config, report, files, directories):
             if not any(files[p[1:]]["sha256"] == selected and
                        posixpath.basename(p) == name for p in resolved):
                 raise Invalid("loader-visible dependency differs from trace")
+            # Only actual ELF NEEDED/interpreter edges confer reachability.
+            # A forged extra ldd resolved edge must not admit a disconnected ELF.
+            byte_edges[path].update(p for p in resolved
+                if files[p[1:]]["sha256"] == selected and posixpath.basename(p) == name)
 
     for path in set(declared) - set(graph) - aliases:
         if (not path.startswith(MUSL) or not path.endswith((".rlib", ".rmeta", ".a", ".o")) or
@@ -181,6 +196,18 @@ def validate(config, report, files, directories):
         if (backend not in (backend_dir + "librustc_codegen_llvm.so",
                             backend_dir + "librustc_codegen_llvm-1.95.0.so") or backend not in graph):
             raise Invalid("codegen backend evidence")
+    pending = [RUSTC, LLD] + ([] if backend == "builtin-in-driver" else [backend])
+    reached = set()
+    while pending:
+        node = pending.pop()
+        if node in reached:
+            continue
+        if node not in byte_edges:
+            raise Invalid("ELF dependency absent from graph")
+        reached.add(node)
+        pending.extend(byte_edges[node] - reached)
+    if reached != set(graph):
+        raise Invalid("disconnected executable graph node")
     probe = report.get("backend_probe")
     if (type(probe) is not dict or
         set(probe) != {"llvm_version", "version_sha256", "target_cpus_sha256"} or
@@ -358,6 +385,7 @@ def self_test():
         notice = payloads["licenses/rust/LICENSE-MIT"]
         report = {"state": "private-closure-export-only", "target_execution": False,
                   "accepted_compiler_image": False, "files": declared, "graph": graph,
+                  "omitted_musl_dynamic": [dict(OMITTED_MUSL)],
                   "codegen_backend": "builtin-in-driver",
                   "backend_probe": {"llvm_version": "22.1.0", "version_sha256": "1" * 64,
                                     "target_cpus_sha256": "2" * 64},
@@ -537,6 +565,27 @@ def self_test():
             self.assertEqual(inspect(*image_bytes(config, report, payloads))["state"], "inspected-not-activated")
             add("librustc_codegen_llvm-1.95.0.so")
             with self.assertRaises(Invalid): inspect(*image_bytes(config, report, payloads))
+        def test_exact_omission_evidence_required(self):
+            for omitted in ([], [dict(OMITTED_MUSL, size=1)],
+                            [dict(OMITTED_MUSL), dict(OMITTED_MUSL)]):
+                config, report, payloads = fixture()
+                report["omitted_musl_dynamic"] = omitted
+                with self.assertRaises(Invalid): inspect(*image_bytes(config, report, payloads))
+        def test_disconnected_elf_and_forged_trace_are_rejected(self):
+            for path in (OMITTED_MUSL["source"], MUSL + "libunrelated.so"):
+                for forged_edge in (False, True):
+                    config, report, payloads = fixture()
+                    value = elf_fixture()
+                    payloads[path[1:]] = value
+                    report["files"][path] = {"source": path, "size": len(value),
+                        "mode": 0o555, "sha256": hashlib.sha256(value).hexdigest()}
+                    report["graph"][path] = {"needed": [], "interpreter": None,
+                                             "resolved": [], "search_paths": []}
+                    report["total_bytes"] += len(value)
+                    if forged_edge:
+                        report["graph"][RUSTC]["resolved"].append(path)
+                    with self.assertRaises(Invalid):
+                        inspect(*image_bytes(config, report, payloads))
         def test_provenance_required(self):
             for field in ("backend_probe", "codegen_backend"):
                 config, report, payloads = fixture(); del report[field]

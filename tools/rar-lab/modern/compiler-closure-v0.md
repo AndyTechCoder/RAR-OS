@@ -223,43 +223,55 @@ Backend selection also binds the complete fixed backend-directory inventory:
 builtin permits no backend files; external permits exactly the selected node.
 Mixed or additional backend payloads fail, with positive/negative fixtures.
 
-## Inactive bounded compiler driver source
+## Real construction correction: pinned LLD RPATH spelling
 
-compiler_driver.rs is RAR-owned host tooling, not an OS executable or adapter.
-It is not yet built into the candidate image or selected by any runner. Its
-purpose is to compile the five exact RAR adapter/source files in a confined
-compiler role, read one bounded regular ELF output from private tmpfs, and stream
-those bytes to the controller without executing them or requiring a writable host
-output mount. It admits no command-line parameters or input-selected tool/path.
+Cloud run34008664172 at04cb08fd passed actual pinned musl acquisition, SHA256,
+archive inventory and installation, then failed closed in dynamic-search-path
+admission before any candidate image or adapter execution. The original log did
+not retain the rejected raw string, so its exact value is not yet independently
+observed. The pinned upstream Rust1.95 build recipe explicitly emits the known
+LLD spelling $ORIGIN/../../../ with a trailing slash:
+https://github.com/rust-lang/rust/blob/1.95.0/src/bootstrap/src/core/build_steps/llvm.rs#L1343 .
 
-The proposed parent must enforce and inspect nonroot65532, read-only root/source,
-bounded noexec build tmpfs, no network, no capabilities, no-new-privileges, default
-seccomp, CPU/memory/PID/time and stdout/stderr budgets before start. The driver
-checks its fixed executable path and process status, an empty private build
-directory, and a complete bounded root-owned readonly source tree.
-It invokes only exact rustc/rust-lld/sysroot/flags with a cleared child environment.
-The source must be an immutable content-addressed image layer, not a host bind.
-Before/after bind hashes cannot exclude a change-and-restore during compilation.
-The parent binds the exact five Git blobs to TargetGitSha, includes their data-only
-layer in the accepted image identity, enforces read-only root and rejects all
-source/extra/nested mounts. Only the bounded build tmpfs may be writable.
+Both metadata inspectors now admit precisely that spelling as equivalent to the
+already admitted $ORIGIN/../../.., with identical normalized immutable-directory
+checks. Supplying both spellings in one list is rejected as a duplicate. No other
+path, token, relative location or writable domain is added. Positive and duplicate
+negative fixtures cover both parsers. Bounded pinned-tool program/dynamic metadata
+are printed on rejection to make any further compatibility failure diagnosable
+without broadening the gate. Real construction must still pass; upstream source
+is supporting diagnosis, not evidence that the cloud image has been accepted.
 
-Output is opened with Linux O_NOFOLLOW, required regular/single-link/owned and
-bounded, and checked for stable metadata and ELF magic before streaming.
-The parent must independently inspect the full returned static ELF, bind it to
-the exact source/compiler identity, reproduce it, and construct the separate
-one-executable adapter image. ELF magic is not acceptance. The parent also owns
-whole-container timeout/teardown, including compiler descendants, and must reject
-partial stdout or nonzero status. This source creates no runtime authorization.
+## Actual musl dynamic-std input: static-only export
 
-Pure driver tests cover fixed compiler arguments and refusal of privileged or
-unconfined process-status fixtures; they do not call the production entry path.
-Recipe integration and a focused driver/runner review remain outstanding.
+Run34009791044 at16f92f18 passed the loader-metadata stage, then stopped on an
+unexpected sysroot file. Its retained pinned-archive inventory identifies exactly
+libstd-286e4795762d614b.so (5,369,608 bytes, SHA256
+5a1f8cfcc59c4cafc031df4f648b20fb1674cc190c8b40b8d391c33ad3e391d1).
+Artifact9982104279 ZIP SHA256:
+d0381deb80a814bc890deaf579c4c745ed7f5c599cc0a814347f7edcce9670c8.
+The measured controller peak at this failed construction stage was639,712KiB.
 
-source_snapshot.py constructs that data-only layer in bounded memory: exact five
-nonempty byte inputs,256KiB per file,512KiB aggregate,1MiB resulting tar, fixed
-paths/modes/root ownership/time and no links, PAX attributes or execution.
-It records the target revision and per-file/layer identities and reproduces
-independently of mapping order. The parent must still prove the blobs correspond
-to the revision and append/inspect the layer without replacing compiler files.
-This pure helper does not import, load or start an image; tests use synthetic bytes.
+The compiler role is static-musl-only. Its archive-provided shared std library
+is not exported or executed: the exporter verifies this one exact path/size/hash
+and records its intentional omission. Static rlib/rmeta/archive/object inputs
+remain required. No wildcard shared-library omission is allowed; any other
+unexpected sysroot file still fails with its path recorded. The complete image
+inspector requires the exact omission record and continues to reject arbitrary
+sysroot shared objects outside the inspected runtime graph. Pure identity and
+report mutations cover this distinction. This does not make RAR depend on a
+third-party OS or link any reference implementation into a target image.
+A successful real static adapter compile and independently inspected compiler
+candidate are still outstanding.
+
+### Independent omission and executable reachability
+
+The image validator explicitly rejects the omitted dynamic-std path in the
+report declarations, graph and actual filesystem. Every graph node must be
+reachable from fixed rustc/LLD/selected-backend roots through independently
+inspected ELF NEEDED/interpreter edges. A construction report cannot admit an
+extra executable by listing it as a disconnected node or forged resolved edge.
+Canonical byte-identical exported aliases remain declared-only where intended.
+Negative synthetic images cover both the exact omitted path and an unrelated
+sysroot shared object, with and without forged trace edges. Actual cloud tests
+and candidate construction remain required; these checks activate no runtime.

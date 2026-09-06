@@ -120,3 +120,16 @@ No hardware-backed or independent monotonic trust anchor is implemented.
 Architecture and security reviewers identified these requirements at baseline
 06ecaaad and proposed head2ec60aae. This refinement records the findings; it does
 not certify an unimplemented controller, crypto module, filesystem or runtime.
+
+## Proposed DataVault framing refinement
+
+The exact candidate is now documented in docs/interfaces/modern-data-v0.md.
+An all-byte-changing reservation precedes the sole per-slot AEAD seal. Ciphertext,
+tag and authenticated chain metadata are durable before a separate fixed commit
+marker. Recognized incomplete reservations burn slots; partial commit markers
+require a valid authenticated complete payload and can recover the new state
+without a pre-crash ACK. No consumed slot is reused or reformatted. This reflects
+read-only architecture review of the crash/nonce conflict; concrete source tests,
+independent review and actual device/profile evidence are still pending. Public
+lab keys, exact-erasure/whole-rollback limits and no writable clones stay explicit.
+This refinement is not runtime authorization or an accepted production format.
