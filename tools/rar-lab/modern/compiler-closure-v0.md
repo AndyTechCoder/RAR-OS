@@ -104,3 +104,17 @@ and runtime confinement checks.
 At most one search-path tag is admitted: simultaneous RPATH and RUNPATH are
 rejected, avoiding cross-tag duplicates and ambiguous precedence. A mixed-tag
 negative fixture enforces this restriction.
+
+## Pinned archive inspection
+
+compiler_archive.py supplies the pre-install byte gate for the exact musl input.
+verify checks the fixed SHA256 before decompression; inventory is a pure helper
+for synthetic tests, not an alternate production admission path. XZ decoder
+memory is bounded at256MiB, compressed input64MiB, total expanded bytes512MiB,
+8192 entries and256MiB per file. Truncated, trailing and concatenated XZ streams
+fail. Every path must stay below the exact pinned root; duplicate entries, links,
+devices, sparse members, special modes and group/world writable files fail.
+Per-file hashes, metadata and payload totals are recorded, with required
+installer and musl library anchors. Inspection never extracts or executes.
+The cloud controller still needs to acquire the fixed URL under bounded HTTPS,
+call verify, and keep the minimal construction context separate from RAR source.
