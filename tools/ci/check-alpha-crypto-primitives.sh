@@ -25,3 +25,11 @@ printf '%s\n' 'Alpha crypto: SHA-512/Ed25519 initial focused tests and no_std co
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/reference_inventory.py" --self-test
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/provision_reference.py" --self-test
 printf '%s\n' 'Modern reference provisioning: pure inventory/acquisition/guard tests passed; candidate construction and activation not claimed'
+
+# Compiler construction parsers only; no acquisition/build/activation here.
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/compiler_closure.py" --self-test
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/compiler_archive.py" --self-test
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/compiler_elf.py" --self-test
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/compiler_inventory.py" --self-test
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/provision_compiler.py" --self-test
+printf '%s\n' 'Modern compiler provisioning: pure fixture and guard tests passed; actual construction and activation not claimed'
