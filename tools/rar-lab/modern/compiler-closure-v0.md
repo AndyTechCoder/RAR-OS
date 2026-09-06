@@ -167,3 +167,28 @@ duplicate JSON keys and image identity. They run only in the existing isolated
 cloud Specifications job. No acquisition, extraction, compilation or image
 activation occurs in these tests. Real compiler construction, reproducibility,
 isolated compile and final static adapter checks remain outstanding.
+
+## Manual trusted-main compiler candidate construction
+
+The modern-compiler workflow and provision_compiler.py construct two no-cache
+candidates only from an exact reviewed main checkout. The fixed Rust base is
+pulled by digest, and the one fixed Rust musl HTTPS URL is bounded, hash-verified
+and inventoried before its pinned installer runs inside network-disabled
+construction. The context contains only the recipe, exporter and pinned archive;
+RAR source, credentials and independent reference implementations are absent.
+
+Like the reference provisioner, child Docker/Git configuration is private and
+allowlisted, identities are retained, the default Docker BuildKit driver is
+verified, no broad cleanup/retry is performed, and the hosted job owns all
+temporary files and daemon state. No Mac/SSD operation is involved. The cloud
+workspace requires16GiB free before work; candidate image size is capped at
+768MiB and serialized archive at1GiB, alongside the source and exporter budgets.
+Measured controller peak RSS and bounded logs/artifacts are retained.
+
+Both candidates must pass independent complete image inspection and have equal
+image/config, layer and file inventories. Construction runs fixed compiler
+metadata probes, but does not start the final compiler image or compile/execute
+an adapter or RAR target. Success remains candidate-reproduced-not-activated.
+Real isolated compilation, static adapter inspection and three-way algorithm
+comparisons follow separately. This manual workflow must be reviewed and merged
+to main before dispatch; adding its source does not activate a guest profile.

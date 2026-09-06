@@ -67,6 +67,9 @@ printf '%s\n' 'Modern compiler ELF: pure dependency-byte tests passed; actual im
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/compiler_inventory.py" --self-test
 printf '%s\n' 'Modern compiler inventory: complete synthetic image and rejection tests passed; real construction/activation pending'
 
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/provision_compiler.py" --self-test
+printf '%s\n' 'Modern compiler provisioning: pure URL/context/guard tests passed; no acquisition or construction in Specifications'
+
 # Keep at most one stripped test executable and one no_std library in the
 # existing cloud-only tmpfs; no owner files or retained evidence are affected.
 set -- $(/usr/bin/du -sk "$work")
