@@ -64,6 +64,9 @@ printf '%s\n' 'Modern compiler archive: pure bounded fixture tests passed; actua
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/compiler_elf.py" --self-test
 printf '%s\n' 'Modern compiler ELF: pure dependency-byte tests passed; actual image closure pending'
 
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/compiler_inventory.py" --self-test
+printf '%s\n' 'Modern compiler inventory: complete synthetic image and rejection tests passed; real construction/activation pending'
+
 # Keep at most one stripped test executable and one no_std library in the
 # existing cloud-only tmpfs; no owner files or retained evidence are affected.
 set -- $(/usr/bin/du -sk "$work")

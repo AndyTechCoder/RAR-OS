@@ -142,3 +142,28 @@ GNU_STACK declaration; missing or duplicate declarations fail. Dynamic and
 string-table mappings must be readable, and the dynamic segment's file extent
 must fit its memory extent. Forbidden reference-library names are rejected in
 SONAME as well as NEEDED. Focused mutations cover each of these requirements.
+
+## Complete candidate image inspection
+
+compiler_inventory.py independently reads a bounded Docker-save archive without
+extracting files or starting containers. It binds the image configuration digest
+and each rootfs layer digest, rejects duplicate/replaced files and special
+entries, and requires exactly the positive compiler/musl/notice/report inventory
+plus its parent directories and the empty source/build directories. Bytes,
+modes, owner, timestamp and aggregate budgets must match. Only build is writable,
+and only by the fixed nonroot identity; no other payload is admitted.
+
+The inspector parses each actual ELF through compiler_elf.py and cross-checks
+direct dependency names, interpreter, exported aliases and search paths against
+the construction graph and actual final files. Missing or ambiguous dependency
+bytes fail. The graph alone cannot override the inspected bytes. Exact process
+environment, entrypoint, working directory and absent additional runtime
+configuration are required. This is still inspected-not-activated evidence,
+not a complete loader proof, legal certification or approval to run an image.
+
+Synthetic whole-image tests cover the positive composition and mutated process
+authority, content, modes, ownership, graph, notices, special/extra entries,
+duplicate JSON keys and image identity. They run only in the existing isolated
+cloud Specifications job. No acquisition, extraction, compilation or image
+activation occurs in these tests. Real compiler construction, reproducibility,
+isolated compile and final static adapter checks remain outstanding.
