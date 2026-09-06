@@ -58,8 +58,8 @@ file, reads exactly 256 words under existing bounded status/transport rules and
 returns no Device on failure. It issues no sector write or flush while identifying.
 
 The verifier requires the pinned QEMU ATA disk type, LBA and enabled FLUSH
-support with valid feature words, exact LBA28 capacity and consistent LBA48
-capacity if advertised, and 512-byte logical/physical geometry. Serial and model
+support with valid feature words, exact LBA28 capacity and mandatory supported/enabled LBA48 with matching
+capacity, and 512-byte logical/physical geometry. Serial and model
 must match exact nonempty printable space-padded profile values after ATA word
 byte-order decoding. DMA advertisement is not DMA authority. The caller cannot
 learn authority by supplying a matching identity: fixed kernel adapter ownership,
@@ -72,3 +72,10 @@ points, task-file/command failures and phase failures. These are cloud model
 tests only, not actual device compatibility or disk persistence evidence.
 The field interpretation follows the pinned QEMU ide_identify/ide_identify_size
 implementation linked above. No target third-party code was copied or linked.
+
+Focused review narrowed admission to actual pinned QEMU output: word106 is
+zero or 0x6000 only; LBA48 support and enabled bits are mandatory and the full
+extended capacity must match. Tests explicitly reject each cleared LBA48 bit,
+zeroed extended capacity and unsupported 0x4000 geometry. Additional transport/
+yield tests cover every initialization status boundary and all three wait phases,
+and retain command/write logs proving IDENTIFY-only, with no Write or Flush.

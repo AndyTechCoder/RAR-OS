@@ -36,19 +36,18 @@ fn identify_matches(words:&[u16;256],expected:&Identity)->Result<(),Error> {
     // This is the pinned QEMU ATA disk profile, not arbitrary ATA/ATAPI support.
     // Advertised DMA capability does not grant DMA; the transport remains PIO.
     if words[0]!=0x0040 || words[49]&(1<<9)==0 ||
-        words[83]&0xc000!=0x4000 || words[83]&(1<<12)==0 ||
-        words[87]&0xc000!=0x4000 || words[86]&(1<<12)==0 {
+        words[83]&0xc000!=0x4000 || words[83]&((1<<12)|(1<<10))!=((1<<12)|(1<<10)) ||
+        words[87]&0xc000!=0x4000 || words[86]&((1<<12)|(1<<10))!=((1<<12)|(1<<10)) {
         return Err(Error::Identity);
     }
     let capacity=words[60]as u32|((words[61]as u32)<<16);
     if capacity!=expected.sectors{return Err(Error::Identity);}
     let extended=words[100]as u64|((words[101]as u64)<<16)|
         ((words[102]as u64)<<32)|((words[103]as u64)<<48);
-    if (words[83]&(1<<10)!=0 && extended!=expected.sectors as u64) ||
-        (words[83]&(1<<10)==0 && extended!=0) {return Err(Error::Identity);}
+    if extended!=expected.sectors as u64 {return Err(Error::Identity);}
     // Legacy default or valid 512-byte logical/physical sectors only.
     // No long logical sectors or nonzero physical-sector exponent are admitted.
-    if !matches!(words[106],0|0x4000|0x6000) || words[117]!=0 || words[118]!=0 {
+    if !matches!(words[106],0|0x6000) || words[117]!=0 || words[118]!=0 {
         return Err(Error::Identity);
     }
     for (start,text) in [(10,&expected.serial[..]),(27,&expected.model[..])] {
@@ -172,11 +171,11 @@ mod tests {
     struct Fake {status:u8,command:Option<Command>,words:usize,reads:usize,yields:usize,
         registers:Vec<(Register,u8)>,written:Vec<u16>,fail_word:Option<usize>,fail_command:bool,
         status_override:Option<(usize,u8)>,fail_status_at:Option<usize>,
-        fail_register_at:Option<usize>,fail_yield:bool,busy_until:usize,busy_per_command:usize,identify_words:Option<[u16;256]>}
+        fail_register_at:Option<usize>,fail_yield:bool,busy_until:usize,busy_per_command:usize,identify_words:Option<[u16;256]>,commands:Vec<Command>}
     impl Fake {
         fn new()->Self {Self {status:0x40,command:None,words:0,reads:0,yields:0,
             registers:vec![],written:vec![],fail_word:None,fail_command:false,status_override:None,
-            fail_status_at:None,fail_register_at:None,fail_yield:false,busy_until:0,busy_per_command:0,identify_words:None}}
+            fail_status_at:None,fail_register_at:None,fail_yield:false,busy_until:0,busy_per_command:0,identify_words:None,commands:vec![]}}
     }
     impl Io for Fake {
         fn status(&mut self)->Result<u8,()> {
@@ -191,6 +190,7 @@ mod tests {
             self.registers.push((r,v));Ok(())
         }
         fn command(&mut self,c:Command)->Result<(),()> {
+            self.commands.push(c);
             if self.fail_command{return Err(());}
             self.command=Some(c);self.words=0;self.busy_until=self.reads+self.busy_per_command;
             self.status=if matches!(c,Command::Read|Command::Write|Command::Identify){0x48}else{0x40};Ok(())
@@ -208,6 +208,16 @@ mod tests {
         fn yield_cpu(&mut self)->Result<(),()> {self.yields+=1;if self.fail_yield{Err(())}else{Ok(())}}
     }
 
+
+    impl Io for &mut Fake {
+        fn status(&mut self)->Result<u8,()> {<Fake as Io>::status(*self)}
+        fn register(&mut self,r:Register,v:u8)->Result<(),()> {<Fake as Io>::register(*self,r,v)}
+        fn command(&mut self,c:Command)->Result<(),()> {<Fake as Io>::command(*self,c)}
+        fn read_word(&mut self)->Result<u16,()> {<Fake as Io>::read_word(*self)}
+        fn write_word(&mut self,w:u16)->Result<(),()> {<Fake as Io>::write_word(*self,w)}
+        fn yield_cpu(&mut self)->Result<(),()> {<Fake as Io>::yield_cpu(*self)}
+    }
+
     fn identity_fixture()->(Identity,[u16;256]) {
         let expected=Identity {sectors:32,serial:*b"RAR-DATA-TEST-000001",model:*b"RAR MODERN TEST DATA                    "};
         let mut words=[0u16;256];
@@ -223,7 +233,7 @@ mod tests {
     }
     #[test] fn identify_exact_profile_then_permit_sector_io() {
         let (expected,words)=identity_fixture();
-        for geometry in [0,0x4000,0x6000] {
+        for geometry in [0,0x6000] {
             let mut words=words;words[106]=geometry;
             let mut fake=Fake::new();fake.identify_words=Some(words);
             let mut device=Device::identify(fake,expected).unwrap();
@@ -240,15 +250,18 @@ mod tests {
         let (expected,words)=identity_fixture();
         for (index,value) in [(0,0x8040),(49,0),(83,0),(83,0xd400),(83,0x4400),
             (86,0),(87,0),(60,31),(61,1),(100,31),(101,1),(102,1),(103,1),
-            (106,0x7000),(106,0x6001),(106,0xffff),(117,256),(118,1),(10,0),(27,0)] {
+            (106,0x4000),(106,0x7000),(106,0x6001),(106,0xffff),(117,256),(118,1),(10,0),(27,0)] {
             let mut bad=words;bad[index]=value;
             assert_eq!(identify_matches(&bad,&expected),Err(Error::Identity));
             let mut fake=Fake::new();fake.identify_words=Some(bad);
             assert!(matches!(Device::identify(fake,expected),Err(Error::Identity)));
         }
-        let mut lba28=words;lba28[83]&=!(1<<10);lba28[86]&=!(1<<10);lba28[100]=0;
-        assert_eq!(identify_matches(&lba28,&expected),Ok(()));
-        lba28[100]=32;assert_eq!(identify_matches(&lba28,&expected),Err(Error::Identity));
+        for index in [83,86] {
+            let mut bad=words;bad[index]&=!(1<<10);
+            assert_eq!(identify_matches(&bad,&expected),Err(Error::Identity));
+            bad[100]=0;
+            assert_eq!(identify_matches(&bad,&expected),Err(Error::Identity));
+        }
         for sectors in [0,1<<28,u32::MAX] {
             let mut bad=expected;bad.sectors=sectors;
             assert!(matches!(Device::identify(Fake::new(),bad),Err(Error::Bounds)));
@@ -277,6 +290,33 @@ mod tests {
             fake.status_override=Some((from,status));
             assert!(Device::identify(fake,expected).is_err());
         }
+    }
+
+
+    #[test] fn identify_transport_and_yield_failures_never_issue_writes() {
+        let (expected,words)=identity_fixture();
+        for at in 1..=16 {
+            let mut fake=Fake::new();fake.identify_words=Some(words);fake.fail_status_at=Some(at);
+            assert!(matches!(Device::identify(&mut fake,expected),Err(Error::Transport)));
+            assert!(fake.written.is_empty());
+            assert!(fake.commands.iter().all(|c|*c==Command::Identify));
+        }
+        for phase in 0..3 {
+            let mut fake=Fake::new();fake.identify_words=Some(words);fake.fail_yield=true;
+            match phase {
+                0=>fake.busy_until=POLLS,
+                1=>fake.busy_per_command=POLLS,
+                _=>fake.status_override=Some((12,0x80)),
+            }
+            assert!(matches!(Device::identify(&mut fake,expected),Err(Error::Transport)));
+            assert_eq!(fake.yields,1);
+            assert!(fake.written.is_empty());
+            assert!(fake.commands.iter().all(|c|*c==Command::Identify));
+        }
+        let mut fake=Fake::new();fake.identify_words=Some(words);
+        {let _device=Device::identify(&mut fake,expected).unwrap();}
+        assert_eq!(fake.commands,vec![Command::Identify]);
+        assert!(fake.written.is_empty());
     }
 
     #[test] fn exact_single_sector_little_endian_sequence() {
