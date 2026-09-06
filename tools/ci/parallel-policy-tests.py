@@ -82,9 +82,9 @@ def supervise(commands, seconds=1200, maximum=8 * 1024 * 1024):
     except Exception as exc:
         reason = type(exc).__name__
     finally:
-        # Signal only owned live session leaders. Dead-leader/orphan ambiguity
-        # cannot become success: open pipes time out, then the caller fails and
-        # the containing disposable CI container is torn down.
+        # Signal only owned live session leaders. Open orphan pipes time out.
+        # Closed-pipe descendants after leader exit are not detected here;
+        # the containing disposable CI container owns residual teardown.
         for process in processes:
             if process.poll() is None:
                 try: os.killpg(process.pid, signal.SIGTERM)

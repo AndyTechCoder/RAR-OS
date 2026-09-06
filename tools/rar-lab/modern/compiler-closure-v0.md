@@ -263,3 +263,15 @@ report mutations cover this distinction. This does not make RAR depend on a
 third-party OS or link any reference implementation into a target image.
 A successful real static adapter compile and independently inspected compiler
 candidate are still outstanding.
+
+### Independent omission and executable reachability
+
+The image validator explicitly rejects the omitted dynamic-std path in the
+report declarations, graph and actual filesystem. Every graph node must be
+reachable from fixed rustc/LLD/selected-backend roots through independently
+inspected ELF NEEDED/interpreter edges. A construction report cannot admit an
+extra executable by listing it as a disconnected node or forged resolved edge.
+Canonical byte-identical exported aliases remain declared-only where intended.
+Negative synthetic images cover both the exact omitted path and an unrelated
+sysroot shared object, with and without forged trace edges. Actual cloud tests
+and candidate construction remain required; these checks activate no runtime.
