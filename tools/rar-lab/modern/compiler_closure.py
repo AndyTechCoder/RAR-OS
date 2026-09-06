@@ -342,10 +342,18 @@ def main():
         export(path, False)
     if len(omitted_musl) != 1:
         raise Invalid("pinned musl dylib omission missing")
-    for record in graph.values():
-        for directory in record["search_paths"]:
-            if not (root / directory.lstrip("/")).is_dir():
-                raise Invalid("dynamic search directory absent from positive export")
+    # Materialize only already validated ELF-derived search directories.
+    # No source-directory contents are copied; final normalization seals metadata.
+    search_directories = sorted({directory for record in graph.values()
+                                 for directory in record["search_paths"]})
+    for directory in search_directories:
+        safe_path(directory)
+        destination = root / directory.lstrip("/")
+        destination.mkdir(parents=True, exist_ok=True)
+        if destination.is_symlink() or not destination.is_dir():
+            raise Invalid("dynamic search directory export type")
+    print(json.dumps({"event": "compiler-search-directories",
+                      "directories": search_directories}, sort_keys=True), flush=True)
     # Inert notices never add executable closure authority.
     notices = {}
     notice_bytes = 0
