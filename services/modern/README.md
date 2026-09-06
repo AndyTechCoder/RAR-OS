@@ -48,3 +48,27 @@ writes; exhaustion is read-only. No format/erase path exists.
 This remains unactivated model code, not actual guest persistence, independent
 crypto interoperability or M4 completion. Device/capability/profile integration
 and real cloud crash/persistence evidence remain required.
+
+## Verified IDENTIFY constructor (source candidate, not activated)
+
+Production construction now goes through Device::identify with an Identity from
+the fixed trusted profile, not an IPC request. The old unverified capacity-only
+constructor is test-only. Initialization selects master, zeros the IDENTIFY task
+file, reads exactly 256 words under existing bounded status/transport rules and
+returns no Device on failure. It issues no sector write or flush while identifying.
+
+The verifier requires the pinned QEMU ATA disk type, LBA and enabled FLUSH
+support with valid feature words, exact LBA28 capacity and consistent LBA48
+capacity if advertised, and 512-byte logical/physical geometry. Serial and model
+must match exact nonempty printable space-padded profile values after ATA word
+byte-order decoding. DMA advertisement is not DMA authority. The caller cannot
+learn authority by supplying a matching identity: fixed kernel adapter ownership,
+IRQ masking/nIEN and separate reviewed System/Data profile identities are still
+mandatory and not yet implemented.
+
+Source fixtures cover exact word-order identity, each required feature/capacity/
+geometry/text mismatch, invalid expected profiles, all 256 transfer interruption
+points, task-file/command failures and phase failures. These are cloud model
+tests only, not actual device compatibility or disk persistence evidence.
+The field interpretation follows the pinned QEMU ide_identify/ide_identify_size
+implementation linked above. No target third-party code was copied or linked.
