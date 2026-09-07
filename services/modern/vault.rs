@@ -286,8 +286,18 @@ mod tests {
         // Every consumed reservation stays untouched on the subsequent write.
         let consumed=recovered.next;
         let prefix=recovered.block.live[..(2+consumed*3) as usize].to_vec();
-        recovered.publish(sample()).unwrap();
+        let expected_revision=recovered.revision()+1;
+        let mut following=sample();
+        following.put(b"note",b"after recovery").unwrap();
+        following.put(b"next",b"second boot").unwrap();
+        assert_eq!(recovered.publish(following),Ok(expected_revision));
         assert_eq!(recovered.block.live[..prefix.len()],prefix);
+        // Crash again after appending beyond any burned slot. Old/new selection
+        // from the first recovery is not sufficient proof of a valid new chain.
+        let again=Vault::mount(recovered.into_block().crash(),14).unwrap();
+        assert_eq!(again.revision(),expected_revision);
+        assert_eq!(*again.snapshot(),following);
+        assert_eq!(again.block.live[..prefix.len()],prefix);
     }
     #[test] fn every_io_failure_and_flush_outcome_recovers_old_or_new() {
         for operation in 1..=12 {
