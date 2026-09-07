@@ -40,6 +40,17 @@ INSTALLED_NOTICES = ("COPYRIGHT.html", "COPYRIGHT-library.html",
                      "licenses/Apache-2.0.txt", "licenses/MIT.txt",
                      "licenses/LLVM-exception.txt")
 
+
+# Generated aggregate Rust copyright reports are large inert HTML documents.
+# Only exact installed sources AND exact destinations receive the larger budget.
+NOTICE_TOTAL_LIMIT = 48 * 1024 * 1024
+def notice_limit(source, relative):
+    for name in ("COPYRIGHT.html", "COPYRIGHT-library.html"):
+        if (str(source) == str(SYSROOT) + "/share/doc/rust/" + name and
+            relative == "rust/" + name):
+            return 16 * 1024 * 1024
+    return 1024 * 1024
+
 def required_notices(notices):
     for name, (size, sha256) in ARCHIVE_NOTICES.items():
         entry = notices.get("rust/" + name)
@@ -270,7 +281,7 @@ def validate(config, report, files, directories):
             re.fullmatch(r"[A-Za-z0-9_.+/-]+", relative) is None or
             any(x in ("", ".", "..") for x in relative.split("/")) or
             type(entry) is not dict or type(entry.get("size")) is not int or
-            not 1 <= entry["size"] <= 1048576 or entry.get("mode") != 0o444 or
+            not 1 <= entry["size"] <= notice_limit(entry.get("source"), relative) or entry.get("mode") != 0o444 or
             not digest(entry.get("sha256"))):
             raise Invalid("notice declaration")
         name = "licenses/" + relative; expected.add(name)
@@ -279,7 +290,7 @@ def validate(config, report, files, directories):
             actual["uid"] != 0 or actual["gid"] != 0 or actual["mtime"] != EPOCH or actual["elf"] is not None):
             raise Invalid("notice bytes/metadata")
         notice_total += entry["size"]
-    if (notice_total > 16777216 or type(license_report.get("total_bytes")) is not int or
+    if (notice_total > NOTICE_TOTAL_LIMIT or type(license_report.get("total_bytes")) is not int or
         license_report["total_bytes"] != notice_total):
         raise Invalid("notice byte total")
     evidence = files.get("evidence/compiler-closure.json")
@@ -562,6 +573,70 @@ def self_test():
                 payloads["licenses/rust/" + name] += b"x"
                 with self.assertRaises(Invalid):
                     inspect(*image_bytes(config, report, payloads))
+
+
+        def test_only_fixed_generated_notices_have_large_file_budget(self):
+            for name in ("COPYRIGHT.html", "COPYRIGHT-library.html"):
+                source = SYSROOT + "/share/doc/rust/" + name
+                self.assertEqual(notice_limit(source, "rust/" + name), 16 * 1024 * 1024)
+                for wrong_source, destination in (
+                    (source + ".extra", "rust/" + name),
+                    ("/build/" + name, "rust/" + name),
+                    (source, "rust/licenses/" + name)):
+                    self.assertEqual(notice_limit(wrong_source, destination), 1024 * 1024)
+                config, report, payloads = fixture()
+                key = "rust/" + name
+                value = b"x" * (1024 * 1024 + 1)
+                old = report["licenses"]["files"][key]["size"]
+                payloads["licenses/" + key] = value
+                report["licenses"]["files"][key].update(
+                    size=len(value), sha256=hashlib.sha256(value).hexdigest())
+                report["licenses"]["total_bytes"] += len(value) - old
+                self.assertEqual(inspect(*image_bytes(config, report, payloads))["state"],
+                                 "inspected-not-activated")
+                value = b"x" * (16 * 1024 * 1024 + 1)
+                old = report["licenses"]["files"][key]["size"]
+                payloads["licenses/" + key] = value
+                report["licenses"]["files"][key].update(
+                    size=len(value), sha256=hashlib.sha256(value).hexdigest())
+                report["licenses"]["total_bytes"] += len(value) - old
+                with self.assertRaisesRegex(Invalid, "notice declaration"):
+                    inspect(*image_bytes(config, report, payloads))
+            config, report, payloads = fixture()
+            key = "rust/licenses/ordinary.txt"
+            value = b"x" * (1024 * 1024 + 1)
+            payloads["licenses/" + key] = value
+            report["licenses"]["files"][key] = {"source": SYSROOT + "/share/doc/rust/licenses/ordinary.txt",
+                "size": len(value), "sha256": hashlib.sha256(value).hexdigest(), "mode": 0o444}
+            report["licenses"]["total_bytes"] += len(value)
+            with self.assertRaisesRegex(Invalid, "notice declaration"):
+                inspect(*image_bytes(config, report, payloads))
+            self.assertEqual(NOTICE_TOTAL_LIMIT, 48 * 1024 * 1024)
+
+
+        def test_notice_aggregate_budget_from_inspected_metadata(self):
+            # Pure metadata gate test; full-image tests separately bind actual bytes.
+            for count, accepted in ((47, True), (48, False)):
+                config, report, payloads = fixture()
+                inspected = inspect(*image_bytes(config, report, payloads))
+                inventory = copy.deepcopy(inspected["files"])
+                directories = copy.deepcopy(inspected["directories"])
+                directories["licenses/extra"] = (0o555, 0, 0, EPOCH)
+                for index in range(count):
+                    key = "extra/notice-" + str(index)
+                    entry = {"source": "/usr/share/doc/fixture/copyright",
+                             "size": 1024 * 1024, "sha256": "1" * 64, "mode": 0o444}
+                    report["licenses"]["files"][key] = entry
+                    report["licenses"]["total_bytes"] += entry["size"]
+                    inventory["licenses/" + key] = {
+                        **{k:entry[k] for k in ("size", "sha256", "mode")},
+                        "uid": 0, "gid": 0, "mtime": EPOCH, "elf": None}
+                if accepted:
+                    self.assertEqual(validate(config, report, inventory, directories)["state"],
+                                     "inspected-not-activated")
+                else:
+                    with self.assertRaisesRegex(Invalid, "notice byte total"):
+                        validate(config, report, inventory, directories)
 
         def test_exact_empty_elf_search_directory_is_readonly(self):
             config, report, payloads = fixture()
