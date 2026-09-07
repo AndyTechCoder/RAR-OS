@@ -164,6 +164,26 @@ impl<I:Io> Device<I> {
         self.finish(result)
     }
 }
+
+/// Connect the checked PIO transport to the vault's existing sector interface.
+/// This grants no device authority: the runtime must supply the Data role's
+/// fixed kernel adapter. There is no device selector, retry, cache or implicit
+/// flush here. A failed transport stays poisoned inside Device.
+impl<I:Io> crate::vault::Block for Device<I> {
+    fn read(&mut self,sector:u32)->Result<crate::vault::Sector,crate::vault::Error> {
+        self.read512(sector).map_err(vault_error)
+    }
+    fn write(&mut self,sector:u32,bytes:&crate::vault::Sector)->Result<(),crate::vault::Error> {
+        self.write512(sector,bytes).map_err(vault_error)
+    }
+    fn flush(&mut self)->Result<(),crate::vault::Error> {
+        Device::flush(self).map_err(vault_error)
+    }
+}
+fn vault_error(error:Error)->crate::vault::Error {
+    match error {Error::Bounds=>crate::vault::Error::Bounds,_=>crate::vault::Error::Io}
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -406,4 +426,49 @@ mod tests {
         assert!(d.read512(0).is_ok());assert!(d.io.yields>=2);
         d.write512(0,&[1;512]).unwrap();d.flush().unwrap();assert!(!d.poisoned());
     }
+
+    #[test] fn vault_bridge_preserves_words_and_explicit_durability() {
+        use crate::vault::{Block,Error as VaultError};
+        let (expected,words)=identity_fixture();
+        let mut fake=Fake::new();fake.identify_words=Some(words);
+        let mut device=Device::identify(fake,expected).unwrap();
+        let bytes=Block::read(&mut device,31).unwrap();
+        for i in 0..256 {assert_eq!(&bytes[2*i..2*i+2],&(i as u16).to_le_bytes());}
+        Block::write(&mut device,2,&bytes).unwrap();
+        assert_eq!(device.io.written,(0..256).collect::<Vec<u16>>());
+        assert_eq!(device.io.commands,vec![Command::Identify,Command::Read,Command::Write]);
+        Block::flush(&mut device).unwrap();
+        assert_eq!(device.io.commands.last(),Some(&Command::Flush));
+        let before=(device.io.reads,device.io.commands.len(),device.io.registers.len());
+        assert_eq!(Block::read(&mut device,32),Err(VaultError::Bounds));
+        assert_eq!(Block::write(&mut device,u32::MAX,&bytes),Err(VaultError::Bounds));
+        assert_eq!((device.io.reads,device.io.commands.len(),device.io.registers.len()),before);
+        assert!(!device.poisoned());
+    }
+    #[test] fn vault_bridge_never_retries_partial_transfers_or_failed_flush() {
+        use crate::vault::{Block,Error as VaultError};
+        for stop in 0..256 {for write in [false,true] {
+            let mut fake=Fake::new();fake.fail_word=Some(stop);
+            let mut device=Device::test_device(fake,32).unwrap();
+            let result=if write {Block::write(&mut device,0,&[7;512])}
+                else {Block::read(&mut device,0).map(|_|())};
+            assert_eq!(result,Err(VaultError::Io));assert!(device.poisoned());
+            let before=(device.io.reads,device.io.commands.len(),device.io.words);
+            assert_eq!(Block::read(&mut device,0),Err(VaultError::Io));
+            assert_eq!(Block::write(&mut device,0,&[7;512]),Err(VaultError::Io));
+            assert_eq!(Block::flush(&mut device),Err(VaultError::Io));
+            assert_eq!((device.io.reads,device.io.commands.len(),device.io.words),before);
+        }}
+        let mut fake=Fake::new();fake.fail_command=true;
+        let mut device=Device::test_device(fake,32).unwrap();
+        assert_eq!(Block::flush(&mut device),Err(VaultError::Io));
+        assert!(device.poisoned());assert_eq!(device.io.commands,vec![Command::Flush]);
+        assert_eq!(Block::flush(&mut device),Err(VaultError::Io));
+        assert_eq!(device.io.commands,vec![Command::Flush]);
+        for error in [Error::Unavailable,Error::Device,Error::Timeout,Error::Transport,
+                      Error::Poisoned,Error::Identity] {
+            assert_eq!(vault_error(error),VaultError::Io);
+        }
+    }
+
 }

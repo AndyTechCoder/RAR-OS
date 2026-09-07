@@ -79,3 +79,23 @@ extended capacity must match. Tests explicitly reject each cleared LBA48 bit,
 zeroed extended capacity and unsupported 0x4000 geometry. Additional transport/
 yield tests cover every initialization status boundary and all three wait phases,
 and retain command/write logs proving IDENTIFY-only, with no Write or Flush.
+
+## PIO-to-vault connection
+
+The verified Device implements the existing vault Block trait directly. Sector
+reads and writes preserve their exact 512-byte framing; flush remains a separate
+explicit call. Bounds remain Bounds and all device/transport failures become Io.
+Transport poisoning remains in force, so a failed or partial operation cannot
+silently retry through the vault interface. No cache or hidden flush is added.
+
+This is source-level transport composition, not a new capability boundary.
+Production construction still requires IDENTIFY, and eventual kernel ownership
+must supply only the Data role's fixed adapter to the vault. No user-selected
+device or shared unrestricted port authority is admitted by this connection.
+There is still no kernel port bridge or guest persistence proof.
+
+Cloud-only source tests cover verified-constructor read/write/flush sequencing,
+word order, out-of-bounds refusal without I/O, every partial transfer boundary,
+failed flush and no subsequent I/O after poisoning. Vault crash tests also
+publish distinct content after recovery and remount after a second crash to
+verify the new chain beyond any burned slots.
