@@ -7,7 +7,7 @@ use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-const DRIVER: &str = "/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/libexec/rar-compile-driver";
+const DRIVER: &str = "/rar-compile-driver";
 const SYSROOT: &str = "/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu";
 const RUSTC: &str = "/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc";
 const LLD: &str = "/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin/rust-lld";
@@ -112,16 +112,22 @@ fn compiler_args() -> Vec<String> {
     ].into_iter().map(str::to_owned)
      .chain(["-C".to_owned(), format!("linker={LLD}")]).collect()
 }
+fn compiler_command() -> Command {
+    let mut command=Command::new(RUSTC);
+    command.args(compiler_args()).env_clear()
+        .env("PATH", "/nonexistent").env("LC_ALL", "C").env("LANG", "C")
+        .env("TMPDIR", "/build")
+        .env("LD_LIBRARY_PATH", format!("{SYSROOT}/lib"))
+        .current_dir("/source").stdin(Stdio::null()).stdout(Stdio::null())
+        .stderr(Stdio::inherit());
+    command
+}
 fn main_inner() -> Result<(), Error> {
     guard()?;
     source_inventory()?;
     // Exact tools/arguments only. No shell, Cargo, plugins, inherited variables,
     // input-driven output path or reference library is introduced here.
-    let status = Command::new(RUSTC).args(compiler_args()).env_clear()
-        .env("PATH", "/nonexistent").env("LC_ALL", "C").env("LANG", "C")
-        .env("LD_LIBRARY_PATH", format!("{SYSROOT}/lib"))
-        .current_dir("/source").stdin(Stdio::null()).stdout(Stdio::null())
-        .stderr(Stdio::inherit()).status()?;
+    let status = compiler_command().status()?;
     if !status.success() { return Err(Error::Compiler); }
     // Linux O_NOFOLLOW. Parent independently validates the returned ELF bytes.
     let mut file = OpenOptions::new().read(true).custom_flags(0x20000).open(OUTPUT)?;
@@ -172,4 +178,18 @@ mod tests {
         }
         assert!(process_status(&[255]).is_err());
     }
+    #[test] fn separate_rar_identity_and_fixed_compiler_environment() {
+        assert_eq!(DRIVER,"/rar-compile-driver");
+        let command=compiler_command();
+        assert_eq!(command.get_program(),std::ffi::OsStr::new(RUSTC));
+        assert_eq!(command.get_current_dir(),Some(Path::new("/source")));
+        let environment=command.get_envs().map(|(key,value)|
+            (key.to_str().unwrap(),value.unwrap().to_str().unwrap()))
+            .collect::<std::collections::BTreeMap<_,_>>();
+        let library=format!("{SYSROOT}/lib");
+        assert_eq!(environment,std::collections::BTreeMap::from([
+            ("PATH","/nonexistent"),("LC_ALL","C"),("LANG","C"),
+            ("TMPDIR","/build"),("LD_LIBRARY_PATH",library.as_str())]));
+    }
+
 }

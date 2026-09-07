@@ -86,3 +86,6 @@ printf 'Modern focused scratch KiB: %s (limit 8192)\n' "$1"
 
 # Deferred scheduler prototype self-tests only; production runner remains serial.
 /usr/bin/python3 -I -B "$root/tools/ci/parallel-policy-tests.py" --self-test
+
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/compiler_driver_layer.py" --self-test
+printf '%s\n' 'Modern driver layer: canonical static artifact/refusal tests passed; runtime handoff remains inactive'
