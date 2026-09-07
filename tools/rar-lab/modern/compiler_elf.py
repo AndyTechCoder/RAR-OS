@@ -213,7 +213,64 @@ def self_test():
         struct.pack_into("<IIQQQQIIQQ", raw, 128, 0, 1, 6, 0, 192, 8, 0, 0, 8, 0)
         return bytes(raw)
 
+
+    def detailed_object_fixture():
+        raw = bytearray(768); raw[:7] = b"\x7fELF\x02\x01\x01"
+        struct.pack_into("<HHI",raw,16,1,62,1)
+        struct.pack_into("<Q",raw,40,64)
+        struct.pack_into("<6H",raw,52,64,0,0,64,7,2)
+        strings = b"\0.text\0.shstrtab\0.strtab\0.symtab\0.rela.text\0.note.GNU-stack\0"
+        raw[520:520+len(strings)] = strings
+        raw[640:645] = b"\0sym\0"
+        def section(i,name,typ,flags,offset,size,link=0,info=0,alignment=1,stride=0):
+            struct.pack_into("<IIQQQQIIQQ",raw,64+i*64,
+                strings.index(name+b"\0"),typ,flags,0,offset,size,link,info,alignment,stride)
+        section(1,b".text",1,6,512,8,alignment=8)
+        section(2,b".shstrtab",3,0,520,len(strings))
+        section(3,b".strtab",3,0,640,5)
+        section(4,b".symtab",2,0,648,48,3,1,8,24)
+        section(5,b".rela.text",4,0,696,24,4,1,8,24)
+        section(6,b".note.GNU-stack",1,0,720,0)
+        return bytes(raw)
+
     class Tests(unittest.TestCase):
+
+
+        def test_object_symbol_relocation_and_names_positive(self):
+            raw = detailed_object_fixture()
+            self.assertEqual(inspect_relocatable(raw)["sections"],7)
+            rel = bytearray(raw)
+            struct.pack_into("<I",rel,64+5*64+4,9)
+            struct.pack_into("<Q",rel,64+5*64+32,16)
+            struct.pack_into("<Q",rel,64+5*64+56,16)
+            self.assertEqual(inspect_relocatable(bytes(rel))["sections"],7)
+        def test_object_symbol_relocation_framing_failures(self):
+            raw = detailed_object_fixture()
+            for section,field,fmt,value in (
+                (4,56,"<Q",16),(4,40,"<I",0),(4,40,"<I",7),(4,44,"<I",3),
+                (5,56,"<Q",16),(5,40,"<I",3),(5,44,"<I",0),(5,44,"<I",7)):
+                bad=bytearray(raw);struct.pack_into(fmt,bad,64+section*64+field,value)
+                with self.subTest(section=section,field=field,value=value), self.assertRaises(Invalid):
+                    inspect_relocatable(bytes(bad))
+            bad=bytearray(raw);struct.pack_into("<I",bad,64+5*64+4,9)
+            with self.assertRaises(Invalid):inspect_relocatable(bytes(bad))
+        def test_object_name_tables_and_executable_stack(self):
+            raw=detailed_object_fixture()
+            for offset,fmt,value in ((64+2*64+4,"<I",1),(64+1*64,"<I",10000),
+                                     (62,"<H",0),(64+6*64+8,"<Q",4)):
+                bad=bytearray(raw);struct.pack_into(fmt,bad,offset,value)
+                with self.assertRaises(Invalid):inspect_relocatable(bytes(bad))
+            bad=bytearray(raw);bad[520]=ord("x")
+            with self.assertRaises(Invalid):inspect_relocatable(bytes(bad))
+            size=struct.unpack_from("<Q",raw,64+2*64+32)[0]
+            bad=bytearray(raw);bad[520+size-1]=ord("x")
+            with self.assertRaises(Invalid):inspect_relocatable(bytes(bad))
+            bad=bytearray(raw);strings=b"\0"+b"a"*300+b"\0"
+            bad.extend(strings)
+            struct.pack_into("<Q",bad,64+2*64+24,len(raw))
+            struct.pack_into("<Q",bad,64+2*64+32,len(strings))
+            struct.pack_into("<I",bad,64+1*64,1)
+            with self.assertRaises(Invalid):inspect_relocatable(bytes(bad))
 
         def test_relocatable_is_not_runtime_executable(self):
             raw = object_fixture()

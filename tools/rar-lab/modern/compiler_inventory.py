@@ -136,6 +136,11 @@ def validate(config, report, files, directories):
     if (OMITTED_MUSL["source"] in declared or OMITTED_MUSL["source"] in graph or
         OMITTED_MUSL["source"][1:] in files):
         raise Invalid("omitted musl dynamic library present")
+    declared_objects = {path for path in declared if type(path) is str and path.endswith(".o")}
+    actual_objects = {"/" + name for name, entry in files.items()
+                      if entry.get("relocatable") is True}
+    if declared_objects != LINK_OBJECTS or actual_objects != LINK_OBJECTS:
+        raise Invalid("required exact linker-object set")
     notices = license_report.get("files")
     if type(notices) is not dict or not 1 <= len(notices) <= 512:
         raise Invalid("notice inventory")
@@ -431,10 +436,20 @@ def self_test():
         struct.pack_into("<IIQQQQQQ", raw, 120, 0x6474e551, 6, 0, 0, 0, 0, 0, 16)
         return bytes(raw)
 
+
+    def object_fixture():
+        raw = bytearray(200); raw[:7] = b"\x7fELF\x02\x01\x01"
+        struct.pack_into("<HHI",raw,16,1,62,1)
+        struct.pack_into("<Q",raw,40,64)
+        struct.pack_into("<6H",raw,52,64,0,0,64,2,0)
+        struct.pack_into("<IIQQQQIIQQ",raw,128,0,1,6,0,192,8,0,0,8,0)
+        return bytes(raw)
+
     def fixture():
         payloads = {RUSTC[1:]: elf_fixture(), LLD[1:]: elf_fixture(),
                     (MUSL + "libstd-fixture.rlib")[1:]: b"!<arch>\nfixture",
                     }
+        payloads.update({path[1:]: object_fixture() for path in LINK_OBJECTS})
         notice_values = unique_json(Path(__file__).with_name("compiler-notices.json").read_bytes())
         notices = {}
         for name, (size, sha256) in ARCHIVE_NOTICES.items():
@@ -451,7 +466,7 @@ def self_test():
                 "size": len(value), "sha256": hashlib.sha256(value).hexdigest(), "mode": 0o444}
         declared = {}
         graph = {}
-        for path in (RUSTC, LLD, MUSL + "libstd-fixture.rlib"):
+        for path in (RUSTC, LLD, MUSL + "libstd-fixture.rlib", *sorted(LINK_OBJECTS)):
             value = payloads[path[1:]]
             declared[path] = {"size": len(value), "sha256": hashlib.sha256(value).hexdigest(),
                               "mode": 0o555 if path in (RUSTC, LLD) else 0o444, "source": path}
@@ -548,6 +563,25 @@ def self_test():
 
     class Tests(unittest.TestCase):
 
+
+        def test_all_link_objects_are_required(self):
+            config,report,payloads = fixture()
+            result = inspect(*image_bytes(config,report,payloads))
+            self.assertEqual({"/"+name for name,item in result["files"].items()
+                              if item.get("relocatable") is True}, LINK_OBJECTS)
+            for missing in ([path] for path in sorted(LINK_OBJECTS)):
+                config,report,payloads = fixture()
+                for path in missing:
+                    report["total_bytes"] -= report["files"].pop(path)["size"]
+                    del payloads[path[1:]]
+                with self.assertRaisesRegex(Invalid,"required exact linker-object set"):
+                    inspect(*image_bytes(config,report,payloads))
+            config,report,payloads = fixture()
+            for path in LINK_OBJECTS:
+                report["total_bytes"] -= report["files"].pop(path)["size"]
+                del payloads[path[1:]]
+            with self.assertRaisesRegex(Invalid,"required exact linker-object set"):
+                inspect(*image_bytes(config,report,payloads))
         def test_relocatable_link_input_has_no_runtime_role(self):
             def object_bytes():
                 raw = bytearray(200);raw[:7] = b"\x7fELF\x02\x01\x01"
@@ -586,7 +620,7 @@ def self_test():
             raw, identity = image_bytes(*fixture())
             result = inspect(raw, identity)
             self.assertEqual(result["state"], "inspected-not-activated")
-            self.assertEqual(len(result["files"]), 12)
+            self.assertEqual(len(result["files"]), 21)
             self.assertEqual(result["directories"]["build"], (0o700, 65532, 65532, EPOCH))
 
         def test_required_notices_cannot_be_omitted_even_with_consistent_report(self):

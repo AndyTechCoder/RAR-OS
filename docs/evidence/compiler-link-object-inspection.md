@@ -49,3 +49,15 @@ construction remain required. Errors now include the member path and reason.
 
 No new runtime profile, target dependency, persistent-data contract, disk access,
 host write authority or compiler/adapter activation is introduced.
+
+## Independent review remediation
+
+The inventory requires the exact nine-object set in both declarations and
+actual classified image files, not merely an allowlist. The base full-image
+fixture now contains all nine; missing-each and missing-all images fail even
+when their reports and totals are adjusted consistently.
+
+Focused parser fixtures additionally cover positive SYMTAB, REL and RELA
+framing, bad strides/links/target indices, malformed section-name tables and
+indices, missing/unterminated/overlong names, and an executable GNU-stack note.
+These close source-review gaps without broadening the runtime ELF parser.
