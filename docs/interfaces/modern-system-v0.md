@@ -134,8 +134,9 @@ detected by this format and is explicitly not an Alpha claim.
 
 ## Publication, failure and repair obligations
 
-The current library only plans records; no disk driver or durability claim exists.
-The future System service must write only the inactive payload/manifest slot,
+The library plans records and provides a bounded selector-publication primitive
+through a two-record SelectorIo interface. No native disk driver or guest durability
+proof exists. The future System service must write only the inactive payload/manifest slot,
 flush and read back/verify it, run candidate health, and publish the next record
 into the older selector sector only after required lifecycle preparation.
 Flush and read back that selector before reporting durable commit. Never mutate
@@ -173,3 +174,27 @@ not installed yet. Future incompatible versions must be explicitly rejected and
 require a reviewed read/export/migration path; never silently reinterpret,
 rewrite or erase unknown data. Codec, signature policy, journal planning,
 block transport, lifecycle and UI remain separately replaceable.
+
+## Selector publication primitive (not runtime activation)
+
+Journal::mount reads the two records and never writes. Selection remains
+provisional: signed image verification is still mandatory. Journal::commit
+accepts only a legal immediate successor of its mounted record, re-reads both
+records to refuse changed/ambiguous media, writes only the alternate selector,
+flushes, reads both back, requires exact new bytes and an unchanged protected
+record, and only then acknowledges and advances its in-memory selection.
+
+Any observed-media or I/O failure locks the instance read-only. Errors from the
+first attempted write onward are Indeterminate: reboot may select either complete
+state, and absence of an ACK must not be interpreted as absence of a commit.
+There is no retry, repair, format, payload write or Data handle in this primitive.
+Invalid successor requests are rejected before I/O without poisoning the instance.
+
+The System service remains responsible for exclusive ownership, durable inactive
+payload/manifest staging, exact re-verification and lifecycle/health preparation
+before committing. This helper supplies none of those capabilities or guarantees.
+The two-valued selector address is local to an eventual fixed System adapter;
+it cannot carry a user-selected disk/LBA. Actual kernel authority, device ordering
+and cloud cut-point proofs remain required. Cloud source tests exercise each I/O
+boundary, all 513 prefix tears, first/subsequent installs, fallback, no retries,
+unchanged active selector, invalid transitions and changed media.

@@ -1,4 +1,4 @@
-//! Modern-v0 System selector codec/transition model. No block I/O or Data handle.
+//! Modern-v0 System selector codec and bounded publication. No native I/O or Data handle.
 //! Checksums detect corruption, not malicious rewrites or wholesale rollback.
 use crate::{manifest::VerifiedLayer, sha256::sha256};
 
@@ -184,6 +184,80 @@ pub fn select(sectors:[&[u8];2])->Result<Selection,Reject> {
     }
 }
 
+
+/// Two selector records only, supplied by the System service's exclusive adapter.
+/// This typed interface contains no Data or arbitrary-sector selector. It is not
+/// itself a kernel capability boundary; its implementation must enforce ownership.
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub enum SelectorSector { First, Second }
+impl SelectorSector {
+    fn from_index(index:usize)->Self { if index==0 {Self::First}else{Self::Second} }
+}
+pub trait SelectorIo {
+    fn read(&mut self,sector:SelectorSector)->Result<[u8;SIZE],()>;
+    fn write(&mut self,sector:SelectorSector,bytes:&[u8;SIZE])->Result<(),()>;
+    fn flush(&mut self)->Result<(),()>;
+}
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub enum PublicationError { Io, Corrupt, Changed, Transition, ReadOnly, Indeterminate }
+
+/// Durable selector publication, not signature, health, or execution authority.
+/// Before commit the caller must durably stage and reverify the inactive signed
+/// image and complete lifecycle preparation/health. No API here can grant those
+/// rights. Mount and record selection remain provisional until layer verification.
+pub struct Journal<I:SelectorIo> {io:I,selected:Selection,readonly:bool}
+impl<I:SelectorIo> Journal<I> {
+    pub fn mount(mut io:I)->Result<Self,PublicationError> {
+        let first=io.read(SelectorSector::First).map_err(|_|PublicationError::Io)?;
+        let second=io.read(SelectorSector::Second).map_err(|_|PublicationError::Io)?;
+        let selected=select([&first,&second]).map_err(|_|PublicationError::Corrupt)?;
+        Ok(Self {io,selected,readonly:false})
+    }
+    pub fn record(&self)->Record {self.selected.record()}
+    pub fn is_readonly(&self)->bool {self.readonly}
+    pub fn into_io(self)->I {self.io}
+
+    pub fn commit(&mut self,next:Record)->Result<(),PublicationError> {
+        if self.readonly {return Err(PublicationError::ReadOnly);}
+        if !next.valid() || !next.follows(&self.selected.record) {
+            return Err(PublicationError::Transition);
+        }
+        let result=self.commit_inner(next);
+        // Any I/O or observed-media failure locks writes in this instance.
+        // An indeterminate publication may have committed despite no ACK.
+        if result.is_err(){self.readonly=true;}
+        result
+    }
+    fn commit_inner(&mut self,next:Record)->Result<(),PublicationError> {
+        let before=[
+            self.io.read(SelectorSector::First).map_err(|_|PublicationError::Io)?,
+            self.io.read(SelectorSector::Second).map_err(|_|PublicationError::Io)?,
+        ];
+        let current=select([&before[0],&before[1]]).map_err(|_|PublicationError::Corrupt)?;
+        if current!=self.selected {return Err(PublicationError::Changed);}
+        let target=self.selected.next_sector();
+        let bytes=next.encode();
+        // From the first attempted write onward, errors are indeterminate.
+        // Never overwrite the selected sector, retry, repair, or autoformat.
+        self.io.write(SelectorSector::from_index(target),&bytes)
+            .map_err(|_|PublicationError::Indeterminate)?;
+        self.io.flush().map_err(|_|PublicationError::Indeterminate)?;
+        let after=[
+            self.io.read(SelectorSector::First).map_err(|_|PublicationError::Indeterminate)?,
+            self.io.read(SelectorSector::Second).map_err(|_|PublicationError::Indeterminate)?,
+        ];
+        if after[target]!=bytes || after[self.selected.sector()]!=before[self.selected.sector()] {
+            return Err(PublicationError::Indeterminate);
+        }
+        let selected=select([&after[0],&after[1]]).map_err(|_|PublicationError::Indeterminate)?;
+        if selected.record()!=next || selected.sector()!=target {
+            return Err(PublicationError::Indeterminate);
+        }
+        self.selected=selected;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -266,4 +340,96 @@ mod tests {
             assert!(Record::decode(&b).is_err(),"{offset}");
         }
     }
+
+    #[derive(Clone)]
+    struct Media {live:[[u8;SIZE];2],stable:[[u8;SIZE];2],calls:usize,
+        fail:usize,tear:usize,flush_after:bool,writes:Vec<SelectorSector>}
+    impl Media {
+        fn new(sectors:[[u8;SIZE];2])->Self {Self {live:sectors,stable:sectors,
+            calls:0,fail:0,tear:0,flush_after:false,writes:vec![]}}
+        fn hit(&mut self)->bool {self.calls+=1;self.calls==self.fail}
+        fn reboot(mut self)->Self {self.live=self.stable;self.calls=0;self.fail=0;self}
+    }
+    impl SelectorIo for Media {
+        fn read(&mut self,sector:SelectorSector)->Result<[u8;SIZE],()> {
+            if self.hit(){return Err(());}
+            Ok(self.live[if sector==SelectorSector::First {0}else{1}])
+        }
+        fn write(&mut self,sector:SelectorSector,bytes:&[u8;SIZE])->Result<(),()> {
+            self.writes.push(sector);
+            let index=if sector==SelectorSector::First {0}else{1};
+            if self.hit() {
+                self.live[index][..self.tear].copy_from_slice(&bytes[..self.tear]);
+                self.stable[index][..self.tear].copy_from_slice(&bytes[..self.tear]);
+                return Err(());
+            }
+            self.live[index]=*bytes;Ok(())
+        }
+        fn flush(&mut self)->Result<(),()> {
+            let fail=self.hit();
+            if !fail||self.flush_after {self.stable=self.live;}
+            if fail {Err(())}else{Ok(())}
+        }
+    }
+    #[test] fn selector_publication_flush_readback_and_fresh_mount() {
+        let (a,b,c)=chain();
+        let mut journal=Journal::mount(Media::new([a.encode(),[0;SIZE]])).unwrap();
+        assert!(journal.io.writes.is_empty());
+        journal.commit(b).unwrap();
+        assert_eq!(journal.record(),b);
+        assert_eq!(journal.io.writes,vec![SelectorSector::Second]);
+        let mut journal=Journal::mount(journal.into_io().reboot()).unwrap();
+        assert_eq!(journal.record(),b);
+        journal.commit(c).unwrap();
+        assert_eq!(journal.io.writes,vec![SelectorSector::Second,SelectorSector::First]);
+        assert_eq!(Journal::mount(journal.into_io().reboot()).unwrap().record(),c);
+    }
+    fn publication_fault(sectors:[[u8;SIZE];2],old:Record,next:Record,
+                         operation:usize,tear:usize,after:bool) {
+        let mut journal=Journal::mount(Media::new(sectors)).unwrap();
+        let protected=journal.selected.sector();
+        journal.io.calls=0;journal.io.fail=operation;
+        journal.io.tear=tear;journal.io.flush_after=after;
+        assert_eq!(journal.commit(next),Err(if operation<=2 {PublicationError::Io}
+            else {PublicationError::Indeterminate}));
+        assert_eq!(journal.record(),old);assert!(journal.is_readonly());
+        assert_eq!(journal.io.stable[protected],sectors[protected]);
+        let calls=journal.io.calls;let writes=journal.io.writes.clone();
+        assert_eq!(journal.commit(next),Err(PublicationError::ReadOnly));
+        assert_eq!(journal.io.calls,calls);assert_eq!(journal.io.writes,writes);
+        let recovered=Journal::mount(journal.into_io().reboot()).unwrap();
+        assert!(recovered.record()==old||recovered.record()==next);
+        assert_eq!(recovered.io.stable[protected],sectors[protected]);
+    }
+    #[test] fn every_publication_io_boundary_and_sector_prefix_recovers_old_or_new() {
+        let (a,b,c)=chain();
+        for (sectors,old,next) in [
+            ([a.encode(),[0;SIZE]],a,b),
+            ([a.encode(),b.encode()],b,c),
+            ([a.encode(),b.encode()],b,b.fallback().unwrap()),
+        ] {
+            for operation in 1..=6 {for after in [false,true] {
+                publication_fault(sectors,old,next,operation,255,after);
+            }}
+            for tear in 0..=SIZE {publication_fault(sectors,old,next,3,tear,false);}
+        }
+    }
+    #[test] fn selector_refuses_stale_transition_and_changed_media_without_writes() {
+        let (a,b,c)=chain();
+        let mut journal=Journal::mount(Media::new([a.encode(),[0;SIZE]])).unwrap();
+        let calls=journal.io.calls;
+        for bad in [a,c] {
+            assert_eq!(journal.commit(bad),Err(PublicationError::Transition));
+            assert_eq!(journal.io.calls,calls);assert!(!journal.is_readonly());
+        }
+        journal.io.live[1]=b.encode();
+        assert_eq!(journal.commit(b),Err(PublicationError::Changed));
+        assert!(journal.is_readonly());assert!(journal.io.writes.is_empty());
+        for fail in [1,2] {
+            let mut media=Media::new([a.encode(),[0;SIZE]]);media.fail=fail;
+            assert!(matches!(Journal::mount(media),Err(PublicationError::Io)));
+        }
+        assert!(matches!(Journal::mount(Media::new([[0;SIZE];2])),Err(PublicationError::Corrupt)));
+    }
+
 }
