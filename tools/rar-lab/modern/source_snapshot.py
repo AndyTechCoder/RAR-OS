@@ -131,13 +131,17 @@ def build_from_objects(revision, commit, trees, blobs):
     report["source_tree"] = root
     report["source_commit_sha256"] = hashlib.sha256(commit).hexdigest()
     report["git_blobs"] = identities
+    report["source_commit_size"] = len(commit)
+    report["git_trees"] = {oid: {"sha256": hashlib.sha256(trees[oid]).hexdigest(),
+                                  "size": len(trees[oid])} for oid in sorted(used_trees)}
     return layer, report
 
 def self_test():
     import unittest
 
-    def object_fixture(change_path=None, extra_blob=False, change_mode=b"100755", lfs=False):
+    def object_fixture(change_path=None, extra_blob=False, change_mode=b"100755", lfs=False, values=None):
         source={path: ("// "+path+"\n").encode() for path in FILES}
+        if values is not None: source=dict(zip(sorted(FILES),values))
         if lfs: source[sorted(FILES)[0]]=b"version https://git-lfs.github.com/spec/v1\noid sha256:fixture\n"
         trees={};blobs={};root={}
         for path,value in source.items():
@@ -175,6 +179,10 @@ def self_test():
             self.assertEqual(report["source_tree"],commit.splitlines()[0][5:].decode())
             self.assertEqual(report["git_blobs"],{p:_git_hash(b"blob",v) for p,v in source.items()})
             self.assertEqual(report["source_commit_sha256"],hashlib.sha256(commit).hexdigest())
+            self.assertEqual(report["source_commit_size"],len(commit))
+            self.assertEqual(list(report["git_trees"]),sorted(trees))
+            self.assertEqual(report["git_trees"],{k:{"sha256":hashlib.sha256(v).hexdigest(),
+                                                    "size":len(v)} for k,v in trees.items()})
         def test_git_labels_corruption_missing_and_extra_objects_refused(self):
             revision,commit,trees,blobs,_=object_fixture()
             with self.assertRaises(Invalid): build_from_objects("f"*40,commit,trees,blobs)
@@ -194,6 +202,36 @@ def self_test():
                 r,c,t,b,_=object_fixture(change_path=path)
                 with self.assertRaises(Invalid): build_from_objects(r,c,t,b)
 
+
+        def test_unused_objects_and_resource_boundaries(self):
+            r,c,t,b,_=object_fixture(values=[b"// shared"]*5,extra_blob=True)
+            with self.assertRaisesRegex(Invalid,"unneeded Git objects"):
+                build_from_objects(r,c,t,b)
+            r,c,t,b,_=object_fixture()
+            extra=b"100644 unused\0"+bytes.fromhex(next(iter(b)))
+            additional=dict(t);additional[_git_hash(b"tree",extra)]=extra
+            with self.assertRaisesRegex(Invalid,"unneeded Git objects"):
+                build_from_objects(r,c,additional,b)
+            additional=dict(t)
+            for n in range(33):
+                raw=b"100644 unused"+str(n).encode()+b"\0"+bytes(20)
+                additional[_git_hash(b"tree",raw)]=raw
+            with self.assertRaisesRegex(Invalid,"Git commit/object envelope"):
+                build_from_objects(r,c,additional,b)
+            additional=dict(t)
+            for n in range(17):
+                raw=bytes([n])*131072
+                additional[_git_hash(b"tree",raw)]=raw
+            with self.assertRaisesRegex(Invalid,"Git object identity/budget"):
+                build_from_objects(r,c,additional,b)
+            values=[b"a"*262144]+[bytes([n])*65536 for n in range(1,5)]
+            r,c,t,b,_=object_fixture(values=values)
+            build_from_objects(r,c,t,b)  # Exact per-blob and aggregate limits.
+            for index in [0,1]:
+                bad=list(values);bad[index]+=b"x"
+                r,c,t,b,_=object_fixture(values=bad)
+                with self.assertRaisesRegex(Invalid,"Git object identity/budget"):
+                    build_from_objects(r,c,t,b)
         def test_no_link_submodule_lfs_or_executable_source(self):
             for path in (sorted(FILES)[0],"core","tools/rar-lab"):
                 for mode in (b"100755",b"120000",b"160000"):

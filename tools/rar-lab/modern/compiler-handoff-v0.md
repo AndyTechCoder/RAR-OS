@@ -91,3 +91,9 @@ read the compiler role's visible files, so its complete positive inventory must
 contain no secrets, credentials or reference oracles. Compiled output remains
 hostile and separately confined. These boundaries avoid merging untested OS
 implementation merely to make testing possible.
+
+The report also inventories every used intermediate tree object by Git OID,
+SHA256 and size, in canonical OID order, and records commit byte length. The
+trusted parent must retain the raw commit and used tree/blob objects with the
+evidence so the complete root-to-leaf chain can be reconstructed independently.
+Unused objects and count/per-object/aggregate bounds have focused source tests.
