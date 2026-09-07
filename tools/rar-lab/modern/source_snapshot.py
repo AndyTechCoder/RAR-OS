@@ -50,9 +50,167 @@ def build(source, revision):
               "directories": sorted(directories)}
     return raw, report
 
+
+def _git_hash(kind, raw):
+    return hashlib.sha1(kind + b" " + str(len(raw)).encode("ascii") + b"\0" + raw).hexdigest()
+
+def _tree_entries(raw):
+    if type(raw) is not bytes or not 1 <= len(raw) <= 131072:
+        raise Invalid("Git tree budget")
+    entries = {}
+    at = 0
+    while at < len(raw):
+        space = raw.find(b" ", at)
+        end = raw.find(b"\0", space + 1)
+        if space < at or end < space or end + 21 > len(raw):
+            raise Invalid("Git tree framing")
+        mode, name = raw[at:space], raw[space + 1:end]
+        if (mode not in (b"40000", b"100644", b"100755", b"120000", b"160000") or
+            not 1 <= len(name) <= 255 or b"/" in name or name in (b".", b"..") or name in entries):
+            raise Invalid("Git tree entry")
+        entries[name] = (mode, raw[end + 1:end + 21].hex())
+        at = end + 21
+        if len(entries) > 4096:
+            raise Invalid("Git tree entry count")
+    return entries
+
+def build_from_objects(revision, commit, trees, blobs):
+    """Bind exact proposal blobs as data; caller separately selects the revision.
+    Obtain raw Git objects with replacement objects disabled, without checkout,
+    hooks, filters, attributes, LFS resolution or submodules. This function does
+    no acquisition and trusts neither filenames nor object-ID labels alone.
+    """
+    if (type(revision) is not str or re.fullmatch(r"[0-9a-f]{40}", revision) is None or
+        type(commit) is not bytes or not 1 <= len(commit) <= 65536 or
+        _git_hash(b"commit", commit) != revision or type(trees) is not dict or
+        type(blobs) is not dict or not 1 <= len(trees) <= 32 or not 1 <= len(blobs) <= 5):
+        raise Invalid("Git commit/object envelope")
+    header = commit.split(b"\n\n", 1)[0].split(b"\n")
+    if (not header or re.fullmatch(b"tree [0-9a-f]{40}", header[0]) is None or
+        sum(line.startswith(b"tree ") for line in header) != 1):
+        raise Invalid("Git commit tree")
+    for objects, kind, maximum, total in ((trees, b"tree", 131072, 2097152),
+                                         (blobs, b"blob", 262144, 524288)):
+        if (any(type(key) is not str or re.fullmatch(r"[0-9a-f]{40}", key) is None or
+                type(raw) is not bytes or not 1 <= len(raw) <= maximum or
+                _git_hash(kind, raw) != key for key, raw in objects.items()) or
+            sum(map(len, objects.values())) > total):
+            raise Invalid("Git object identity/budget")
+    root = header[0][5:].decode("ascii")
+    used_trees = set()
+    used_blobs = set()
+    source = {}
+    identities = {}
+    for path in sorted(FILES):
+        tree = root
+        parts = path.encode("ascii").split(b"/")
+        for number, component in enumerate(parts):
+            if tree not in trees:
+                raise Invalid("missing Git tree")
+            used_trees.add(tree)
+            entry = _tree_entries(trees[tree]).get(component)
+            if entry is None:
+                raise Invalid("missing fixed Git path")
+            mode, oid = entry
+            if number + 1 < len(parts):
+                if mode != b"40000":
+                    raise Invalid("Git source directory mode")
+                tree = oid
+            else:
+                if mode != b"100644" or oid not in blobs:
+                    raise Invalid("Git source regular blob")
+                raw = blobs[oid]
+                if raw.startswith(b"version https://git-lfs.github.com/spec/v1\n"):
+                    raise Invalid("LFS source pointer")
+                used_blobs.add(oid)
+                source[path] = raw
+                identities[path] = oid
+    if used_trees != set(trees) or used_blobs != set(blobs):
+        raise Invalid("unneeded Git objects")
+    layer, report = build(source, revision)
+    report["source_tree"] = root
+    report["source_commit_sha256"] = hashlib.sha256(commit).hexdigest()
+    report["git_blobs"] = identities
+    return layer, report
+
 def self_test():
     import unittest
+
+    def object_fixture(change_path=None, extra_blob=False, change_mode=b"100755", lfs=False):
+        source={path: ("// "+path+"\n").encode() for path in FILES}
+        if lfs: source[sorted(FILES)[0]]=b"version https://git-lfs.github.com/spec/v1\noid sha256:fixture\n"
+        trees={};blobs={};root={}
+        for path,value in source.items():
+            cursor=root
+            parts=path.split("/")
+            for name in parts[:-1]:
+                cursor=cursor.setdefault(name,{})
+            cursor[parts[-1]]=value
+        def encode(node,prefix=""):
+            raw=bytearray()
+            for name,value in sorted(node.items(),key=lambda item:
+                    (item[0]+("/" if isinstance(item[1],dict) else "")).encode()):
+                path=prefix+name
+                if isinstance(value,dict):
+                    mode=b"40000";oid=encode(value,path+"/")
+                else:
+                    mode=b"100644"
+                    oid=_git_hash(b"blob",value);blobs[oid]=value
+                if path==change_path: mode=change_mode
+                raw.extend(mode+b" "+name.encode()+b"\0"+bytes.fromhex(oid))
+            raw=bytes(raw);oid=_git_hash(b"tree",raw);trees[oid]=raw;return oid
+        tree=encode(root)
+        commit=(b"tree "+tree.encode()+b"\nauthor RAR <lab@example.invalid> 1 +0000\n"
+                b"committer RAR <lab@example.invalid> 1 +0000\n\nfixture\n")
+        if extra_blob:
+            blobs[_git_hash(b"blob",b"extra")]=b"extra"
+        return _git_hash(b"commit",commit),commit,trees,blobs,source
+
     class Tests(unittest.TestCase):
+
+        def test_exact_git_object_source_binding(self):
+            revision,commit,trees,blobs,source=object_fixture()
+            layer,report=build_from_objects(revision,commit,trees,blobs)
+            self.assertEqual(layer,build(source,revision)[0])
+            self.assertEqual(report["source_tree"],commit.splitlines()[0][5:].decode())
+            self.assertEqual(report["git_blobs"],{p:_git_hash(b"blob",v) for p,v in source.items()})
+            self.assertEqual(report["source_commit_sha256"],hashlib.sha256(commit).hexdigest())
+        def test_git_labels_corruption_missing_and_extra_objects_refused(self):
+            revision,commit,trees,blobs,_=object_fixture()
+            with self.assertRaises(Invalid): build_from_objects("f"*40,commit,trees,blobs)
+            with self.assertRaises(Invalid): build_from_objects(revision,commit+b"x",trees,blobs)
+            for objects in (trees,blobs):
+                key=next(iter(objects))
+                for replacement in (b"x",None):
+                    bad=dict(objects)
+                    if replacement is None: bad.pop(key)
+                    else: bad[key]=replacement
+                    with self.assertRaises(Invalid):
+                        build_from_objects(revision,commit,bad if objects is trees else trees,
+                                           bad if objects is blobs else blobs)
+            r,c,t,b,_=object_fixture(extra_blob=True)
+            with self.assertRaises(Invalid): build_from_objects(r,c,t,b)
+            for path in FILES:
+                r,c,t,b,_=object_fixture(change_path=path)
+                with self.assertRaises(Invalid): build_from_objects(r,c,t,b)
+
+        def test_no_link_submodule_lfs_or_executable_source(self):
+            for path in (sorted(FILES)[0],"core","tools/rar-lab"):
+                for mode in (b"100755",b"120000",b"160000"):
+                    r,c,t,b,_=object_fixture(change_path=path,change_mode=mode)
+                    with self.assertRaises(Invalid): build_from_objects(r,c,t,b)
+            r,c,t,b,_=object_fixture(lfs=True)
+            with self.assertRaises(Invalid): build_from_objects(r,c,t,b)
+            r,c,t,b,_=object_fixture()
+            duplicate=c.split(b"\n",1)[0]+b"\n"+c
+            with self.assertRaises(Invalid):
+                build_from_objects(_git_hash(b"commit",duplicate),duplicate,t,b)
+        def test_git_tree_framing_and_duplicate_paths(self):
+            entry=b"100644 file\0"+bytes.fromhex("a"*40)
+            self.assertEqual(_tree_entries(entry),{b"file":(b"100644","a"*40)})
+            for raw in (entry+entry,entry[:-1],b"100644 ../file\0"+bytes(20),
+                        b"000000 file\0"+bytes(20),b"40000\0"+bytes(20)):
+                with self.assertRaises(Invalid): _tree_entries(raw)
         def test_exact_reproducible_readonly_layer(self):
             source = {path: ("// " + path + "\n").encode() for path in FILES}
             raw, report = build(source, "a" * 40)

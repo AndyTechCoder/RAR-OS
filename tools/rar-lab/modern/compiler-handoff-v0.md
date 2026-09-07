@@ -36,8 +36,10 @@ can substitute for that construction proof.
 
 ## Remaining integration gates
 
-- Bind exact five source files to trusted-main Git tree/blob identities and
-  immutable source-layer bytes, not arbitrary checkout content or labels.
+- Bind the exact five source files to a coordinator-selected immutable proposal
+  commit/tree/blob identity and source-layer bytes, not arbitrary checkout
+  content, moving references or caller labels. Control-plane code stays on
+  exact reviewed main; proposal source need not be merged before testing.
 - Inspect the full new config/rootfs: exact parent prefix, this driver layer,
   exact source layer, no other additions, exact process environment/entrypoint.
 - Independently bind required Rust-std/musl and RAR notices to driver provenance.
@@ -65,3 +67,27 @@ establish provenance. The caller's read-only source mount prevents changes
 between identity measurement and import. Both sources are bounded at128KiB.
 Focused tests cover aggregate multi-LOAD limits, address/offset congruence,
 ambiguous executable entry mappings, no-bytecode refusal and the exact2MiB limit.
+
+## Proposal source object binding
+
+source_snapshot.build_from_objects verifies the selected commit's raw Git object
+identity, its root-tree relationship, bounded raw tree/blob identities, and every
+component of each fixed path. Intermediate entries must be directories and all
+five leaves must be regular100644 blobs. Missing/extra objects, wrong hashes,
+duplicate names, malformed trees, executable/link/submodule source entries and
+LFS pointers fail. No checkout, filters, hooks, attributes or LFS resolution runs.
+The source-layer report binds the commit SHA256, root tree, five blob identities,
+per-file SHA256/size and canonical layer digest.
+
+The controller selects the immutable canonical-repository proposal commit and
+obtains raw objects with replacement objects disabled. This pure function does
+not authenticate the repository or choose/approve a revision. Compiler helper,
+driver, parser, inventories and launch commands remain exact reviewed-main code.
+The proposal contributes only bounded source bytes, never paths or commands.
+
+Before release, compare final main's five blob IDs/SHA256 values with the tested
+proposal and rerun comparisons if any differ. Rust compile-time built-ins can
+read the compiler role's visible files, so its complete positive inventory must
+contain no secrets, credentials or reference oracles. Compiled output remains
+hostile and separately confined. These boundaries avoid merging untested OS
+implementation merely to make testing possible.
