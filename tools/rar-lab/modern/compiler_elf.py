@@ -132,6 +132,60 @@ def inspect(raw):
     return {"kind": kind, "interpreter": interpreter, "needed": needed,
             "soname": soname, "search": search}
 
+
+def inspect_relocatable(raw):
+    """Classify a bounded host linker input; never treat it as a runtime ELF.
+    This is structural framing, not a complete linker semantic validation.
+    """
+    if (type(raw) is not bytes or not 64 <= len(raw) <= 1024 * 1024 or
+        raw[:7] != b"\x7fELF\x02\x01\x01"):
+        raise Invalid("object size/class/encoding")
+    kind, machine, version = struct.unpack_from("<HHI", raw, 16)
+    entry, phoff, shoff = struct.unpack_from("<QQQ", raw, 24)
+    flags = struct.unpack_from("<I", raw, 48)[0]
+    ehsize, phsize, phnum, shsize, shnum, names = struct.unpack_from("<6H", raw, 52)
+    if (kind != 1 or machine != 62 or version != 1 or entry != 0 or phoff != 0 or
+        phsize != 0 or phnum != 0 or flags != 0 or ehsize != 64 or shsize != 64 or
+        not 1 <= shnum <= 1024 or shoff < 64 or shoff % 8 or
+        shoff + shnum * 64 > len(raw) or names >= shnum):
+        raise Invalid("object header/section table")
+    sections = [struct.unpack_from("<IIQQQQIIQQ", raw, shoff + i * 64)
+                for i in range(shnum)]
+    if any(sections[0]):
+        raise Invalid("object null/extended section")
+    for i, section in enumerate(sections[1:], 1):
+        name, typ, flags, address, offset, size, link, info, alignment, stride = section
+        if (typ in (0, 6, 11) or address != 0 or flags & 5 == 5 or
+            size > 16 * 1024 * 1024 or link >= shnum or
+            alignment > 2 * 1024 * 1024 or
+            (alignment and alignment & (alignment - 1)) or
+            (typ != 8 and offset + size > len(raw)) or
+            (typ == 8 and offset > len(raw)) or (stride and size % stride)):
+            raise Invalid("object section bounds/authority")
+        if typ == 2 and (stride != 24 or sections[link][1] != 3 or info > size // 24):
+            raise Invalid("object symbol framing")
+        if typ in (4, 9) and (stride != (24 if typ == 4 else 16) or
+                             sections[link][1] != 2 or not 0 < info < shnum):
+            raise Invalid("object relocation framing")
+    if names:
+        table = sections[names]
+        if table[1] != 3:
+            raise Invalid("object section-name table")
+        start, size = table[4], table[5]
+        strings = raw[start:start + size]
+        if not strings or strings[0] != 0:
+            raise Invalid("object section-name framing")
+        for section in sections:
+            index = section[0]
+            end = strings.find(b"\0", index) if index < len(strings) else -1
+            if end < 0 or end - index > 256:
+                raise Invalid("object section-name bounds")
+            if strings[index:end] == b".note.GNU-stack" and section[2] & 4:
+                raise Invalid("object executable stack request")
+    elif any(section[0] for section in sections):
+        raise Invalid("object names without table")
+    return {"kind": 1, "sections": shnum, "state": "link-input-not-executable"}
+
 def self_test():
     import unittest
     def fixture(entries=None, strings=b"\0libc.so.6\0$ORIGIN\0"):
@@ -149,7 +203,37 @@ def self_test():
             struct.pack_into("<QQ", raw, 256 + index * 16, tag, value)
         raw[384:384 + len(strings)] = strings
         return bytes(raw)
+
+    def object_fixture():
+        raw = bytearray(200)
+        raw[:7] = b"\x7fELF\x02\x01\x01"
+        struct.pack_into("<HHI", raw, 16, 1, 62, 1)
+        struct.pack_into("<Q", raw, 40, 64)
+        struct.pack_into("<6H", raw, 52, 64, 0, 0, 64, 2, 0)
+        struct.pack_into("<IIQQQQIIQQ", raw, 128, 0, 1, 6, 0, 192, 8, 0, 0, 8, 0)
+        return bytes(raw)
+
     class Tests(unittest.TestCase):
+
+        def test_relocatable_is_not_runtime_executable(self):
+            raw = object_fixture()
+            self.assertEqual(inspect_relocatable(raw)["state"], "link-input-not-executable")
+            with self.assertRaises(Invalid): inspect(raw)
+            with self.assertRaises(Invalid): inspect_relocatable(fixture())
+        def test_relocatable_header_and_section_negatives(self):
+            raw = object_fixture()
+            for offset, fmt, value in ((16,"<H",2),(18,"<H",183),(24,"<Q",1),
+                (32,"<Q",64),(48,"<I",1),(54,"<H",56),(56,"<H",1),
+                (58,"<H",63),(60,"<H",0),(60,"<H",1025),(62,"<H",2),
+                (40,"<Q",2**63),(64,"<I",1),(132,"<I",6),(132,"<I",11),
+                (136,"<Q",7),(144,"<Q",4096),(152,"<Q",2**63),
+                (160,"<Q",2**63),(168,"<I",2),(176,"<Q",3)):
+                bad = bytearray(raw); struct.pack_into(fmt,bad,offset,value)
+                with self.subTest(offset=offset,value=value), self.assertRaises(Invalid):
+                    inspect_relocatable(bytes(bad))
+            for n in range(len(raw)):
+                with self.assertRaises(Invalid): inspect_relocatable(raw[:n])
+            with self.assertRaises(Invalid): inspect_relocatable(raw + bytes(1024*1024))
         def test_dependency_and_search_are_parsed_from_bytes(self):
             result = inspect(fixture())
             self.assertEqual(result["needed"], ["libc.so.6"])

@@ -22,6 +22,9 @@ DEFAULT_DIRS = ("/lib/x86_64-linux-gnu", "/usr/lib/x86_64-linux-gnu",
 OMITTED_MUSL = {"source": MUSL + "libstd-286e4795762d614b.so", "size": 5369608,
                 "sha256": "5a1f8cfcc59c4cafc031df4f648b20fb1674cc190c8b40b8d391c33ad3e391d1",
                 "reason": "static-musl-only"}
+LINK_OBJECTS = frozenset(MUSL + "self-contained/" + name for name in (
+    "Scrt1.o", "crt1.o", "crtbegin.o", "crtbeginS.o", "crtend.o", "crtendS.o",
+    "crti.o", "crtn.o", "rcrt1.o"))
 EPOCH = 1785715200
 LIMIT = 2 * 1024 * 1024 * 1024
 
@@ -151,6 +154,13 @@ def validate(config, report, files, directories):
         if (actual is None or any(actual[k] != entry[k] for k in ("size", "sha256", "mode")) or
             actual["uid"] != 0 or actual["gid"] != 0 or actual["mtime"] != EPOCH):
             raise Invalid("runtime bytes/metadata mismatch")
+        object_flag = actual.get("relocatable", False)
+        if type(object_flag) is not bool:
+            raise Invalid("object classification type")
+        if path.endswith(".o") or object_flag:
+            if (path not in LINK_OBJECTS or entry["source"] != path or
+                entry["mode"] != 0o444 or object_flag is not True or actual["elf"] is not None):
+                raise Invalid("link object outside fixed readonly input role")
         total += entry["size"]
     if total > 1610612736 or type(report.get("total_bytes")) is not int or report["total_bytes"] != total:
         raise Invalid("runtime byte total")
@@ -382,12 +392,21 @@ def inspect(raw, image):
                             value = stream_file.read(item.size + 1)
                             if len(value) != item.size: raise Invalid("image payload length")
                             elf = None
-                            if value.startswith(b"\x7fELF"):
+                            relocatable = False
+                            if name.startswith(MUSL[1:]) and name.endswith(".o"):
+                                if "/" + name not in LINK_OBJECTS or item.mode != 0o444:
+                                    raise Invalid("unapproved link object: " + name)
+                                try: elf_reader.inspect_relocatable(value)
+                                except ValueError as exc:
+                                    raise Invalid("compiler link object rejected: " + name + ": " + str(exc)) from exc
+                                relocatable = True
+                            elif value.startswith(b"\x7fELF"):
                                 try: elf = elf_reader.inspect(value)
-                                except ValueError as exc: raise Invalid("compiler ELF rejected") from exc
+                                except ValueError as exc:
+                                    raise Invalid("compiler runtime ELF rejected: " + name + ": " + str(exc)) from exc
                             files[name] = {"size": item.size, "sha256": hashlib.sha256(value).hexdigest(),
                                            "mode": item.mode, "uid": item.uid, "gid": item.gid,
-                                           "mtime": item.mtime, "elf": elf}
+                                           "mtime": item.mtime, "elf": elf, "relocatable": relocatable}
                             if name == "evidence/compiler-closure.json":
                                 if len(value) > 8 * 1024 * 1024: raise Invalid("report size")
                                 report = unique_json(value)
@@ -528,6 +547,41 @@ def self_test():
                           for name, value in (("manifest.json", manifest), ("config.json", cb), ("layer.tar", layer))]), image
 
     class Tests(unittest.TestCase):
+
+        def test_relocatable_link_input_has_no_runtime_role(self):
+            def object_bytes():
+                raw = bytearray(200);raw[:7] = b"\x7fELF\x02\x01\x01"
+                struct.pack_into("<HHI",raw,16,1,62,1)
+                struct.pack_into("<Q",raw,40,64)
+                struct.pack_into("<6H",raw,52,64,0,0,64,2,0)
+                struct.pack_into("<IIQQQQIIQQ",raw,128,0,1,6,0,192,8,0,0,8,0)
+                return bytes(raw)
+            value = object_bytes()
+            def add(path, mode=0o444, source=None):
+                config, report, payloads = fixture()
+                payloads[path[1:]] = value
+                report["files"][path] = {"source": source or path,"size":len(value),
+                    "sha256":hashlib.sha256(value).hexdigest(),"mode":mode}
+                report["total_bytes"] = sum(x["size"] for x in report["files"].values())
+                return config,report,payloads
+            for path in sorted(LINK_OBJECTS):
+                result = inspect(*image_bytes(*add(path)))
+                self.assertTrue(result["files"][path[1:]]["relocatable"])
+                self.assertIsNone(result["files"][path[1:]]["elf"])
+                with self.assertRaises(Invalid): inspect(*image_bytes(*add(path,0o555)))
+                with self.assertRaises(Invalid): inspect(*image_bytes(*add(path,source=MUSL+"elsewhere.o")))
+            for path in (MUSL+"unknown.o",SYSROOT+"/lib/other.o",RUSTC):
+                with self.assertRaises(Invalid): inspect(*image_bytes(*add(path)))
+            path = sorted(LINK_OBJECTS)[0]
+            config,report,payloads = add(path)
+            report["graph"][path] = {"needed":[],"interpreter":None,"resolved":[],"search_paths":[]}
+            with self.assertRaises(Invalid): inspect(*image_bytes(config,report,payloads))
+            config,report,payloads = add(path)
+            bad = bytearray(value);struct.pack_into("<H",bad,16,3)
+            payloads[path[1:]] = bytes(bad)
+            report["files"][path]["sha256"] = hashlib.sha256(bad).hexdigest()
+            with self.assertRaises(Invalid): inspect(*image_bytes(config,report,payloads))
+
         def test_full_positive_archive_is_inspected_not_activated(self):
             raw, identity = image_bytes(*fixture())
             result = inspect(raw, identity)
