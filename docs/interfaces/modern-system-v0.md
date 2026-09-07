@@ -198,3 +198,8 @@ it cannot carry a user-selected disk/LBA. Actual kernel authority, device orderi
 and cloud cut-point proofs remain required. Cloud source tests exercise each I/O
 boundary, all 513 prefix tears, first/subsequent installs, fallback, no retries,
 unchanged active selector, invalid transitions and changed media.
+
+Focused readback fixtures also simulate successful writes/flush followed by wrong
+target bytes or a corrupted protected selector. Each is indeterminate and locks
+writes with no retry; fresh mount selects the remaining valid complete record.
+A successful fallback test checks ACK, retained high-water and fresh mount.

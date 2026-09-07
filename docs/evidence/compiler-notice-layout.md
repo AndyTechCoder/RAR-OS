@@ -60,3 +60,31 @@ Full-image regressions cover each missing required notice with a correspondingly
 adjusted report, each redirected source, same-size and size-changing archive
 mutations with recomputed report hashes, wrong modes and mismatched image bytes.
 These tests require cloud CI before merge. Real construction remains pending.
+
+## Measured generated-report resource budget
+
+Construction run34022425904 at d360b650cc6bc5127030c574551cb20aee52d40b
+captured all three exact archive notices, then reported installed
+COPYRIGHT.html at 14,263,576 bytes and stopped at the former 1 MiB limit.
+The failed job101457317391 retained artifact9985946829 (ZIP38,705,098 bytes,
+SHA2560f4377cfdba4c67644f0ee472bb137e43d7c8e474014c096862144c9510cf01b).
+No candidate, adapter or OS execution occurred.
+
+Exporter and independent inspector now permit at most16 MiB for each of only
+the exact installed COPYRIGHT.html and COPYRIGHT-library.html source/destination
+pairs. Other notices remain limited to1 MiB, total notices to512, and aggregate
+notice bytes to48 MiB (two16 MiB generated slots plus16 MiB for other notices).
+The second generated file's actual size is not yet measured; the bound is a
+finite resource budget, not a claim about its size. Paths, required identities,
+actual-image byte checks, non-executable readonly metadata, image budgets and
+runtime authority are unchanged. No notice is truncated, split or omitted.
+
+Pure path/destination budget negatives and whole-image tests cover both generated
+files above1 MiB, rejection above16 MiB and ordinary-file rejection above1 MiB.
+The existing full-image, exact-notice and aggregate checks remain mandatory.
+Fresh cloud CI, independent review and actual construction must pass before
+candidate acceptance. This correction is not legal certification or activation.
+
+A separate inspected-metadata fixture tests aggregate acceptance below48 MiB
+and rejection above48 MiB without allocating that much inert notice content;
+it is not described as an actual-image byte proof.

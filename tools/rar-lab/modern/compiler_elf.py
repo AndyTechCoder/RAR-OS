@@ -132,6 +132,60 @@ def inspect(raw):
     return {"kind": kind, "interpreter": interpreter, "needed": needed,
             "soname": soname, "search": search}
 
+
+def inspect_relocatable(raw):
+    """Classify a bounded host linker input; never treat it as a runtime ELF.
+    This is structural framing, not a complete linker semantic validation.
+    """
+    if (type(raw) is not bytes or not 64 <= len(raw) <= 1024 * 1024 or
+        raw[:7] != b"\x7fELF\x02\x01\x01"):
+        raise Invalid("object size/class/encoding")
+    kind, machine, version = struct.unpack_from("<HHI", raw, 16)
+    entry, phoff, shoff = struct.unpack_from("<QQQ", raw, 24)
+    flags = struct.unpack_from("<I", raw, 48)[0]
+    ehsize, phsize, phnum, shsize, shnum, names = struct.unpack_from("<6H", raw, 52)
+    if (kind != 1 or machine != 62 or version != 1 or entry != 0 or phoff != 0 or
+        phsize != 0 or phnum != 0 or flags != 0 or ehsize != 64 or shsize != 64 or
+        not 1 <= shnum <= 1024 or shoff < 64 or shoff % 8 or
+        shoff + shnum * 64 > len(raw) or names >= shnum):
+        raise Invalid("object header/section table")
+    sections = [struct.unpack_from("<IIQQQQIIQQ", raw, shoff + i * 64)
+                for i in range(shnum)]
+    if any(sections[0]):
+        raise Invalid("object null/extended section")
+    for i, section in enumerate(sections[1:], 1):
+        name, typ, flags, address, offset, size, link, info, alignment, stride = section
+        if (typ in (0, 6, 11) or address != 0 or flags & 5 == 5 or
+            size > 16 * 1024 * 1024 or link >= shnum or
+            alignment > 2 * 1024 * 1024 or
+            (alignment and alignment & (alignment - 1)) or
+            (typ != 8 and offset + size > len(raw)) or
+            (typ == 8 and offset > len(raw)) or (stride and size % stride)):
+            raise Invalid("object section bounds/authority")
+        if typ == 2 and (stride != 24 or sections[link][1] != 3 or info > size // 24):
+            raise Invalid("object symbol framing")
+        if typ in (4, 9) and (stride != (24 if typ == 4 else 16) or
+                             sections[link][1] != 2 or not 0 < info < shnum):
+            raise Invalid("object relocation framing")
+    if names:
+        table = sections[names]
+        if table[1] != 3:
+            raise Invalid("object section-name table")
+        start, size = table[4], table[5]
+        strings = raw[start:start + size]
+        if not strings or strings[0] != 0:
+            raise Invalid("object section-name framing")
+        for section in sections:
+            index = section[0]
+            end = strings.find(b"\0", index) if index < len(strings) else -1
+            if end < 0 or end - index > 256:
+                raise Invalid("object section-name bounds")
+            if strings[index:end] == b".note.GNU-stack" and section[2] & 4:
+                raise Invalid("object executable stack request")
+    elif any(section[0] for section in sections):
+        raise Invalid("object names without table")
+    return {"kind": 1, "sections": shnum, "state": "link-input-not-executable"}
+
 def self_test():
     import unittest
     def fixture(entries=None, strings=b"\0libc.so.6\0$ORIGIN\0"):
@@ -149,7 +203,94 @@ def self_test():
             struct.pack_into("<QQ", raw, 256 + index * 16, tag, value)
         raw[384:384 + len(strings)] = strings
         return bytes(raw)
+
+    def object_fixture():
+        raw = bytearray(200)
+        raw[:7] = b"\x7fELF\x02\x01\x01"
+        struct.pack_into("<HHI", raw, 16, 1, 62, 1)
+        struct.pack_into("<Q", raw, 40, 64)
+        struct.pack_into("<6H", raw, 52, 64, 0, 0, 64, 2, 0)
+        struct.pack_into("<IIQQQQIIQQ", raw, 128, 0, 1, 6, 0, 192, 8, 0, 0, 8, 0)
+        return bytes(raw)
+
+
+    def detailed_object_fixture():
+        raw = bytearray(768); raw[:7] = b"\x7fELF\x02\x01\x01"
+        struct.pack_into("<HHI",raw,16,1,62,1)
+        struct.pack_into("<Q",raw,40,64)
+        struct.pack_into("<6H",raw,52,64,0,0,64,7,2)
+        strings = b"\0.text\0.shstrtab\0.strtab\0.symtab\0.rela.text\0.note.GNU-stack\0"
+        raw[520:520+len(strings)] = strings
+        raw[640:645] = b"\0sym\0"
+        def section(i,name,typ,flags,offset,size,link=0,info=0,alignment=1,stride=0):
+            struct.pack_into("<IIQQQQIIQQ",raw,64+i*64,
+                strings.index(name+b"\0"),typ,flags,0,offset,size,link,info,alignment,stride)
+        section(1,b".text",1,6,512,8,alignment=8)
+        section(2,b".shstrtab",3,0,520,len(strings))
+        section(3,b".strtab",3,0,640,5)
+        section(4,b".symtab",2,0,648,48,3,1,8,24)
+        section(5,b".rela.text",4,0,696,24,4,1,8,24)
+        section(6,b".note.GNU-stack",1,0,720,0)
+        return bytes(raw)
+
     class Tests(unittest.TestCase):
+
+
+        def test_object_symbol_relocation_and_names_positive(self):
+            raw = detailed_object_fixture()
+            self.assertEqual(inspect_relocatable(raw)["sections"],7)
+            rel = bytearray(raw)
+            struct.pack_into("<I",rel,64+5*64+4,9)
+            struct.pack_into("<Q",rel,64+5*64+32,16)
+            struct.pack_into("<Q",rel,64+5*64+56,16)
+            self.assertEqual(inspect_relocatable(bytes(rel))["sections"],7)
+        def test_object_symbol_relocation_framing_failures(self):
+            raw = detailed_object_fixture()
+            for section,field,fmt,value in (
+                (4,56,"<Q",16),(4,40,"<I",0),(4,40,"<I",7),(4,44,"<I",3),
+                (5,56,"<Q",16),(5,40,"<I",3),(5,44,"<I",0),(5,44,"<I",7)):
+                bad=bytearray(raw);struct.pack_into(fmt,bad,64+section*64+field,value)
+                with self.subTest(section=section,field=field,value=value), self.assertRaises(Invalid):
+                    inspect_relocatable(bytes(bad))
+            bad=bytearray(raw);struct.pack_into("<I",bad,64+5*64+4,9)
+            with self.assertRaises(Invalid):inspect_relocatable(bytes(bad))
+        def test_object_name_tables_and_executable_stack(self):
+            raw=detailed_object_fixture()
+            for offset,fmt,value in ((64+2*64+4,"<I",1),(64+1*64,"<I",10000),
+                                     (62,"<H",0),(64+6*64+8,"<Q",4)):
+                bad=bytearray(raw);struct.pack_into(fmt,bad,offset,value)
+                with self.assertRaises(Invalid):inspect_relocatable(bytes(bad))
+            bad=bytearray(raw);bad[520]=ord("x")
+            with self.assertRaises(Invalid):inspect_relocatable(bytes(bad))
+            size=struct.unpack_from("<Q",raw,64+2*64+32)[0]
+            bad=bytearray(raw);bad[520+size-1]=ord("x")
+            with self.assertRaises(Invalid):inspect_relocatable(bytes(bad))
+            bad=bytearray(raw);strings=b"\0"+b"a"*300+b"\0"
+            bad.extend(strings)
+            struct.pack_into("<Q",bad,64+2*64+24,len(raw))
+            struct.pack_into("<Q",bad,64+2*64+32,len(strings))
+            struct.pack_into("<I",bad,64+1*64,1)
+            with self.assertRaises(Invalid):inspect_relocatable(bytes(bad))
+
+        def test_relocatable_is_not_runtime_executable(self):
+            raw = object_fixture()
+            self.assertEqual(inspect_relocatable(raw)["state"], "link-input-not-executable")
+            with self.assertRaises(Invalid): inspect(raw)
+            with self.assertRaises(Invalid): inspect_relocatable(fixture())
+        def test_relocatable_header_and_section_negatives(self):
+            raw = object_fixture()
+            for offset, fmt, value in ((16,"<H",2),(18,"<H",183),(24,"<Q",1),
+                (32,"<Q",64),(48,"<I",1),(54,"<H",56),(56,"<H",1),
+                (58,"<H",63),(60,"<H",0),(60,"<H",1025),(62,"<H",2),
+                (40,"<Q",2**63),(64,"<I",1),(132,"<I",6),(132,"<I",11),
+                (136,"<Q",7),(144,"<Q",4096),(152,"<Q",2**63),
+                (160,"<Q",2**63),(168,"<I",2),(176,"<Q",3)):
+                bad = bytearray(raw); struct.pack_into(fmt,bad,offset,value)
+                with self.subTest(offset=offset,value=value), self.assertRaises(Invalid):
+                    inspect_relocatable(bytes(bad))
+            for n in range(len(raw)):
+                with self.assertRaises(Invalid): inspect_relocatable(raw[:n])
+            with self.assertRaises(Invalid): inspect_relocatable(raw + bytes(1024*1024))
         def test_dependency_and_search_are_parsed_from_bytes(self):
             result = inspect(fixture())
             self.assertEqual(result["needed"], ["libc.so.6"])

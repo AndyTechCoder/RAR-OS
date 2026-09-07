@@ -8,15 +8,18 @@ See docs/interfaces/modern-system-v0.md for exact bytes and failure rules.
   untrusted; verified immutable bytes still are not kernel execution authority.
 - journal.rs: canonical checksummed System selection records, two-record
   selection, monotonic install high-water, and explicit authorized fallback
-  planning. No disk I/O, encryption, data migration, health or durable commit.
+  planning. Journal adds bounded alternate-record publication over SelectorIo:
+  pre-read, write, flush, exact readback and acknowledgement. No native disk
+  driver, encryption, data migration, health or execution authority.
 - lib.rs: safe modules and reused RAR crypto/PE code; forbids unsafe code.
   No external target dependencies, allocation or local execution.
 
 Focused tests run only in the existing isolated cloud Specifications container.
-The same sources compile as no_std. Record faults are model tests; they do not
-claim real block writes, reboot persistence, atomic lifecycle or recovery.
-A positive signed-package reference fixture and end-to-end runtime gates remain
-required before activation. No production trust or cryptographic audit claim.
+The same sources compile as no_std. Record and I/O faults are model tests;
+they do not claim real device flush ordering, reboot persistence, atomic
+lifecycle or recovery. A positive signed-package reference fixture and
+end-to-end runtime gates remain required before activation.
+No production trust or cryptographic audit claim.
 
 Replacement: retain the explicit experimental contract and conformance corpus.
 Never link the host-only reference implementations into these modules.

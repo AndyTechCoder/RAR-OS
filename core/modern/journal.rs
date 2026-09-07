@@ -343,10 +343,10 @@ mod tests {
 
     #[derive(Clone)]
     struct Media {live:[[u8;SIZE];2],stable:[[u8;SIZE];2],calls:usize,
-        fail:usize,tear:usize,flush_after:bool,writes:Vec<SelectorSector>}
+        fail:usize,tear:usize,flush_after:bool,writes:Vec<SelectorSector>,corrupt_after_flush:Option<usize>}
     impl Media {
         fn new(sectors:[[u8;SIZE];2])->Self {Self {live:sectors,stable:sectors,
-            calls:0,fail:0,tear:0,flush_after:false,writes:vec![]}}
+            calls:0,fail:0,tear:0,flush_after:false,writes:vec![],corrupt_after_flush:None}}
         fn hit(&mut self)->bool {self.calls+=1;self.calls==self.fail}
         fn reboot(mut self)->Self {self.live=self.stable;self.calls=0;self.fail=0;self}
     }
@@ -368,6 +368,9 @@ mod tests {
         fn flush(&mut self)->Result<(),()> {
             let fail=self.hit();
             if !fail||self.flush_after {self.stable=self.live;}
+            if !fail {if let Some(index)=self.corrupt_after_flush {
+                self.live[index][200]^=1;self.stable[index]=self.live[index];
+            }}
             if fail {Err(())}else{Ok(())}
         }
     }
@@ -430,6 +433,34 @@ mod tests {
             assert!(matches!(Journal::mount(media),Err(PublicationError::Io)));
         }
         assert!(matches!(Journal::mount(Media::new([[0;SIZE];2])),Err(PublicationError::Corrupt)));
+    }
+
+    #[test] fn successful_io_with_wrong_readback_is_indeterminate_and_never_retried() {
+        let (a,b,_)=chain();
+        // Independently damage the protected current record and written target.
+        for damaged in [0,1] {
+            let mut journal=Journal::mount(Media::new([a.encode(),[0;SIZE]])).unwrap();
+            journal.io.corrupt_after_flush=Some(damaged);
+            assert_eq!(journal.commit(b),Err(PublicationError::Indeterminate));
+            assert_eq!(journal.record(),a);assert!(journal.is_readonly());
+            let calls=journal.io.calls;let writes=journal.io.writes.clone();
+            assert_eq!(journal.commit(b),Err(PublicationError::ReadOnly));
+            assert_eq!(journal.io.calls,calls);assert_eq!(journal.io.writes,writes);
+            assert_eq!(writes,vec![SelectorSector::Second]);
+            let recovered=Journal::mount(journal.into_io().reboot()).unwrap();
+            assert_eq!(recovered.record(),if damaged==0 {b}else{a});
+        }
+    }
+    #[test] fn successful_fallback_ack_preserves_high_water_across_reboot() {
+        let (a,b,_)=chain();let fallback=b.fallback().unwrap();
+        let mut journal=Journal::mount(Media::new([a.encode(),b.encode()])).unwrap();
+        journal.commit(fallback).unwrap();
+        assert_eq!(journal.record(),fallback);assert!(!journal.is_readonly());
+        assert_eq!(journal.io.writes,vec![SelectorSector::First]);
+        let recovered=Journal::mount(journal.into_io().reboot()).unwrap();
+        assert_eq!(recovered.record(),fallback);
+        assert_eq!(recovered.record().highest_committed_generation(),b.highest);
+        assert_eq!(recovered.record().active(),a.active());
     }
 
 }
