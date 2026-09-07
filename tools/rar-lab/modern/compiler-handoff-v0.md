@@ -97,3 +97,29 @@ SHA256 and size, in canonical OID order, and records commit byte length. The
 trusted parent must retain the raw commit and used tree/blob objects with the
 evidence so the complete root-to-leaf chain can be reconstructed independently.
 Unused objects and count/per-object/aggregate bounds have focused source tests.
+
+## Private driver construction recipe (not invoked or activated)
+
+compiler-driver.Containerfile builds only the reviewed RAR host-driver source.
+The trusted controller must supply a newly owned local parent tag already bound
+to the exact reproduced compiler image, inspect that association, and invoke
+BuildKit with network disabled, no cache, no pull, a fixed local output path and
+a minimal context of this recipe plus the exact reviewed driver blob. No
+proposal source, reference code, credentials or owner storage enters that build.
+
+The recipe takes only the verified musl sysroot from the compiler parent and
+uses the already pinned Rust1.95 private bootstrap. A fixed direct rustc command
+has a cleared environment, fixed linker/sysroot/static target and reproducible
+paths/metadata. Per-process CPU and file-size ceilings apply; the outer trusted
+job must additionally enforce wall-time, output and disk budgets. No driver or
+compiled adapter is executed during construction.
+
+The export contains only the bounded driver and all captured parent notices;
+its deliberately nonexistent entrypoint is not a runtime profile. Independently
+verify export paths/types/metadata/content, complete notice identity against the
+parent, static ELF framing, actual compiler/tool/source/recipe identities and
+two-build equality before making the canonical driver layer. The derived
+compiler image preserves all parent notices; the later adapter-only image
+requires its own separately inventoried notice set. This recipe alone does not
+establish legal sufficiency, role confinement, reproducibility or compilation
+success. Actual construction remains pending.
