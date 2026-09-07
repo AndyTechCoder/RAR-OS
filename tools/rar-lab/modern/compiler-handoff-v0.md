@@ -18,7 +18,9 @@ at most2MiB static x86-64 ET_EXEC. It reuses the independent ELF byte parser,
 requires exactly one NX stack and an entry in exactly one executable file-backed
 load, rejects PT_INTERP/PT_DYNAMIC, W+X, malformed loads, and unbounded mapping.
 Canonical byte equality rejects hidden concatenated entries and extra padding.
-It creates no directories or files on the host and activates no image.
+It has no filesystem write operations and refuses execution unless Python is
+isolated with bytecode writes disabled. It activates no image. Construction
+callers must provide read-only exact-main tool sources, not a mutable directory.
 
 The driver has a distinct RAR path, not an upstream Rust toolchain identity.
 Its fixed rustc command clears inherited environment and sets TMPDIR=/build;
@@ -55,3 +57,11 @@ can substitute for that construction proof.
 Current tests are source-level layer, framing, refusal and command construction
 tests in the existing cloud Specifications sandbox, not runtime acceptance.
 No compiler runtime, adapter runtime, Modern VM or disk profile is activated.
+
+The layer report records SHA256 and Git blob identities of both this helper
+and its adjacent compiler_elf.py parser. Those measured identities must match
+the trusted-main tree before construction/inspection; labels alone cannot
+establish provenance. The caller's read-only source mount prevents changes
+between identity measurement and import. Both sources are bounded at128KiB.
+Focused tests cover aggregate multi-LOAD limits, address/offset congruence,
+ambiguous executable entry mappings, no-bytecode refusal and the exact2MiB limit.

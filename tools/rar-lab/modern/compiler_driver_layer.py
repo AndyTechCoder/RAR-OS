@@ -8,6 +8,7 @@ import io
 from pathlib import Path
 import re
 import struct
+import sys
 import tarfile
 
 EPOCH = 1785715200
@@ -23,7 +24,26 @@ def identity(value, width):
     return (type(value) is str and re.fullmatch("[0-9a-f]{" + str(width) + "}", value)
             is not None and value != "0" * width)
 
+def _tool_sources():
+    if sys.flags.isolated != 1 or not sys.dont_write_bytecode:
+        raise Invalid("isolated no-bytecode controller required")
+    result = {}
+    for name in ("compiler_driver_layer.py", "compiler_elf.py"):
+        path = Path(__file__).with_name(name)
+        if path.is_symlink() or not path.is_file():
+            raise Invalid("trusted tool location")
+        with path.open("rb") as stream:
+            raw = stream.read(131073)
+        if not 1 <= len(raw) <= 131072:
+            raise Invalid("trusted tool source budget")
+        result[name] = {"sha256": hashlib.sha256(raw).hexdigest(),
+                        "git_blob": hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") +
+                                                b"\0" + raw).hexdigest(),
+                        "size": len(raw)}
+    return result
+
 def static_driver(raw):
+    _tool_sources()
     if type(raw) is not bytes or not 176 <= len(raw) <= MAX_DRIVER:
         raise Invalid("driver size/type")
     # Reuse the independent byte parser, not a compiler/exporter's metadata.
@@ -124,6 +144,7 @@ def build(driver, source_revision, source_sha256, recipe_sha256):
     raw = _encode(driver)
     report = inspect(raw, sha)
     report["provenance_labels"] = labels
+    report["tool_sources"] = _tool_sources()
     return raw, report
 
 def self_test():
@@ -155,6 +176,33 @@ def self_test():
                 with self.assertRaises(Invalid): static_driver(bytes(bad))
             for size in range(256):
                 with self.assertRaises(Invalid): static_driver(executable()[:size])
+        def test_load_congruence_aggregate_and_ambiguous_entry(self):
+            bad=bytearray(executable())
+            struct.pack_into("<Q",bad,80,0x400001)
+            with self.assertRaises(Invalid): static_driver(bytes(bad))
+            def second_load(flags, address, memsz):
+                raw=bytearray(executable()+bytes(64))
+                struct.pack_into("<H",raw,56,3)
+                struct.pack_into("<IIQQQQQQ",raw,176,1,flags,0,address,0,256,memsz,4096)
+                return raw
+            raw=second_load(4,0x800000,64*1024*1024)
+            with self.assertRaises(Invalid): static_driver(bytes(raw))
+            raw=second_load(5,0x400000,256)
+            with self.assertRaises(Invalid): static_driver(bytes(raw))
+            # A distinct readonly load within the aggregate budget is valid.
+            raw=second_load(4,0x800000,256)
+            static_driver(bytes(raw))
+        def test_tool_binding_and_no_bytecode_guard(self):
+            from unittest.mock import patch
+            sources=_tool_sources()
+            self.assertEqual(set(sources),{"compiler_driver_layer.py","compiler_elf.py"})
+            self.assertTrue(all(identity(x["sha256"],64) and identity(x["git_blob"],40)
+                                for x in sources.values()))
+            with patch.object(sys,"dont_write_bytecode",False):
+                with self.assertRaises(Invalid): static_driver(executable())
+        def test_exact_maximum_driver_size_is_admitted(self):
+            raw=executable()+bytes(MAX_DRIVER-256)
+            self.assertEqual(static_driver(raw),hashlib.sha256(raw).hexdigest())
         def test_identity_and_budgets(self):
             driver = executable(); raw, _ = build(driver,"a"*40,"b"*64,"c"*64)
             for value in (None,"", "0"*64,"g"*64,"a"*63):
