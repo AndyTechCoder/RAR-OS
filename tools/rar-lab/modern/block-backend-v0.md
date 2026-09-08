@@ -122,3 +122,48 @@ kill/join handling, exclusive image provisioning, fresh firmware and read-only
 boot composition. Crypto interoperability and the actual causal Terminal/Files
 fresh-VM proof remain M4.1 acceptance requirements. This candidate does not waive
 them and does not authorize any Mac/SSD operation.
+
+
+## Separately killable backend process
+
+The candidate block_process.py now supplies a host-only child boundary and
+bounded parent handle; it still does NOT launch a VM or activate a Modern profile.
+It accepts only an already-owned disk FD, connected AF_UNIX stream FD, fixed
+device role, read-only flag and bounded fault plan. It opens no image path,
+creates no listener and never invokes a shell. The exact fixed sibling source
+runs under isolated Python with bytecode disabled, a cleared environment,
+close_fds and only the two specified inherited descriptors. Parent ownership of
+the server socket transfers after successful spawn; the retained image FD stays
+owned by the caller. No uncommitted volatile data is flushed on termination.
+
+The child is separately memory/CPU/core limited. It emits bounded JSON records
+for readiness, each observed request, the resulting device event and terminal
+outcome. Record writes precede the corresponding protocol reply, so evidence is
+not silently dropped to keep I/O moving. The parent must continuously drain both
+pipes; any stderr, malformed/truncated record, output budget violation or
+absolute deadline fails the session and kills the exact owned child. Its poll
+work is bounded so VM monitoring can continue. A blocked file operation or audit
+pipe is subject to that EXTERNAL watchdog, not merely a socket timeout.
+
+The handle enforces at most8MiB output,2048 bytes per line,16390 records and
+180 seconds per child. stop kills an active child, drains and joins within two
+seconds, or raises without granting snapshot authority. Intentional crash-stop
+may have a signal return code; that is evidence of termination, NOT success or
+automatic permission to continue a scenario. A cut is exit20, protocol/backend
+failure21, and invalid startup22. No retry, new connection or image reconstruction
+occurs. Environment markers are only defense in depth, not authorization.
+
+The future trusted VM controller must still validate the complete typed record
+sequence and expected outcomes, kill/join the ENTIRE VM as well as both backend
+children, verify actual image/FD identity and frozen bytes, and create fresh
+firmware and new backend processes. A successful backend stop alone never proves
+that the VM is dead or that M4.1 is complete. Process uninterruptibility at the
+host kernel is not magically solved: failure to join must abort acceptance and
+leave the outer disposable-container timeout as the final containment boundary.
+
+Six new cloud-only process tests use disposable zero-filled regular files and
+private socketpairs, not RAR code. They exercise a flushed write across complete
+backend replacement, loss of unflushed volatile state, actual torn-prefix bytes
+with no success reply, read-only preservation, an externally stopped-child
+watchdog/kill/join, and refusal before spawn for invalid configuration. They do
+not substitute for the pending whole-VM persistence or frozen-Data oracle proof.

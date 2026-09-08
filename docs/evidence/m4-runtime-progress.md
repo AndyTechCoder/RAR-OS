@@ -9,7 +9,7 @@ acceptance requirements in the milestone task remain controlling.
 
 | Section | Implemented source | Missing runtime proof |
 | --- | --- | --- |
-| M4.1 Persistent files — in progress | Actual Modern kernel entry, full-width IPC/syscalls and fixed device authority; Data-only PIO service; Terminal/Files session wiring and sticky failure UI; bounded encrypted append-only snapshots; independent frozen-Data oracle; reviewed empty-image provisioner; actual reproducible UEFI kernel/service builds; controlled block backend candidate | certified dual-PIO cloud profile, stack/syscall/framebuffer execution, fresh-VM persistence, bound frozen-image oracle and block-fault evidence |
+| M4.1 Persistent files — in progress | Actual Modern kernel entry, full-width IPC/syscalls and fixed device authority; Data-only PIO service; Terminal/Files session wiring and sticky failure UI; bounded encrypted append-only snapshots; independent frozen-Data oracle; reviewed empty-image provisioner; actual reproducible UEFI kernel/service builds; controlled block backend and bounded child-process candidates | certified dual-PIO cloud profile, stack/syscall/framebuffer execution, fresh-VM persistence, bound frozen-image oracle and block-fault evidence |
 | M4.2 Signed live updates — pending | Crypto, canonical manifest verification, System selector publication and incarnation/queue lifecycle model | System payload I/O, executable sealing/loading, real Settings replacement, health/fallback, stale-capability enforcement and GUI rebind |
 | M4.3 Recovery and release — pending | Source-level fault tests and released M3 baseline | Immutable recovery integration, full block fault matrix, exact Data hash preservation, final reproduction/regressions/reviews and release |
 
@@ -62,8 +62,12 @@ path input, device selector or VM launch. It records actual write/flush ordinals
 performs exact-count writes and fsync before flush ACK, rejects append/wrong-access descriptors before any ACK; supports bounded torn/
 short/error/before/after cuts and reverse flush order, and forbids reconnecting
 a volatile instance. Frozen reads require detachment and read actual file bytes.
-The15-test cloud candidate includes real disposable-file and socketpair tests;
-its review and exact-head results are pending, not claimed passed here.
+The15-test backend candidate passed independent source review at6369251f430d92a88bb58f3c258932e9823d7a2c. Exact-head Foundation34242245906, Platform34242245927 and Desktop34242245960 passed. Specifications34242245898 passed its main validation step; full mutation-check completion was still pending at this checkpoint.
+
+A new bounded backend child-process candidate adds exact descriptor inheritance,
+cleared environment, bounded audit output, external deadline/kill/join and six
+cloud-only process tests. This is not a VM launcher or profile activation; its
+review and exact-head test results are pending.
 
 ## Crypto prerequisite evidence
 
