@@ -25,6 +25,8 @@ snapshot. An unpredictable persistence challenge must be created separately,
 checked absent from the initial image, and typed only into boot1. It cannot be
 placed in initial Data by this API.
 
+The isolated CLI self-test reads its exact trusted-checkout sibling oracle source;
+it performs no image or provisioning-path I/O.
 Focused cloud self-tests invoke the separate frozen-image oracle on two fresh
 empty images, reject 11 invalid/reused/exhausted cases, and exercise the real
 inclusive 4096-image session budget. Deterministic test entropy is test-only;

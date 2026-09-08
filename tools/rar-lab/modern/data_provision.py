@@ -1,5 +1,6 @@
 """Empty DataVault image construction, public disposable laboratory data only.
-Bytes in/bytes out: no paths, files, randomness, target imports, or device I/O.
+Provisioning API: bytes in/bytes out; no paths, randomness or device I/O.
+The guarded CLI self-test reads only its trusted sibling oracle source.
 The trusted session controller owns entropy and must forbid writable clones.
 """
 import hashlib
