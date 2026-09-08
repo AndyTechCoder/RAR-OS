@@ -121,3 +121,14 @@ printf '%s\n' 'Modern driver layer: canonical static artifact/refusal tests pass
 
 # Public known-key fixture signing only; no target signing API or secret input.
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/lab_signer.py" --self-test
+
+# A fixed synthetic PE is data only: generate four public-key codec cases.
+# The trusted shell supplies the sole source/output paths inside cloud scratch.
+/usr/bin/python3 -I -B -c 'import runpy,sys; sys.stdout.buffer.write(runpy.run_path(sys.argv[1])["codec_test_fixture"]())' \
+    "$root/tools/rar-lab/modern/lab_signer.py" > "$work/signed-codec-fixture"
+RAR_LAB_SIGNED_CODEC_FIXTURE="$work/signed-codec-fixture" \
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --test \
+    -C strip=symbols -C debuginfo=0 -C opt-level=1 -C debug-assertions=yes -C overflow-checks=yes \
+    tools/rar-lab/modern/signed_layer_test.rs -o "$work/focused-tests"
+"$work/focused-tests"
+printf '%s\n' 'Modern signed codec: public fixture RAR verification and tamper/policy tests; no PE execution or independent reference acceptance'

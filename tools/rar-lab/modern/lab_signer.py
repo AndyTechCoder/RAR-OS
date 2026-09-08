@@ -90,6 +90,45 @@ def sign_manifest_digest(digest):
         raise ValueError("exact nonzero manifest digest bytes")
     return _public_fixture_signature(_DOMAIN + digest)
 
+
+def codec_test_fixture():
+    """Four fixed signed, non-executed codec cases, not an installable app."""
+    from hashlib import sha256
+    payload = bytearray(1024)
+    def put(out, offset, size, value):
+        out[offset:offset+size] = value.to_bytes(size, "little")
+    payload[:2] = b"MZ"
+    put(payload, 60, 4, 64)
+    payload[64:68] = b"PE\0\0"
+    for offset, size, value in ((68,2,0x8664),(70,2,1),(84,2,240),(88,2,0x20b),
+        (104,4,4096),(112,8,0x400000),(120,4,4096),(144,4,8192),
+        (148,4,512),(196,4,16),(336,4,16),(340,4,4096),(344,4,512),
+        (348,4,512),(364,4,0x60000020)):
+        put(payload, offset, size, value)
+    cases = []
+    for abi, generation, writable in ((1,1,False),(0,1,False),(1,2,False),(1,1,True)):
+        image = bytearray(payload)
+        if writable:
+            put(image, 364, 4, 0xe0000020)
+        image = bytes(image)  # Freeze payload before hashing and signing.
+        manifest = bytearray(288)
+        manifest[:8] = b"RARMODL0"
+        manifest[16:40] = b"rar.alpha.ed25519.v0\0\0\0\0"
+        for offset, size, value in ((10,2,384),(12,4,1),(40,4,5),(44,2,1),
+            (48,4,1),(56,4,len(image)),(60,4,8192),(64,8,7),(72,8,generation),
+            (228,4,abi),(232,4,50),(240,4,16384)):
+            put(manifest, offset, size, value)
+        manifest[80:112] = sha256(b"RAR-MODERN-SETTINGS-HEALTH-V0\0").digest()
+        manifest[112:144] = sha256(image).digest()
+        manifest[144:176] = sha256(PUBLIC_KEY).digest()
+        # Signed nonzero test labels only, never actual build provenance.
+        manifest[176:196] = bytes([1])*20
+        manifest[196:228] = bytes([2])*32
+        frozen = bytes(manifest)
+        digest = sha256(frozen).digest()
+        cases.append(frozen + digest + sign_manifest_digest(digest) + image)
+    return b"".join(cases)
+
 def self_test():
     known = bytes.fromhex(
         "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e06522490155"

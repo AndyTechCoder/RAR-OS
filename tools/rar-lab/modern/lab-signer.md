@@ -27,6 +27,14 @@ releases or protect against a malicious publisher.
 
 The cloud Specifications hook runs the RFC empty-message exact signature,
 base/order identity, determinism, canonical scalar and bounded input refusal
-tests. No helper tests execute on the Mac/SSD. Actual signed-layer generation,
-RAR/OpenSSL/libsodium verification, real Settings loading and update/failure
-evidence remain pending. This helper alone closes no M4 acceptance criterion.
+tests. No helper tests execute on the Mac/SSD. A second cloud-only test builds four fixed synthetic PE/manifest byte cases in
+memory, freezes the preimage/payload, computes their digests internally, and
+passes the resulting signed bytes to the actual RAR manifest verifier. It checks
+valid ABI1 generations, rejection of signed ABI0 and W+X payloads, every
+manifest/signature byte mutation, and representative payload mutations.
+The synthetic PE is never executed. Fixed nonzero source/build labels are test
+data, not actual provenance. This is separate RAR signer/verifier conformance,
+not either independent reference.
+
+Actual signed executable generation, OpenSSL/libsodium verification, real
+Settings loading and update/failure evidence remain pending. This helper alone closes no M4 acceptance criterion.
