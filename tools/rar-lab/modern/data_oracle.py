@@ -74,7 +74,7 @@ def inspect(image):
     Caller must independently bind these exact bytes to the frozen cloud disk.
     No guest claim, screenshot, expected file value, or reconstruction is input.
     """
-    if type(image) is not bytes or not 5*512<=len(image)<=194*512 or len(image)%512:
+    if type(image) is not bytes or not 5*512 <= len(image) <= 194*512 or len(image)%512:
         raise ValueError("bounded Data image required")
     h=image[:512];slots=int.from_bytes(h[20:24],"little")
     if h!=image[512:1024] or h[:8]!=b"RARVLT00" or h[8:12]!=bytes((0,0,0,2)) or h[12:16]!=(1).to_bytes(4,"little") or h[16:20]!=(512).to_bytes(4,"little") or h[24:32]!=(2).to_bytes(8,"little"):
@@ -150,6 +150,12 @@ def self_test():
     header[480:]=_sha(header[:480]);header=bytes(header)
     empty=header*2+bytes(12*512)
     assert inspect(empty)["files"]=={} and inspect(empty)["next_slot"]==0
+    for slots in (1,64):
+        h=bytearray(header);h[20:24]=slots.to_bytes(4,"little");h[480:]=_sha(h[:480])
+        endpoint=bytes(h)*2+bytes(3*slots*512)
+        assert len(endpoint)==(2+3*slots)*512
+        result=inspect(endpoint)
+        assert result["revision"]==0 and result["files"]=={} and result["next_slot"]==0 and not result["readonly"]
     def encoded(entries):
         raw=b"RARDAT00"+bytes((len(entries),))+bytes(7)
         for name,value in entries: raw+=bytes((len(name),len(value)))+name+value
@@ -210,7 +216,7 @@ def self_test():
     bad=bytearray(encoded([]));bad[-1]=1
     reject(lambda:snapshot(bytes(bad)))
     assert rejected==73
-    return dict(negative_tests=rejected,marker_prefix_cases=1026,rfc_vectors=2)
+    return dict(negative_tests=rejected,marker_prefix_cases=1026,rfc_vectors=2,capacity_endpoints=2)
 
 if __name__=="__main__":
     import sys

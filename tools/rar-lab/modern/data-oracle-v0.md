@@ -28,7 +28,7 @@ required by M4. Neither it nor a reference library is linked into the OS.
 Pure checks include RFC block/AEAD vectors, tag/key/nonce/AAD/ciphertext rejection,
 all reservation and commit prefix lengths, both-header semantic mutations,
 canonical and malformed file snapshots, holes/conflicts/forks, consumed-slot
-continuation, image truncation/size bounds and exhaustion. The fixtures are
+continuation, image truncation/size bounds, exact one-slot/64-slot positive endpoints and exhaustion. The fixtures are
 in-memory only; their repeated fixed keys must never provision writable images.
 Source tests and generated fixtures are not actual frozen-guest-disk evidence.
 
