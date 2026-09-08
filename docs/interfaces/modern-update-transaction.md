@@ -25,6 +25,19 @@ failure leaves only bootstrap services, never a partially active desktop.
 This initial boot barrier is distinct from live replacement, where all unrelated
 apps and services must remain scheduled.
 
+If the selected package fails signature/content/compatibility verification or
+isolated health, boot may attempt exactly one explicit authorized fallback only
+when the intact selected record names a prior package, the System transport and
+journal are still usable, and that exact prior manifest/generation/payload can
+be read and independently verified. Health-test it in a fresh incarnation,
+durably commit the legal fallback selector preserving the high-water, then
+publish the initial desktop. Any failure halts unavailable; no second fallback,
+retry, implicit floor1 image or repeated boot-time attempt loop is permitted.
+An I/O failure that makes the transport/journal sticky-failed or indeterminate
+halts directly; it does not authorize alternate reads or another write. A
+selected fallback record with no prior cannot fall back again. A separate
+immutable factory copy cannot bypass these exact prior/high-water conditions.
+
 A known virgin laboratory System image is explicitly provisioned from reviewed
 factory package and selector bytes by the cloud fixture builder. The guest does
 not infer permission to initialize media from zero bytes. Unknown or corrupt
@@ -66,8 +79,12 @@ binding of verified metadata references the exact seal; no substitution of a
 different mutable buffer is allowed. The kernel independently validates PE
 mapping/W^X/resource geometry, not publisher policy.
 
-The present 36 MiB arena has no spare region sufficient for the maximum 2 MiB
-package. Implementation must reserve a separately guarded Modern-only region
+The sealed package has exactly 384 manifest bytes followed by a PE payload of
+at most 2,097,152 bytes: maximum logical length 2,097,536 bytes. A single
+page-rounded buffer therefore needs 513 pages (2,101,248 bytes), plus separate
+unmapped guard pages. Any disk-slot padding is outside this logical sealed
+package and must be independently checked by the System codec. The present
+36 MiB arena has no spare region sufficient for this maximum package. Implementation must reserve a separately guarded Modern-only region
 and increase only the Modern allocation as needed. Do not overlap the existing
 2 MiB process strides, page tables, stacks, Boot pages or framebuffer. Exact
 addresses, chunk framing and syscall numbers must be specified alongside their
