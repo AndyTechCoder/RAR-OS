@@ -37,7 +37,17 @@ def main():
         fd = os.open(path,os.O_RDWR|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW|os.O_CLOEXEC,0o600)
         descriptors.append(fd)
         size = 32768*512 if kind=="boot" else 194*512
-        assert os.write(fd,bytes(size)) == size
+        if kind=="boot":
+            # This is an O_EXCL-created empty fixture, never an existing file.
+            # Grow a sparse zero image: preserve full geometry and actual FD I/O
+            # without retaining 16MiB of redundant zero pages in shared /tmp.
+            assert os.fstat(fd).st_size==0
+            os.ftruncate(fd,size)
+            assert os.fstat(fd).st_size==size
+            assert os.pread(fd,512,0)==bytes(512)
+            assert os.pread(fd,512,size-512)==bytes(512)
+        else:
+            assert os.write(fd,bytes(size)) == size
         os.fsync(fd)
         if readonly:
             fd = os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC)
