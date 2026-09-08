@@ -676,7 +676,25 @@ duplicates=$(printf '%s\n' "$index_targets" | sort | uniq -d)
 
 adr_files=$(sed -n 's/^- \[ADR [^]]*\](\(adr\/[^)]*\.md\))$/docs\/\1/p' docs/README.md)
 adr_count=$(printf '%s\n' "$adr_files" | awk 'NF { count++ } END { print count + 0 }')
-[ "$adr_count" -eq 33 ] || fail "expected exactly 33 indexed ADRs"
+[ "$adr_count" -eq 34 ] || fail "expected exactly 34 indexed ADRs"
+
+# Pure registration/status drift fixtures; no files, launches or approval grants.
+modern_ide_registration() {
+    [ "$2" = 'Status: Proposed — concrete cloud profile validation pending' ] &&
+    [ "$(printf '%s\n' "$1" | grep -Fxc -- '- [ADR 0035: Proposed Immutable IDE Inputs](adr/0035-immutable-ide-inputs.md)')" -eq 1 ]
+}
+modern_ide_index='- [ADR 0035: Proposed Immutable IDE Inputs](adr/0035-immutable-ide-inputs.md)'
+modern_ide_status='Status: Proposed — concrete cloud profile validation pending'
+modern_ide_registration "$modern_ide_index" "$modern_ide_status" || fail "valid Modern IDE registration refused"
+if modern_ide_registration "" "$modern_ide_status"; then fail "missing Modern IDE registration accepted"; fi
+if modern_ide_registration "$modern_ide_index
+$modern_ide_index" "$modern_ide_status"; then fail "duplicate Modern IDE registration accepted"; fi
+if modern_ide_registration "$modern_ide_index" ""; then fail "missing Modern IDE status accepted"; fi
+if modern_ide_registration "$modern_ide_index" 'Status: Accepted'; then fail "unapproved Modern IDE status accepted"; fi
+if modern_ide_registration "$modern_ide_index" "$modern_ide_status
+$modern_ide_status"; then fail "duplicate Modern IDE status accepted"; fi
+modern_ide_registration "$(sed -n '/^- \[ADR 0035:/p' docs/README.md)" \
+    "$(sed -n '/^Status:/p' docs/adr/0035-immutable-ide-inputs.md)" || fail "Modern IDE registration/status drift"
 
 approval_date=$(sed -n 's/^Date: //p' docs/approval-record.md)
 case "$approval_date" in
@@ -745,6 +763,9 @@ printf '%s\n' "$adr_files" | while IFS= read -r adr; do
     if [ "$adr" = docs/adr/0034-modern-alpha-update-and-recovery.md ]; then
         [ "$(grep -c '^Status:' "$adr")" -eq 1 ] || fail "Modern proposal status is ambiguous"
         grep -qx 'Status: Proposed — independent architecture/security review pending' "$adr" || fail "Modern proposal must not claim accepted authority"
+    elif [ "$adr" = docs/adr/0035-immutable-ide-inputs.md ]; then
+        [ "$(grep -c '^Status:' "$adr")" -eq 1 ] || fail "Immutable IDE proposal status is ambiguous"
+        grep -qx 'Status: Proposed — concrete cloud profile validation pending' "$adr" || fail "Immutable IDE proposal must not claim accepted authority"
     else
     case "$adr" in
         docs/adr/0013-* | docs/adr/0014-* | docs/adr/0015-* | docs/adr/0016-*) adr_approval_date=2026-07-17 ;;
