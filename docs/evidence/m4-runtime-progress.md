@@ -103,3 +103,63 @@ replacement and immutable recovery; do not relabel source tests as completion.
 All repository mutations remain GitHub-only. No Mac/SSD files are created,
 modified or deleted. No OS, emulator or adapter executes locally. No unreviewed
 Modern VM profile is activated.
+
+## Verified checkpoint after the first cloud diagnostic (2026-09-08)
+
+This checkpoint supersedes the older "Next concrete actions" planning text,
+not the acceptance contract. M4 remains incomplete in all three sections.
+
+- Runtime source977aa66f8b4cc3d83370c10d88ea9763e31c11e7 passed
+  Specifications34270243797, Foundation34270243824, Platform34270243879 and
+  Desktop34270243822. Its signed-manifest compatibility field now requires
+  exact kernel ABI1; source tests do not establish a working component loader.
+- Tools PR170 merged at f441533bcb6763491ec00c9d280b0910826f5d58 after
+  independent review and complete exact-head Specifications34261199628.
+  Resulting-main Specifications34270145791 also passed in full.
+- The first manual Modern persistence diagnostic34271876157 (job102215185348)
+  used that trusted controller and fully checked source6fefabe4bac1fc967ba0c0b73743fe9c844964db.
+  It failed in owned_identity on the first compiler container's pre-start
+  inspection. No target build, VM start or cross-reboot persistence was proved.
+  Failure artifact10074144358 has ZIP SHA256
+  195e9479645b748cbf33e574695b6561210deacddb6bfb526a4596ab7784155f.
+- Correction PR171 at96897b080660afad813d52ba2c1cec6f259b2d7a passed
+  independent source review and is undergoing CI34272449883. It binds the exact
+  inherited image label map plus the reserved invocation label, preserves all
+  ID/confinement/lifecycle checks and adds boolean mismatch diagnostics.
+  Inherited labels are a plausible cause, not a recovered actual mismatch.
+  Do not retry the unchanged failing controller.
+- Existing reference construction33959130858 succeeded atacc027df17dfb2b497a78bbb41808968539b405f.
+  Retained artifact9967392023 (22026442 bytes) has ZIP SHA256
+  3f6113efaaa95f20807b5a0423ec710a607a88640775f36055abf715039bacbe.
+  It proves candidate construction/reproduction only. Reuse it through bounded
+  reviewed cloud acquisition and inventory validation, not local downloads or
+  needless reference rebuilds.
+
+### Requirement-by-requirement status
+
+Numbers refer to the ten requirements in the active M4 contract.
+
+| Requirement | Verified scope and remaining work |
+| --- | --- |
+| 1 Signed verification | Bounded codec/crypto and ABI compatibility tests exist; actual signed package and executable staging proof remain. |
+| 2 Live Settings replacement | Logical lifecycle model exists; actual kernel staging, image mapping, manager transport and visible replacement remain. |
+| 3 Failure/revocation | Model tests cover cap/queue/incarnation rules; actual timer budget, address-space retirement, rollback and app-continuity proof remain. |
+| 4 Cross-reboot files | Real PIO/data path and cloud harness are implemented; first diagnostic stopped before execution, so persistence is unproved. |
+| 5 Storage authority separation | Reviewed distinct cloud roles/descriptors and source checks exist; actual System-only recovery/Data-hash proof remains. |
+| 6 Immutable recovery | Contract exists; actual repair/restart runtime and evidence remain. |
+| 7 Interrupted publication | Journal/backend fault models exist; actual guest write/flush/cut/reboot campaign remains. |
+| 8 Data encryption | RAR AEAD/vault implementation and source tests exist; crypto-reference closure and actual persistence acceptance remain; laboratory keys are public. |
+| 9 Crypto independence | Reference/compiler candidate builds are retained; real isolated RAR/OpenSSL/libsodium comparisons remain. |
+| 10 Reproduction/release | Earlier Modern UEFI two-build proof and regressions exist; final runtime/recovery/fault evidence, final-main reproduction and v0.4 release remain. |
+
+### Immediate continuation
+
+Finish PR171 checks, merge only after passing evidence and review, then validate
+the corrected trusted-main controller and run one corrected cloud diagnostic.
+Retain actual failure or success evidence; success requires complete two-VM
+pixel/block/frozen-image agreement and independent retained-envelope mutation
+tests. Then finish crypto handoff/comparisons, actual signed replacement and
+System-only recovery. Keep the complete original acceptance scope.
+
+No local Mac/SSD mutation, build, packaging, image download or target/VM/reference
+adapter execution has been authorized or performed by these steps.
