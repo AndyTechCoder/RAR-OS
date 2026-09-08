@@ -124,8 +124,7 @@ pub fn files(boot:&Boot)->! {
 }
 pub fn settings(boot:&Boot)->! {
     let mut light=false;let mut version=0;
-    let mut view=View::EMPTY;view.line(0,b"APPEARANCE");view.line(1,b"DARK");
-    view.line(2,b"SPACE TO CHANGE THEME");view.line(3,b"SESSION ONLY");publish(boot,&mut version,&view);
+    let mut view=crate::settings::initial_view();publish(boot,&mut version,&view);
     loop {
         let m=shell_event(boot);
         if key_decode(&m)==Some(b' ') {

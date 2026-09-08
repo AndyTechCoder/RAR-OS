@@ -2,6 +2,7 @@
 #![no_main]
 #![deny(unsafe_op_in_unsafe_fn)]
 mod abi;
+#[path="../../apps/modern/settings.rs"] mod settings;
 #[path="../../apps/modern/model.rs"] mod file_ui;
 #[path="../desktop/memory.rs"] mod memory;
 #[path="../../services/modern/gui.rs"] mod services;
@@ -64,10 +65,26 @@ fn publish(boot:&Boot,version:&mut u32,view:&services::apps::View) {
     for i in 0..6 {deliver(boot.caps[COMPOSITOR],&services::line(*version,i,&view.lines[i]).unwrap_or_else(||fail()));}
     deliver(boot.caps[COMPOSITOR],&services::commit(*version));
 }
+fn boot_snapshot()->Boot {
+    // SAFETY: kernel-owned aligned initialized Boot mapping at fixed address,
+    // readable for this process's entire lifetime, never user-writable. The
+    // kernel may republish it only while this process is not running. No Rust
+    // reference crosses the trap; volatile reads obtain the post-cutover bytes.
+    unsafe{core::ptr::read_volatile(BOOT_ADDRESS as *const Boot)}
+}
 #[unsafe(no_mangle)] pub extern "efiapi" fn efi_main()->! {
-    // Fixed kernel-owned read-only bootstrap mapping, no firmware pointer.
-    let boot=unsafe{(BOOT_ADDRESS as *const Boot).read()};
-    check(valid_boot(&boot));
+    let initial=boot_snapshot();
+    check(valid_boot(&initial));
+    let boot=if initial.phase==TRIAL {
+        // Trial has only HEALTH, so do not call normal Settings IPC yet.
+        check(settings::health());
+        check(syscall(TRIAL_READY,initial.caps[HEALTH],initial.health_token,0,0)==0);
+        // A successful health report blocks in the kernel. Only cutover may
+        // resume this context, after publishing its new read-only bootstrap.
+        let active=boot_snapshot();
+        check(valid_trial_activation(&initial,&active));
+        active
+    }else{initial};
     match boot.role {
         0=>apps::shell(&boot),1=>drivers::storage(&boot),2=>drivers::keyboard(&boot),
         3=>drivers::compositor(&boot),4=>apps::files(&boot),5=>apps::settings(&boot),

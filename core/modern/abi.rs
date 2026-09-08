@@ -90,6 +90,12 @@ pub fn valid_boot(b:&Boot)->bool {
     } else if b.device_sectors!=0||b.device_serial!=[0;20]||b.device_model!=[0;40] {return false;}
     true
 }
+/// Receiver-side consistency only, never kernel activation authority.
+/// The kernel publishes ACTIVE while the healthy candidate is unscheduled.
+pub fn valid_trial_activation(trial:&Boot,active:&Boot)->bool {
+    valid_boot(trial)&&trial.phase==TRIAL&&valid_boot(active)&&active.phase==ACTIVE&&
+        active.role==5&&active.generation==trial.generation&&active.entry==trial.entry
+}
 /// DEVICE args: caller-local handle, operation, value, zero. No port or device ID.
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 pub enum DeviceOp {
@@ -185,6 +191,25 @@ mod tests {
         let mut bad=b;bad.health_token=0;assert!(!valid_boot(&bad));
         let mut bad=b;bad.role=1;assert!(!valid_boot(&bad));
         let mut bad=b;bad.device_sectors=1;assert!(!valid_boot(&bad));
+    }
+    #[test] fn trial_activation_requires_fresh_active_grants_and_same_full_identity() {
+        let active=fixture(5);
+        let mut trial=active;trial.phase=TRIAL;trial.health_token=17;trial.caps=[0;12];
+        trial.caps[HEALTH]=(1<<32)|(HEALTH as u64+1);trial.peers[5]=1;
+        assert!(valid_trial_activation(&trial,&active));
+        assert!(!valid_trial_activation(&trial,&trial));
+        assert!(!valid_trial_activation(&active,&active));
+        let mut bad=active;bad.generation+=1;bad.peers[5]=bad.generation;
+        assert!(valid_boot(&bad));assert!(!valid_trial_activation(&trial,&bad));
+        let mut bad=active;bad.entry+=1;
+        assert!(valid_boot(&bad));assert!(!valid_trial_activation(&trial,&bad));
+        let mut bad=active;bad.peers[5]=active.generation as u32 as u64;
+        assert!(!valid_trial_activation(&trial,&bad));
+        let mut bad=active;bad.caps[HEALTH]=trial.caps[HEALTH];
+        assert!(!valid_trial_activation(&trial,&bad));
+        let mut bad=active;bad.caps[COMPOSITOR]=0;
+        assert!(!valid_trial_activation(&trial,&bad));
+        assert!(!valid_trial_activation(&trial,&fixture(4)));
     }
     #[test] fn device_allowlist_rejects_truncation_slave_and_extra_arguments() {
         for operation in 0..12 {

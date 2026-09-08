@@ -128,6 +128,13 @@ RAR_LAB_SIGNED_CODEC_FIXTURE="$work/signed-codec-fixture" \
 "$work/focused-tests"
 printf '%s\n' 'Modern signed codec: public fixture RAR verification and tamper/policy tests; no PE execution or independent reference acceptance'
 
+# Trial receiver/Settings health model only; no trap or target entry is run.
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --test \
+    -C strip=symbols -C debuginfo=0 -C opt-level=1 -C debug-assertions=yes -C overflow-checks=yes \
+    tools/rar-lab/modern/trial_entry_test.rs -o "$work/focused-tests"
+"$work/focused-tests"
+printf '%s\n' 'Modern trial entry: receiver consistency and pure Settings view checks; actual candidate scheduling/cutover pending'
+
 # Bound the final stripped executable, no_std library and signed codec fixture in the
 # existing cloud-only tmpfs; no owner files or retained evidence are affected.
 set -- $(/usr/bin/du -sk "$work")
