@@ -375,6 +375,7 @@ mod tests {
         let mut r=Runtime::new();let input=r.handle(2,INPUT_CAP).unwrap();
         let draw=r.handle(3,FRAMEBUFFER_CAP).unwrap();
         assert!(r.input(2,input).is_ok());assert!(r.framebuffer(3,draw).is_ok());
+        assert!(r.input(2,draw).is_err());assert!(r.framebuffer(3,input).is_err());
         for caller in 0..TASKS {
             if caller!=2 {assert!(r.input(caller,input).is_err());}
             if caller!=3 {assert!(r.framebuffer(caller,draw).is_err());}
@@ -385,6 +386,10 @@ mod tests {
             assert!(r.device(slot,h).is_err());assert!(r.input(slot,h).is_err());
             assert!(r.framebuffer(slot,h).is_err());
         }
+        r.fault(Endpoint{slot:2,incarnation:1}).unwrap();
+        assert!(r.input(2,input).is_err());
+        r.fault(Endpoint{slot:3,incarnation:1}).unwrap();
+        assert!(r.framebuffer(3,draw).is_err());
         let mut c=Caps::new();
         for (object,right) in [(Object::Device(Device::Data),DEVICE),(Object::Device(Device::System),DEVICE),
             (Object::Input,INPUT),(Object::Framebuffer,DRAW)] {
