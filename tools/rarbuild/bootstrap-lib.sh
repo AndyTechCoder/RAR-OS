@@ -437,7 +437,7 @@ rar_verify_ci_execution_boundary() {
     [ "${RAR_CI_RUNNER_ARCH-}" = X64 ] || return 1
     [ "${RAR_CI_RUNNER_IMAGE_OS-}" = ubuntu24 ] || return 1
     case "${RAR_CI_RUNNER_IMAGE_VERSION-}" in
-        20260823.283.1 | 20260831.293.1) ;;
+        20260823.283.1 | 20260831.293.1 | 20260907.300.1) ;;
         *) return 1 ;;
     esac
     [ "$bootstrap_lock_sha256" = 6752b1b21ac8fa93a671ff9444173e4c3bbc4cdcbe4cf5cd39820371dc79aa24 ] || return 1
