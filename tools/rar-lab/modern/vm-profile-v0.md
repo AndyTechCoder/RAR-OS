@@ -250,3 +250,17 @@ Backend termination content admits exactly (-9, backend-failed) or
 nonzero/None combinations are negative fixtures. The first full actual envelope
 will additionally exercise and mutate disk hashes, frames, input chronology,
 preflight, readonly Data mode, inode/PID binding and termination states.
+
+### Exact cloud container ownership remediation
+
+The outer controller creates each container with an invocation-bound ownership
+label, restart disabled and daemon logging disabled. It validates the returned
+full container ID against an ID-based inspection, including name, image and
+label, before recording cleanup authority. Start, post-execution inspection and
+cleanup use only that immutable ID. Confinement is checked before first start.
+An ambiguous create or mismatched identity fails the disposable hosted job;
+it never grants name-based cleanup authority or retries creation. Unknown
+objects are left to final hosted-runner teardown. Mock lifecycle checks cover
+ambiguous creation, identity/label/name mismatch, confinement rejection, start
+failure/timeout, swapped post-inspection and cleanup failure. These fixtures
+prove control flow only, not an actual Docker or VM execution result.

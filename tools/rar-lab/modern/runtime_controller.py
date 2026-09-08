@@ -48,6 +48,9 @@ def effective(info,image,name,entry,mounts,environment):
         host.get("Binds") or host.get("VolumesFrom") or host.get("Links") or
         host.get("PortBindings") or host.get("ExtraHosts")):
         raise ValueError("extra device, capability, namespace or host access")
+    if (host.get("RestartPolicy")!={"Name":"no","MaximumRetryCount":0} or
+        host.get("LogConfig")!={"Type":"none","Config":{}}):
+        raise ValueError("no restart or daemon log side channel")
     tmp="/tmp:rw,exec,nosuid,nodev,size=256m,uid=65532,gid=65532,mode=700"
     if host.get("Tmpfs")!={"/tmp":tmp.split(":",1)[1]}:
         raise ValueError("exact disposable scratch mount")
@@ -71,6 +74,51 @@ def effective(info,image,name,entry,mounts,environment):
     if found!={destination:str(source) for source,destination in mounts}:
         raise ValueError("exact source/artifact mount identities")
     return True
+
+OWNER_LABEL="org.rar-os.modern-invocation"
+
+def owned_identity(info,identifier,name,image,owner):
+    if (type(info) is not dict or info.get("Id")!=identifier or
+        info.get("Name")!="/"+name or info.get("Image")!=image or
+        info.get("Config",{}).get("Labels")!={OWNER_LABEL:owner}):
+        raise ValueError("exact owned container ID/name/image/label")
+
+def container(command,args,name,image,entry,mounts,environment,owner,seconds,limit,owned,proofs,save):
+    # Never recover or clean up an ambiguous create by name. Fail the job;
+    # final teardown of unknown objects belongs to the disposable hosted runner.
+    _,raw=command(args,30,1024)
+    if re.fullmatch(b"[0-9a-f]{64}\\n",raw) is None:
+        raise ValueError("ambiguous create; disposable job teardown required")
+    identifier=raw.decode().strip()
+    _,raw=command(["inspect",identifier],10,131072)
+    objects=json.loads(raw)
+    if type(objects) is not list or len(objects)!=1:
+        raise ValueError("ambiguous created container inspection")
+    info=objects[0]
+    owned_identity(info,identifier,name,image,owner)
+    owned.append(identifier)
+    effective(info,image,name,entry,mounts,environment)
+    proof={"name":name,"id":identifier,"image":image,"created":info}
+    proofs.append(proof);save()
+    _,output=command(["start","--attach",identifier],seconds,limit)
+    _,raw=command(["inspect",identifier],10,131072)
+    objects=json.loads(raw)
+    if type(objects) is not list or len(objects)!=1:
+        raise ValueError("one exact post-execution object")
+    ended=objects[0]
+    owned_identity(ended,identifier,name,image,owner)
+    if (ended.get("State",{}).get("Running") is not False or
+        ended["State"].get("Status")!="exited" or ended["State"].get("ExitCode")!=0):
+        raise ValueError("owned cloud process did not exit successfully")
+    proof["exited"]=ended;save()
+    return output
+
+def cleanup(command,owned):
+    failures=[]
+    for identifier in reversed(owned):
+        try: command(["rm","--force",identifier],15,4096)
+        except BaseException: failures.append(identifier)
+    return failures
 
 def main():
     import sys
@@ -137,29 +185,16 @@ def main():
             merged[key]=value
         merged.update(env)
         expected=[k+"="+v for k,v in merged.items()]
-        args=["create","--name",name]+sandbox(policy)
+        owner=run_id+":"+attempt+":"+str(sequence)
+        args=["create","--name",name,"--label",OWNER_LABEL+"="+owner,"--restart=no","--log-driver=none"]+sandbox(policy)
         for path,destination in mounts:
             if path.is_symlink() or path.resolve(strict=True)!=path:
                 raise ValueError("literal non-symlink controlled mount")
             args+=["--mount","type=bind,src="+str(path)+",dst="+destination+",readonly"]
         for key,value in env.items(): args+=["--env",key+"="+value]
         args+=["--entrypoint",entry[0],identifier]+entry[1:]
-        _,created=command(args,30,1024)
-        containers.append(name)  # Only after Docker confirmed successful creation.
-        if re.fullmatch(b"[0-9a-f]{64}\n",created) is None: raise ValueError("exact created container ID")
-        _,raw=command(["inspect",name],10,131072)
-        inspection=json.loads(raw)
-        if type(inspection) is not list or len(inspection)!=1: raise ValueError("one owned container")
-        effective(inspection[0],identifier,name,entry,mounts,expected)
-        proof={"name":name,"id":created.decode().strip(),"image":identifier,"created":inspection[0]}
-        report["container_proofs"].append(proof);save()
-        _,output=command(["start","--attach",name],seconds,limit)
-        _,post=command(["inspect",name],10,131072)
-        ended=json.loads(post)[0]
-        if ended["State"]["Running"] is not False or ended["State"]["Status"]!="exited" or ended["State"]["ExitCode"]!=0:
-            raise ValueError("owned cloud process did not exit successfully")
-        proof["exited"]=ended;save()
-        return output
+        return container(command,args,name,identifier,entry,mounts,expected,owner,
+            seconds,limit,containers,report["container_proofs"],save)
     try:
         compiler=image("build.Containerfile","build")
         builds=[]
@@ -209,10 +244,7 @@ def main():
     finally:
         # Only exact disposable cloud containers created by this invocation.
         # No host files, source trees, volumes, images, branches or owner data.
-        failures=[]
-        for name in reversed(containers):
-            try: command(["rm","--force",name],15,4096)
-            except BaseException: failures.append(name)
+        failures=cleanup(command,containers)
         if failures:
             report["status"]="cleanup-failed";report["cleanup_failures"]=failures;save()
             raise RuntimeError("owned cloud container cleanup failed")
@@ -228,6 +260,7 @@ def self_test():
         "Memory":1073741824,"MemorySwap":1073741824,"NanoCpus":2000000000,"PidsLimit":64,
         "PidMode":"","IpcMode":"private","PublishAllPorts":False,"AutoRemove":False,
         "CapDrop":["ALL"],"SecurityOpt":["no-new-privileges"],
+        "RestartPolicy":{"Name":"no","MaximumRetryCount":0},"LogConfig":{"Type":"none","Config":{}},
         "Tmpfs":{"/tmp":"rw,exec,nosuid,nodev,size=256m,uid=65532,gid=65532,mode=700"},
         "Ulimits":[{"Name":"fsize","Soft":67108864,"Hard":67108864}]},"Mounts":[]}
     assert effective(info,image,"owned",entry,[],env)
@@ -242,7 +275,8 @@ def self_test():
     for key,value in (("NetworkMode","host"),("Privileged",True),("ReadonlyRootfs",False),
         ("Memory",0),("PidsLimit",0),("PidMode","host"),("IpcMode","host"),
         ("CapAdd",["SYS_ADMIN"]),("SecurityOpt",[]),("Devices",[{}]),
-        ("Tmpfs",{}),("Ulimits",[]),("VolumesFrom",["other"])):
+        ("Tmpfs",{}),("Ulimits",[]),("VolumesFrom",["other"]),
+        ("RestartPolicy",{"Name":"always","MaximumRetryCount":0}),("LogConfig",{"Type":"json-file","Config":{}})):
         changed=json.loads(json.dumps(info));changed["HostConfig"][key]=value
         reject(lambda changed=changed:effective(changed,image,"owned",entry,[],env))
     for key,value in (("User","0:0"),("Env",["GITHUB_TOKEN=secret"]),("Cmd",["/outside"]),("Tty",True)):
@@ -250,6 +284,55 @@ def self_test():
         reject(lambda changed=changed:effective(changed,image,"owned",entry,[],env))
     changed=json.loads(json.dumps(info));changed["Mounts"]=[{"Type":"bind","RW":True,"Destination":"/outside"}]
     reject(lambda:effective(changed,image,"owned",entry,[],env))
+    # Fake daemon lifecycle only: no subprocess or filesystem mutation.
+    identifier="b"*64;owner="1:1:1"
+    original=json.loads(json.dumps(info));original["Id"]=identifier
+    original["Config"]["Labels"]={OWNER_LABEL:owner}
+    def scenario(fault):
+        calls=[];owned=[];proofs=[]
+        def command(args,seconds,limit):
+            calls.append(args)
+            if args[0]=="create":
+                if fault=="create-error": raise RuntimeError("ambiguous daemon error")
+                return 0,b"malformed\n" if fault=="malformed" else (identifier+"\n").encode()
+            if args[0]=="inspect":
+                obj=json.loads(json.dumps(original))
+                after=any(c[0]=="start" for c in calls)
+                if after: obj["State"]={"Running":False,"Status":"exited","ExitCode":0}
+                if fault=="id-mismatch" or (after and fault=="swapped-post"):obj["Id"]="c"*64
+                if fault=="label-mismatch":obj["Config"]["Labels"]={}
+                if fault=="name-mismatch":obj["Name"]="/other"
+                if fault=="confinement":obj["HostConfig"]["Privileged"]=True
+                return 0,json.dumps([obj]).encode()
+            if args[0]=="start":
+                if fault in ("start-failed","timeout"):raise RuntimeError(fault)
+                return 0,b"evidence"
+            if args[0]=="rm":
+                if fault=="cleanup-failed":raise RuntimeError(fault)
+                return 0,b""
+            raise AssertionError("unexpected operation")
+        failed=False
+        try:
+            assert container(command,["create"],"owned",image,entry,[],env,owner,
+                10,1024,owned,proofs,lambda:None)==b"evidence"
+        except (ValueError,RuntimeError):failed=True
+        failures=cleanup(command,owned)
+        assert all(c[-1]==identifier for c in calls if c[0] in ("inspect","start","rm"))
+        if fault in ("create-error","malformed","id-mismatch","label-mismatch","name-mismatch"):
+            assert failed and not owned and not any(c[0] in ("start","rm") for c in calls)
+        elif fault=="confinement":
+            assert failed and owned==[identifier] and not any(c[0]=="start" for c in calls)
+            assert calls[-1]==["rm","--force",identifier]
+        elif fault in ("start-failed","timeout","swapped-post"):
+            assert failed and owned==[identifier] and calls[-1]==["rm","--force",identifier]
+        elif fault=="cleanup-failed":
+            assert not failed and failures==[identifier]
+        else:
+            assert not failed and not failures and len(proofs)==1
+        return bool(fault)
+    for fault in ("","create-error","malformed","id-mismatch","label-mismatch",
+                  "name-mismatch","confinement","start-failed","timeout","swapped-post","cleanup-failed"):
+        rejected+=scenario(fault)
     return rejected
 
 if __name__=="__main__":
