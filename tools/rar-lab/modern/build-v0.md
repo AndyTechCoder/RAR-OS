@@ -60,3 +60,24 @@ Pure negative tests run in the existing isolated Specifications validation.
 A new controller must pass independent review and merge before dispatch; never
 execute a proposal copy of this controller as the trusted outer orchestrator.
 No local Mac/SSD build or execution is authorized by this document.
+
+## Hosted-runner rollout (2026-09-08)
+
+Specifications run34230717029 used Ubuntu24 image20260907.300.1 and passed all
+69 new controller tests. The later legacy host-safety entry rejected that exact
+image because its literal allowlist ended at20260831.293.1. The successful
+runtime-source run34228974378 received the older20260831.293.1 image; this is a
+mixed-pool runner rollout, not evidence of a target/compiler regression.
+
+The [official release](https://github.com/actions/runner-images/releases/tag/ubuntu24/20260907.300)
+was published 2026-09-08T09:34:53Z and identifies image20260907.300.1, Ubuntu24.04.5,
+kernel6.17.0-1022-azure. Its reported tool changes include Buildx0.37.0; the
+pinned target Rust/UEFI OCI and distribution inputs are unchanged. Host-provided
+Rust1.98.1 is not the target compiler and receives no compiler authority here.
+
+The bootstrap guard admits this one exact new image alongside the two previously
+reviewed versions. Unknown versions, wrong OS/architecture/repository/source,
+wrong OCI digest, mutable tool mounts and mismatched executable hashes still fail.
+This does not pin or certify the whole hosted platform as reproducible; exact
+runner identity remains recorded and container/tool authority remains separately
+checked. No Mac permission, VM profile, target dependency or safety gate changes.
