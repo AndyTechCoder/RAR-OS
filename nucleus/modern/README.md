@@ -6,8 +6,9 @@ trial health, checked incarnations, atomic model cutover, revocation and fault
 recovery. See docs/interfaces/modern-lifecycle-v0.md.
 
 This is not a kernel runtime, dynamic loader, sealed-memory implementation,
-PIO driver, storage controller or boot proof. It has no unsafe code, allocation,
-external runtime dependency or OS execution entrypoint. The real trap/loader
+storage controller or boot proof. The model and ABI forbid unsafe code; the
+new native_pio leaf contains narrowly scoped privileged x86-64 UEFI instructions.
+There is no allocation, external runtime dependency or OS execution entrypoint. The real trap/loader
 integration and independent runtime evidence must enforce the documented model.
 Tests/no_std compilation run only in the cloud Specifications sandbox.
 
@@ -24,6 +25,9 @@ from the kernel-owned table, not a userspace selector. Keyboard has no receive
 grant. Trial and replacement Settings receive no device authority. Exhaustive
 IPC-edge, cross-role/type denial and fault-revocation tests cover these additions.
 
-Native fixed-port dispatch, geometry/command checks, framebuffer mapping,
-scheduling and actual syscall bootstrap are still missing. No native I/O occurs
-in this model. See the private lifecycle contract for exact roles and indices.
+The native_pio candidate maps authorized Data/System operations to separate
+fixed registers; non-UEFI builds use inert denied stubs. Its public entrypoints
+are unsafe and require the documented certified VM/kernel-context invariants.
+Trap wiring, actual UEFI compilation/execution, certified register layout,
+geometry/driver sequencing, framebuffer mapping and scheduling remain pending.
+Model tests perform no native I/O. See modern-runtime-v1.md for the boundary.

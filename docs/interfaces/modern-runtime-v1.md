@@ -107,3 +107,40 @@ kernel pointer validation, fixed native adapters, timer, bootstrap publication,
 trial handover, service/UI wiring and reviewed cloud execution are still gates.
 No native execution, disk/profile activation or production ABI is authorized by
 this candidate.
+
+## Native fixed PIO candidate
+
+nucleus/modern/native_pio.rs is the privileged leaf for the DEVICE operation.
+It resolves the trapped caller's live capability, decodes the bounded operation,
+then derives one fixed register set: Data1 uses0x1f0..0x1f7/control0x3f6;
+System9 uses0x170..0x177/control0x376. No userspace port/device selector exists.
+Initialization checks PIC slave mask bits6/7 (IRQ14/15), writes nIEN=1/SRST=0
+to both device controls and rejects absent-status0/255. It issues no reset,
+data transfer or disk command, and returns at the first error without retry.
+
+The pinned Desktop cloud tool recipe uses Debian QEMU
+1:7.2+dfsg-7+deb12u18+b3. Upstream QEMU7.2 ISA IDE exposes iobase, iobase2 and irq
+properties ([primary source](https://github.com/qemu/qemu/blob/v7.2.0/hw/ide/isa.c)).
+These facts support a candidate layout, not certification of the patched Debian
+binary or a composed q35 VM. Exact runtime property/port collision, IRQ,
+master-only attachment, identity, geometry and confinement evidence remain
+mandatory before this adapter is used. No upstream implementation is copied or
+linked into RAR target code.
+
+Only x86-64 UEFI builds contain the four in/out primitives. Other builds return
+Denied without I/O. The public Adapter initialize/execute functions are unsafe:
+the real kernel must ensure firmware exit, CPL0, IF=0, one CPU, exclusive
+ownership, the exact reviewed cloud devices and current caller derivation on
+every call. Adapter is neither Send nor Sync and has no public port fields,
+ordinary constructor, Clone or reset. Native assembly intentionally omits nomem
+so compiler memory operations are not allowed to move across the I/O boundary.
+
+Every execution performs at most one native I/O and checks authority/arguments
+first. It does not implement driver IDENTIFY/geometry, whole-command sequencing,
+durability or transport poisoning; services/modern/pio.rs owns those mechanisms.
+Unsafe code is permitted only in this explicit native leaf; model.rs and abi.rs
+retain their own forbid(unsafe_code) guards. Tests use a private fake backend to
+pin all operation/port mappings, denied/expired/type/value paths with zero I/O,
+initialization boundaries and no retry. Linux tests/no_std compilation do NOT
+compile or execute the UEFI-only asm branch; actual UEFI build, focused unsafe
+review and VM tests are required before runtime acceptance.

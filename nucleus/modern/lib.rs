@@ -1,7 +1,10 @@
 //! Pure Modern kernel mechanisms and private ABI; runtime activation is separate.
 #![cfg_attr(not(test), no_std)]
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
+#![deny(unsafe_op_in_unsafe_fn)]
 pub mod model;
+// The only native unsafe leaf. Model and ABI retain their own forbid guards.
+#[allow(unsafe_code)] pub mod native_pio;
 #[path="../../core/modern/abi.rs"] pub mod abi;
 #[cfg(test)]
 mod bootstrap_integration {
