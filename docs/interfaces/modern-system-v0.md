@@ -37,7 +37,7 @@ I/O, keys with real secrecy, kernel capabilities or execution occurs here.
 | 144 | 32 | SHA256 of the exact laboratory public key |
 | 176 | 20 | nonzero source commit identity, binary Git SHA1 identifier, not a security hash |
 | 196 | 32 | nonzero SHA256 identity of the declared build inputs |
-| 228 | 4 | required Modern kernel ABI version 0 |
+| 228 | 4 | required Modern kernel ABI version 1 |
 | 232 | 4 | declared trial CPU budget, 1 through 100 preemptions |
 | 236 | 4 | dynamic heap budget 0 |
 | 240 | 4 | guarded user stack budget 16384 bytes |
@@ -203,3 +203,15 @@ Focused readback fixtures also simulate successful writes/flush followed by wron
 target bytes or a corrupted protected selector. Each is indeterminate and locks
 writes with no retry; fresh mount selects the remaining valid complete record.
 A successful fallback test checks ACK, retained high-water and fresh mount.
+
+## Experimental kernel compatibility correction
+
+Before any accepted signed Settings package, the authenticated LE u32 at bytes
+228..231 is corrected to exact value 1, matching Modern-v1 RARMOD01, Boot368
+and Envelope152. Manifest framing version0, component interface0, all offsets,
+signature preimage/domain and other policy constraints remain unchanged.
+Kernel-ABI0 and every value other than1 are rejected, never translated or
+silently upgraded. Existing zero-valued fixtures are not compatible layers.
+New real packages must be generated and signed with ABI1; changing this field
+after signing invalidates authentication. This corrects an unactivated candidate,
+not a stable format or an accepted on-disk deployment. See ADR0034 refinement.

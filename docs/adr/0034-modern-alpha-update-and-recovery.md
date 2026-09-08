@@ -133,3 +133,24 @@ read-only architecture review of the crash/nonce conflict; concrete source tests
 independent review and actual device/profile evidence are still pending. Public
 lab keys, exact-erasure/whole-rollback limits and no writable clones stay explicit.
 This refinement is not runtime authorization or an accepted production format.
+
+## Refinement: signed compatibility matches the actual Modern-v1 kernel
+
+Under the owner's delegated safe-direction authority, correct the unactivated
+Modern-v0 layer candidate's signed kernel compatibility field at bytes228..231
+from0 to exact1. The actual kernel, service and app bootstrap uses RARMOD01,
+Boot368 and Envelope152. A manifest declaring ABI0 must not authorize that code.
+
+Alternatives considered: accepting both0 and1 or translating old bootstrap data
+would misrepresent compatibility and is rejected. A new manifest framing version
+would be needed if preserving an accepted ABI0 deployment; no such Modern layer
+has been accepted. Keep the experimental format0, component interface0, existing
+offsets, signature domain and preimage unchanged; reject all non1 kernel values.
+
+Consequences: zero-valued fixtures/packages remain incompatible. Every real
+Settings candidate must be newly generated and signed with the value1. The
+verifier checks this authenticated declaration before returning verified payload
+bytes for staging. Focused cross-module tests pin the actual ABI version, magic
+and Boot/Envelope sizes and reject0,2 and other unknown values. This refinement
+requires independent code/contract review and cloud checks before publication;
+it grants no loader/cutover, runtime acceptance or production security claim.

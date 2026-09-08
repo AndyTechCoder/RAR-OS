@@ -1,6 +1,13 @@
 //! Modern-v0 bounded signed layer, not stable RLM/RCI and not execution authority.
 use crate::{ed25519, pe, sha256::sha256};
 
+// Keep this explicit: changing the kernel must not silently change signed policy.
+pub const REQUIRED_KERNEL_ABI: u32 = 1;
+#[cfg(test)]
+#[allow(dead_code)]
+#[path = "abi.rs"]
+mod runtime_abi;
+
 pub const SIZE: usize = 384;
 pub const PREIMAGE: usize = 288;
 pub const MAX_PAYLOAD: usize = 2 * 1024 * 1024;
@@ -62,7 +69,7 @@ impl<'a> Manifest<'a> {
     fn policy(&self, minimum_generation: u64) -> Result<(), Reject> {
         let b = self.bytes;
         if word32(b, 40) != 5 || b[44..46] != [1,0] || b[46..48] != [0,0] ||
-            word32(b, 48) != 1 || word32(b, 52) != 0 || word32(b, 228) != 0 ||
+            word32(b, 48) != 1 || word32(b, 52) != 0 || word32(b, 228) != REQUIRED_KERNEL_ABI ||
             b[80..112] != hash(HEALTH_NAME)? || b[176..196].iter().all(|&x| x == 0) ||
             b[196..228].iter().all(|&x| x == 0) {
             return Err(Reject::Compatibility);
@@ -126,6 +133,7 @@ mod tests {
         b[80..112].copy_from_slice(&hash(HEALTH_NAME).unwrap());
         b[144..176].copy_from_slice(&hash(&LAB_PUBLIC_KEY).unwrap());
         b[176..196].fill(1); b[196..228].fill(2);
+        u32put(&mut b, 228, REQUIRED_KERNEL_ABI);
         u32put(&mut b, 232, 50); u32put(&mut b, 240, 16384);
         let digest = hash(&b[..PREIMAGE]).unwrap();
         b[288..320].copy_from_slice(&digest); b
@@ -177,10 +185,31 @@ mod tests {
             (48,2,Reject::Compatibility), (52,1,Reject::Compatibility),
             (60,4097,Reject::Budget), (60,0,Reject::Budget), (60,131073,Reject::Budget),
             (64,8,Reject::Budget), (232,0,Reject::Budget), (232,101,Reject::Budget),
-            (236,1,Reject::Budget), (240,32768,Reject::Budget), (228,1,Reject::Compatibility),
+            (236,1,Reject::Budget), (240,32768,Reject::Budget), (228,0,Reject::Compatibility),
+            (228,2,Reject::Compatibility), (228,u32::MAX,Reject::Compatibility),
         ] {
             let mut bad = b; u32put(&mut bad, offset, value);
             assert_eq!(Manifest::parse(&bad).unwrap().policy(1), Err(want), "{offset}");
+        }
+    }
+    #[test]
+    fn signed_kernel_compatibility_matches_actual_boot_and_envelope() {
+        assert_eq!(u64::from(REQUIRED_KERNEL_ABI), runtime_abi::VERSION);
+        assert_eq!(runtime_abi::MAGIC, u64::from_le_bytes(*b"RARMOD01"));
+        assert_eq!(runtime_abi::BOOT_BYTES, 368);
+        assert_eq!(runtime_abi::ENVELOPE_BYTES, 152);
+        assert_eq!(core::mem::size_of::<runtime_abi::Boot>(), 368);
+        assert_eq!(core::mem::size_of::<runtime_abi::Envelope>(), 152);
+        let b = fixture();
+        assert_eq!(word32(&b, 228), 1);
+        let message = Manifest::parse(&b).unwrap().signed_message().unwrap();
+        for value in [0, 2, 255, 65536, u32::MAX] {
+            let mut old = b; u32put(&mut old, 228, value);
+            let parsed = Manifest::parse(&old).unwrap();
+            assert_eq!(parsed.policy(1), Err(Reject::Compatibility));
+            assert_ne!(parsed.signed_message().unwrap(), message);
+            // The old digest cannot authenticate modified compatibility bytes.
+            assert!(matches!(verify(&old, &[0;1024], 1), Err(Reject::Digest)));
         }
     }
     #[test]
