@@ -43,7 +43,11 @@ span is capped at 64MiB; this is a parser ceiling, not proof of runtime allocati
 Malformed or oversized artifacts fail, rather than relaxing the runtime budget.
 
 Both builds' hashes and layouts, tool executable/image identities, source and
-controller commits, runner/run identities, and final status are retained.
+controller commits, runner/run identities, and final status are retained once
+startup guards reach manifest creation. Checkout-action failures and early
+controller/source identity, cleanliness or source-tree rejection precede that
+point and retain workflow logs only, not a manifest. An absent artifact is not
+successful build evidence.
 Reproducibility here means two isolated builds with the same pinned tool image;
 it does not mean two independent compiler implementations.
 PE stack-reserve/commit headers are reported, but are NOT a maximum call-stack

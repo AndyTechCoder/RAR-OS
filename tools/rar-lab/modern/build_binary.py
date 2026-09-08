@@ -100,6 +100,7 @@ def self_test():
                  (328+8,0),(328+12,0),(328+16,1024),(328+20,0xffffffff),
                  (328+36,0xe0000020)]
     mutations += [(o+112+8*i,1) for i in (1,5,6,9,13)]
+    mutations += [(70,17),(s+36,0x20000020)]
     for at,value in mutations:
         bad=bytearray(valid); struct.pack_into("<I",bad,at,value)
         try: inspect(bytes(bad),True)
@@ -109,6 +110,20 @@ def self_test():
         try: inspect(bad,True)
         except (ValueError,struct.error): rejected+=1
         else: raise AssertionError("PE truncation accepted")
+    # Adjacent pages and raw sectors are valid, but sharing either is refused.
+    two=bytearray(valid+bytes(512))
+    struct.pack_into("<H",two,70,2)
+    struct.pack_into("<I",two,o+56,12288)
+    s2=s+40
+    for offset,value in ((8,16),(12,8192),(16,512),(20,1024),(36,0x40000040)):
+        struct.pack_into("<I",two,s2+offset,value)
+    assert len(inspect(bytes(two),True)["sections"])==2
+    assert len(inspect(bytes(two),False)["sections"])==2
+    for offset,value in ((12,4096),(20,512)):
+        bad=bytearray(two);struct.pack_into("<I",bad,s2+offset,value)
+        try: inspect(bytes(bad),True)
+        except ValueError: rejected+=1
+        else: raise AssertionError("overlapping section accepted")
     packet=b"".join(("RAR-FILE:"+name+"\n").encode()+base64.b64encode(valid)+b"\n" for name in NAMES)+b"RAR-BUILD:END\n"
     assert unpack(packet)==dict.fromkeys(NAMES,valid)
     for bad in (b"",packet[:-1],packet+b"x",packet.replace(b"modern.efi",b"../escape",1),
@@ -116,6 +131,7 @@ def self_test():
         try: unpack(bad)
         except ValueError: rejected+=1
         else: raise AssertionError("transfer mutation accepted")
+    assert rejected==33, "Modern PE negative coverage changed"
     return rejected
 
 if __name__ == "__main__":

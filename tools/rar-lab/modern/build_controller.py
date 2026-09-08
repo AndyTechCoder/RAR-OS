@@ -39,6 +39,7 @@ def self_test():
         try: identity(value)
         except ValueError: rejected+=1
         else: raise AssertionError("invalid revision accepted")
+    assert rejected==69, "Modern build negative coverage changed"
     return rejected
 
 def main():
