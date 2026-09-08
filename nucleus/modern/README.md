@@ -15,3 +15,15 @@ Staging records are private and currently populated only by test fixtures.
 Production verification/sealing integration is still absent. Fault/timer events
 are incarnation-bound; manager failure cancels pending work and requests
 controlled recovery without disrupting the active Settings instance.
+
+The M4.1 integration candidate includes the complete existing desktop named-send
+graph and caller-local Data/System/Input/Framebuffer capability checks. Data
+storage principal1 alone holds Data; System storage principal9 alone holds
+System; manager8 and all apps hold neither. These methods derive device kind
+from the kernel-owned table, not a userspace selector. Keyboard has no receive
+grant. Trial and replacement Settings receive no device authority. Exhaustive
+IPC-edge, cross-role/type denial and fault-revocation tests cover these additions.
+
+Native fixed-port dispatch, geometry/command checks, framebuffer mapping,
+scheduling and actual syscall bootstrap are still missing. No native I/O occurs
+in this model. See the private lifecycle contract for exact roles and indices.

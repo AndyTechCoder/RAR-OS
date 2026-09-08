@@ -12,6 +12,12 @@ pub const SEND:u8=1;
 pub const RECEIVE:u8=2;
 pub const HEALTH:u8=4;
 pub const MANAGE:u8=8;
+pub const DEVICE:u8=16;
+pub const INPUT:u8=32;
+pub const DRAW:u8=64;
+pub const INPUT_CAP:usize=7;
+pub const FRAMEBUFFER_CAP:usize=8;
+pub const DEVICE_CAP:usize=11;
 pub const SELF_CAP:usize=0;
 pub const SHELL_CAP:usize=1;
 pub const COMPOSITOR_CAP:usize=2;
@@ -23,9 +29,12 @@ pub enum Error {Invalid,Denied,Stale,Full,Empty,Exhausted,Busy}
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 pub struct Endpoint {pub slot:u8,pub incarnation:u64}
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub enum Device {Data,System}
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
 pub enum Object {
     None, NamedSend {principal:u8}, Receive(Endpoint),
     TrialHealth {endpoint:Endpoint,token:u64}, Manager,
+    Device(Device), Input, Framebuffer,
 }
 #[derive(Clone,Copy)]
 struct Cap {generation:u32,rights:u8,object:Object,retired:bool}
@@ -41,6 +50,9 @@ impl Caps {
             Object::Receive(e) if (e.slot as usize)<TASKS&&e.incarnation!=0=>RECEIVE,
             Object::TrialHealth {endpoint:e,token} if (e.slot as usize)<TASKS&&e.incarnation!=0&&token!=0=>HEALTH,
             Object::Manager=>MANAGE,
+            Object::Device(_)=>DEVICE,
+            Object::Input=>INPUT,
+            Object::Framebuffer=>DRAW,
             _=>return Err(Error::Invalid),
         };
         if rights!=allowed||s.retired||s.object!=Object::None {return Err(Error::Denied);}
@@ -140,13 +152,20 @@ impl Runtime {
             let e=Endpoint {slot:i as u8,incarnation:1};
             r.processes[i].state=State::Active;r.processes[i].principal=Some(i as u8);r.processes[i].incarnation=1;
             r.bindings[i]=Some(e);
-            r.processes[i].caps.grant(SELF_CAP,Object::Receive(e),RECEIVE).unwrap();
+            if i!=2 {r.processes[i].caps.grant(SELF_CAP,Object::Receive(e),RECEIVE).unwrap();}
         }
         r.processes[8].caps.grant(MANAGER_CAP,Object::Manager,MANAGE).unwrap();
-        r.processes[5].caps.grant(SHELL_CAP,Object::NamedSend {principal:0},SEND).unwrap();
-        r.processes[5].caps.grant(COMPOSITOR_CAP,Object::NamedSend {principal:3},SEND).unwrap();
-        // Shell holds a named endpoint; it follows authorized principal5 rebinding.
-        r.processes[0].caps.grant(5,Object::NamedSend {principal:5},SEND).unwrap();
+        // Released desktop's least-authority IPC graph, with logical endpoints.
+        for (caller,slot,principal) in [(0,2,3),(0,4,4),(0,5,5),(0,6,6),
+            (1,4,4),(1,6,6),(2,1,0),(4,2,3),(4,3,1),
+            (5,1,0),(5,2,3),(6,2,3),(6,3,1)] {
+            r.processes[caller].caps.grant(slot,Object::NamedSend {principal},SEND).unwrap();
+        }
+        r.processes[1].caps.grant(DEVICE_CAP,Object::Device(Device::Data),DEVICE).unwrap();
+        r.processes[9].caps.grant(DEVICE_CAP,Object::Device(Device::System),DEVICE).unwrap();
+        r.processes[2].caps.grant(INPUT_CAP,Object::Input,INPUT).unwrap();
+        r.processes[3].caps.grant(FRAMEBUFFER_CAP,Object::Framebuffer,DRAW).unwrap();
+        // Principal8 manages lifecycle; only System service9 receives System I/O.
         r
     }
     pub fn recovery_required(&self)->bool {self.recovery_required}
@@ -158,6 +177,29 @@ impl Runtime {
     }
     pub fn handle(&self,slot:usize,index:usize)->Result<u64,Error>{
         self.processes.get(slot).ok_or(Error::Invalid)?.caps.handle(index)
+    }
+    /// Resolve only the trapped caller's table. No device selector comes from
+    /// user bytes. Native adapter code must map the returned kind to fixed ports.
+    /// This checks mechanism authority, not profile/capacity or ATA sequencing.
+    pub fn device(&self,caller:usize,handle:u64)->Result<Device,Error> {
+        let p=self.processes.get(caller).ok_or(Error::Invalid)?;
+        if p.state!=State::Active {return Err(Error::Denied);}
+        let expected=match p.principal {Some(1)=>Device::Data,Some(9)=>Device::System,
+            _=>return Err(Error::Denied)};
+        if p.caps.resolve(handle,DEVICE)?!=Object::Device(expected) {return Err(Error::Denied);}
+        Ok(expected)
+    }
+    pub fn input(&self,caller:usize,handle:u64)->Result<(),Error> {
+        let p=self.processes.get(caller).ok_or(Error::Invalid)?;
+        if p.state!=State::Active||p.principal!=Some(2)||
+            p.caps.resolve(handle,INPUT)?!=Object::Input {return Err(Error::Denied);}
+        Ok(())
+    }
+    pub fn framebuffer(&self,caller:usize,handle:u64)->Result<(),Error> {
+        let p=self.processes.get(caller).ok_or(Error::Invalid)?;
+        if p.state!=State::Active||p.principal!=Some(3)||
+            p.caps.resolve(handle,DRAW)?!=Object::Framebuffer {return Err(Error::Denied);}
+        Ok(())
     }
     fn manager(&self,caller:usize,handle:u64)->Result<(),Error>{
         let p=self.processes.get(caller).ok_or(Error::Invalid)?;
@@ -307,6 +349,76 @@ mod tests {
     fn healthy(r:&mut Runtime)->Trial{
         let t=prepare(r,23,50);
         r.ready(t.endpoint.slot as usize,r.handle(t.endpoint.slot as usize,HEALTH_CAP).unwrap(),t.token).unwrap();t
+    }
+    #[test] fn normal_boot_device_authority_is_caller_local_and_role_exact() {
+        let mut r=Runtime::new();let data=r.handle(1,DEVICE_CAP).unwrap();
+        let system=r.handle(9,DEVICE_CAP).unwrap();
+        assert_eq!(r.device(1,data),Ok(Device::Data));
+        assert_eq!(r.device(9,system),Ok(Device::System));
+        // Same numeric handle in two tables is not transferable authority.
+        assert_eq!(data,system);
+        for caller in 0..=TASKS {
+            if ![1,9].contains(&caller) {assert!(r.device(caller,data).is_err());}
+        }
+        for caller in [1,9] {
+            for handle in [0,u64::MAX,1,data^(1<<32),r.handle(caller,SELF_CAP).unwrap()] {
+                assert!(r.device(caller,handle).is_err());
+            }
+        }
+        assert!(r.handle(8,DEVICE_CAP).is_err());
+        r.fault(Endpoint{slot:1,incarnation:1}).unwrap();
+        assert!(r.device(1,data).is_err());assert_eq!(r.device(9,system),Ok(Device::System));
+        r.fault(Endpoint{slot:9,incarnation:1}).unwrap();
+        assert!(r.device(9,system).is_err());
+    }
+    #[test] fn input_framebuffer_and_trial_never_gain_disk_authority() {
+        let mut r=Runtime::new();let input=r.handle(2,INPUT_CAP).unwrap();
+        let draw=r.handle(3,FRAMEBUFFER_CAP).unwrap();
+        assert!(r.input(2,input).is_ok());assert!(r.framebuffer(3,draw).is_ok());
+        for caller in 0..TASKS {
+            if caller!=2 {assert!(r.input(caller,input).is_err());}
+            if caller!=3 {assert!(r.framebuffer(caller,draw).is_err());}
+        }
+        assert!(r.handle(2,SELF_CAP).is_err());
+        let trial=prepare(&mut r,1,2);let slot=trial.endpoint.slot as usize;
+        for h in [input,draw,r.handle(slot,HEALTH_CAP).unwrap()] {
+            assert!(r.device(slot,h).is_err());assert!(r.input(slot,h).is_err());
+            assert!(r.framebuffer(slot,h).is_err());
+        }
+        let mut c=Caps::new();
+        for (object,right) in [(Object::Device(Device::Data),DEVICE),(Object::Device(Device::System),DEVICE),
+            (Object::Input,INPUT),(Object::Framebuffer,DRAW)] {
+            for wrong in [SEND,RECEIVE,HEALTH,MANAGE,DEVICE,INPUT,DRAW,255] {
+                if wrong!=right {assert!(c.grant(0,object,wrong).is_err());}
+            }
+        }
+    }
+    #[test] fn named_send_matrix_has_no_extra_edges() {
+        let r=Runtime::new();
+        let edges=[(0,2,3),(0,4,4),(0,5,5),(0,6,6),
+            (1,4,4),(1,6,6),(2,1,0),(4,2,3),(4,3,1),
+            (5,1,0),(5,2,3),(6,2,3),(6,3,1)];
+        for caller in 0..TASKS {for slot in 0..CAP_SLOTS {
+            let expected=edges.iter().find(|&&(c,s,_)|c==caller&&s==slot).map(|&(_,_,p)|p);
+            let actual=r.handle(caller,slot).and_then(|h|r.processes[caller].caps.resolve(h,SEND));
+            match expected {
+                Some(principal)=>assert_eq!(actual,Ok(Object::NamedSend{principal})),
+                None=>assert!(actual.is_err()),
+            }
+        }}
+    }
+    #[test] fn full_desktop_named_graph_routes_storage_without_device_grants() {
+        let mut r=Runtime::new();
+        for (caller,slot,target) in [(0,2,3),(0,4,4),(0,5,5),(0,6,6),
+            (1,4,4),(1,6,6),(2,1,0),(4,2,3),(4,3,1),
+            (5,1,0),(5,2,3),(6,2,3),(6,3,1)] {
+            r.send(caller,r.handle(caller,slot).unwrap(),b"route").unwrap();
+            let m=r.receive(target,r.handle(target,SELF_CAP).unwrap()).unwrap();
+            assert_eq!((m.principal,m.incarnation,m.length),(caller as u8,1,5));
+        }
+        for caller in [0,2,3,4,5,6,7,8] {assert!(r.handle(caller,DEVICE_CAP).is_err());}
+        let trial=healthy(&mut r);r.cutover(8,manager(&r),trial.token).unwrap();
+        assert!(r.handle(trial.endpoint.slot as usize,DEVICE_CAP).is_err());
     }
     #[test] fn trial_has_no_production_authority_and_health_is_one_shot(){
         let mut r=Runtime::new();let t=prepare(&mut r,1,2);let slot=t.endpoint.slot as usize;

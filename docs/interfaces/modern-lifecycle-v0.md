@@ -17,9 +17,9 @@ principals0..6,8,9 map to matching physical slots at incarnation1. Slot7 is
 vacant, not a preconstructed spare process. Slots10..15 remain unused. Only
 Settings principal5 currently has a replacement path; slots5 and7 alternate.
 Principal8 is the lifecycle manager; principal9 is planned System storage.
-This model's bootstrap graph includes only IPC/lifecycle handles. Device,
-framebuffer, filesystem authority and the complete application grants are not
-implemented or granted here.
+The candidate bootstrap graph now includes the released desktop's application
+IPC edges and distinct device/input/framebuffer capabilities. These remain
+kernel-owned source mechanisms, not implemented native I/O, mappings or syscalls.
 
 Every replacement consumes a new global64-bit incarnation and64-bit trial
 token. Both counters use checked addition; exhaustion refuses before mutation.
@@ -35,12 +35,46 @@ table's revocation history; private memory must separately be zeroed by runtime.
 - Receive(slot,incarnation): RECEIVE only; only its exact live owner redeems it.
 - TrialHealth(slot,incarnation,token): one-shot HEALTH only.
 - Manager: MANAGE only, provisioned solely to principal8.
+- Device(Data) or Device(System): DEVICE only, provisioned respectively to
+  Data storage principal1 and System storage principal9. Lifecycle manager8
+  has no raw-device handle. The kernel derives the kind from the caller's table;
+  no caller-provided selector chooses a device.
+- Input: INPUT only, provisioned solely to keyboard principal2.
+- Framebuffer: DRAW only, provisioned solely to compositor principal3.
 - No numeric object request or manifest field creates a capability.
 
 Each table has12 entries. Self receive index0, Settings shell send1, compositor
 send2, trial health9 and manager10 are reserved. Shell holds its named Settings
 send at index5. The real kernel alone fills a process's read-only bootstrap with
 the permitted handles; the model handle() accessor is not a userspace operation.
+Input is index7, framebuffer8 and per-storage-process device11. Rights DEVICE,
+INPUT and DRAW use private bits16,32 and64 respectively. The kernel-internal
+accessors check active state, exact logical owner and its local capability table
+before returning authority. Process destruction revokes these slots as it does
+all other capabilities; no device access survives a fault or trial process.
+
+Normal-boot named-send edges are exactly:
+
+| Caller | Cap index -> destination principal |
+| --- | --- |
+| Shell0 | 2 -> compositor3, 4 -> Files4, 5 -> Settings5, 6 -> Terminal6 |
+| Data storage1 | 4 -> Files4, 6 -> Terminal6 |
+| Keyboard2 | 1 -> shell0 |
+| Files4 | 2 -> compositor3, 3 -> Data storage1 |
+| Settings5 | 1 -> shell0, 2 -> compositor3 |
+| Terminal6 | 2 -> compositor3, 3 -> Data storage1 |
+
+Compositor3, manager8 and System service9 have no named-send edges at this
+checkpoint. Their later update/System protocol remains to be integrated.
+Keyboard2 has no receive grant. Other initial principals retain only their
+specified receive, lifecycle or device authority. Trial and replacement Settings
+never acquire a device, input or framebuffer capability.
+
+The device accessor is not an ATA driver. The native trap integration must
+independently enforce fixed, separate profile-certified PIO adapters, allowed
+operations, geometry and bounded transport. It must never treat a numeric
+caller argument or source-model success as runtime authority. No device profile
+is activated by this source change.
 
 Messages contain logical sender principal,64-bit sender incarnation, length and
 128-byte zero-filled bounded payload. These are stamped by the kernel, not
@@ -120,7 +154,8 @@ The real compositor must keep the last committed view while resetting only the
 new Settings incarnation's staging/version namespace after authorized handover.
 Shell and service clients must accept kernel-authenticated incarnation changes;
 they must not continue Desktop's hard-coded generation1 rule. This UI change is
-pending. Data storage and recovery permissions remain outside this IPC model.
+pending. Native Data/System I/O and immutable recovery remain outside this
+source mechanism; the distinct device capabilities do not implement either.
 
 ## Tests, migration and remaining integration
 
