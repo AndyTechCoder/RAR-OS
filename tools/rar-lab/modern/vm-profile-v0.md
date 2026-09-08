@@ -189,3 +189,22 @@ bytes-only synthetic fixtures, not boot evidence.
 No Modern workflow or outer-controller dispatch is introduced by this candidate.
 Effective confinement, exact source/build/helper binding, independent retained
 envelope checks and actual cloud execution remain required before acceptance.
+
+
+## Retained evidence checker candidate
+
+runtime_evidence.py takes only bounded canonical JSON bytes plus independently
+trusted boot digest and firmware sizes. It checks all five full actual frames,
+the authenticated frozen Data snapshot and initial empty-image binding, unchanged
+System digest, distinct fresh QEMU PIDs, the same three separate disk inodes,
+typed backend audit, exact paused preflight, exact fixed QEMU arguments, and the
+ordered input/capture plan. VM2 may receive only F1. The sole expected QMP event
+is RESUME; panics, unexpected events, alternate paths and extra commands fail.
+
+This is a content checker, not provenance or milestone acceptance. Its output
+explicitly leaves provenance_validated and milestone_complete false. Only the
+future trusted-main outer controller may bind the actual container/process,
+source/build/tool identity and independently measured firmware geometry.
+Current pure tests cover malformed framing, argument changes and command/capture
+drift; a complete successful retained envelope still requires actual cloud VM
+execution and independent review. No synthetic success envelope is boot evidence.
