@@ -43,7 +43,11 @@ An old immutable bootstrap or cached trial descriptor cannot imply those grants.
 Active cap indices exactly match the lifecycle contract. Present handles must
 have nonzero upper32-bit capability generation and their own one-based index
 in the lower32 bits; all other slots are zero. This checks encoding only.
-The active health token is zero. Entry lies inside the fixed 1MiB service-image
+The active health token is zero. kernel_probe and peer_probe are reserved
+placeholders and must both be zero; unlike the historical Desktop fixture,
+Modern bootstrap construction must not insert kernel or another process's
+private addresses. Any future diagnostic use needs an explicit reviewed contract.
+Entry lies inside the fixed 1MiB service-image
 VA window0x400000..0x500000; real PE/executable-page validation is separate.
 
 Only compositor3 receives framebuffer VA0x800000, 640x480 dimensions,

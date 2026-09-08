@@ -63,7 +63,8 @@ fn text(value:&[u8])->bool {
 /// writes this read-only mapping and derives grants, identities and expectations.
 pub fn valid_boot(b:&Boot)->bool {
     if b.magic!=MAGIC||b.version!=VERSION||b.bytes!=BOOT_BYTES||b.generation==0||
-        !(0x400000..0x500000).contains(&b.entry)||b.reserved!=[0;4]||b.peers[7]!=0 {return false;}
+        !(0x400000..0x500000).contains(&b.entry)||b.reserved!=[0;4]||b.peers[7]!=0||
+        b.kernel_probe!=0||b.peer_probe!=0 {return false;}
     let mask=match b.phase {
         ACTIVE=>{
             let Some(mask)=active_mask(b.role) else{return false;};
@@ -154,11 +155,12 @@ mod tests {
     }
     #[test] fn bootstrap_refuses_version_shape_and_cross_role_resources() {
         let b=fixture(4);
-        for field in 0..9 {
+        for field in 0..11 {
             let mut bad=b;
             match field {0=>bad.magic=0,1=>bad.version=2,2=>bad.bytes=176,3=>bad.generation=0,
                 4=>bad.reserved[0]=1,5=>bad.phase=2,6=>bad.health_token=1,
-                7=>bad.peers[7]=1,_=>bad.entry=0x500000}
+                7=>bad.peers[7]=1,8=>bad.entry=0x500000,9=>bad.kernel_probe=0x2000000,
+                _=>bad.peer_probe=0x600000}
             assert!(!valid_boot(&bad));
         }
         for role in [7,10,14,16,u64::MAX] {let mut bad=b;bad.role=role;assert!(!valid_boot(&bad));}
