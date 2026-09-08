@@ -5,12 +5,18 @@ logical endpoints, caller-local capabilities, bounded stamped queues, restricted
 trial health, checked incarnations, atomic model cutover, revocation and fault
 recovery. See docs/interfaces/modern-lifecycle-v0.md.
 
-This is not a kernel runtime, dynamic loader, sealed-memory implementation,
-storage controller or boot proof. The model and ABI forbid unsafe code; the
-new native_pio leaf contains narrowly scoped privileged x86-64 UEFI instructions.
-There is no allocation, external runtime dependency or OS execution entrypoint. The real trap/loader
-integration and independent runtime evidence must enforce the documented model.
-Tests/no_std compilation run only in the cloud Specifications sandbox.
+The distinct main.rs entry now connects the initial Modern policy to protected
+CPU contexts, page tables, int80 IPC, keyboard, delivered timer ticks and the
+native PIO adapter. It is an unactivated source candidate, not a boot proof or
+completed dynamic loader. Foundation selects it only with rar_platform plus
+rar_modern; rar_desktop is mutually exclusive. The existing Desktop profile and
+runtime remain separate.
+
+Model, ABI and support checks forbid unsafe code. The actual kernel entry uses
+documented privileged/memory mechanisms; native_pio is its fixed storage leaf.
+There is no external target dependency. Pure tests/no_std compilation run only
+in the cloud Specifications sandbox; that does not compile or execute main.rs.
+Actual pinned UEFI build and reviewed Modern controller execution remain gates.
 
 Staging records are private and currently populated only by test fixtures.
 Production verification/sealing integration is still absent. Fault/timer events
@@ -28,6 +34,14 @@ IPC-edge, cross-role/type denial and fault-revocation tests cover these addition
 The native_pio candidate maps authorized Data/System operations to separate
 fixed registers; non-UEFI builds use inert denied stubs. Its public entrypoints
 are unsafe and require the documented certified VM/kernel-context invariants.
-Trap wiring, actual UEFI compilation/execution, certified register layout,
-geometry/driver sequencing, framebuffer mapping and scheduling remain pending.
-Model tests perform no native I/O. See modern-runtime-v1.md for the boundary.
+The new entry supplies initial trap wiring, framebuffer mapping and scheduling;
+actual UEFI compilation/execution, certified register layout, service/UI wiring
+and runtime geometry/driver evidence remain pending. Model tests perform no
+native I/O. See modern-runtime-v1.md for the boundary.
+
+support.rs is used by the real entry and source tests: exact initial bootstrap
+construction, full 152-byte user span checks before queue consumption, bounded
+CPU selection, sticky tick exhaustion, and fixed candidate synthetic disk
+expectations. Idle15 is a CPU context with no logical principal or grants.
+M4.2 staging, trial construction/preemption/cutover and active bootstrap refresh
+are not implemented by this initial M4.1 entry. No live-update claim follows.

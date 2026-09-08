@@ -1,6 +1,8 @@
 //! Narrow UEFI GOP discovery and PS/2 setup for the fixed cloud platform.
 use core::{mem,ptr};
 use super::BootHardware;
+#[cfg(rar_modern)] use super::support as geometry;
+#[cfg(not(rar_modern))] use super::model as geometry;
 use crate::{fatal,input,out};
 #[repr(C)]struct Guid{a:u32,b:u16,c:u16,d:[u8;8]}
 const GOP:Guid=Guid{a:0x9042a9de,b:0x23dc,c:0x4a38,d:[0x96,0xfb,0x7a,0xde,0xd0,0x80,0x51,0x6a]};
@@ -46,7 +48,7 @@ pub unsafe fn configure(functions:&[usize;44],image_base:u64,image_size:u64)->Bo
     let value=unsafe{info.read()};
     let (framebuffer,bytes)=unsafe{((*mode).base,(*mode).bytes)};
     if value.version!=0{fatal("RAR-PANIC:CODE=GOP-VERSION");}
-    let rounded=super::model::framebuffer_span(value.width,value.height,value.pitch,value.format,framebuffer,bytes as u64)
+    let rounded=geometry::framebuffer_span(value.width,value.height,value.pitch,value.format,framebuffer,bytes as u64)
         .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=GOP-RANGE"));
     BootHardware{image_base,image_size,framebuffer,framebuffer_bytes:rounded,pitch:value.pitch as u64,format:value.format as u64}
 }

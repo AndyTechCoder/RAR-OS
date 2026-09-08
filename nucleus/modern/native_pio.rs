@@ -1,7 +1,7 @@
 //! Fixed Modern PIO boundary; native instructions only on x86-64 UEFI.
 //! Tests use fake I/O. This source does not activate a VM profile.
 #![deny(unsafe_op_in_unsafe_fn)]
-use crate::{abi::{self,DeviceOp},model::{Device,Error,Runtime}};
+use super::{abi::{self,DeviceOp},model::{Device,Error,Runtime}};
 use core::marker::PhantomData;
 trait PortIo {
     fn read8(&mut self,p:u16)->Result<u8,Error>;
@@ -102,7 +102,7 @@ impl Adapter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Endpoint,DEVICE_CAP};
+    use super::super::model::{Endpoint,DEVICE_CAP};
     #[derive(Clone,Copy,Debug,PartialEq,Eq)]
     enum Access {R8(u16),W8(u16,u8),R16(u16),W16(u16,u16)}
     struct Fake {log:Vec<Access>,fail:Option<usize>,mask:u8,status:[u8;2]}

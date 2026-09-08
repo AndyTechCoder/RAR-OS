@@ -5,9 +5,14 @@ mod model;
 mod boot;
 mod paging;
 mod interrupts;
+#[cfg(all(rar_modern,not(rar_platform)))]
+compile_error!("rar_modern requires rar_platform");
+#[cfg(all(rar_modern,rar_desktop))]
+compile_error!("Modern and Desktop compositions are mutually exclusive");
 #[cfg(rar_platform)]
-#[cfg_attr(rar_desktop,path="../desktop/main.rs")]
-#[cfg_attr(not(rar_desktop),path="../platform/main.rs")]
+#[cfg_attr(rar_modern,path="../modern/main.rs")]
+#[cfg_attr(all(rar_desktop,not(rar_modern)),path="../desktop/main.rs")]
+#[cfg_attr(not(any(rar_desktop,rar_modern)),path="../platform/main.rs")]
 mod platform;
 use core::{arch::{asm,naked_asm}, panic::PanicInfo, sync::atomic::{AtomicUsize,Ordering}};
 

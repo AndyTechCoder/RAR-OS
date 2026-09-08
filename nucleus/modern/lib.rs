@@ -3,6 +3,7 @@
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 pub mod model;
+pub mod support;
 // The only native unsafe leaf. Model and ABI retain their own forbid guards.
 #[allow(unsafe_code)] pub mod native_pio;
 #[path="../../core/modern/abi.rs"] pub mod abi;
