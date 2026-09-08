@@ -163,6 +163,55 @@ def main():
             self.assertEqual(result["problem"],"deadline")
             self.assertIsNotNone(b.process.returncode)
 
+        def test_post_spawn_setup_failure_reaps_exact_child(self):
+            actual_spawn = process.subprocess.Popen
+            actual_selector = process.selectors.DefaultSelector
+            actual_blocking = process.os.set_blocking
+            for stage in ("blocking-1","blocking-2","register-1","register-2"):
+                fd = image()
+                server,client = socket.socketpair()
+                spawned = []
+                count = {"blocking":0,"register":0}
+                inner = actual_selector()
+                class Selector:
+                    def register(self,*args):
+                        count["register"] += 1
+                        if stage == "register-"+str(count["register"]):
+                            raise OSError("injected registration failure")
+                        return inner.register(*args)
+                    def close(self):
+                        inner.close()
+                def spawn(*args,**kwargs):
+                    result = actual_spawn(*args,**kwargs)
+                    spawned.append(result)
+                    return result
+                def blocking(*args):
+                    count["blocking"] += 1
+                    if stage == "blocking-"+str(count["blocking"]):
+                        raise OSError("injected blocking-mode failure")
+                    return actual_blocking(*args)
+                try:
+                    with patch.object(process.subprocess,"Popen",spawn), \
+                         patch.object(process.selectors,"DefaultSelector",Selector), \
+                         patch.object(process.os,"set_blocking",blocking):
+                        with self.assertRaises(OSError):
+                            process.Backend(fd,server,"data")
+                    self.assertEqual(len(spawned),1)
+                    self.assertIsNotNone(spawned[0].poll())
+                    self.assertEqual(spawned[0].wait(timeout=0),spawned[0].returncode)
+                    self.assertTrue(spawned[0].stdout.closed)
+                    self.assertTrue(spawned[0].stderr.closed)
+                    self.assertEqual(server.fileno(),-1)
+                    self.assertEqual(os.pread(fd,194*512,0),bytes(194*512))
+                finally:
+                    for child in spawned:
+                        if child.poll() is None:
+                            child.kill()
+                            child.wait(timeout=2)
+                    server.close()
+                    client.close()
+                    inner.close()
+
         def test_invalid_process_configuration_never_spawns(self):
             fd = image()
             server,client = socket.socketpair()
@@ -182,11 +231,11 @@ def main():
 
     try:
         suite = unittest.defaultTestLoader.loadTestsFromTestCase(Tests)
-        assert suite.countTestCases() == 6
+        assert suite.countTestCases() == 7
         result = unittest.TextTestRunner(verbosity=2).run(suite)
         if not result.wasSuccessful():
             raise SystemExit(1)
-        print("Modern backend process: 6 tests; real child kill/join, retained bytes, lost volatile state, torn cut, readonly and deadline; no VM/target execution")
+        print("Modern backend process: 7 tests; real child kill/join, retained bytes, lost volatile state, torn cut, readonly and deadline; no VM/target execution")
     finally:
         for backend in backends:
             if not backend.closed:

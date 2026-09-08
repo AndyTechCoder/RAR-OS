@@ -140,17 +140,41 @@ class Backend:
         self.eof = False
         self.closed = False
         self.deadline = time.monotonic()+seconds
-        self.process = subprocess.Popen(
-            [sys.executable,"-I","-B",str(path),"--child",encoded],
-            stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
-            close_fds=True,pass_fds=(disk_fd,server_socket.fileno()),
-            cwd="/tmp",start_new_session=True,
-            env={"CI":"true","GITHUB_ACTIONS":"true","RAR_CI_RUNNER_OS":"Linux"})
-        server_socket.close()
         self.selector = selectors.DefaultSelector()
-        for stream in (self.process.stdout,self.process.stderr):
-            os.set_blocking(stream.fileno(),False)
-            self.selector.register(stream,selectors.EVENT_READ)
+        self.process = None
+        try:
+            self.process = subprocess.Popen(
+                [sys.executable,"-I","-B",str(path),"--child",encoded],
+                stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+                close_fds=True,pass_fds=(disk_fd,server_socket.fileno()),
+                cwd="/tmp",start_new_session=True,
+                env={"CI":"true","GITHUB_ACTIONS":"true","RAR_CI_RUNNER_OS":"Linux"})
+            server_socket.close()
+            for stream in (self.process.stdout,self.process.stderr):
+                os.set_blocking(stream.fileno(),False)
+                self.selector.register(stream,selectors.EVENT_READ)
+        except BaseException:
+            # No caller handle exists yet. Retain ownership until the exact
+            # child has been killed/reaped, even if pipe/selector setup failed.
+            try:
+                self.selector.close()
+            finally:
+                if self.process is not None:
+                    try:
+                        try:
+                            server_socket.close()
+                        finally:
+                            if self.process.poll() is None:
+                                self.process.kill()
+                            # Failed setup grants no evidence. SIGKILL precedes
+                            # wait, so unread pipes cannot deadlock a writer.
+                            self.process.wait(timeout=2)
+                    finally:
+                        try:
+                            self.process.stdout.close()
+                        finally:
+                            self.process.stderr.close()
+            raise
 
     def _fail(self,reason):
         if self.problem is None:

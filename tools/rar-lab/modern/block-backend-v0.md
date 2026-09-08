@@ -161,9 +161,13 @@ that the VM is dead or that M4.1 is complete. Process uninterruptibility at the
 host kernel is not magically solved: failure to join must abort acceptance and
 leave the outer disposable-container timeout as the final containment boundary.
 
-Six new cloud-only process tests use disposable zero-filled regular files and
+Seven new cloud-only process tests use disposable zero-filled regular files and
 private socketpairs, not RAR code. They exercise a flushed write across complete
 backend replacement, loss of unflushed volatile state, actual torn-prefix bytes
 with no success reply, read-only preservation, an externally stopped-child
-watchdog/kill/join, and refusal before spawn for invalid configuration. They do
+watchdog/kill/join, refusal before spawn for invalid configuration, and four injected first/second
+stream-setup failures after a real child spawn. Failed construction kills and
+reaps that exact child before closing its pipes; no evidence from failed setup
+is accepted. An unreapable child fails the disposable job, never returns a
+usable handle or permits a snapshot. They do
 not substitute for the pending whole-VM persistence or frozen-Data oracle proof.

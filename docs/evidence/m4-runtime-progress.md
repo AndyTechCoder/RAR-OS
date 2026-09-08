@@ -65,7 +65,7 @@ a volatile instance. Frozen reads require detachment and read actual file bytes.
 The15-test backend candidate passed independent source review at6369251f430d92a88bb58f3c258932e9823d7a2c. Exact-head Foundation34242245906, Platform34242245927 and Desktop34242245960 passed. Specifications34242245898 passed its main validation step; full mutation-check completion was still pending at this checkpoint.
 
 A new bounded backend child-process candidate adds exact descriptor inheritance,
-cleared environment, bounded audit output, external deadline/kill/join and six
+cleared environment, bounded audit output, external deadline/kill/join and seven
 cloud-only process tests. This is not a VM launcher or profile activation; its
 review and exact-head test results are pending.
 
