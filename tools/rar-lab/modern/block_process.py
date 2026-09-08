@@ -28,12 +28,15 @@ def cloud_guard():
 
 def configuration(value):
     if (type(value) is not dict or set(value) !=
-        {"disk_fd","socket_fd","kind","readonly","fault","reverse_flush","seconds"} or
+        {"disk_fd","socket_fd","kind","readonly","fault","reverse_flush","seconds","write_refusing"} or
         type(value["disk_fd"]) is not int or value["disk_fd"] < 3 or
         type(value["socket_fd"]) is not int or value["socket_fd"] < 3 or
         value["disk_fd"] == value["socket_fd"] or
-        value["kind"] not in ("data","system") or
+        value["kind"] not in ("data","system","boot") or
         type(value["readonly"]) is not bool or
+        type(value["write_refusing"]) is not bool or
+        (value["write_refusing"] and not value["readonly"]) or
+        (value["kind"] == "boot" and not value["readonly"]) or
         type(value["reverse_flush"]) is not bool or
         type(value["seconds"]) not in (int,float) or
         not math.isfinite(value["seconds"]) or not 0 < value["seconds"] <= 180):
@@ -95,9 +98,10 @@ def child(config):
     channel = socket.socket(fileno=config["socket_fd"])
     started = time.monotonic()
     emit(dict(type="ready",kind=disk.kind,readonly=disk.readonly,
-              capacity=disk.size,device=disk.identity[0],inode=disk.identity[1]))
+              capacity=disk.size,device=disk.identity[0],inode=disk.identity[1],
+              export_readonly=disk.readonly and not config["write_refusing"]))
     try:
-        result = wire.serve(channel,disk,started+config["seconds"])
+        result = wire.serve(channel,disk,started+config["seconds"],config["write_refusing"])
         emit(dict(type="terminal",outcome="closed",result=result,
                   fault_hit=disk.fault_hit,failed=disk.failed))
         return 0
@@ -119,10 +123,10 @@ class Backend:
     Ownership of server_socket transfers only after successful spawn.
     """
     def __init__(self,disk_fd,server_socket,kind,readonly=False,fault=None,
-                 reverse_flush=False,seconds=30):
+                 reverse_flush=False,seconds=30,write_refusing=False):
         cloud_guard()
         config = configuration(dict(disk_fd=disk_fd,socket_fd=server_socket.fileno(),
-            kind=kind,readonly=readonly,fault=fault,reverse_flush=reverse_flush,seconds=seconds))
+            kind=kind,readonly=readonly,fault=fault,reverse_flush=reverse_flush,seconds=seconds,write_refusing=write_refusing))
         if (server_socket.family != socket.AF_UNIX or
             server_socket.getsockopt(socket.SOL_SOCKET,socket.SO_TYPE) != socket.SOCK_STREAM or
             server_socket.getsockopt(socket.SOL_SOCKET,socket.SO_ACCEPTCONN) != 0):

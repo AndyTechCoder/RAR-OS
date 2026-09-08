@@ -18,7 +18,7 @@ MAX_WIRE = 128 * 1024 * 1024
 
 class Negotiation:
     def __init__(self,size,readonly):
-        if type(size) is not int or size not in (194*512,16384*512) or type(readonly) is not bool:
+        if type(size) is not int or size not in (194*512,16384*512,32768*512) or type(readonly) is not bool:
             raise ValueError("fixed export geometry")
         self.size = size
         self.flags = 1 | 4 | (2 if readonly else 0)
@@ -86,7 +86,7 @@ class Negotiation:
         return details+bounds+reply(1)
 
 def request(raw,size):
-    if type(raw) is not bytes or len(raw) != 28 or type(size) is not int or size not in (194*512,16384*512):
+    if type(raw) is not bytes or len(raw) != 28 or type(size) is not int or size not in (194*512,16384*512,32768*512):
         raise ValueError("fixed request framing")
     magic,flags,kind,cookie,offset,length = struct.unpack(">IHHQQI",raw)
     if magic != REQUEST_MAGIC or flags != 0 or kind not in (0,1,2,3):
@@ -106,14 +106,16 @@ def simple(cookie,error=0,data=b""):
         raise ValueError("bounded simple response")
     return struct.pack(">IIQ",SIMPLE_MAGIC,error,cookie)+data
 
-def serve(channel,disk,deadline):
+def serve(channel,disk,deadline,write_refusing=False):
+    if type(write_refusing) is not bool or (write_refusing and not disk.readonly):
+        raise ValueError("write-refusing export requires an actually read-only disk")
     disk.attach()
     try:
-        return _serve(channel,disk,deadline)
+        return _serve(channel,disk,deadline,write_refusing)
     finally:
         disk.detach()
 
-def _serve(channel,disk,deadline):
+def _serve(channel,disk,deadline,write_refusing):
     """Called only by the reviewed cloud controller, never a local entrypoint.
     Controller creates AF_UNIX socketpair and passes its other endpoint only to
     the fixed QEMU process. This backend must itself be a separately killable
@@ -156,7 +158,7 @@ def _serve(channel,disk,deadline):
             raise ValueError("private block wire budget")
         channel.settimeout(min(1,remaining()))
         channel.sendall(raw)  # A partial/failed send is fatal; never replay.
-    negotiation = Negotiation(disk.size,disk.readonly)
+    negotiation = Negotiation(disk.size,disk.readonly and not write_refusing)
     send(HELLO)
     negotiation.client_flags(read(4))
     while not negotiation.ready:

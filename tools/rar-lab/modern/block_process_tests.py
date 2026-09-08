@@ -1,6 +1,7 @@
 """Cloud-only process lifecycle tests using disposable synthetic files.
 No RAR target, VM, reference adapter, network listener or host disk.
 """
+import hashlib
 import importlib.util
 import os
 from pathlib import Path
@@ -31,22 +32,23 @@ def main():
     process,wire = load("block_process"),load("block_wire")
     root = Path(tempfile.mkdtemp(prefix="rar-modern-process-tests-",dir="/tmp"))
     descriptors,backends,clients = [],[],[]
-    def image(readonly=False):
+    def image(readonly=False,kind="data"):
         path = root/("disk-"+str(len(descriptors)))
         fd = os.open(path,os.O_RDWR|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW|os.O_CLOEXEC,0o600)
         descriptors.append(fd)
-        assert os.write(fd,bytes(194*512)) == 194*512
+        size = 32768*512 if kind=="boot" else 194*512
+        assert os.write(fd,bytes(size)) == size
         os.fsync(fd)
         if readonly:
             fd = os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC)
             descriptors.append(fd)
         return fd
-    def start(fd,**kwargs):
+    def start(fd,kind="data",**kwargs):
         server,client = socket.socketpair()
         client.settimeout(3)
         clients.append(client)
         try:
-            backend = process.Backend(fd,server,"data",**kwargs)
+            backend = process.Backend(fd,server,kind,**kwargs)
         except BaseException:
             server.close()
             raise
@@ -60,19 +62,19 @@ def main():
                 raise EOFError("test socket")
             data += part
         return data
-    def handshake(client):
+    def handshake(client,size=194*512,readonly=False):
         assert read(client,18) == wire.HELLO
         client.sendall(struct.pack(">I",3))
         body = struct.pack(">IHH",0,1,3)
         header = struct.pack(">QII",wire.OPTION_MAGIC,7,len(body))
         client.sendall(header+body)
-        n = wire.Negotiation(194*512,False)
+        n = wire.Negotiation(size,readonly)
         n.client_flags(struct.pack(">I",3))
         expected = n.option(header,body)
         raw = read(client,len(expected))
         # Read-only exports differ only in advertised transmission flags.
         assert len(raw) == len(expected)
-        assert raw[:20] == expected[:20]
+        assert raw == expected
     def request(client,kind,cookie=1,offset=0,length=0,data=b"",error=0):
         client.sendall(struct.pack(">IHHQQI",wire.REQUEST_MAGIC,0,kind,cookie,offset,length)+data)
         header = read(client,16)
@@ -141,7 +143,7 @@ def main():
             fd = image(readonly=True)
             before = os.pread(fd,194*512,0)
             b,c = start(fd,readonly=True)
-            handshake(c)
+            handshake(c,readonly=True)
             request(c,1,offset=1024,length=512,data=b"D"*512,error=1)
             c.sendall(struct.pack(">IHHQQI",wire.REQUEST_MAGIC,0,2,0,0,0))
             self.assertEqual(finished(b),0)
@@ -162,6 +164,21 @@ def main():
             self.assertTrue(result["joined"])
             self.assertEqual(result["problem"],"deadline")
             self.assertIsNotNone(b.process.returncode)
+
+        def test_ide_compatible_exports_cannot_write_readonly_boot_or_data(self):
+            for kind,size in (("data",194*512),("boot",32768*512)):
+                fd = image(readonly=True,kind=kind)
+                before = hashlib.sha256(os.pread(fd,size,0)).digest()
+                b,c = start(fd,kind=kind,readonly=True,write_refusing=True)
+                handshake(c,size=size,readonly=False)
+                self.assertEqual(request(c,0,length=512),bytes(512))
+                request(c,1,length=512,data=b"E"*512,error=1)
+                c.sendall(struct.pack(">IHHQQI",wire.REQUEST_MAGIC,0,2,0,0,0))
+                self.assertEqual(finished(b),0)
+                result = b.stop()
+                self.assertTrue(result["records"][0]["readonly"])
+                self.assertFalse(result["records"][0]["export_readonly"])
+                self.assertEqual(hashlib.sha256(os.pread(fd,size,0)).digest(),before)
 
         def test_post_spawn_setup_failure_reaps_exact_child(self):
             actual_spawn = process.subprocess.Popen
@@ -231,11 +248,11 @@ def main():
 
     try:
         suite = unittest.defaultTestLoader.loadTestsFromTestCase(Tests)
-        assert suite.countTestCases() == 7
+        assert suite.countTestCases() == 8
         result = unittest.TextTestRunner(verbosity=2).run(suite)
         if not result.wasSuccessful():
             raise SystemExit(1)
-        print("Modern backend process: 7 tests; real child kill/join, retained bytes, lost volatile state, torn cut, readonly and deadline; no VM/target execution")
+        print("Modern backend process: 8 tests; real child kill/join, retained bytes, lost volatile state, torn cut, readonly and deadline; no VM/target execution")
     finally:
         for backend in backends:
             if not backend.closed:

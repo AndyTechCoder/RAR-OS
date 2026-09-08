@@ -8,7 +8,7 @@ import hashlib
 import os
 import stat
 
-CAPACITY = {"data": 194 * 512, "system": 16384 * 512}
+CAPACITY = {"data": 194 * 512, "system": 16384 * 512, "boot": 32768 * 512}
 MAX_REQUEST = 65536
 MAX_EVENTS = 8192
 MAX_TRAFFIC = 64 * 1024 * 1024
@@ -21,7 +21,7 @@ class Cut(RuntimeError):
 
 class Disk:
     def __init__(self, fd, kind, readonly=False, fault=None, reverse_flush=False):
-        if type(fd) is not int or fd < 3 or type(kind) is not str or kind not in CAPACITY or type(readonly) is not bool or type(reverse_flush) is not bool:
+        if type(fd) is not int or fd < 3 or type(kind) is not str or kind not in CAPACITY or type(readonly) is not bool or type(reverse_flush) is not bool or (kind == "boot" and not readonly):
             raise ValueError("fixed synthetic device descriptor required")
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size != CAPACITY[kind]:

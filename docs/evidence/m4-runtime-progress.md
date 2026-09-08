@@ -62,12 +62,11 @@ path input, device selector or VM launch. It records actual write/flush ordinals
 performs exact-count writes and fsync before flush ACK, rejects append/wrong-access descriptors before any ACK; supports bounded torn/
 short/error/before/after cuts and reverse flush order, and forbids reconnecting
 a volatile instance. Frozen reads require detachment and read actual file bytes.
-The15-test backend candidate passed independent source review at6369251f430d92a88bb58f3c258932e9823d7a2c. Exact-head Foundation34242245906, Platform34242245927 and Desktop34242245960 passed. Specifications34242245898 passed its main validation step; full mutation-check completion was still pending at this checkpoint.
+The15-test backend candidate passed independent source review at6369251f430d92a88bb58f3c258932e9823d7a2c. Exact-head Foundation34242245906, Platform34242245927, Desktop34242245960 and full Specifications34242245898 passed; completed logs confirm all15 real file/socket tests.
 
-A new bounded backend child-process candidate adds exact descriptor inheritance,
-cleared environment, bounded audit output, external deadline/kill/join and seven
-cloud-only process tests. This is not a VM launcher or profile activation; its
-review and exact-head test results are pending.
+The bounded backend child-process implementation at003755945731772e6a8bf5803f67f6e6ca94b4df passed independent review after fixing post-spawn constructor cleanup. Full Specifications34244394441, Foundation34244394528, Platform34244394519 and Desktop34244394508 passed. Job102122517517 logs confirm all7 actual process tests, including four injected startup-cleanup failures. This proves host-only child lifecycle, not whole-VM persistence.
+
+New vm_profile.py and vm_session.py candidates now provide the concrete fixed paused QEMU composition, actual device/port/identity preflight, guarded QMP/input/capture path, continuously serviced backend deadlines and whole-VM-first kill/join. ADR0035 records the IDE read-only compatibility constraint: immutable boot/recovery Data retain O_RDONLY descriptors and reject every write even though the IDE-facing export advertises writable. A third private backend supplies immutable boot bytes, without an overlay or new DMA device. Eight extended process tests and pure profile/lifecycle fixtures await review/cloud validation. No Modern profile is activated; the outer trusted-main controller, image/workflow binding and causal GUI/disk proof are still required.
 
 ## Crypto prerequisite evidence
 
