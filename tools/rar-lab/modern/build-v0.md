@@ -81,3 +81,33 @@ wrong OCI digest, mutable tool mounts and mismatched executable hashes still fai
 This does not pin or certify the whole hosted platform as reproducible; exact
 runner identity remains recorded and container/tool authority remains separately
 checked. No Mac permission, VM profile, target dependency or safety gate changes.
+
+### Admission evidence versus hosted-image compatibility
+
+Full source runs34232075836 (tooling863f) and34232725410 (runtime1769)
+passed on20260831.293.1. They do not prove full-suite operation on20260907.300.1.
+Run34230717029 on20260907.300.1 passed the unchanged69 Modern controller tests
+and pinned Rust R0 conformance, then failed at the old literal admission branch.
+
+The unchanged controller and PE-test blobs are respectively
+0ebcb1cd8258075e50b18b020c1e4264f87b1eb0 and
+d54884b49a52db6555ff522bca2d9d47f42e5ebb at58435a3 and863f5bb.
+The new bootstrap guard blob2eb79d4dc6ff54e6183933ba21d0666095de512e is
+identical at863f5bb and1769c12; the old guard was
+3d8dba3281ac51fad956ff16c86727217c0df065.
+
+The existing bootstrap tests now invoke the real guard in isolated subshells
+for all three exact admitted versions, including20260907.300.1, and seven
+rejected empty/malformed/unknown/adjacent values including20260907.300.0/.2.
+Only the version variable changes. Real OCI/lock/source-ID/read-only mount
+checks remain active; the actual-environment guard invocation and complete
+source snapshot verification remain unchanged. There is no duplicated guard,
+stubbed filesystem or range/prefix admission.
+
+Independent review accepted this combined evidence plus exact-head fixture/CI
+success for merging the one-literal admission. Requiring the scheduler to
+randomly select the new image again adds no branch-semantics evidence.
+A complete-suite success on the actual new hosted image remains unobserved,
+not waived or claimed; it is an operational compatibility question. All guards
+remain live on future main self-validation and build runs, which fail closed
+on any mismatch. This does not waive any M4 runtime, safety or release gate.
