@@ -9,7 +9,7 @@ acceptance requirements in the milestone task remain controlling.
 
 | Section | Implemented source | Missing runtime proof |
 | --- | --- | --- |
-| M4.1 Persistent files — in progress | Actual Modern kernel entry, full-width IPC/syscalls and fixed device authority; Data-only PIO service; Terminal/Files session wiring and sticky failure UI; bounded encrypted append-only snapshots; independent frozen-Data oracle; empty-image provisioner candidate | Actual UEFI build/link/layout evidence, certified dual-PIO cloud profile, stack/syscall/framebuffer execution, fresh-VM persistence, bound frozen-image oracle and block-fault evidence |
+| M4.1 Persistent files — in progress | Actual Modern kernel entry, full-width IPC/syscalls and fixed device authority; Data-only PIO service; Terminal/Files session wiring and sticky failure UI; bounded encrypted append-only snapshots; independent frozen-Data oracle; reviewed empty-image provisioner; actual reproducible UEFI kernel/service builds; controlled block backend candidate | certified dual-PIO cloud profile, stack/syscall/framebuffer execution, fresh-VM persistence, bound frozen-image oracle and block-fault evidence |
 | M4.2 Signed live updates — pending | Crypto, canonical manifest verification, System selector publication and incarnation/queue lifecycle model | System payload I/O, executable sealing/loading, real Settings replacement, health/fallback, stale-capability enforcement and GUI rebind |
 | M4.3 Recovery and release — pending | Source-level fault tests and released M3 baseline | Immutable recovery integration, full block fault matrix, exact Data hash preservation, final reproduction/regressions/reviews and release |
 
@@ -34,30 +34,36 @@ guest execution still require the independently reviewed Modern cloud profile.
 
 PR169 passed independent review and exact-head Specifications34235323255 at
 f72b8672c7be9000854363bfcfa152034e4ba79e, then merged as
-3d1d37860365f31de508bcdd1a6c027c31c1e3d5. The merge tree exactly equals reviewed
-dd00ae3552f221dd065ef3754e882e76d5009226. It adds build-only tooling; no Modern
-VM or image provisioning is activated. Exact-main self-validation34236807924 is
-in progress at this checkpoint. Real UEFI dispatch/results are not yet claimed.
+3d1d37860365f31de508bcdd1a6c027c31c1e3d5. Its exact reviewed merge tree is
+dd00ae3552f221dd065ef3754e882e76d5009226. Exact-main validation34236807924 passed.
 
-The final source gate passed69 Modern controller negative tests and actual
-bootstrap guard fixtures:3 exact admitted runner versions and7 malformed,
-unknown or adjacent rejects. Actual run image was20260831.293.1. The one-literal
-admission of20260907.300.1 preserves pinned OCI/tool hashes, source and read-only
-mount checks; full-suite new-host operation remains unobserved, not claimed.
+Actual Modern UEFI build34238883047 succeeded using that main controller and
+reviewed source1769c12562fe9d752dcaeddf747a6222e76bad19. Both actual kernel and
+service were compiled/linked twice, without the Linux compile-only fixture.
+The controller confirmed identical binary hashes and bounded PE/W^X layouts,
+including the128KiB service image limit. This is actual build/link evidence,
+not a Modern VM boot, maximum-stack proof or encrypted runtime acceptance.
 
-Runtime source1769c12562fe9d752dcaeddf747a6222e76bad19 passed full
-Specifications34232725410 and Desktop34232725473, Platform34232725540,
-Foundation34232725369. The independently reviewed frozen-Data oracle passed
-73 negative tests,1026 marker-prefix cases,2 RFC vectors and2 exact capacity
-endpoints. These are independent in-memory checks, not actual disk binding.
+Cloud artifact10061103555 retains binaries/manifests/layouts/tool identities:
+ZIP95236 bytes, SHA256947f08cef144f5b323b30a27cf7ae133397779e07865036f81a04f9a2682b0ae.
+No artifact was downloaded to the Mac/SSD.
 
-The new bytes-only empty-image provisioner is independently reviewed source.
-It emits exactly194 sectors with two canonical identical headers and64 virgin
-slots; it accepts no existing image, file or challenge. Session-local key/ID
-reuse is refused even with a different nonce prefix. The fixed4096-image
-session budget and independent empty-image parses are new cloud test candidates,
-not claimed passed here. Future trusted-controller entropy, exclusive private
-paths/inodes and writable-clone prevention remain required before activation.
+Runtime6ec7d3eee741f222273bcb3fe5757b711f6eade6 passed complete
+Specifications34237072588 and Desktop34237072627, Platform34237072579,
+Foundation34237072819. Actual Specifications runner was20260907.300.1, so this
+now supplies full-suite operation evidence on that exact admitted hosted image.
+The frozen oracle passed73 negatives,1026 marker prefixes,2 RFC vectors and2
+capacity endpoints. The reviewed empty provisioner passed11 negatives,4096
+fresh fixture allocations and2 independent empty-image parses.
+
+The controlled block backend is new unactivated source. It binds one private
+preconnected socket to one fixed regular synthetic disk; no listener, image
+path input, device selector or VM launch. It records actual write/flush ordinals,
+performs exact-count writes and fsync before flush ACK, supports bounded torn/
+short/error/before/after cuts and reverse flush order, and forbids reconnecting
+a volatile instance. Frozen reads require detachment and read actual file bytes.
+The13-test cloud candidate includes real disposable-file and socketpair tests;
+its review and exact-head results are pending, not claimed passed here.
 
 ## Crypto prerequisite evidence
 
@@ -75,10 +81,10 @@ The new frozen-image checker does not replace either required reference.
 
 ## Next concrete actions
 
-Finish the already-running exact-main self-validation34236807924, then obtain
-two actual UEFI builds of reviewed source1769c12 using merged tooling without
-activating the VM profile. Preserve the128KiB service image budget and report
-stack headers as diagnostics, not maximum-stack proof.
+Finish focused review/cloud validation of the concrete block backend, then
+integrate its private descriptors and fault records into the reviewed Modern
+cloud controller. UEFI build tooling is complete; do not repeat its construction
+as a substitute for the remaining runtime path.
 
 Complete the separately reviewed dual-PIO cloud controller and causal
 Terminal write -> entire VM destruction -> fresh firmware/VM Files read ->

@@ -1,7 +1,8 @@
 # Fast-Track Alpha Milestone 4: Modern Architecture
 
-Status: owner-directed; contract design and initial crypto primitive work in progress.
-No Modern runtime implementation or Milestone4 completion is claimed.
+Status: M4.1 integration in progress. Modern kernel/service source and reproducible
+UEFI builds exist; actual Modern guest persistence and Milestone4 completion are
+not claimed. See docs/evidence/m4-runtime-progress.md for exact evidence.
 Direction: 2026-09-05 UTC, "Perfect. So then let's continue with the next, milestone 4".
 
 ## Baseline and purpose
@@ -169,9 +170,9 @@ launcher to discover whether it is safe.
 ## Limits and progress
 
 This document records acceptance targets, not completion. Current missing work:
-the Modern contracts/controller, cryptographic implementation/reference closure,
-persistent block/storage path, component replacement, update/recovery wiring and
-runtime evidence. Networking, SDK, additional hardware profiles, AI/agents,
+the reviewed Modern cloud controller/profile, crypto reference handoff and
+interoperability, actual fresh-VM persistence, component replacement,
+update/recovery wiring and complete runtime evidence. Networking, SDK, additional hardware profiles, AI/agents,
 production identity/hardware-backed secrets and an external cryptographic audit
 remain later work. A failure to finish any requirement is reported explicitly,
 not relabeled as successful Milestone 4.
