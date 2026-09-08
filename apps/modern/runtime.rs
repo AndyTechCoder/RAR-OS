@@ -12,6 +12,10 @@ impl Io {
             session:session::Session::new(boot.peers[1],boot.peers[0]).unwrap_or_else(|_|fail()),
             state:file_ui::State::new()}
     }
+    fn decorate(&self,view:&mut View){
+        if let Some(warning)=self.state.warning(self.session.closed(),
+            self.session.writes_locked(),self.session.input_lost()){view.line(0,warning);}
+    }
     fn label(&self)->&'static [u8]{
         self.state.label(self.session.closed(),self.session.writes_locked(),self.session.input_lost())
     }
@@ -87,7 +91,7 @@ fn files_view(boot:&Boot,io:&mut Io,selected:&mut usize)->View{
         _=>None,
     };
     let Some(names)=names else{
-        view.line(1,problem(reply));view.line(5,io.label());return view;
+        view.line(1,problem(reply));view.line(5,io.label());io.decorate(&mut view);return view;
     };
     if *selected>=names.count{*selected=0;}
     view.lines[1]=names.display();
@@ -103,7 +107,7 @@ fn files_view(boot:&Boot,io:&mut Io,selected:&mut usize)->View{
             _=>view.line(3,problem(reply)),
         }
     }else{view.line(2,b"NO FILES");}
-    view.line(5,io.label());view
+    view.line(5,io.label());io.decorate(&mut view);view
 }
 pub fn files(boot:&Boot)->! {
     let mut pending=Io::new(boot);let mut selected=0;let mut version=0;
@@ -190,6 +194,7 @@ pub fn terminal(boot:&Boot)->! {
                     Command::Invalid=>view.line(1,b"UNKNOWN COMMAND"),
                 }
                 if view.lines[5].len==0{view.line(5,pending.label());}
+                pending.decorate(&mut view);
                 editor.clear();editor.prompt(&mut view);
             }
         }

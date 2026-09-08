@@ -18,6 +18,17 @@ impl State{
         else if self.unavailable||closed{Outcome::Unavailable}
         else{Outcome::ReadOnly}
     }
+    /// Independent heading warning: a long value must not hide sticky state.
+    pub fn warning(&self,closed:bool,locked:bool,input_lost:bool)->Option<&'static [u8]>{
+        if input_lost{
+            Some(if self.uncertain{b"UNCERTAIN SAVE / INPUT LOST"}
+                else if self.unavailable||closed{b"UNAVAILABLE / INPUT LOST"}
+                else if self.readonly||locked{b"READ ONLY / INPUT LOST"}
+                else{b"INPUT LOST - CHECK COMMAND"})
+        }else if self.uncertain||self.unavailable||closed||self.readonly||locked{
+            Some(self.label(closed,locked,false))
+        }else{None}
+    }
     pub fn label(&self,closed:bool,locked:bool,input_lost:bool)->&'static [u8]{
         if self.uncertain{b"SAVE UNCERTAIN - WRITES LOCKED"}
         else if self.unavailable||closed{b"STORAGE UNAVAILABLE"}
@@ -69,5 +80,10 @@ mod tests{
         assert_eq!(s.label(false,false,false),b"STORAGE UNAVAILABLE");
         assert_eq!(State::new().label(false,false,true),b"INPUT LOST - CHECK COMMAND");
         assert_ne!(problem(Outcome::SaveUncertain),problem(Outcome::Unavailable));
+        let mut s=State::new();assert_eq!(s.warning(false,false,false),None);
+        assert_eq!(s.warning(false,false,true),Some(b"INPUT LOST - CHECK COMMAND".as_slice()));
+        s.note(Outcome::SaveUncertain);s.note(Outcome::Reply([0;128]));
+        assert_eq!(s.warning(false,true,true),Some(b"UNCERTAIN SAVE / INPUT LOST".as_slice()));
+        assert_eq!(s.warning(false,true,false),Some(b"SAVE UNCERTAIN - WRITES LOCKED".as_slice()));
     }
 }

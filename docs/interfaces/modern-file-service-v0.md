@@ -198,6 +198,8 @@ ACK rule used by the actual Terminal SAVED branch. ReadOnly, Unavailable,
 SaveUncertain, malformed response or failed request never permits SAVED.
 After uncertain mutation, later reads cannot clear the write lock or warning.
 Pending shell input is shape checked and bounded; overflow is visibly reported.
+Sticky uncertainty/read-only/unavailable and input-loss warnings also occupy the
+window heading, so a long value using the final data row cannot hide them.
 Settings needs no file session or storage grant.
 
 Files can display all64 value bytes across two rows, and Terminal READ uses a
