@@ -107,11 +107,6 @@ printf '%s\n' 'Modern compiler driver: fixed arguments and status refusal fixtur
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/source_snapshot.py" --self-test
 printf '%s\n' 'Modern source snapshot: pure immutable-layer fixtures passed; compiler role not active'
 
-# Keep at most one stripped test executable and one no_std library in the
-# existing cloud-only tmpfs; no owner files or retained evidence are affected.
-set -- $(/usr/bin/du -sk "$work")
-[ "$1" -le 8192 ]
-printf 'Modern focused scratch KiB: %s (limit 8192)\n' "$1"
 
 # Deferred scheduler prototype self-tests only; production runner remains serial.
 /usr/bin/python3 -I -B "$root/tools/ci/parallel-policy-tests.py" --self-test
@@ -132,3 +127,9 @@ RAR_LAB_SIGNED_CODEC_FIXTURE="$work/signed-codec-fixture" \
     tools/rar-lab/modern/signed_layer_test.rs -o "$work/focused-tests"
 "$work/focused-tests"
 printf '%s\n' 'Modern signed codec: public fixture RAR verification and tamper/policy tests; no PE execution or independent reference acceptance'
+
+# Bound the final stripped executable, no_std library and signed codec fixture in the
+# existing cloud-only tmpfs; no owner files or retained evidence are affected.
+set -- $(/usr/bin/du -sk "$work")
+[ "$1" -le 8192 ]
+printf 'Modern focused scratch KiB: %s (limit 8192)\n' "$1"
