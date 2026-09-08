@@ -124,3 +124,34 @@ canonical error/LIST bodies, explicit failure states, absolute deadline and
 stale-message budget, mutation lock retention, and ID/clock overflow. These
 tests do not prove actual process-restart revocation, device isolation, real
 durability or the GUI flow; those remain M4.1 integration gates.
+
+## App session integration
+
+`services/modern/session.rs` is the Modern-only ring3 polling policy around the
+correlated transport. The real syscall adapter is still required before runtime
+activation; source tests use a fake runtime and are not VM evidence.
+
+The adapter supplies checked monotonic kernel ticks, a single nonblocking send
+attempt using the fixed storage grant, one nonblocking receive using the app's
+own grant, and CPU yield. It never retries queue-full. Any send error permanently
+closes this session, preventing a burned request ID from causing later successor
+gaps. No constructor/reset may renew IDs under unchanged live grants. Kernel
+reincarnation and queue/grant revocation remain prerequisites for renewal.
+
+Clock, receive or yield errors after a mutation was submitted report uncertain
+save and close the session; failure before submission reports unavailable.
+Backward time closes the session. Absolute deadlines are checked before and
+after polling, with a second fixed 65,536-iteration ceiling even for an empty
+mailbox and stalled clock. Deadline expiry after accepted send can leave reads
+available, but never clears uncertain-write lockout. A ReadOnly or Unavailable
+server response locks writes; a local read timeout alone does not imply a
+permanent server read-only state.
+
+Only full envelopes from the expected current shell are offered to the bounded
+input queue. Every dequeued message spends the transport budget, including UI,
+stale, short and malformed traffic. Input queue overflow sets a sticky input-loss
+indicator instead of panicking the app or retrying storage. UI consumers must
+still validate their own event shapes. Transport outcomes remain typed: the GUI
+must explicitly render ReadOnly, Unavailable and SaveUncertain, and may say SAVED
+only for a validated successful mutation reply. The session does not implement
+the future syscall adapter, kernel clock, UI labels or service restart policy.

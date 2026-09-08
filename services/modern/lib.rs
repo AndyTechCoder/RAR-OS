@@ -11,3 +11,5 @@ mod desktop_wire;
 pub mod store;
 
 pub mod transport;
+
+pub mod session;
