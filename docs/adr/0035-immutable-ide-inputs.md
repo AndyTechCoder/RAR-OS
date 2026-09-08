@@ -72,3 +72,27 @@ The concrete VM/session, source/image binding, confinement, private fixtures and
 whole-VM/backend kill/join require independent review and actual cloud evidence.
 A candidate or passing parser fixture is not certification. No Mac/SSD operation
 or production privacy/security claim is authorized by this ADR.
+
+
+## Review refinement: complete routing and stable boot identity
+
+The q35 built-in SATA instance is disabled and the identical ich9-ahci model is
+instantiated explicitly at its existing PCI address 00:1f.2 with the stable ID
+rar-boot-ahci. This adds no controller model or runtime DMA authority. Paused QMP
+must prove the Intel 8086:2922 SATA identity at that address, the boot disk's
+parent link and sole master child on port0, and empty ports1..5.
+
+Firmware code/variables use explicit named raw/file nodes bound to
+/machine/system.flash0 and flash1. Their geometry is measured from the pinned
+tool-image files, not guessed. The read-only code node retains no write permission.
+x-debug-query-block-graph must contain exactly ten block-driver nodes, five
+backends and ten expected edges, including every raw-to-role-specific NBD/file
+edge and every backend root. Extra, disconnected, backing or cross-role paths
+fail preflight. The experimental query is deliberately tied to pinned QEMU;
+unsupported output fails rather than weakening validation.
+
+Primary definitions: [q35 device placement](https://github.com/qemu/qemu/blob/v7.2.0/hw/i386/pc_q35.c),
+[AHCI buses](https://github.com/qemu/qemu/blob/v7.2.0/hw/ide/ahci.c),
+[firmware bindings](https://github.com/qemu/qemu/blob/v7.2.0/hw/i386/pc_sysfw.c),
+[block graph schema](https://github.com/qemu/qemu/blob/v7.2.0/qapi/block-core.json).
+These source-derived expectations still require actual cloud binary evidence.

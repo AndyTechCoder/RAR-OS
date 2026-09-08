@@ -68,6 +68,11 @@ The bounded backend child-process implementation at003755945731772e6a8bf5803f67f
 
 New vm_profile.py and vm_session.py candidates now provide the concrete fixed paused QEMU composition, actual device/port/identity preflight, guarded QMP/input/capture path, continuously serviced backend deadlines and whole-VM-first kill/join. ADR0035 records the IDE read-only compatibility constraint: immutable boot/recovery Data retain O_RDONLY descriptors and reject every write even though the IDE-facing export advertises writable. A third private backend supplies immutable boot bytes, without an overlay or new DMA device. Eight extended process tests and pure profile/lifecycle fixtures await review/cloud validation. No Modern profile is activated; the outer trusted-main controller, image/workflow binding and causal GUI/disk proof are still required.
 
+The follow-up review fixes add complete ten-driver/five-backend routing checks,
+explicit same-model/same-address boot AHCI identity, all six boot-bus attachment
+checks, measured firmware geometry, and constructor/teardown failure fixtures.
+They remain unactivated and await independent review and exact-head cloud tests.
+
 ## Crypto prerequisite evidence
 
 PR168 merged at d9cf06b87449391077f18566bffa1905fb3895bb after full source

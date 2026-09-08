@@ -25,16 +25,22 @@ def argv(index,data_fd,system_fd,boot_fd,readonly_data=False):
         for fd in (data_fd,system_fd,boot_fd)) or len({data_fd,system_fd,boot_fd}) != 3):
         raise ValueError("three distinct inherited private socket descriptors")
     args = [
-        "/usr/bin/qemu-system-x86_64","-machine","q35,accel=tcg",
+        "/usr/bin/qemu-system-x86_64","-machine","q35,accel=tcg,sata=off,pflash0=rar-fw-code,pflash1=rar-fw-vars",
         "-cpu","qemu64","-smp","1","-m","256M",
         "-nodefaults","-no-user-config","-display","none","-monitor","none",
         "-serial","stdio","-nic","none","-no-reboot","-no-shutdown","-S",
         "-device","VGA",
         "-qmp","unix:"+work+"/qmp.sock,server=on,wait=off",
         "-sandbox","on,obsolete=deny,elevateprivileges=deny,spawn=deny,resourcecontrol=deny",
-        "-drive","if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE.fd",
-        "-drive","if=pflash,format=raw,file="+work+"/OVMF_VARS.fd",
+        "-device","ich9-ahci,id=rar-boot-ahci,bus=pcie.0,addr=1f.2",
     ]
+    for role,path,readonly in (("code","/usr/share/OVMF/OVMF_CODE.fd",True),
+                               ("vars",work+"/OVMF_VARS.fd",False)):
+        node = "rar-fw-"+role
+        args += ["-blockdev",json.dumps(dict(driver="file",filename=path,
+            **{"node-name":node+"-file","read-only":readonly}),separators=(",",":")),
+            "-blockdev",json.dumps(dict(driver="raw",file=node+"-file",
+            **{"node-name":node,"read-only":readonly}),separators=(",",":"))]
     args += ["-blockdev",json.dumps(dict(driver="nbd",
         server={"type":"fd","str":str(boot_fd)},export="",
         **{"node-name":"rar-boot-nbd","read-only":False,"reconnect-delay":0,
@@ -42,7 +48,7 @@ def argv(index,data_fd,system_fd,boot_fd,readonly_data=False):
         "-blockdev",json.dumps(dict(driver="raw",file="rar-boot-nbd",
             **{"node-name":"rar-boot","read-only":False,
                "cache":{"direct":False,"no-flush":False}}),separators=(",",":")),
-        "-device","ide-hd,id=rar-boot-disk,drive=rar-boot,bus=ide.0,unit=0,bootindex=0"+
+        "-device","ide-hd,id=rar-boot-disk,drive=rar-boot,bus=rar-boot-ahci.0,unit=0,bootindex=0"+
             ",serial="+BOOT[5]+",model="+BOOT[6]+",rerror=report,werror=report"]
     for descriptor,device in zip((data_fd,system_fd),DEVICES):
         role,base,control,irq,capacity,serial,model = device
@@ -88,17 +94,27 @@ def qom_expected():
     for key,value in (("serial",BOOT[5]),("model",BOOT[6]),("unit",0),("drive","rar-boot"),
                       ("realized",True),("rerror","report"),("werror","report")):
         values[(PREFIX+"rar-boot-disk",key)] = value
+    values[(PREFIX+"rar-boot-disk","parent_bus")] = PREFIX+"rar-boot-ahci/rar-boot-ahci.0"
+    values[(PREFIX+"rar-boot-ahci/rar-boot-ahci.0","child[0]")] = PREFIX+"rar-boot-disk"
+    values[(PREFIX+"rar-boot-ahci","realized")] = True
+    values[("/machine/system.flash0","drive")] = "rar-fw-code"
+    values[("/machine/system.flash1","drive")] = "rar-fw-vars"
     return values
+
+def buses():
+    return [(PREFIX+"rar-"+role+"-bus/rar-"+role+"-bus.0",1) for role,*_ in DEVICES]+[
+        (PREFIX+"rar-boot-ahci/rar-boot-ahci."+str(i),1 if i==0 else 0) for i in range(6)]
 
 def preflight_requests():
     requests = [("status",{"execute":"query-status"}),
                 ("ports",{"execute":"human-monitor-command",
                           "arguments":{"command-line":"info mtree -f -o"}}),
-                ("nodes",{"execute":"query-named-block-nodes"})]
+                ("nodes",{"execute":"query-named-block-nodes"}),
+                ("graph",{"execute":"x-debug-query-block-graph"}),
+                ("pci",{"execute":"query-pci"})]
     for (path,key),value in qom_expected().items():
         requests.append((path+"#"+key,{"execute":"qom-get","arguments":{"path":path,"property":key}}))
-    for role,*_ in DEVICES:
-        path = PREFIX+"rar-"+role+"-bus/rar-"+role+"-bus.0"
+    for path,count in buses():
         requests.append((path+"#children",{"execute":"qom-list","arguments":{"path":path}}))
     return requests
 
@@ -140,31 +156,115 @@ def ports(text):
             verified.append(dict(role=role,start=first,end=last,owner=expected_owner))
     return verified
 
-def validate_nodes(nodes,readonly_data):
-    if type(nodes) is not list or not 6 <= len(nodes) <= 32 or type(readonly_data) is not bool:
-        raise ValueError("bounded fixed block graph")
+def node_specs(index,firmware_sizes):
+    if (type(firmware_sizes) is not tuple or len(firmware_sizes)!=2 or
+        any(type(n) is not int or n%65536 or not 65536<=n<=4194304 for n in firmware_sizes)):
+        raise ValueError("bounded pinned firmware geometry")
+    work = directory(index)
+    specs = {}
+    for role,size in (("boot",16777216),("data",99328),("system",8388608)):
+        specs["rar-"+role] = ("raw",False,size,None)
+        specs["rar-"+role+"-nbd"] = ("nbd",False,size,None)
+    for role,size,readonly,path in (("code",firmware_sizes[0],True,"/usr/share/OVMF/OVMF_CODE.fd"),
+                                    ("vars",firmware_sizes[1],False,work+"/OVMF_VARS.fd")):
+        specs["rar-fw-"+role] = ("raw",readonly,size,path)
+        specs["rar-fw-"+role+"-file"] = ("file",readonly,size,path)
+    return specs
+
+def validate_nodes(nodes,index,firmware_sizes):
+    specs = node_specs(index,firmware_sizes)
+    if type(nodes) is not list or len(nodes)!=len(specs):
+        raise ValueError("exact complete named block inventory required")
     names = {}
     for node in nodes:
         if type(node) is not dict or type(node.get("node-name")) is not str or node["node-name"] in names:
             raise ValueError("missing/duplicate block node identity")
         names[node["node-name"]] = node
-    checks = [("rar-boot-nbd","nbd",False,16*1024*1024),
-              ("rar-boot","raw",False,16*1024*1024)]
-    for role,base,control,irq,size,serial,model in DEVICES:
-        checks += [("rar-"+role,"raw",False,size),
-                   ("rar-"+role+"-nbd","nbd",False,size)]
-    for name,driver,readonly,size in checks:
-        node = names.get(name,{})
+    if set(names)!=set(specs):
+        raise ValueError("unexpected/disconnected block node")
+    for name,(driver,readonly,size,path) in specs.items():
+        node = names[name]
         image = node.get("image",{})
-        if (node.get("drv") != driver or node.get("ro") is not readonly or
+        if (node.get("drv")!=driver or node.get("ro") is not readonly or
             type(image) is not dict or type(image.get("virtual-size")) is not int or
-            image["virtual-size"] != size or node.get("backing_file") or
-            image.get("backing-filename") or image.get("encrypted") is True):
-            raise ValueError("wrong block role/type/capacity/readonly/backing")
-    return {name:dict(driver=driver,readonly=readonly,bytes=size)
-            for name,driver,readonly,size in checks}
+            image["virtual-size"]!=size or node.get("backing_file") or
+            image.get("backing-filename") or image.get("encrypted") is True or
+            (path is not None and image.get("filename")!=path)):
+            raise ValueError("wrong block role/type/capacity/readonly/file/backing")
+    return {name:dict(driver=v[0],readonly=v[1],bytes=v[2]) for name,v in specs.items()}
 
-def validate_preflight(results,readonly_data=False):
+def validate_graph(graph,index,firmware_sizes):
+    specs = node_specs(index,firmware_sizes)
+    backends = {"rar-boot-disk":"rar-boot","rar-data-disk":"rar-data",
+                "rar-system-disk":"rar-system","/machine/system.flash0":"rar-fw-code",
+                "/machine/system.flash1":"rar-fw-vars"}
+    expected = {("block-driver",name) for name in specs}|{("block-backend",name) for name in backends}
+    if (type(graph) is not dict or set(graph)!={"nodes","edges"} or
+        type(graph["nodes"]) is not list or len(graph["nodes"])!=15 or
+        type(graph["edges"]) is not list or len(graph["edges"])!=10):
+        raise ValueError("exact complete block graph required")
+    identities = {}
+    for node in graph["nodes"]:
+        if (type(node) is not dict or set(node)!={"id","type","name"} or
+            type(node["id"]) is not int or not 1<=node["id"]<2**64 or
+            node["id"] in identities or type(node["type"]) is not str or type(node["name"]) is not str):
+            raise ValueError("canonical block graph node")
+        identities[node["id"]] = (node["type"],node["name"])
+    if len(set(identities.values()))!=15 or set(identities.values())!=expected:
+        raise ValueError("extra/missing block node, job or backend")
+    needed = {(("block-backend",name),("block-driver",target),"root") for name,target in backends.items()}
+    for role in ("boot","data","system"):
+        needed.add((("block-driver","rar-"+role),("block-driver","rar-"+role+"-nbd"),"file"))
+    for role in ("code","vars"):
+        needed.add((("block-driver","rar-fw-"+role),("block-driver","rar-fw-"+role+"-file"),"file"))
+    seen = set()
+    permission_names = {"consistent-read","write","write-unchanged","resize"}
+    for edge in graph["edges"]:
+        if (type(edge) is not dict or set(edge)!={"parent","child","name","perm","shared-perm"} or
+            type(edge["parent"]) is not int or type(edge["child"]) is not int or
+            edge["parent"] not in identities or edge["child"] not in identities or
+            type(edge["name"]) is not str):
+            raise ValueError("canonical existing graph endpoints")
+        relation = (identities[edge["parent"]],identities[edge["child"]],edge["name"])
+        if relation not in needed or relation in seen:
+            raise ValueError("cross-role, duplicate, backing or alternate-file edge")
+        for field in ("perm","shared-perm"):
+            values = edge[field]
+            if (type(values) is not list or any(type(v) is not str or v not in permission_names for v in values) or
+                len(set(values))!=len(values)):
+                raise ValueError("canonical bounded block permissions")
+        if relation[1][1] in ("rar-fw-code","rar-fw-code-file") and any(p in edge["perm"] for p in ("write","resize","write-unchanged")):
+            raise ValueError("firmware code graph gained mutation authority")
+        seen.add(relation)
+    if seen!=needed:
+        raise ValueError("disconnected raw/NBD/firmware route")
+    return True
+
+def validate_pci(buses):
+    if type(buses) is not list or len(buses)!=1 or type(buses[0]) is not dict or type(buses[0].get("bus")) is not int or buses[0].get("bus")!=0:
+        raise ValueError("one fixed root PCI bus")
+    devices = buses[0].get("devices")
+    if type(devices) is not list or not 1<=len(devices)<=32 or any(type(d) is not dict for d in devices):
+        raise ValueError("bounded root PCI devices")
+    if any(type(d.get("class_info")) is not dict or type(d.get("id")) is not dict or
+           any(type(d.get(field)) is not int for field in ("bus","slot","function")) or
+           type(d["class_info"].get("class")) is not int or
+           any(type(d["id"].get(field)) is not int for field in ("vendor","device"))
+           for d in devices):
+        raise ValueError("typed PCI identity and address required")
+    sata = [d for d in devices if d.get("qdev_id")=="rar-boot-ahci" or d["class_info"]["class"]==0x0106]
+    if len(sata)!=1:
+        raise ValueError("exactly one identified boot SATA controller")
+    d=sata[0]
+    if (d.get("qdev_id")!="rar-boot-ahci" or d.get("bus")!=0 or d.get("slot")!=31 or
+        d.get("function")!=2 or d.get("class_info",{}).get("class")!=0x0106 or
+        d.get("id",{}).get("vendor")!=0x8086 or d.get("id",{}).get("device")!=0x2922):
+        raise ValueError("wrong boot controller model or PCI address")
+    return True
+
+def validate_preflight(results,readonly_data=False,index=1,firmware_sizes=(1966080,131072)):
+    if type(readonly_data) is not bool:
+        raise ValueError("explicit Data mode")
     expected_keys = {key for key,_ in preflight_requests()}
     if type(results) is not dict or set(results) != expected_keys:
         raise ValueError("missing/extra paused-machine evidence")
@@ -173,13 +273,14 @@ def validate_preflight(results,readonly_data=False):
         state.get("singlestep") is not False or state.get("status") not in ("prelaunch","paused")):
         raise ValueError("guest must remain stopped for certification")
     port_map = ports(results["ports"])
-    graph = validate_nodes(results["nodes"],readonly_data)
+    graph = validate_nodes(results["nodes"],index,firmware_sizes)
+    validate_graph(results["graph"],index,firmware_sizes)
+    validate_pci(results["pci"])
     for (path,key),value in qom_expected().items():
         actual = results[path+"#"+key]
         if type(actual) is not type(value) or actual != value:
             raise ValueError("device identity/port/IRQ/geometry/attachment mismatch")
-    for role,*_ in DEVICES:
-        path = PREFIX+"rar-"+role+"-bus/rar-"+role+"-bus.0"
+    for path,count in buses():
         items = results[path+"#children"]
         if type(items) is not list or not 1 <= len(items) <= 64:
             raise ValueError("bounded actual bus properties required")
@@ -193,7 +294,7 @@ def validate_preflight(results,readonly_data=False):
             names.add(item["name"])
             if item["name"].startswith("child["):
                 children.append(item)
-        if children != [{"name":"child[0]","type":"link<ide-hd>"}]:
+        if children != ([{"name":"child[0]","type":"link<ide-hd>"}] if count else []):
             raise ValueError("one master-only disk on the exact bus")
     return dict(ports=port_map,block_graph=graph,guest_stopped=True)
 
@@ -208,18 +309,36 @@ def self_test():
     for start,end,role in sorted(regions):
         lines.append("  %016x-%016x (prio 0, i/o): ide owner:{dev id=rar-%s-bus}"%(start,end,role))
     fixture["ports"] = "\n".join(lines)+"\n\n"
-    fixture["nodes"] = []
-    for name,driver,readonly,size in (
-        ("rar-boot-nbd","nbd",False,16777216),("rar-boot","raw",False,16777216),
-        ("rar-data","raw",False,99328),("rar-data-nbd","nbd",False,99328),
-        ("rar-system","raw",False,8388608),("rar-system-nbd","nbd",False,8388608)):
-        fixture["nodes"].append({"node-name":name,"drv":driver,"ro":readonly,
-                                 "image":{"virtual-size":size}})
+    specs = node_specs(1,(1966080,131072))
+    fixture["nodes"] = [{"node-name":name,"drv":v[0],"ro":v[1],
+        "image":dict({"virtual-size":v[2]},**({"filename":v[3]} if v[3] else {}))}
+        for name,v in specs.items()]
+    identifiers = {}
+    graph_nodes = []
+    for kind,names in (("block-driver",list(specs)),("block-backend",
+        ["rar-boot-disk","rar-data-disk","rar-system-disk","/machine/system.flash0","/machine/system.flash1"])):
+        for name in names:
+            index = len(graph_nodes)+1
+            identifiers[(kind,name)] = index
+            graph_nodes.append(dict(id=index,type=kind,name=name))
+    edges = []
+    def edge(parent,child,name):
+        edges.append(dict(parent=identifiers[parent],child=identifiers[child],
+                          name=name,perm=["consistent-read"],**{"shared-perm":["consistent-read"]}))
+    for role in ("boot","data","system"):
+        edge(("block-backend","rar-"+role+"-disk"),("block-driver","rar-"+role),"root")
+        edge(("block-driver","rar-"+role),("block-driver","rar-"+role+"-nbd"),"file")
+    for index,role in enumerate(("code","vars")):
+        edge(("block-backend","/machine/system.flash"+str(index)),("block-driver","rar-fw-"+role),"root")
+        edge(("block-driver","rar-fw-"+role),("block-driver","rar-fw-"+role+"-file"),"file")
+    fixture["graph"] = dict(nodes=graph_nodes,edges=edges)
+    fixture["pci"] = [{"bus":0,"devices":[{"bus":0,"slot":31,"function":2,
+        "qdev_id":"rar-boot-ahci","class_info":{"class":262},"id":{"vendor":32902,"device":10530}}]}]
     for (path,key),value in qom_expected().items():
         fixture[path+"#"+key] = value
-    for role,*_ in DEVICES:
-        fixture[PREFIX+"rar-"+role+"-bus/rar-"+role+"-bus.0#children"] = [
-            {"name":"type","type":"string"},{"name":"child[0]","type":"link<ide-hd>"}]
+    for path,count in buses():
+        fixture[path+"#children"] = [{"name":"type","type":"string"}]+(
+            [{"name":"child[0]","type":"link<ide-hd>"}] if count else [])
     assert validate_preflight(fixture)["guest_stopped"]
     rejected = 0
     def reject(fn):
@@ -265,6 +384,30 @@ def self_test():
     # The IDE graph remains writable-looking even for physical read-only Data.
     # Actual descriptor flags/refusal and post-cut hashes are separate evidence.
     assert validate_preflight(fixture,True)["guest_stopped"]
+    for driver in ("file","nbd","qcow2"):
+        bad = json.loads(json.dumps(fixture))
+        bad["nodes"].append({"node-name":"extra","drv":driver,"ro":False,"image":{"virtual-size":99328}})
+        reject(lambda bad=bad:validate_preflight(bad))
+    for changed in ("cross","missing","backing","extra"):
+        bad = json.loads(json.dumps(fixture))
+        if changed=="cross":
+            bad["graph"]["edges"][1]["child"] = identifiers[("block-driver","rar-data-nbd")]
+        elif changed=="missing":
+            bad["graph"]["edges"].pop()
+        elif changed=="backing":
+            bad["graph"]["edges"][1]["name"] = "backing"
+        else:
+            bad["graph"]["nodes"].append(dict(id=99,type="block-job",name="overlay"))
+        reject(lambda bad=bad:validate_preflight(bad))
+    for key,value in ((PREFIX+"rar-boot-disk#parent_bus",PREFIX+"wrong"),
+                      (PREFIX+"rar-boot-ahci/rar-boot-ahci.0#child[0]",PREFIX+"rar-data-disk")):
+        bad = dict(fixture);bad[key] = value
+        reject(lambda bad=bad:validate_preflight(bad))
+    bad = json.loads(json.dumps(fixture));bad["pci"][0]["devices"][0]["slot"]=30
+    reject(lambda:validate_preflight(bad))
+    for field,value in (("class_info",None),("id",[]),("bus",False),("slot","31")):
+        bad = json.loads(json.dumps(fixture));bad["pci"][0]["devices"][0][field]=value
+        reject(lambda bad=bad:validate_preflight(bad))
     return rejected
 
 if __name__ == "__main__":

@@ -93,3 +93,19 @@ with the two independent references remains required before encrypted acceptance
 M4.2 actual signed Settings code replacement and M4.3 immutable System-only repair
 and data-hash preservation remain separate full outcomes. Pure tests and these
 candidate helpers do not mark any section complete.
+
+
+## Review closure fixtures
+
+The paused-machine validator now checks the complete block graph, including
+explicit firmware nodes and exact root/file edges; named-node metadata alone is
+insufficient. The existing AHCI model is explicitly named at the same 00:1f.2
+address. All six boot-controller buses and the actual boot parent/child linkage
+are checked, alongside its PCI model and the two independent PIO buses.
+
+Pure lifecycle tests inject eight failures into the actual constructor control
+flow through inert adapters (stream setup, selector registration, QMP connect,
+greeting and request). No test starts QEMU. Five teardown failures cover VM
+wait timeout/error and failure of each of the three backend joins. Every other
+child must still be attempted, and no failing teardown may return joined=True.
+Passing these fixtures will not replace actual cloud process lifecycle evidence.

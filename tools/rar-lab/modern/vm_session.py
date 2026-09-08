@@ -107,6 +107,8 @@ class VM:
                 raise ValueError("exclusive private Modern session directory")
             self.work.mkdir(mode=0o700,exist_ok=False)
             firmware = read_regular("/usr/share/OVMF/OVMF_VARS.fd",2*1024*1024)
+            code = read_regular("/usr/share/OVMF/OVMF_CODE.fd",4*1024*1024)
+            self.firmware_sizes = (len(code),len(firmware))
             fd = os.open(self.work/"OVMF_VARS.fd",
                 os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW|os.O_CLOEXEC,0o600)
             try:
@@ -178,7 +180,7 @@ class VM:
             for key,command in self.profile.preflight_requests():
                 evidence[key] = self.request(command)
             self.preflight = dict(raw=evidence,
-                verified=self.profile.validate_preflight(evidence,readonly_data))
+                verified=self.profile.validate_preflight(evidence,readonly_data,index,self.firmware_sizes))
             self.certified = True
         except BaseException:
             self.destroy()
@@ -333,7 +335,10 @@ class VM:
                 failures.append(type(error).__name__+": VM reap/drain failed")
         for backend in self.backends:
             try:
-                result["backends"].append(backend.stop())
+                stopped = backend.stop()
+                if stopped.get("joined") is not True:
+                    raise ValueError("backend did not prove reaping")
+                result["backends"].append(stopped)
             except BaseException as error:
                 failures.append(type(error).__name__+": backend reap failed")
         resources = [self.selector,self.connection]+self.sockets
@@ -358,7 +363,7 @@ class VM:
         return result
 
 def self_test():
-    # Pure parser/authority/lifecycle mocks only; never invokes VM constructor.
+    # Pure parser/authority/lifecycle mocks only; never invokes a real VM process.
     import io
     from unittest.mock import patch
     from types import SimpleNamespace
@@ -403,13 +408,130 @@ def self_test():
         def wait(self,timeout): order.append("vm-reap");return self.returncode
     class Backend:
         def stop(self): order.append("backend-reap");return {"joined":True}
-    vm.closed=False;vm.boot_fd=None;vm.child=Child();vm.backends=[Backend(),Backend()]
+    vm.closed=False;vm.boot_fd=None;vm.child=Child();vm.backends=[Backend(),Backend(),Backend()]
     vm.connection=None;vm.sockets=[];vm.serial=bytearray()
     vm.selector=SimpleNamespace(close=lambda:None)
     with patch.object(os,"set_blocking",lambda *args:None):
         assert vm.destroy()["joined"]
-    assert order == ["vm-kill","vm-reap","backend-reap","backend-reap"]
+    assert order == ["vm-kill","vm-reap","backend-reap","backend-reap","backend-reap"]
     reject(vm.destroy)
+    # All teardown failures remain failures, but never skip another child.
+    for failing in ("vm-timeout","vm-error",0,1,2):
+        attempted = []
+        class FailedChild(Child):
+            stdout=Pipe(b"")
+            stderr=Pipe(b"")
+            returncode=None
+            def wait(self,timeout):
+                attempted.append("vm")
+                if failing=="vm-timeout":
+                    raise subprocess.TimeoutExpired("owned-vm",timeout)
+                if failing=="vm-error":
+                    raise OSError("injected reap failure")
+                return self.returncode
+        class FailedBackend:
+            def __init__(self,index): self.index=index
+            def stop(self):
+                attempted.append(self.index)
+                if failing==self.index:
+                    raise RuntimeError("injected backend reap failure")
+                return {"joined":True}
+        broken = object.__new__(VM)
+        broken.profile=profile;broken.closed=False;broken.boot_fd=None
+        broken.child=FailedChild();broken.backends=[FailedBackend(i) for i in range(3)]
+        broken.connection=None;broken.sockets=[];broken.serial=bytearray()
+        broken.selector=SimpleNamespace(close=lambda:None)
+        with patch.object(os,"set_blocking",lambda *args:None):
+            try: broken.destroy()
+            except RuntimeError: rejected+=1
+            else: raise AssertionError("failed reap granted joined authority")
+        assert attempted==["vm",0,1,2] and not broken.closed
+        assert broken.child.stdout.closed and broken.child.stderr.closed
+
+    # Run the actual constructor control flow with inert filesystem/socket/
+    # process adapters. No real QEMU, process, socket or file is created here.
+    from contextlib import ExitStack
+    for stage in ("blocking1","blocking2","register1","register2","register3",
+                  "connect","greeting","qmp-request"):
+        observed = {"blocking":0,"register":0,"children":[],"backends":[],"sockets":[],"fd":100}
+        class FakePath:
+            def __init__(self,value): self.value=str(value)
+            def __str__(self): return self.value
+            def __truediv__(self,name): return FakePath(self.value+"/"+str(name))
+            def mkdir(self,**kwargs): assert kwargs=={"mode":0o700,"exist_ok":False}
+            def lstat(self):
+                mode=stat.S_IFSOCK if self.value.endswith("/qmp.sock") else stat.S_IFDIR|0o700
+                return SimpleNamespace(st_mode=mode,st_uid=65532)
+        class FakeSocket:
+            def __init__(self,*args):
+                observed["fd"]+=1;self.fd=observed["fd"];self.closed=False
+                observed["sockets"].append(self)
+            def fileno(self): return self.fd
+            def close(self): self.closed=True
+            def settimeout(self,value): pass
+            def setblocking(self,value): pass
+            def connect(self,path):
+                if stage=="connect": raise ValueError("injected QMP connection failure")
+        class FakeSelector:
+            def register(self,*args):
+                observed["register"]+=1
+                if stage=="register"+str(observed["register"]):
+                    raise OSError("injected selector setup failure")
+            def close(self): pass
+        class FakeBackend:
+            def __init__(self,fd,server,role,**kwargs):
+                server.close();self.closed=False
+                size={"data":99328,"system":8388608,"boot":16777216}[role]
+                self.records=[dict(type="ready",kind=role,readonly=kwargs["readonly"],
+                    export_readonly=False,capacity=size,device=1,inode=fd)]
+                observed["backends"].append(self)
+            def stop(self):
+                self.closed=True
+                return {"joined":True}
+        class ConstructChild(Child):
+            stdout=Pipe(b"")
+            stderr=Pipe(b"")
+            returncode=None
+        def spawn(*args,**kwargs):
+            assert kwargs["close_fds"] and len(kwargs["pass_fds"])==3
+            child=ConstructChild();observed["children"].append(child)
+            return child
+        def opened(*args):
+            observed["fd"]+=1
+            return observed["fd"]
+        def blocking(*args):
+            observed["blocking"]+=1
+            if stage=="blocking"+str(observed["blocking"]):
+                raise OSError("injected stream setup failure")
+        def receive(self):
+            return {} if stage=="greeting" else {"QMP":{}}
+        def request(self,command):
+            raise ValueError("injected first QMP request failure")
+        adaptations = [
+            patch(__name__+".cloud_guard",lambda:None),
+            patch(__name__+".load",lambda name:profile if name=="vm_profile" else SimpleNamespace(Backend=FakeBackend)),
+            patch(__name__+".Path",FakePath),
+            patch(__name__+".read_regular",lambda path,limit:bytes(131072) if "VARS" in str(path) else bytes(1966080)),
+            patch.object(os,"open",opened),patch.object(os,"write",lambda fd,data:len(data)),
+            patch.object(os,"fsync",lambda fd:None),patch.object(os,"close",lambda fd:None),
+            patch.object(os,"fstat",lambda fd:SimpleNamespace(st_dev=1,st_ino=fd)),
+            patch.object(os,"set_blocking",blocking),
+            patch.object(socket,"socketpair",lambda *args:(FakeSocket(),FakeSocket())),
+            patch.object(socket,"socket",FakeSocket),
+            patch.object(selectors,"DefaultSelector",FakeSelector),
+            patch.object(subprocess,"Popen",spawn),
+            patch.object(VM,"service",lambda self:None),
+            patch.object(VM,"receive",receive),patch.object(VM,"request",request)]
+        with ExitStack() as stack:
+            for adaptation in adaptations: stack.enter_context(adaptation)
+            try: VM(1,41,42)
+            except (ValueError,OSError): rejected+=1
+            else: raise AssertionError("constructor failure was accepted")
+        assert len(observed["children"])==1 and len(observed["backends"])==3
+        child=observed["children"][0]
+        assert child.returncode==-9 and child.stdout.closed and child.stderr.closed
+        assert all(b.closed for b in observed["backends"])
+        assert all(s.closed for s in observed["sockets"])
     return rejected
 
 if __name__ == "__main__":
