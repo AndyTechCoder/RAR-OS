@@ -64,6 +64,74 @@ converted into a persistent format.
     still pass. Publish v0.4.0-modern-alpha only after reviewed final-head and
     exact-main evidence; model-only tests cannot satisfy runtime requirements.
 
+## Owner-approved three-section delivery
+
+The owner approved this organization on 2026-09-08. It replaces the delivery
+sequence, not the ten completion requirements above, ADR0034 review boundaries,
+or any host/data safety constraint. All three sections remain incomplete.
+
+### M4.1 — Persistent files
+
+Deliver the actual Terminal -> storage service -> kernel-mediated Data device ->
+durable DataVault -> fresh-VM Files path. Reuse the working Desktop UI without
+changing its historical volatile profile. Finish the concrete bounded Modern
+device/syscall contract, separately enforce System/Data authority, wire the
+existing PIO and vault implementation, and mount rather than recreate contents.
+
+Acceptance: a controller-generated unpredictable value typed only during boot1
+survives complete QEMU destruction and fresh firmware state; boot2 Files and a
+separate frozen-image oracle agree. Include read/write denial for unauthorized
+roles, exact capacity checks, sticky failure/no autoformat, and representative
+controller-owned interrupted-write tests. Finish the reviewed crypto/reference
+and cloud-profile prerequisites before accepting encrypted runtime evidence;
+do not postpone an unsafe prerequisite merely because final release is later.
+This section primarily covers requirements4,7,8,9 and the storage isolation in5.
+
+### M4.2 — Signed live updates
+
+Connect canonical signed metadata and inactive System payload storage to the
+actual component loader and lifecycle mechanisms. Replace Settings executable
+code while shell, compositor, Files and Terminal continue. Trial health has no
+production authority; atomic publication and incarnation/queue revocation must
+be enforced by the running kernel, not only by the lifecycle model.
+
+Acceptance: visibly different Settings behavior; tampered, unknown-key,
+incompatible and stale candidates rejected; failed startup and post-cutover
+failure restore the verified prior component without granting stale handles
+authority. Verify preserved persistent Data. Covers requirements1,2,3, the update
+portion of5, and the related System transaction cases in7.
+
+### M4.3 — Recovery and release
+
+Boot independently verifiable immutable laboratory recovery, identify and repair
+only damaged System units, and preserve the exact Data-image hash. Demonstrate
+restartable interrupted repair and complete the full controller-owned fault
+matrix across persistence, update and recovery. Run final crypto comparisons,
+two independent target builds and retained Desktop/Platform/Foundation
+regressions; retain actual serial output, screenshots, image/source/tool hashes
+and causal test evidence. Complete focused independent reviews/remediation,
+final-head and exact-main gates, then publish v0.4.0-modern-alpha.
+
+Covers the recovery portion of5, requirement6, full7/9 regression coverage and10.
+No section is complete until its actual cloud behavior is demonstrated; passing
+source/model tests, a compiler image, documentation or a prompt count is not the
+completion measure.
+
+### Execution discipline
+
+One main writer; one integrated implementation and outcome demonstration per
+section, with quick focused checks and a consolidated independent review near
+completion. Review security-critical contracts/authority before use and fixes
+before meaningful merges. A section can use coherent dependency changes where
+trusted-main execution requires them, but not authorization-only PR chains.
+
+Maintain docs/evidence/m4-runtime-progress.md with what works, exact evidence,
+remaining integration and the next concrete action. Shared compiler/reference
+work belongs to M4.1's required crypto validation and final M4.3 regression; it
+is not a fourth open-ended milestone. Preserve already-reviewed work, avoid
+duplicate live runs, diagnose a terminal failed/cancelled run before one bounded
+retry, and never weaken checks simply to report progress.
+
 ## Delivery and ownership
 
 One main writer. Read-only independent architecture/correctness/security reviews

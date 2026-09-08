@@ -1,36 +1,48 @@
 # M4 runtime progress checkpoint
 
 This is an incomplete development checkpoint, not v0.4.0 or runtime acceptance.
-The released v0.3.0 usable graphical Alpha remains unchanged.
+The released v0.3.0 usable graphical Alpha remains unchanged. The owner-approved
+delivery is now M4.1 persistent files, M4.2 signed live updates, M4.3 recovery and
+release; the complete acceptance contract remains in the milestone task.
 
-## Implemented source, still requiring runtime integration
+## Status by outcome
 
-- RAR crypto, canonical signed Settings manifest verification and System selector.
-- Lifecycle/incarnation/queue replacement model.
-- Verified bounded PIO transport and its explicit-flush vault connection.
-- Encrypted append-only DataVault with crash recovery and second-reboot tests.
-- Alternate System selector publication with flush/readback, uncertain-write
-  refusal, protected-record checks, fallback and fault tests.
+| Section | Implemented source | Missing runtime proof |
+| --- | --- | --- |
+| M4.1 Persistent files — in progress | PIO transport, explicit-flush vault bridge, encrypted append-only snapshots, crash and second-reboot model tests | Kernel device authority/syscalls, actual service/UI wiring, reviewed cloud disks, fresh-VM persistence and independent frozen-Data oracle |
+| M4.2 Signed live updates — pending | Crypto, canonical signed manifest verification, System selector publication, incarnation/queue lifecycle model | System payload I/O, executable sealing/loading, real Settings replacement, health/fallback and stale-capability enforcement |
+| M4.3 Recovery and release — pending | Source-level fault tests and existing M3 release baseline | Immutable recovery integration, full block fault matrix, Data hash preservation, target reproduction, retained regressions and final release evidence |
 
-These pieces are unactivated. Model/source tests are not guest evidence.
-Corrupt or ambiguous Data remains unavailable without autoformat; optional
-last-verified-prefix salvage is deferred and is not needed for M4.
+None of these rows claims running M4 behavior. Corrupt/ambiguous Data remains
+unavailable without autoformat; optional last-verified-prefix salvage is deferred.
 
-## Critical remaining path
+## Confirmed prerequisite evidence
 
-1. Reproduce and independently inspect the corrected pinned compiler candidate.
-   PR168 is merged at d9cf06b87449391077f18566bffa1905fb3895bb after full
-   source CI34082160653 and independent review. Construction34083184108 was
-   dispatched once; its outcome must be checked, not assumed.
-2. Complete the separate reference-free RAR adapter compiler/runtime handoff
-   and real comparisons with both pinned crypto references.
-3. Integrate Modern kernel/process sealing, fixed independent System/Data
-   adapters, storage services, replacement Settings and update/health handover.
-4. Review and activate the concrete cloud-only Modern device/controller profile.
-5. Prove real fresh-VM persistence, live update, tamper rejection, fallback,
-   interrupted commit and immutable recovery with preserved Data hashes.
-6. Reproduce images, pass retained regressions and final independent review,
-   then exact-main evidence and release.
+PR168 merged at d9cf06b87449391077f18566bffa1905fb3895bb after full source
+CI34082160653 and independent review. Compiler construction34083184108 succeeded:
+two no-cache candidates have identical complete inventories and image identity
+sha256:9bb926e46f5789c5048af8dfad598b5ef9779ae0f1c572267a000f4b12eaf914.
+Retained artifact10004371629 contains the construction evidence. This proves
+candidate reproduction/inspection, not driver execution or crypto comparisons.
 
-No Mac/SSD files are created, modified or deleted. No OS, emulator or adapter
-executes locally. No unreviewed Modern VM profile has been activated.
+The private driver recipe, source Git-object binding and source-layer inspector
+are reviewed source candidates. Actual separate compiler/adapter handoff and
+two-reference interoperability remain prerequisites to encrypted runtime
+acceptance, not evidence that the persistent-files section has completed.
+
+## Next concrete implementation
+
+Connect the file-service operations used by Terminal and Files to DataVault in
+the distinct Modern composition, with durable acknowledgement and explicit
+unavailable/read-only failure behavior. Complete the kernel-mediated fixed Data
+transport and reviewed cloud profile alongside it. Do not change released
+Desktop-v0 into a persistent profile or inject reconstructed contents on boot.
+
+Keep source CI and independent boundary review, but measure completion by the
+boot1 write -> full VM destruction -> boot2 read demonstration and independent
+disk evidence specified in the task. Later sections retain every original M4
+security, update, fault, recovery and release requirement.
+
+All repository mutations remain GitHub-only. No Mac/SSD files are created,
+modified or deleted. No OS, emulator or adapter executes locally. No unreviewed
+Modern VM profile is activated.
