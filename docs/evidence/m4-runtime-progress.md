@@ -9,7 +9,7 @@ release; the complete acceptance contract remains in the milestone task.
 
 | Section | Implemented source | Missing runtime proof |
 | --- | --- | --- |
-| M4.1 Persistent files — in progress | PIO transport, explicit-flush vault bridge, encrypted append-only snapshots, crash and second-reboot model tests | Kernel device authority/syscalls, actual service/UI wiring, reviewed cloud disks, fresh-VM persistence and independent frozen-Data oracle |
+| M4.1 Persistent files — in progress | PIO transport, explicit-flush vault bridge, encrypted append-only snapshots, durable file-service adapter, correlated IPC, bounded app-session loop, crash and second-reboot source tests | Kernel device authority/syscalls, actual service/UI wiring, reviewed cloud disks, fresh-VM persistence and independent frozen-Data oracle |
 | M4.2 Signed live updates — pending | Crypto, canonical signed manifest verification, System selector publication, incarnation/queue lifecycle model | System payload I/O, executable sealing/loading, real Settings replacement, health/fallback and stale-capability enforcement |
 | M4.3 Recovery and release — pending | Source-level fault tests and existing M3 release baseline | Immutable recovery integration, full block fault matrix, Data hash preservation, target reproduction, retained regressions and final release evidence |
 
@@ -32,9 +32,15 @@ acceptance, not evidence that the persistent-files section has completed.
 
 ## Next concrete implementation
 
-Connect the file-service operations used by Terminal and Files to DataVault in
-the distinct Modern composition, with durable acknowledgement and explicit
-unavailable/read-only failure behavior. Complete the kernel-mediated fixed Data
+The durable file-service adapter and correlated IPC have passed the primary
+cloud source validation at checkpoints 2ec1e8cd and 4d32a364. Full run34215539991
+passed at 2ec1e8cd; the later full run remains pending at this writing. The new
+bounded app-session loop is a source candidate awaiting its cloud checks.
+These are not runtime persistence evidence.
+
+Connect these components to the actual Terminal and Files paths in the distinct
+Modern composition, with durable acknowledgement and explicit unavailable,
+read-only and uncertain-save UI behavior. Complete the kernel-mediated fixed Data
 transport and reviewed cloud profile alongside it. Do not change released
 Desktop-v0 into a persistent profile or inject reconstructed contents on boot.
 

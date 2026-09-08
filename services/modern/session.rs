@@ -52,6 +52,12 @@ impl Session {
             let now=match self.clock(runtime) {Ok(now)=>now,Err(())=>return Ok(self.abort())};
             if let Some(outcome)=self.client.tick(now) {return Ok(outcome);}
             let envelope=match runtime.poll() {Ok(envelope)=>envelope,Err(())=>return Ok(self.abort())};
+            // Preserve dequeued current-shell input before any timeout/error
+            // return. Storage replies are still checked only after fresh time.
+            if let Some(envelope)=envelope {
+                if envelope.sender==0 && envelope.generation==self.shell_generation &&
+                    envelope.length==128 && !input.push(envelope.bytes) {self.input_lost=true;}
+            }
             let now=match self.clock(runtime) {Ok(now)=>now,Err(())=>return Ok(self.abort())};
             if let Some(outcome)=self.client.tick(now) {return Ok(outcome);}
             if let Some(envelope)=envelope {
@@ -61,8 +67,6 @@ impl Session {
                 if let Some(outcome)=self.client.receive(now,envelope.sender,envelope.generation,bytes) {
                     return Ok(outcome);
                 }
-                if envelope.sender==0 && envelope.generation==self.shell_generation &&
-                    envelope.length==128 && !input.push(envelope.bytes) {self.input_lost=true;}
             }
             if runtime.yield_now().is_err() {return Ok(self.abort());}
         }
@@ -78,13 +82,14 @@ mod tests {
     use std::collections::VecDeque;
     struct Fake {now:u64,step:u64,sends:usize,polls:usize,yields:usize,
         send_error:bool,poll_error:bool,yield_error:bool,clock_error:bool,
-        backwards:bool,messages:VecDeque<Envelope>}
+        backwards:bool,post_poll_clock:Option<Result<u64,()>>,messages:VecDeque<Envelope>}
     impl Fake {fn new()->Self {Self {now:0,step:1,sends:0,polls:0,yields:0,
         send_error:false,poll_error:false,yield_error:false,clock_error:false,
-        backwards:false,messages:VecDeque::new()}}}
+        backwards:false,post_poll_clock:None,messages:VecDeque::new()}}}
     impl Runtime for Fake {
         fn now(&mut self)->Result<u64,()> {
             if self.clock_error {return Err(());}
+            if self.polls>0 {if let Some(value)=self.post_poll_clock {return value;}}
             if self.backwards&&self.sends>0 {return Ok(0);}
             let now=self.now;self.now=self.now.saturating_add(self.step);Ok(now)
         }
@@ -156,6 +161,31 @@ mod tests {
             let expected=if failure==3 {Outcome::Unavailable}else{Outcome::SaveUncertain};
             assert_eq!(s.call(&mut r,&mut ui(),&request(wire::WRITE)),Ok(expected));
             assert!(s.closed());assert_eq!(r.sends,if failure==3{0}else{1});
+        }
+    }
+    #[test] fn dequeued_shell_input_survives_post_poll_deadline_and_clock_error() {
+        for post in [Ok(DEADLINE_TICKS),Err(())] {for accept in [false,true] {
+            let mut r=Fake::new();r.post_poll_clock=Some(post);
+            r.messages.push_back(response(0,2,0,0));
+            let mut s=Session::new(3,2).unwrap();let mut input=Ui{count:0,accept};
+            assert_eq!(s.call(&mut r,&mut input,&request(wire::WRITE)),Ok(Outcome::SaveUncertain));
+            assert_eq!(input.count,1);assert_eq!(s.input_lost(),!accept);
+            assert_eq!(r.polls,1);assert!(s.writes_locked());
+        }}
+        // The same post-poll deadline must NOT accept a late storage success.
+        let mut r=Fake::new();r.post_poll_clock=Some(Ok(DEADLINE_TICKS));
+        r.messages.push_back(response(1,3,1,0));let mut s=Session::new(3,2).unwrap();
+        assert_eq!(s.call(&mut r,&mut ui(),&request(wire::WRITE)),Ok(Outcome::SaveUncertain));
+    }
+    #[test] fn final_budget_shell_envelope_is_offered_once_or_loss_flagged() {
+        for accept in [false,true] {
+            let mut r=Fake::new();r.step=0;
+            r.messages.extend((1..MESSAGE_BUDGET).map(|_|response(99,1,1,0)));
+            r.messages.push_back(response(0,2,0,0));
+            let mut s=Session::new(3,2).unwrap();let mut input=Ui{count:0,accept};
+            assert_eq!(s.call(&mut r,&mut input,&request(wire::WRITE)),Ok(Outcome::SaveUncertain));
+            assert_eq!(r.polls,MESSAGE_BUDGET as usize);assert_eq!(input.count,1);
+            assert_eq!(s.input_lost(),!accept);assert!(s.writes_locked());
         }
     }
     #[test] fn stalled_clock_and_empty_mailbox_have_finite_work() {
