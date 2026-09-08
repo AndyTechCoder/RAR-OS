@@ -62,6 +62,7 @@ printf '%s\n' 'Modern reference protocol: bounded framing/comparison tests passe
 printf '%s\n' 'Modern reference corpus: pure public fixture tests passed; live comparisons pending'
 
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/data_oracle.py" --self-test
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/data_provision.py" --self-test
 printf '%s\n' 'Modern frozen Data oracle: bounded pure tests passed; actual disk binding and persistence not claimed'
 
 # Policy-only runner checks: subprocess launch is mocked, no image activation.
