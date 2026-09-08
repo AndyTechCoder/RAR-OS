@@ -51,6 +51,69 @@ def build(source, revision):
     return raw, report
 
 
+def inspect(raw, revision, expected_files):
+    """Inspect untrusted source-layer bytes against separately Git-bound inputs.
+    The caller supplies expected_files from build_from_objects, never from the
+    archive or a proposal-authored manifest. This routine grants no execution.
+    """
+    if (type(raw) is not bytes or not 10240 <= len(raw) <= 1024 * 1024 or
+        len(raw) % 512 or type(expected_files) is not dict or
+        set(expected_files) != FILES):
+        raise Invalid("source layer envelope")
+    total = 0
+    for entry in expected_files.values():
+        if (type(entry) is not dict or set(entry) != {"size", "sha256"} or
+            type(entry["size"]) is not int or not 1 <= entry["size"] <= 262144 or
+            type(entry["sha256"]) is not str or
+            re.fullmatch(r"[0-9a-f]{64}", entry["sha256"]) is None):
+            raise Invalid("Git-bound source inventory")
+        total += entry["size"]
+    if total > 524288:
+        raise Invalid("Git-bound source total")
+    # Derive the allowlist from fixed paths, not archive directory declarations.
+    directories = set()
+    for path in FILES:
+        parts = ("source/" + path).split("/")
+        directories.update("/".join(parts[:n]) for n in range(2, len(parts)))
+    seen = set()
+    source = {}
+    try:
+        with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
+            for item in archive:
+                if (item.name in seen or item.uid != 0 or item.gid != 0 or
+                    item.mtime != EPOCH or item.uname or item.gname or
+                    item.pax_headers or item.sparse is not None or item.linkname):
+                    raise Invalid("source layer metadata")
+                seen.add(item.name)
+                if len(seen) > len(directories) + len(FILES):
+                    raise Invalid("source layer member count")
+                if item.name in directories:
+                    if not item.isdir() or item.mode != 0o555 or item.size != 0:
+                        raise Invalid("source directory metadata")
+                    continue
+                path = item.name.removeprefix("source/")
+                if (item.name != "source/" + path or path not in FILES or
+                    not item.isfile() or item.mode != 0o444 or
+                    item.size != expected_files[path]["size"]):
+                    raise Invalid("source file metadata")
+                stream = archive.extractfile(item)
+                if stream is None:
+                    raise Invalid("source payload absent")
+                value = stream.read(262145)
+                if (len(value) != item.size or
+                    hashlib.sha256(value).hexdigest() != expected_files[path]["sha256"]):
+                    raise Invalid("source bytes differ from Git-bound input")
+                source[path] = value
+    except (tarfile.TarError, OSError, EOFError, OverflowError) as exc:
+        raise Invalid("source layer framing") from exc
+    if seen != directories | {"source/" + path for path in FILES}:
+        raise Invalid("source layer incomplete")
+    canonical, report = build(source, revision)
+    if raw != canonical:
+        raise Invalid("noncanonical source layer")
+    return report
+
+
 def _git_hash(kind, raw):
     return hashlib.sha1(kind + b" " + str(len(raw)).encode("ascii") + b"\0" + raw).hexdigest()
 
@@ -171,6 +234,57 @@ def self_test():
         return _git_hash(b"commit",commit),commit,trees,blobs,source
 
     class Tests(unittest.TestCase):
+
+
+        def test_independent_layer_inspection_binds_git_source_bytes(self):
+            revision,commit,trees,blobs,source=object_fixture()
+            raw,report=build_from_objects(revision,commit,trees,blobs)
+            checked=inspect(raw,revision,report["files"])
+            self.assertEqual(checked,build(source,revision)[1])
+            bad=dict(source);path=sorted(FILES)[0]
+            bad[path]=b"x"+bad[path][1:]
+            with self.assertRaisesRegex(Invalid,"source bytes differ"):
+                inspect(build(bad,revision)[0],revision,report["files"])
+            for tail in (raw+b"\0"*512,raw+raw,raw[:-512],raw[:-1]):
+                with self.assertRaises(Invalid):
+                    inspect(tail,revision,report["files"])
+            wrong=dict(report["files"]);wrong.pop(path)
+            with self.assertRaises(Invalid): inspect(raw,revision,wrong)
+            for value in (True,0,262145):
+                wrong={p:dict(v) for p,v in report["files"].items()}
+                wrong[path]["size"]=value
+                with self.assertRaises(Invalid): inspect(raw,revision,wrong)
+
+        def test_source_layer_rejects_links_extra_paths_and_metadata(self):
+            revision,commit,trees,blobs,source=object_fixture()
+            raw,report=build_from_objects(revision,commit,trees,blobs)
+            path="source/"+sorted(FILES)[0]
+            def modified(field,value,extra=False,duplicate=False):
+                import copy
+                out=io.BytesIO()
+                with tarfile.open(fileobj=io.BytesIO(raw),mode="r:") as original:
+                    with tarfile.open(fileobj=out,mode="w",format=tarfile.USTAR_FORMAT) as target:
+                        for item in original:
+                            payload=original.extractfile(item).read() if item.isfile() else None
+                            item=copy.copy(item)
+                            if item.name==path: setattr(item,field,value)
+                            target.addfile(item,io.BytesIO(payload) if payload is not None else None)
+                            if duplicate and item.name==path:
+                                target.addfile(item,io.BytesIO(payload))
+                        if extra:
+                            item=tarfile.TarInfo("source/unapproved")
+                            item.mode=0o444;item.mtime=EPOCH
+                            target.addfile(item,io.BytesIO(b""))
+                return out.getvalue()
+            for field,value in (("mode",0o555),("uid",1),("gid",1),("mtime",EPOCH+1),
+                                ("name","source/../escape"),("name","/"+path),
+                                ("type",tarfile.SYMTYPE),("type",tarfile.LNKTYPE),
+                                ("uname","root"),("linkname","elsewhere")):
+                with self.subTest(field=field,value=value),self.assertRaises(Invalid):
+                    inspect(modified(field,value),revision,report["files"])
+            for extra,duplicate in ((True,False),(False,True)):
+                with self.assertRaises(Invalid):
+                    inspect(modified("mode",0o444,extra,duplicate),revision,report["files"])
 
         def test_exact_git_object_source_binding(self):
             revision,commit,trees,blobs,source=object_fixture()

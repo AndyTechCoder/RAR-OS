@@ -123,3 +123,15 @@ compiler image preserves all parent notices; the later adapter-only image
 requires its own separately inventoried notice set. This recipe alone does not
 establish legal sufficiency, role confinement, reproducibility or compilation
 success. Actual construction remains pending.
+
+## Source layer consumption
+
+Before derived-image assembly, source_snapshot.inspect independently parses the
+bounded source USTAR and compares every file to the separately Git-object-bound
+size/SHA256 inventory. It requires the fixed five paths and their exact readonly
+root-owned directory/file metadata, then requires the canonical encoding. Extra
+paths, replacements, links, alternate metadata, changed content, concatenated
+archives and trailing padding fail. The expected inventory must come from the
+trusted parent's raw-object verification, never a manifest supplied by the layer.
+This closes source-layer consumption validation only; no build, derived image,
+compiler invocation, adapter comparison or Modern VM is activated by this API.
