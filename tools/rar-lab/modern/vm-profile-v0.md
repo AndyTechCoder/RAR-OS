@@ -109,3 +109,15 @@ greeting and request). No test starts QEMU. Five teardown failures cover VM
 wait timeout/error and failure of each of the three backend joins. Every other
 child must still be attempted, and no failing teardown may return joined=True.
 Passing these fixtures will not replace actual cloud process lifecycle evidence.
+
+
+## Independent visual expectation
+
+visual_oracle.py implements four fixed public scenes independently of target
+imports: initial workspace, initial Terminal, SAVED after the write, and Files
+in a fresh VM. Its 32 lowercase a-p challenge encodes 128 random bits supplied
+only after the first actual home capture. The second VM's input plan contains
+only F1. Every capture is compared in full as a bounded 640x480 RGB PPM; serial
+claims or a matching filename alone are insufficient. The oracle's expected
+pixels are never guest screenshots and must never be emitted as captured evidence.
+Its self-tests use synthetic frames only and claim no guest execution.
