@@ -118,3 +118,6 @@ printf 'Modern focused scratch KiB: %s (limit 8192)\n' "$1"
 
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/compiler_driver_layer.py" --self-test
 printf '%s\n' 'Modern driver layer: canonical static artifact/refusal tests passed; runtime handoff remains inactive'
+
+# Public known-key fixture signing only; no target signing API or secret input.
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/lab_signer.py" --self-test
