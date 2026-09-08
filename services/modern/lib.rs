@@ -9,3 +9,5 @@ pub mod vault;
 
 mod desktop_wire;
 pub mod store;
+
+pub mod transport;

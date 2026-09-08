@@ -13,10 +13,25 @@ pub struct Store<B: Block> {
     files_generation: u32,
     terminal_generation: u32,
 }
-fn name_ok(name: &[u8]) -> bool {
+pub(crate) fn name_ok(name: &[u8]) -> bool {
     !name.is_empty() && name.len() <= 12 && name != b"." && name != b".." &&
         name.iter().all(|b| b.is_ascii_alphanumeric() || *b == b'.' || *b == b'-')
 }
+
+pub(crate) fn decode(request: &[u8]) -> Option<(u8, &[u8], &[u8])> {
+    if request.len() != 128 { return None; }
+    let op=request[0]; let names=request[1] as usize; let data=request[2] as usize;
+    if !matches!(op,wire::CREATE|wire::WRITE|wire::READ|wire::LIST) ||
+        names>12 || data>64 || request[3]!=0 ||
+        request[4+names..16].iter().any(|b|*b!=0) ||
+        request[16+data..].iter().any(|b|*b!=0) || (op!=wire::WRITE && data!=0) {
+        return None;
+    }
+    let name=&request[4..4+names];
+    if (op==wire::LIST && names!=0) || (op!=wire::LIST && !name_ok(name)) { return None; }
+    Some((op,name,&request[16..16+data]))
+}
+
 fn status(value: u8) -> [u8; 128] { let mut out = [0;128]; out[0] = value; out }
 
 impl<B: Block> Store<B> {
@@ -34,6 +49,10 @@ impl<B: Block> Store<B> {
     }
     pub fn into_block(self) -> B { self.vault.into_block() }
     pub fn revision(&self) -> u64 { self.vault.revision() }
+    pub(crate) fn authorized(&self,sender:u64,generation:u32)->bool {
+        match sender {4=>generation==self.files_generation,
+            6=>generation==self.terminal_generation,_=>false}
+    }
 
     /// Sender/generation must be copied from the kernel receive envelope.
     /// Mount's expected incarnations come from trusted Modern bootstrap grants,
@@ -44,28 +63,8 @@ impl<B: Block> Store<B> {
     pub fn process(&mut self, sender: u64, generation: u32, request: &[u8])
         -> Result<[u8;128], Failure>
     {
-        let authorized = match sender {
-            4 => generation == self.files_generation,
-            6 => generation == self.terminal_generation,
-            _ => false,
-        };
-        if !authorized || request.len() != 128 {
-            return Ok(status(wire::INVALID));
-        }
-        let op = request[0];
-        let names = request[1] as usize;
-        let data = request[2] as usize;
-        if !matches!(op, wire::CREATE|wire::WRITE|wire::READ|wire::LIST) ||
-            names > 12 || data > 64 || request[3] != 0 ||
-            request[4+names..16].iter().any(|b| *b != 0) ||
-            request[16+data..].iter().any(|b| *b != 0) ||
-            (op != wire::WRITE && data != 0) {
-            return Ok(status(wire::INVALID));
-        }
-        let name = &request[4..4+names];
-        if (op == wire::LIST && names != 0) || (op != wire::LIST && !name_ok(name)) {
-            return Ok(status(wire::INVALID));
-        }
+        if !self.authorized(sender,generation) { return Ok(status(wire::INVALID)); }
+        let Some((op,name,value))=decode(request) else { return Ok(status(wire::INVALID)); };
         if self.unavailable { return Err(Failure::Unavailable); }
         let snapshot = *self.vault.snapshot();
         match op {
@@ -91,12 +90,12 @@ impl<B: Block> Store<B> {
                 if op == wire::CREATE && exists { return Ok(status(wire::EXISTS)); }
                 if op == wire::WRITE && !exists { return Ok(status(wire::NOT_FOUND)); }
                 // A verified already-committed value needs no new nonce/slot.
-                if op == wire::WRITE && snapshot.get(name) == Some(&request[16..16+data]) {
+                if op == wire::WRITE && snapshot.get(name) == Some(value) {
                     return Ok(status(wire::OK));
                 }
                 if self.vault.is_readonly() { return Err(Failure::ReadOnly); }
                 let mut candidate: Snapshot = snapshot;
-                if candidate.put(name, &request[16..16+data]).is_err() {
+                if candidate.put(name, value).is_err() {
                     return Ok(status(wire::QUOTA));
                 }
                 match self.vault.publish(candidate) {

@@ -60,3 +60,67 @@ kernel-mediated fixed Data authority, real PIO storage service loop and reviewed
 cloud disk profile. Complete required crypto interoperability and causal
 boot1-write/full-VM-destruction/boot2-read/frozen-disk-oracle proof. None of these
 runtime gates is satisfied merely by this adapter or its source tests.
+
+## Correlated transport candidate — not activated
+
+Decision for the separate Modern composition: retain bounded 128-byte messages
+but add explicit correlation rather than reuse Desktop's uncorrelated polling
+or introduce a new durable transaction-ID database. This does not change the
+historical Desktop/Platform ABI. services/modern/transport.rs implements the
+candidate codec and client/server state; real runtime/UI and kernel epoch
+enforcement remain mandatory before activation.
+
+Frame bytes0..80 contain the existing operation body; 80..112 are zero;
+112..120 contain a nonzero little-endian u64 request ID; 120..128 are the eight
+ASCII bytes RARFIO01. These fields are domain/version separation and correlation,
+not authentication. Sender and incarnation always come from the kernel envelope.
+Before passing a request to Store, copy only0..80 into a zeroed128-byte body.
+Malformed outer framing and unauthorized envelopes never advance sequence state.
+
+Within one live service epoch, each authorized Files/Terminal incarnation has an
+independent sequence beginning at1. Only the exact next ID is accepted; advance
+before Store execution, even if a canonical outer frame has an invalid body.
+Stale, duplicate and gap requests are dropped without I/O or re-execution.
+Lost sends can therefore leave a gap: fail closed and renew sessions through
+the kernel lifecycle, never replay the uncertain request. Across roles, receive
+order supplies serialization, not an additional shared transaction-ID scheme.
+
+Replies echo ID/magic. Status0..4 retain operation-specific body meanings.
+Modern-only status5 is ReadOnly,6 Unavailable,7 SaveUncertain; error bodies are
+otherwise all zero. Receivers validate full canonical bytes and operation/status
+compatibility, bounded READ, sorted unique LIST, padding, storage identity/
+incarnation and pending ID. Unknown/malformed/stale replies never complete a
+different operation. Each client has at most one pending operation and IDs never
+wrap or reset during its incarnation.
+
+The client burns an ID before its sole send attempt. It never automatically
+retries a failed/ambiguous send. Mutation timeout or SaveUncertain locks ALL
+CREATE/WRITE operations for that incarnation, including apparent no-ops; READ/
+LIST and late success replies cannot clear the lock. ReadOnly/Unavailable also
+lock mutations. An expired read/list reports Unavailable without claiming a save.
+The runtime/UI must show these distinctions and must not say SAVED on uncertainty.
+
+Each begin fixes an absolute deadline of4096 monotonic kernel ticks and a total
+budget of65536 received messages. Neither invalid traffic nor partial progress
+extends these bounds. Runtime must invoke tick even when no messages arrive;
+the real kernel tick source/unit, bounded receiver integration and user-visible
+deadline still require concrete runtime/profile validation. These source limits
+are not a measured latency guarantee and do not reuse the old256-poll app loop.
+
+### Restart boundary (still requires kernel implementation/proof)
+
+Sequences are volatile, NOT durable transaction IDs or cross-reboot exactly-once
+execution. Never reset a server under the same live client grants, nor reset a
+client's IDs under the same incarnation. On service failure, old endpoints and
+queues must be revoked/drained, affected client sessions reincarnated, and all
+new nonwrapping identities bound by the kernel before remount/recreation. Until
+that is proved, the profile stays unactivated; use controlled recovery, not
+automatic remount/reset. A constructor or caller label cannot prove this policy.
+
+Source tests cover real adapter invocation with a model Block, durable reply
+loss followed by duplicate rejection, per-role serialization, unsupported
+envelopes/framing/gaps, burned invalid requests, late/wrong/malformed replies,
+canonical error/LIST bodies, explicit failure states, absolute deadline and
+stale-message budget, mutation lock retention, and ID/clock overflow. These
+tests do not prove actual process-restart revocation, device isolation, real
+durability or the GUI flow; those remain M4.1 integration gates.
