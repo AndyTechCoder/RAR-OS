@@ -36,8 +36,11 @@ model's vacant logical slot bookkeeping.
 
 Phase1 is a Settings trial (role5) with only cap9 and a nonzero health token.
 It has no self receive, production sends, framebuffer, input or device fields.
-Cutover/rebootstrap and actual trial-entry handling are not yet implemented;
-a real runtime must supply active grants only after the authorized cutover.
+The userspace trial entry now performs bounded local Settings health, reports
+its one-shot token, and takes a fresh validated bootstrap after resumption;
+see [Modern trial entry](modern-trial-entry.md). Kernel cutover, bootstrap
+republication and rescheduling remain unimplemented. Active grants must be
+published only after the authorized cutover.
 An old immutable bootstrap or cached trial descriptor cannot imply those grants.
 
 Active cap indices exactly match the lifecycle contract. Present handles must
@@ -69,7 +72,8 @@ a message before validating the receive destination.
 Private int80 numbers retain0 yield,1 send,2 receive,3 keyboard port read,
 4 bounded evidence report,5 exit;6 is monotonic ticks,7 fixed device operation,
 8 trial ready. The initial kernel dispatcher is now a source candidate;
-userspace assembly/service integration and UEFI runtime evidence remain pending.
+userspace syscall/service composition is implemented in source, including the
+trial receiver handoff above. Complete UEFI runtime acceptance remains pending.
 Error returns are negative; tick success must fit nonnegative
 i64 and fail on exhaustion rather than wrap. Tick semantics are specified below.
 Trial ready must redeem the model's exact one-shot handle/token; the number
