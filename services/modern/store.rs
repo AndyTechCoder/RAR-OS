@@ -186,8 +186,9 @@ mod tests {
             let mut disk = Disk::new(4); disk.fail = Some(14+operation);
             let mut store = Store::mount(disk,14,1,1).unwrap();
             let failed = call(&mut store,6,wire::CREATE,b"note",b"");
-            assert!(failed.is_err());
-            if operation >= 10 { assert_eq!(failed,Err(Failure::Indeterminate)); }
+            assert_eq!(failed,Err(if operation >= 10 {
+                Failure::Indeterminate
+            } else { Failure::Unavailable }));
             for op in [wire::CREATE,wire::READ,wire::LIST] {
                 assert_eq!(call(&mut store,4,op,if op==wire::LIST{b""}else{b"note"},b""),
                            Err(Failure::Unavailable));
@@ -229,14 +230,21 @@ mod tests {
         for name in [b".".as_slice(),b"..",b"a/b",b"a_b",b""] {
             assert_eq!(call(&mut store,4,wire::CREATE,name,b"").unwrap()[0],wire::INVALID);
         }
+        for op in [wire::CREATE,wire::READ,wire::LIST] {
+            let bad=wire::request(op,if op==wire::LIST{b""}else{b"a"},b"x").unwrap();
+            assert_eq!(store.process(4,1,&bad).unwrap()[0],wire::INVALID);
+        }
         assert_eq!(writes.get(),0);
     }
     #[test] fn existence_and_quotas_preserve_the_durable_snapshot() {
         let disk=Disk::new(8);let writes=disk.writes.clone();
         let mut store=Store::mount(disk,26,1,1).unwrap();
-        for name in [b"a",b"b",b"c",b"d"] {
+        for name in [b"d",b"b",b"a",b"c"] {
             assert_eq!(call(&mut store,6,wire::CREATE,name,b"").unwrap()[0],wire::OK);
         }
+        let mut expected=[0;128];expected[1]=4;
+        expected[4..12].copy_from_slice(&[1,b'a',1,b'b',1,b'c',1,b'd']);
+        assert_eq!(call(&mut store,4,wire::LIST,b"",b"").unwrap(),expected);
         assert_eq!(call(&mut store,6,wire::WRITE,b"a",&[1;64]).unwrap()[0],wire::OK);
         assert_eq!(call(&mut store,6,wire::WRITE,b"b",&[2;64]).unwrap()[0],wire::OK);
         let before=writes.get();let revision=store.revision();
