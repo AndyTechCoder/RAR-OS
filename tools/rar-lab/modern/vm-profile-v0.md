@@ -160,3 +160,32 @@ The normal first-VM audit conservatively marks every completed WRITE dirty and
 clears it only on a completed FLUSH. A dirty cut cannot pass. Focused negatives
 cover write-without-flush, another write after the last flush, writable readiness
 in VM2, and a VM2 Data WRITE; write followed by flush is a positive fixture.
+
+
+## Cloud packaging and entrypoint integration candidate
+
+launch.Containerfile reuses the existing pinned Debian/QEMU/OVMF/Python tool
+inputs. Apt reads only the fixed snapshot source list (sourceparts disabled);
+it does not delete the base image's configuration. Only explicitly named reviewed
+host helpers are copied into /opt/rar-modern. The image defaults to UID/GID65532.
+The outer controller must still enforce network-none, read-only mounts/root,
+resource limits, credentials/device denial and exact image/helper identity.
+
+launch.py has no options or source-selected imports. It loads only fixed tool
+siblings, applies the cloud VM guard, invokes the two-VM scenario, and emits a
+single bounded canonical JSON result. This is a candidate entrypoint, not an
+activated workflow or authorization to run the image locally.
+
+pack.sh uses the already pinned cloud Rust image to compile the trusted-main
+RAR-owned nucleus/foundation/image.rs mounted read-only as /packager.rs. The
+bounded previously inspected UEFI binary is mounted read-only at
+/artifact/modern.efi. The host packager runs only in the disposable container and
+produces the fixed16MiB FAT16 boot image; no target code executes during packaging.
+boot_image.py independently reconstructs the fixed FAT metadata and binds every
+payload/zero-padding byte to that exact UEFI input, rejecting changed geometry,
+directories, FAT entries, payload, padding or transfer framing. Its tests are
+bytes-only synthetic fixtures, not boot evidence.
+
+No Modern workflow or outer-controller dispatch is introduced by this candidate.
+Effective confinement, exact source/build/helper binding, independent retained
+envelope checks and actual cloud execution remain required before acceptance.
