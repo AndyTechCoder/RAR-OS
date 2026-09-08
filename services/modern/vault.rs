@@ -31,6 +31,11 @@ impl File {
 pub struct Snapshot { files: [File;4], count: u8 }
 impl Snapshot {
     pub const fn empty() -> Self { Self { files:[File::EMPTY;4], count:0 } }
+    /// Bounded canonical order; exposes no mutable file internals.
+    pub fn entries(&self) -> impl Iterator<Item=(&[u8], &[u8])> {
+        self.files[..self.count as usize].iter().map(|f|
+            (f.name(), &f.data[..f.data_len as usize]))
+    }
     pub fn get(&self, name: &[u8]) -> Option<&[u8]> {
         self.files[..self.count as usize].iter().find(|f| f.name() == name)
             .map(|f| &f.data[..f.data_len as usize])
