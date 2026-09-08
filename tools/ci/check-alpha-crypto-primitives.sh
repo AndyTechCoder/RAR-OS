@@ -37,6 +37,11 @@ printf '%s\n' 'Modern lifecycle: focused mechanism model tests and no_std compil
     --cfg rar_platform --cfg rar_modern --cfg rar_modern_compile_only \
     --cfg 'rar_profile="normal"' nucleus/foundation/main.rs -o "$work/focused.rlib"
 printf '%s\n' 'Modern kernel: Linux object-only integration compile passed; no link, target execution or UEFI build claimed'
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 \
+    --crate-type lib --emit=obj -C panic=abort -C no-redzone=yes -C debuginfo=0 \
+    core/modern/main.rs -o "$work/focused.rlib"
+printf '%s\n' 'Modern services: Linux object-only composition compile passed; no link, target execution or UEFI build claimed'
+
 
 
 /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --test -C strip=symbols -C debuginfo=0 -C opt-level=1 -C debug-assertions=yes -C overflow-checks=yes services/modern/lib.rs -o "$work/focused-tests"

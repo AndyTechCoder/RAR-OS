@@ -166,3 +166,56 @@ in-process interfaces; the 128-byte request/reply framing and on-disk formats
 are unchanged. The eventual Modern syscall envelope must preserve all 64 bits.
 Focused tests exercise incarnations above 2^32 and u64::MAX and reject otherwise
 identical lower-32-bit identities; zero remains invalid bootstrap material.
+
+
+## Initial syscall, service and UI composition
+
+The source composition now connects core/modern/main.rs,
+services/modern/runtime.rs and apps/modern/runtime.rs to the kernel candidate.
+This supersedes the earlier statements that the syscall/UI adapters are absent;
+it does not supersede any activation, crypto, epoch or causal-runtime gate.
+
+Data uses its own fixed bootstrap device grant with verified IDENTIFY, then
+Store::mount and Server. It never instantiates DesktopStore, creates a welcome
+file, formats, repairs or automatically remounts. Exact bootstrap Files/Terminal
+u64 incarnations are checked before request handling. A failed identify/mount
+leaves a failure-only receiver that echoes canonical correlation with status6
+Unavailable after sender authentication, never an OK or I/O attempt. No
+operation is executed in that state, including on duplicate IDs. A mounted
+Server retains the existing strict successor/once-per-epoch policy.
+
+FileRuntime performs exactly one nonblocking storage send, checked monotonic
+kernel ticks, one152-byte nonblocking own receive and yield. Session remains
+the bounded deadline/work/correlation policy; its state is constructed once
+per Files/Terminal process and never reset under live grants. The existing
+bounded-retry send utility is only used for GUI messages, not file requests or
+storage responses. Storage responses get one send attempt, so dropped ACKs
+cannot cause a resend/re-execution shortcut.
+
+Files and Terminal use typed outcomes, not invented historical error bytes.
+apps/modern/model.rs supplies tested sticky error labels and the exact canonical
+ACK rule used by the actual Terminal SAVED branch. ReadOnly, Unavailable,
+SaveUncertain, malformed response or failed request never permits SAVED.
+After uncertain mutation, later reads cannot clear the write lock or warning.
+Pending shell input is shape checked and bounded; overflow is visibly reported.
+Settings needs no file session or storage grant.
+
+Files can display all64 value bytes across two rows, and Terminal READ uses a
+second value row when necessary. The GUI labels the public laboratory data as
+not private. Terminal introduction/help explicitly explains separate CREATE
+and WRITE commits and that interruption may leave an empty file. Only a
+validated durable WRITE ACK prints SAVED; CREATE alone does not.
+
+The compositor checks full current peer incarnations without converting them
+to Desktop's u32 identities. Its initial expected peers come from the immutable
+Modern bootstrap. M4.2 must still implement authenticated peer/surface rebinding
+for real Settings replacement; that behavior is not supplied by this initial
+M4.1 composition. System only identifies once without writing and awaits its
+future protocol; manager awaits future lifecycle messages. Neither is an update
+or recovery implementation yet.
+
+Pure GUI/status/correlation tests and Linux object-only compile checks cover
+source integration. They are not an EFI target build or VM persistence proof.
+The exact pinned UEFI image, stack/image resource checks, certified dual-PIO
+profile, full VM destruction/fresh boot, independent frozen-Data oracle and
+retained fault/regression evidence remain completion requirements.

@@ -13,3 +13,6 @@ pub mod store;
 pub mod transport;
 
 pub mod session;
+
+pub mod gui;
+#[path="../../apps/modern/model.rs"] pub mod file_ui;

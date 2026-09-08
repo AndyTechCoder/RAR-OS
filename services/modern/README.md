@@ -1,8 +1,9 @@
 # Modern storage service transport candidate
 
-Unactivated RAR-owned bounded ATA PIO sequencer. No native port instructions,
-syscalls, block attachment, filesystem or OS execution entrypoint exists here.
-The Io trait is not a security boundary: a future kernel bridge must enforce
+Unactivated RAR-owned bounded ATA PIO sequencer and Modern service composition.
+runtime.rs now connects Io to the Modern device syscall and mounts DataVault.
+It has no native port instructions or device attachment authority.
+The Io trait is not a security boundary: the kernel bridge must enforce
 one fixed nondelegable adapter capability, register/width/command whitelists,
 and no caller-supplied device selector.
 
@@ -12,8 +13,8 @@ yielding every16. Missing/faulted/timeout/transport errors permanently poison
 this instance. No ambiguous operation retries. Bounds errors touch no I/O.
 A completed write is not a durable write until flush succeeds.
 
-Proposed topology: System role9 owns 0x1f0..0x1f7 plus0x3f6; Data role1 owns
-0x170..0x177 plus0x376. Master only; the kernel bridge must mask IRQ14/15 and set nIEN before constructing Device;
+Candidate topology (matching native_pio.rs): Data role1 owns 0x1f0..0x1f7 plus0x3f6;
+System role9 owns 0x170..0x177 plus0x376. Master only; the kernel bridge must mask IRQ14/15 and set nIEN before constructing Device;
 Io deliberately exposes no control-port write. No DMA.
 The immutable boot disk stays explicitly on Q35 AHCI, separate from both.
 This proposal does not activate or extend the existing Desktop profile.
@@ -64,7 +65,8 @@ must match exact nonempty printable space-padded profile values after ATA word
 byte-order decoding. DMA advertisement is not DMA authority. The caller cannot
 learn authority by supplying a matching identity: fixed kernel adapter ownership,
 IRQ masking/nIEN and separate reviewed System/Data profile identities are still
-mandatory and not yet implemented.
+mandatory; the kernel source candidate enforces the fixed grant/port split,
+but actual profile and runtime proof remain pending.
 
 Source fixtures cover exact word-order identity, each required feature/capacity/
 geometry/text mismatch, invalid expected profiles, all 256 transfer interruption
@@ -92,10 +94,38 @@ This is source-level transport composition, not a new capability boundary.
 Production construction still requires IDENTIFY, and eventual kernel ownership
 must supply only the Data role's fixed adapter to the vault. No user-selected
 device or shared unrestricted port authority is admitted by this connection.
-There is still no kernel port bridge or guest persistence proof.
+The kernel/source syscall bridge now exists; guest persistence proof remains pending.
 
 Cloud-only source tests cover verified-constructor read/write/flush sequencing,
 word order, out-of-bounds refusal without I/O, every partial transfer boundary,
 failed flush and no subsequent I/O after poisoning. Vault crash tests also
 publish distinct content after recovery and remount after a second crash to
 verify the new chain beyond any burned slots.
+
+
+## Real service and GUI wiring candidate
+
+runtime.rs constructs Ports only from the trusted Data/System bootstrap grant,
+maps each Io operation to the bounded DEVICE syscall, and checks result widths.
+Data identifies once, mounts Store once using full Files/Terminal incarnations,
+then serves the correlated Server. There is no RAM store, welcome seed, format,
+retry or automatic remount. Publication errors stay locked inside Store/Device.
+
+If IDENTIFY or mount fails, the service remains alive solely to return canonical
+correlated Unavailable responses to authenticated current Files/Terminal
+envelopes. The failure-only helper executes no request, creates no successful
+ACK and performs no I/O; it need not preserve execution sequence state because
+there is no mounted operation executor. Malformed/unauthorized frames are dropped.
+Replies get one send attempt; a lost ACK is handled as uncertainty by the app.
+
+FileRuntime connects the tested Session to actual checked kernel ticks, one
+storage send, one own-queue receive and yield. GUI input is separately bounded
+and shape checked. gui.rs uses full u64 peer incarnations for shell and surfaces;
+it contains no DesktopStore or legacy storage backend. Fixed bitmap rendering
+still belongs only to compositor3, and prominently labels public lab data.
+
+These are implementation candidates, not VM proof. Actual pinned UEFI compile,
+private Data provisioning, crypto references, profile certification and fresh-VM
+write/read/oracle evidence are still required. M4.2 manager/System operations,
+surface rebind and refreshed peer incarnations after replacement remain future
+integration; the initial GUI uses its kernel-supplied bootstrap epoch.

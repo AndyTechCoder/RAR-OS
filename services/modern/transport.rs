@@ -55,6 +55,12 @@ fn reply_valid(op:u8,body:&[u8;128])->bool {
         _=>false,
     }
 }
+/// Canonical failure-only response for a storage service that could not mount.
+/// The real service must first authenticate full kernel sender/incarnation.
+/// No operation is executed and no Store/server or successful ACK is created.
+pub fn unavailable_response(frame:&[u8])->Option<[u8;128]>{
+    let (id,_)=unpack(frame)?;let mut body=[0;128];body[0]=UNAVAILABLE;pack(body,id)
+}
 /// One owner/receiver loop. Never recreate with the same live client grants.
 /// After service loss, revoke old endpoints/queues and reincarnate clients
 /// before mounting a new Server. The kernel must enforce this before activation.
@@ -176,6 +182,22 @@ mod tests {
     }
     fn response(status:u8,id:u64)->[u8;128]{
         let mut body=[0;128];body[0]=status;pack(body,id).unwrap()
+    }
+    #[test] fn failed_mount_response_is_correlated_failure_only(){
+        for op in [wire::LIST,wire::READ,wire::CREATE,wire::WRITE]{
+            let mut c=Client::new(3).unwrap();
+            let req=c.begin(0,&body(op)).unwrap();
+            let reply=unavailable_response(&req).unwrap();
+            assert_eq!(c.receive(1,1,3,&reply),Some(Outcome::Unavailable));
+            assert!(c.writes_locked());
+        }
+        let req=pack(body(wire::WRITE),u64::MAX).unwrap();
+        let reply=unavailable_response(&req).unwrap();
+        assert_eq!(unpack(&reply).unwrap().0,u64::MAX);
+        assert_eq!(reply[0],UNAVAILABLE);
+        for length in 0..128{assert!(unavailable_response(&req[..length]).is_none());}
+        for i in [80,111,120,127]{let mut bad=req;bad[i]^=1;assert!(unavailable_response(&bad).is_none());}
+        let mut bad=req;bad[112..120].fill(0);assert!(unavailable_response(&bad).is_none());
     }
     #[test] fn full_kernel_incarnations_survive_server_and_client_path() {
         let files=(1u64<<32)|3;let terminal=u64::MAX;let storage=(1u64<<40)|9;

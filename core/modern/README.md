@@ -23,3 +23,23 @@ No production trust or cryptographic audit claim.
 
 Replacement: retain the explicit experimental contract and conformance corpus.
 Never link the host-only reference implementations into these modules.
+
+
+## Initial ring3 composition — source candidate
+
+main.rs is the distinct Modern service entry. It consumes the368-byte read-only
+bootstrap, uses152-byte full-incarnation int80 envelopes and wires the durable
+Data service, keyboard/compositor, Files, Settings and Terminal. It includes
+only RAR-owned modules and the existing RAR memory intrinsics. Desktop-v0 is not
+used as a storage backend and remains unchanged.
+
+The service loops are in services/modern/runtime.rs; durable app/session/UI
+logic is in apps/modern and the existing tested Modern transport/session.
+Manager/System entrypoints reserve their roles but do not implement live
+updates: System only IDENTIFYs its own controller once, and both then await
+future protocol work. No signed-update/recovery completion is implied.
+
+Cloud Specifications compiles this actual ring3 entry to a Linux relocatable
+object, never links or executes it. A pinned x86-64 UEFI build, bounded PE/link
+inspection, certified Modern VM and actual persistent GUI demonstration remain
+required. No Modern profile is activated by the source composition.
