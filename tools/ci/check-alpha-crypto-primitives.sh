@@ -68,6 +68,7 @@ printf '%s\n' 'Modern reference corpus: pure public fixture tests passed; live c
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/vm_profile.py" --self-test
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/vm_session.py" --self-test
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/visual_oracle.py" --self-test
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/persistence.py" --self-test
 printf '%s\n' 'Modern frozen Data oracle: bounded pure tests passed; actual disk binding and persistence not claimed'
 
 # Policy-only runner checks: subprocess launch is mocked, no image activation.

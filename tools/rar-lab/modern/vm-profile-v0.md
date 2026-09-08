@@ -121,3 +121,33 @@ only F1. Every capture is compared in full as a bounded 640x480 RGB PPM; serial
 claims or a matching filename alone are insufficient. The oracle's expected
 pixels are never guest screenshots and must never be emitted as captured evidence.
 Its self-tests use synthetic frames only and claim no guest execution.
+
+
+## Two-VM persistence scenario candidate
+
+persistence.py now supplies the concrete scenario API, with no activated launch
+CLI. It creates one empty Data image and one zeroed System image exclusively in
+the private disposable cloud directory. It retains separate O_RDONLY observer
+descriptors to the same fixed inodes. The host has no post-provision write API.
+
+The public random challenge is generated only after VM1's actual home frame.
+Terminal receives the write; exact SAVED pixels must appear. All QEMU/backend
+processes are killed and reaped before observer reads. The independent frozen
+oracle must find exactly note=challenge, revision2 and committed physical slots
+0/1 with no burned slot. A fresh VM with new firmware and backend processes
+receives only F1 and must render that value in Files. Data must remain byte-
+identical across the second boot, while System and immutable boot hashes remain
+unchanged throughout.
+
+The baseline audit validates typed readiness/request/completed-event order,
+operation geometry and monotonically counted ordinals. System/boot writes,
+uncompleted mutations, injected faults and device failures are rejected. A
+deliberate whole-VM cut may leave a final read or transport-EOF terminal record;
+neither is treated as a successful write. Complete raw evidence is retained with
+the summaries. This baseline is not the M4.3 fault-injection acceptance suite.
+
+Output retains actual captured PPM bytes, serial/QMP/topology/child-cut records,
+frozen Data bytes and hashes under a64MiB bound. The future trusted-main outer
+controller must independently bind/recheck that evidence. The output explicitly
+does not claim crypto interoperability or milestone completion. No candidate
+source publication activates QEMU or a workflow.
