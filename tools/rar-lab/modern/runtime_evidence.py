@@ -93,6 +93,11 @@ def argv(rows,index,profile):
     if rows!=expected: raise ValueError("actual QEMU arguments differ from the fixed reviewed profile")
     return True
 
+def terminated(code,problem):
+    if type(code) is not int or (code,problem) not in ((-9,"backend-failed"),(21,"backend-failed")):
+        raise ValueError("exact observed backend termination pairing")
+    return True
+
 def validate(raw,expected_boot_digest,firmware_sizes):
     if type(raw) is not bytes or not 1<=len(raw)<=64*1024*1024 or not raw.endswith(b"\n"):
         raise ValueError("bounded retained JSON line")
@@ -179,9 +184,9 @@ def validate(raw,expected_boot_digest,firmware_sizes):
         summaries=[];current=[]
         for role,report in zip(("data","system","boot"),cut["backends"]):
             if (type(report) is not dict or set(report)!={"returncode","problem","records","joined"} or
-                report["joined"] is not True or report["returncode"] not in (-9,21) or
-                report["problem"] not in ("backend-failed",None)):
+                report["joined"] is not True):
                 raise ValueError("bounded baseline backend termination")
+            terminated(report["returncode"],report["problem"])
             records=report["records"]
             if type(records) is not list or not records: raise ValueError("actual backend records")
             ready=records[0]
@@ -209,6 +214,10 @@ def self_test():
     for value in ("", "AAAA", "!!!!"):
         reject(lambda value=value:decoded(value,1))
     assert decoded("YQ==",1)==b"a"
+    for code in (-9,21):
+        assert terminated(code,"backend-failed")
+        reject(lambda code=code:terminated(code,None))
+    reject(lambda:terminated(0,"backend-failed"))
     profile=helper("vm_profile");visual=helper("visual_oracle")
     value="abcdefghijklmnop"*2
     for index in (1,2):

@@ -2,7 +2,9 @@
 
 Status: unactivated source candidate for M4.1 through M4.3. Existing certified
 Foundation/Platform/Desktop profiles and the v0.3 release are unchanged.
-No workflow or executable Modern launch entrypoint is enabled by these helpers.
+A manual trusted-main workflow and fixed entrypoint now exist as source candidates.
+Neither has been deployed to trusted main or invoked; the earlier helper-only
+stage descriptions below do not imply activation.
 
 ## Fixed device and process layout
 
@@ -208,3 +210,43 @@ source/build/tool identity and independently measured firmware geometry.
 Current pure tests cover malformed framing, argument changes and command/capture
 drift; a complete successful retained envelope still requires actual cloud VM
 execution and independent review. No synthetic success envelope is boot evidence.
+
+
+## Trusted-main outer integration candidate
+
+runtime_controller.py and modern-persistence.yml now connect the reviewed pieces.
+The workflow is manual-only, canonical-repository/main-ref constrained, and uses
+pinned checkout/upload actions with read-only repository permissions. It does not
+run automatically on a branch push. The controller additionally requires Linux,
+isolated Python, the exact trusted-main workflow revision and clean exact source/
+controller snapshots. Ambient Docker endpoint/configuration overrides are denied;
+all Docker operations use a fresh private cloud configuration and fixed local
+cloud-daemon endpoint.
+
+Every compiler, packager, identity reader and VM container is created stopped.
+Before start, inspect evidence must match the exact image/name, nonroot user,
+fixed command/environment, network-none/read-only-root,1GiB memory and swap,2CPU,
+64PID limit, dropped capabilities, no-new-privileges, no device/host namespace
+access, exact256MiB private tmpfs and only the specified read-only bind mounts.
+The runtime container receives the built artifact directory, never source or a
+Docker socket. Container inspect records before and after execution are retained.
+
+Two actual UEFI builds must match. The RAR host packager's result must satisfy the
+independent whole-image check. Pinned runtime tool hashes and measured firmware
+sizes are retained before the scenario runs. The emitted bounded actual envelope
+is independently revalidated against those build/tool inputs. Successful content
+validation is still not complete M4 or crypto acceptance. All containers owned by
+this cloud invocation are terminated on exit; cleanup failure prevents success.
+No owner files, source trees, images, volumes or local/SSD files are deleted.
+
+Independent review and trusted-main tooling integration are still required before
+the first bounded diagnostic VM run. That first real envelope must then pass full
+independent success-path validation and field/state mutation coverage before its
+runtime evidence can be accepted. Requiring a real envelope before allowing the
+first reviewed diagnostic run would be circular; no such gate is introduced.
+
+Backend termination content admits exactly (-9, backend-failed) or
+(21, backend-failed), matching the actual observed process wrapper. Both impossible
+nonzero/None combinations are negative fixtures. The first full actual envelope
+will additionally exercise and mutate disk hashes, frames, input chronology,
+preflight, readonly Data mode, inode/PID binding and termination states.
