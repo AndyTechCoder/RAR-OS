@@ -151,3 +151,12 @@ frozen Data bytes and hashes under a64MiB bound. The future trusted-main outer
 controller must independently bind/recheck that evidence. The output explicitly
 does not claim crypto interoperability or milestone completion. No candidate
 source publication activates QEMU or a workflow.
+
+
+The second VM receives the retained O_RDONLY Data observer descriptor with
+readonly_data=True; its physical-readonly readiness must agree, and any Data
+WRITE request rejects the baseline even if the immutable backend refused it.
+The normal first-VM audit conservatively marks every completed WRITE dirty and
+clears it only on a completed FLUSH. A dirty cut cannot pass. Focused negatives
+cover write-without-flush, another write after the last flush, writable readiness
+in VM2, and a VM2 Data WRITE; write followed by flush is a positive fixture.

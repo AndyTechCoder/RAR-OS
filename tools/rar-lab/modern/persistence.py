@@ -77,17 +77,27 @@ class Fixture:
                 setattr(self,name,None)
         if errors: raise OSError("fixture descriptor cleanup failed")
 
-def audit(records,role,ready):
+def audit(records,role,ready,readonly_data=False):
     """Successful baseline only, not fault-injection/recovery acceptance.
     A deliberate whole-VM cut may interrupt one final READ; writes/flushes must
     have complete events. Raw audit records are retained alongside this summary.
     """
     if type(records) is not list or not 1<=len(records)<=16390 or records[0]!=ready:
         raise ValueError("exact backend readiness is required")
+    if type(readonly_data) is not bool:
+        raise ValueError("explicit Data authority mode")
     counts={"read":0,"write":0,"flush":0}
+    dirty=False
     pending=None
     terminal=False
     size={"data":99328,"system":8388608,"boot":16777216}[role]
+    physical_readonly=role=="boot" or (role=="data" and readonly_data)
+    if (type(ready) is not dict or set(ready)!={"type","kind","readonly","export_readonly","capacity","device","inode"} or
+        ready["type"]!="ready" or ready["kind"]!=role or ready["readonly"] is not physical_readonly or
+        ready["export_readonly"] is not False or type(ready["capacity"]) is not int or ready["capacity"]!=size or
+        type(ready["device"]) is not int or ready["device"]<0 or
+        type(ready["inode"]) is not int or ready["inode"]<=0):
+        raise ValueError("typed role and physical descriptor authority")
     for row in records[1:]:
         if type(row) is not dict or terminal:
             raise ValueError("record after terminal or non-object")
@@ -101,8 +111,8 @@ def audit(records,role,ready):
             if (op=="flush" and (offset or length)) or (op!="flush" and
                 (offset<0 or offset%512 or not 512<=length<=65536 or length%512 or offset+length>size)):
                 raise ValueError("operation outside fixed device")
-            if op=="write" and role!="data":
-                raise ValueError("baseline may not attempt System/boot writes")
+            if op=="write" and (role!="data" or readonly_data):
+                raise ValueError("baseline may not attempt System/boot or read-only Data writes")
             pending=row
         elif kind=="event":
             if set(row)!={"type","event"} or pending is None or type(row["event"]) is not dict:
@@ -120,6 +130,8 @@ def audit(records,role,ready):
                 digest=event["payload_sha256"]
                 if type(digest) is not str or len(digest)!=64 or any(c not in "0123456789abcdef" for c in digest):
                     raise ValueError("canonical write payload digest")
+            if op=="write": dirty=True
+            elif op=="flush": dirty=False
             pending=None
         elif kind=="terminal":
             # EOF after deliberate QEMU SIGKILL is an ordinary transport failure,
@@ -132,7 +144,9 @@ def audit(records,role,ready):
             raise ValueError("unknown or repeated readiness record")
     if pending is not None and pending["operation"]!="read":
         raise ValueError("uncompleted mutation at persistence cut")
-    return dict(counts=counts,trailing_read=pending is not None,transport_closed=terminal)
+    if dirty:
+        raise ValueError("completed volatile write lacks a completed durability flush")
+    return dict(counts=counts,dirty=False,trailing_read=pending is not None,transport_closed=terminal)
 
 def joined(vm):
     vm.service()
@@ -143,7 +157,7 @@ def joined(vm):
     for backend,report,role in zip(vm.backends,stopped["backends"],("data","system","boot")):
         if report["joined"] is not True or report["records"]!=backend.records:
             raise ValueError("actual joined backend records required")
-        summaries.append(audit(report["records"],role,backend.records[0]))
+        summaries.append(audit(report["records"],role,backend.records[0],vm.readonly_data))
     return dict(cut=stopped,audit=summaries,argv=vm.argv,preflight=vm.preflight,
                 commands=vm.commands,events=vm.events,serial=bytes(vm.serial).decode("ascii"))
 
@@ -219,7 +233,7 @@ def run(session):
             raise ValueError("actual durable create/write state differs from Terminal")
         if sha(system.freeze(vms))!=system.initial:
             raise ValueError("System changed during Data-only proof")
-        live=session.VM(2,data.fd,system.fd)
+        live=session.VM(2,data.observer,system.fd,readonly_data=True)
         vms.append(live)
         live.start();ready(live)
         frames.append(scene(live,oracle,0))
@@ -261,11 +275,14 @@ def self_test():
         else: raise AssertionError("invalid persistence proof accepted")
     for value in (None,b"",bytes(15),bytes(17),bytearray(16)):
         reject(lambda value=value:challenge(value))
-    ready_record={"type":"ready","kind":"data"}
+    ready_record={"type":"ready","kind":"data","readonly":False,"export_readonly":False,
+                  "capacity":99328,"device":1,"inode":2}
     req={"type":"request","operation":"write","offset":1024,"length":512}
     event={"type":"event","event":{"operation":"write","ordinal":1,"offset":1024,
         "length":512,"status":"completed","payload_sha256":"a"*64}}
-    good=[ready_record,req,event]
+    flush={"type":"request","operation":"flush","offset":0,"length":0}
+    flushed={"type":"event","event":{"operation":"flush","ordinal":1,"offset":0,"length":0,"status":"completed"}}
+    good=[ready_record,req,event,flush,flushed]
     assert audit(good,"data",ready_record)["counts"]["write"]==1
     for rows in ([],[ready_record,req],[ready_record,event],[ready_record,req,req],
                  good+[{"type":"unknown"}],good+[dict(ready_record)]):
@@ -275,9 +292,18 @@ def self_test():
         changed=json.loads(json.dumps(good));changed[2]["event"][field]=value
         reject(lambda changed=changed:audit(changed,"data",ready_record))
     for role in ("system","boot"):
-        reject(lambda role=role:audit(good,role,ready_record))
+        role_ready=dict(ready_record,kind=role,readonly=role=="boot",
+                        capacity={"system":8388608,"boot":16777216}[role])
+        reject(lambda role=role,role_ready=role_ready:audit([role_ready]+good[1:],role,role_ready))
     trailing=[ready_record,{"type":"request","operation":"read","offset":0,"length":512}]
     assert audit(trailing,"data",ready_record)["trailing_read"]
+    reject(lambda:audit([ready_record,req,event],"data",ready_record))
+    second_event=json.loads(json.dumps(event));second_event["event"]["ordinal"]=2
+    reject(lambda:audit(good+[req,second_event],"data",ready_record))
+    ro_ready=dict(ready_record,readonly=True)
+    assert audit([ro_ready],"data",ro_ready,True)["dirty"] is False
+    reject(lambda:audit([ro_ready,req,event,flush,flushed],"data",ro_ready,True))
+    reject(lambda:audit([ready_record],"data",ready_record,True))
     return rejected
 
 if __name__=="__main__":
