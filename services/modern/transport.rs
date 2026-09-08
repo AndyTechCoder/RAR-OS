@@ -62,7 +62,7 @@ pub struct Server<B:Block> {store:Store<B>,last:[u64;2]}
 impl<B:Block> Server<B> {
     pub fn new(store:Store<B>)->Self {Self{store,last:[0;2]}}
     pub fn into_store(self)->Store<B> {self.store}
-    pub fn handle(&mut self,sender:u64,generation:u32,frame:&[u8])->Option<[u8;128]> {
+    pub fn handle(&mut self,sender:u64,generation:u64,frame:&[u8])->Option<[u8;128]> {
         if !self.store.authorized(sender,generation) {return None;}
         let role=if sender==4 {0}else{1};
         let (id,body)=unpack(frame)?;
@@ -87,10 +87,10 @@ pub enum StartError {Invalid,Busy,WritesLocked,Exhausted}
 pub enum Outcome {Reply([u8;128]),ReadOnly,Unavailable,SaveUncertain}
 #[derive(Clone,Copy)]
 struct Pending {id:u64,op:u8,deadline:u64,budget:u32}
-pub struct Client {generation:u32,next:u64,pending:Option<Pending>,writes_locked:bool}
+pub struct Client {generation:u64,next:u64,pending:Option<Pending>,writes_locked:bool}
 impl Client {
     /// Expected storage incarnation is trusted bootstrap/grant material.
-    pub fn new(generation:u32)->Result<Self,StartError> {
+    pub fn new(generation:u64)->Result<Self,StartError> {
         if generation==0 {return Err(StartError::Invalid);}
         Ok(Self{generation,next:1,pending:None,writes_locked:false})
     }
@@ -120,7 +120,7 @@ impl Client {
     }
     /// Runtime supplies monotonic kernel ticks; stale/malformed messages consume
     /// the fixed work budget and never extend the absolute deadline.
-    pub fn receive(&mut self,now:u64,sender:u64,generation:u32,frame:&[u8])->Option<Outcome> {
+    pub fn receive(&mut self,now:u64,sender:u64,generation:u64,frame:&[u8])->Option<Outcome> {
         let pending=self.pending?;
         if now>=pending.deadline || pending.budget==0 {return self.expire();}
         self.pending.as_mut()?.budget-=1;
@@ -176,6 +176,22 @@ mod tests {
     }
     fn response(status:u8,id:u64)->[u8;128]{
         let mut body=[0;128];body[0]=status;pack(body,id).unwrap()
+    }
+    #[test] fn full_kernel_incarnations_survive_server_and_client_path() {
+        let files=(1u64<<32)|3;let terminal=u64::MAX;let storage=(1u64<<40)|9;
+        let mut server=Server::new(Store::mount(Disk::new(),14,files,terminal).unwrap());
+        let mut client=Client::new(storage).unwrap();
+        let frame=client.begin(0,&body(wire::LIST)).unwrap();
+        assert!(server.handle(4,3,&frame).is_none());
+        assert!(server.handle(6,u32::MAX as u64,&frame).is_none());
+        let reply=server.handle(4,files,&frame).unwrap();
+        assert_eq!(client.receive(1,1,9,&reply),None);
+        assert_eq!(client.receive(2,1,storage,&reply),Some(Outcome::Reply([0;128])));
+        let mut other=Client::new(u64::MAX).unwrap();
+        let frame=other.begin(0,&body(wire::LIST)).unwrap();
+        let reply=server.handle(6,terminal,&frame).unwrap();
+        assert_eq!(other.receive(1,1,u32::MAX as u64,&reply),None);
+        assert_eq!(other.receive(2,1,u64::MAX,&reply),Some(Outcome::Reply([0;128])));
     }
     #[test] fn lost_durable_reply_never_reexecutes_or_unlocks_client() {
         let disk=Disk::new();let calls=disk.calls.clone();

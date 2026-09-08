@@ -10,8 +10,8 @@ pub enum Failure { ReadOnly, Unavailable, Indeterminate }
 pub struct Store<B: Block> {
     vault: Vault<B>,
     unavailable: bool,
-    files_generation: u32,
-    terminal_generation: u32,
+    files_generation: u64,
+    terminal_generation: u64,
 }
 pub(crate) fn name_ok(name: &[u8]) -> bool {
     !name.is_empty() && name.len() <= 12 && name != b"." && name != b".." &&
@@ -36,7 +36,7 @@ fn status(value: u8) -> [u8; 128] { let mut out = [0;128]; out[0] = value; out }
 
 impl<B: Block> Store<B> {
     /// Mount only: no welcome-file creation, formatting or write on boot.
-    pub fn mount(block: B, capacity: u32, files_generation: u32, terminal_generation: u32)
+    pub fn mount(block: B, capacity: u32, files_generation: u64, terminal_generation: u64)
         -> Result<Self, Error> {
         if files_generation == 0 || terminal_generation == 0 { return Err(Error::Invalid); }
         let vault = Vault::mount(block, capacity)?;
@@ -49,7 +49,7 @@ impl<B: Block> Store<B> {
     }
     pub fn into_block(self) -> B { self.vault.into_block() }
     pub fn revision(&self) -> u64 { self.vault.revision() }
-    pub(crate) fn authorized(&self,sender:u64,generation:u32)->bool {
+    pub(crate) fn authorized(&self,sender:u64,generation:u64)->bool {
         match sender {4=>generation==self.files_generation,
             6=>generation==self.terminal_generation,_=>false}
     }
@@ -60,7 +60,7 @@ impl<B: Block> Store<B> {
     /// A successful mutation reply is produced ONLY after Vault's durable ACK.
     /// Failures are private typed results, not new values in the old wire ABI;
     /// the Modern runtime must display them explicitly and never synthesize OK.
-    pub fn process(&mut self, sender: u64, generation: u32, request: &[u8])
+    pub fn process(&mut self, sender: u64, generation: u64, request: &[u8])
         -> Result<[u8;128], Failure>
     {
         if !self.authorized(sender,generation) { return Ok(status(wire::INVALID)); }
@@ -164,6 +164,17 @@ mod tests {
         -> Result<[u8;128],Failure> {
         store.process(sender,1,&wire::request(op,name,data).unwrap())
     }
+    #[test] fn full_width_incarnations_do_not_alias_low_bits() {
+        let files=(1u64<<32)|3;let terminal=u64::MAX;
+        let mut store=Store::mount(Disk::new(4),14,files,terminal).unwrap();
+        let list=wire::request(wire::LIST,b"",b"").unwrap();
+        for generation in [3,u32::MAX as u64,files-1] {
+            assert_eq!(store.process(4,generation,&list).unwrap()[0],wire::INVALID);
+        }
+        assert_eq!(store.process(4,files,&list).unwrap()[0],wire::OK);
+        assert_eq!(store.process(6,terminal,&list).unwrap()[0],wire::OK);
+        assert_eq!(store.process(6,u32::MAX as u64,&list).unwrap()[0],wire::INVALID);
+    }
     #[test] fn terminal_write_files_read_after_fresh_mount_model() {
         let disk = Disk::new(4); let before = disk.live.clone(); let writes = disk.writes.clone();
         let mut store = Store::mount(disk,14,1,1).unwrap();
@@ -216,7 +227,7 @@ mod tests {
         for sender in [0,1,2,3,5,7,u64::MAX] {
             assert_eq!(store.process(sender,1,&request).unwrap()[0],wire::INVALID);
         }
-        for generation in [0,2,u32::MAX] {
+        for generation in [0,2,u32::MAX as u64,u64::MAX] {
             assert_eq!(store.process(4,generation,&request).unwrap()[0],wire::INVALID);
         }
         for length in 0..128 {

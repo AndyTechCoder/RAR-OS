@@ -155,3 +155,14 @@ still validate their own event shapes. Transport outcomes remain typed: the GUI
 must explicitly render ReadOnly, Unavailable and SaveUncertain, and may say SAVED
 only for a validated successful mutation reply. The session does not implement
 the future syscall adapter, kernel clock, UI labels or service restart policy.
+
+## Kernel incarnation width
+
+Modern lifecycle endpoints use nonzero 64-bit incarnations. Store authorization,
+transport clients and servers, and the app session's stamped envelopes preserve
+that full width, including current shell/storage expectations from bootstrap.
+No cast to Desktop-v0's 32-bit generation field is permitted. These are private
+in-process interfaces; the 128-byte request/reply framing and on-disk formats
+are unchanged. The eventual Modern syscall envelope must preserve all 64 bits.
+Focused tests exercise incarnations above 2^32 and u64::MAX and reject otherwise
+identical lower-32-bit identities; zero remains invalid bootstrap material.

@@ -3,7 +3,7 @@
 #![forbid(unsafe_code)]
 use crate::transport::{Client,Outcome,StartError,MESSAGE_BUDGET};
 #[derive(Clone,Copy)]
-pub struct Envelope {pub sender:u64,pub generation:u32,pub length:usize,pub bytes:[u8;128]}
+pub struct Envelope {pub sender:u64,pub generation:u64,pub length:usize,pub bytes:[u8;128]}
 /// Adapters must use the current process's fixed storage/receive grants.
 /// send_once returns Ok only after the kernel accepted exactly this frame.
 /// An error (including queue-full) closes the session; it is never retried.
@@ -18,11 +18,11 @@ pub trait Runtime {
 /// UI receives only complete current-shell envelopes. Return false on a full
 /// bounded input queue. The caller can display input loss; never replay a save.
 pub trait Input {fn push(&mut self,frame:[u8;128])->bool;}
-pub struct Session {client:Client,shell_generation:u32,closed:bool,input_lost:bool,last_tick:u64}
+pub struct Session {client:Client,shell_generation:u64,closed:bool,input_lost:bool,last_tick:u64}
 impl Session {
     /// Incarnations are trusted bootstrap material. Recreating Session under
     /// unchanged live grants is forbidden, including after a failed send.
-    pub fn new(storage_generation:u32,shell_generation:u32)->Result<Self,StartError> {
+    pub fn new(storage_generation:u64,shell_generation:u64)->Result<Self,StartError> {
         if shell_generation==0 {return Err(StartError::Invalid);}
         Ok(Self {client:Client::new(storage_generation)?,shell_generation,
             closed:false,input_lost:false,last_tick:0})
@@ -108,12 +108,20 @@ mod tests {
     fn request(op:u8)->[u8;128] {
         wire::request(op,if op==wire::LIST{b""}else{b"note"},b"").unwrap()
     }
-    fn response(sender:u64,generation:u32,id:u64,status:u8)->Envelope {
+    fn response(sender:u64,generation:u64,id:u64,status:u8)->Envelope {
         let mut bytes=[0;128];bytes[0]=status;
         bytes[112..120].copy_from_slice(&id.to_le_bytes());bytes[120..].copy_from_slice(&MAGIC);
         Envelope {sender,generation,length:128,bytes}
     }
     fn ui()->Ui {Ui{count:0,accept:true}}
+    #[test] fn full_width_bootstrap_and_stamped_shell_storage_identities() {
+        let storage=(1u64<<40)|3;let shell=u64::MAX;
+        let mut r=Fake::new();let mut s=Session::new(storage,shell).unwrap();let mut input=ui();
+        r.messages.extend([response(0,u32::MAX as u64,0,0),response(0,shell,0,0),
+            response(1,3,1,0),response(1,storage,1,0)]);
+        assert_eq!(s.call(&mut r,&mut input,&request(wire::LIST)),Ok(Outcome::Reply([0;128])));
+        assert_eq!(input.count,1);assert_eq!(r.polls,4);assert!(!s.writes_locked());
+    }
     #[test] fn accepted_durable_reply_after_input_and_stale_traffic() {
         let mut r=Fake::new();let mut s=Session::new(3,2).unwrap();let mut input=ui();
         r.messages.extend([response(0,1,1,0),response(0,2,1,0),response(1,1,1,0),
