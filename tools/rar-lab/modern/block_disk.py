@@ -3,6 +3,7 @@ No target code. The caller must supply an exclusively owned regular-file FD
 inside the reviewed disposable cloud container, never a host/shared/raw disk.
 This API is not a path confinement boundary and has no image-opening entrypoint.
 """
+import fcntl
 import hashlib
 import os
 import stat
@@ -61,6 +62,10 @@ class Disk:
         self.attached = False
 
     def _identity(self):
+        flags = fcntl.fcntl(self.fd,fcntl.F_GETFL)
+        required = os.O_RDONLY if self.readonly else os.O_RDWR
+        if flags & os.O_APPEND or flags & os.O_ACCMODE != required:
+            raise DeviceError("append/wrong-access synthetic descriptor")
         info = os.fstat(self.fd)
         if ((info.st_dev,info.st_ino) != self.identity or not stat.S_ISREG(info.st_mode) or
             info.st_nlink != 1 or info.st_size != self.size):
@@ -74,6 +79,7 @@ class Disk:
         return data
 
     def _put(self, data, offset):
+        self._identity()
         if data and os.pwrite(self.fd, data, offset) != len(data):
             raise DeviceError("short physical fixture write; no retry")
 
@@ -92,6 +98,7 @@ class Disk:
             remaining -= take
         # Never a successful FLUSH or recorded durable partial cut before fsync.
         os.fsync(self.fd)
+        self._identity()  # No ACK after changed flags, identity or capacity.
 
     def execute(self, operation, offset=0, length=0, data=b""):
         if self.failed or self.cut or (self.served and not self.attached):
@@ -165,8 +172,8 @@ class Disk:
 
     def frozen(self):
         """Read actual retained bytes, never flush/reconstruct volatile state.
-        Caller must first confirm whole VM termination and join its backend
-        thread. This function alone cannot prove that external lifecycle fact.
+        Caller must first confirm whole VM termination and join its bounded backend
+        process. This function alone cannot prove that external lifecycle fact.
         """
         if self.attached:
             raise DeviceError("cannot freeze an attached block session")

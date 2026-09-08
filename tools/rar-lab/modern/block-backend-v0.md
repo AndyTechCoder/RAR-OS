@@ -9,7 +9,10 @@ exercises private regular-file I/O and an AF_UNIX socketpair, not RAR OS.
 Each connection is bound by the trusted controller to exactly one exclusively
 owned synthetic regular-file descriptor: Data194 sectors or System16384 sectors,
 512 bytes per sector. The backend has no path-opening API. It rejects nonregular,
-multiply linked, wrong-size or replaced descriptor identities. These checks
+multiply linked, wrong-size or replaced descriptor identities. Writable disks
+require O_RDWR and declared read-only disks require O_RDONLY. O_APPEND is always
+rejected. Flags/identity/capacity are checked before writes and after fsync before
+success, so Linux append-mode pwrite behavior cannot produce a false flush ACK. These checks
 are NOT path confinement: the future launcher must create exact private files
 exclusively inside its bounded disposable container scratch, keep source/boot/
 recovery/Data/System in separate inode/backing domains, and never supply a host,
@@ -21,6 +24,10 @@ It does not create sockets, bind/listen/connect, invoke subprocesses, interpret
 paths or accept a device selector. The intended reviewed launcher uses one
 socketpair per device and passes the peer FD only to its fixed QEMU process.
 No TCP, external endpoint, TLS/credential role or network listener is proposed.
+QEMU7.2 may attempt reconnection even with reconnect-delay=0; that flag is not a
+no-attempt guarantee. The single preconnected peer is never rebound or accepted
+again, and no stopped backend permits replay. Cut/fatal outcomes require whole
+VM/backend termination before any next boot.
 
 Primary QEMU7.2 source accepts numeric preconnected socket descriptors outside
 a monitor through [socket_get_fd](https://github.com/qemu/qemu/blob/v7.2.0/util/qemu-sockets.c#L1144)
@@ -34,6 +41,9 @@ The original RAR-owned host code follows the standard
 [NBD protocol](https://github.com/NetworkBlockDevice/nbd/blob/6725f91e6a33bc9f62d31d82798c04ec1cde1c73/doc/proto.md).
 No upstream implementation is copied or linked into the RAR target.
 
+Fixed-newstyle client flags1 or3 are accepted. The124 legacy zero padding bytes
+belong only to EXPORT_NAME, which is rejected; GO has no padding regardless of
+C_NO_ZEROES. Both flag combinations have real socketpair GO/write/flush/read tests.
 Fixed-newstyle only, at most16 option requests, option bodies at most4096 bytes.
 INFO/GO expose only the default already-bound device, never an export selector.
 GO requires explicit block-size negotiation: min/preferred512, max payload65536.
@@ -49,8 +59,11 @@ backend I/O failures return EIO, never success data. Malformed framing, an
 unsupported command/flag, partial transport failure or budget/deadline breach
 ends the connection without replay. DISC never flushes uncommitted state.
 
-The connection has an absolute maximum180-second deadline,8192 requests and
-128MiB aggregate inbound/outbound wire budget. It sends no request-derived text,
+Socket I/O has an absolute maximum180-second deadline,8192 requests and
+128MiB aggregate inbound/outbound wire budget. Synchronous file reads/writes and
+fsync are NOT bounded by that timer. The future launcher must place the backend
+in a separately killable process with an externally enforced whole-backend
+deadline; it must terminate/join both VM and backend before freezing evidence. It sends no request-derived text,
 path or command to a shell. The concrete launcher must use tighter scenario and
 whole-process limits as needed and handle every terminal outcome explicitly.
 
@@ -85,7 +98,7 @@ One instance can attach only once. Detachment stops its I/O and never flushes.
 A new VM needs a new backend object reading the SAME retained file; reattaching
 an old volatile copy is refused. Frozen reads reject an attached connection and
 read actual descriptor bytes, never the volatile buffer or a reconstructed
-snapshot. The launcher must additionally prove VM termination and backend-thread
+snapshot. The launcher must additionally prove VM termination and backend-process
 join; a byte helper cannot prove an external process lifecycle.
 
 This proves only virtual-device crash behavior across the chosen process cut.
@@ -94,7 +107,7 @@ filesystem, confidential keys or an anti-rollback hardware anchor.
 
 ## Tests and activation boundary
 
-The new13-test suite is a candidate until exact-head cloud CI passes. It uses
+The new15-test suite is a candidate until exact-head cloud CI passes. It uses
 only exclusively created small synthetic files under the already guarded cloud
 Specifications /tmp and a private socketpair. It exercises actual write/flush/
 fresh-reader behavior; reverse ordering; retained torn prefixes; before/after
@@ -104,7 +117,7 @@ WRITE -> FLUSH -> READ. It never runs a VM, target executable or reference adapt
 Its fixture files are retired only by normal disposable-container teardown.
 
 Before Modern guest use, complete focused independent review of this backend
-AND the concrete launcher/profile, inherited-descriptor ownership, deadline/
+AND the concrete launcher/profile, inherited-descriptor ownership, socket and externally enforced process deadlines/
 kill/join handling, exclusive image provisioning, fresh firmware and read-only
 boot composition. Crypto interoperability and the actual causal Terminal/Files
 fresh-VM proof remain M4.1 acceptance requirements. This candidate does not waive

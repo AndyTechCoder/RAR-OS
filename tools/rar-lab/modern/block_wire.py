@@ -116,7 +116,9 @@ def serve(channel,disk,deadline):
 def _serve(channel,disk,deadline):
     """Called only by the reviewed cloud controller, never a local entrypoint.
     Controller creates AF_UNIX socketpair and passes its other endpoint only to
-    the fixed QEMU process. It owns both lifetime and whole-VM kill/join proof.
+    the fixed QEMU process. This backend must itself be a separately killable
+    bounded process: socket deadlines cannot bound synchronous file/fsync I/O.
+    The outer controller owns both backend and whole-VM kill/join proof.
     """
     if (channel.family != socket.AF_UNIX or
         channel.getsockopt(socket.SOL_SOCKET,socket.SO_TYPE) != socket.SOCK_STREAM or
@@ -124,12 +126,12 @@ def _serve(channel,disk,deadline):
         raise ValueError("private connected stream required")
     channel.getpeername()  # An unconnected socket is not accepted.
     if type(deadline) not in (int,float) or not 0 < deadline-time.monotonic() <= 180:
-        raise ValueError("bounded absolute session deadline")
+        raise ValueError("bounded absolute socket-I/O deadline")
     wire = 0
     def remaining():
         left = deadline-time.monotonic()
         if left <= 0:
-            raise TimeoutError("private block session deadline")
+            raise TimeoutError("private block socket-I/O deadline")
         return left
     def read(length):
         nonlocal wire

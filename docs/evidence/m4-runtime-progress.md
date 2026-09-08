@@ -59,10 +59,10 @@ fresh fixture allocations and2 independent empty-image parses.
 The controlled block backend is new unactivated source. It binds one private
 preconnected socket to one fixed regular synthetic disk; no listener, image
 path input, device selector or VM launch. It records actual write/flush ordinals,
-performs exact-count writes and fsync before flush ACK, supports bounded torn/
+performs exact-count writes and fsync before flush ACK, rejects append/wrong-access descriptors before any ACK; supports bounded torn/
 short/error/before/after cuts and reverse flush order, and forbids reconnecting
 a volatile instance. Frozen reads require detachment and read actual file bytes.
-The13-test cloud candidate includes real disposable-file and socketpair tests;
+The15-test cloud candidate includes real disposable-file and socketpair tests;
 its review and exact-head results are pending, not claimed passed here.
 
 ## Crypto prerequisite evidence

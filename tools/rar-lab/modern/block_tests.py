@@ -1,4 +1,5 @@
 """Cloud-only real regular-file and private-socket tests. Never a VM launch."""
+import fcntl
 import importlib.util
 import os
 from pathlib import Path
@@ -31,6 +32,7 @@ def main():
     block,wire = load("block_disk"),load("block_wire")
     root = Path(tempfile.mkdtemp(prefix="rar-modern-block-tests-",dir="/tmp"))
     descriptors = []
+    paths = {}
     serial = 0
     def image(kind="data",readonly=False,**kwargs):
         nonlocal serial
@@ -38,12 +40,14 @@ def main():
         path = root/("image-"+str(serial))
         fd = os.open(path,os.O_RDWR|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW|os.O_CLOEXEC,0o600)
         descriptors.append(fd)
+        paths[fd] = path
         data = bytes(block.CAPACITY[kind])
         assert os.write(fd,data) == len(data)
         os.fsync(fd)
         if readonly:
             ro = os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC)
             descriptors.append(ro)
+            paths[ro] = path
             fd = ro
         return block.Disk(fd,kind,readonly=readonly,**kwargs)
     def plan(operation,effect,prefix=0,ordinal=1):
@@ -163,6 +167,44 @@ def main():
             with self.assertRaises(ValueError):
                 block.Disk(d.fd,"data")
 
+        def test_append_and_wrong_access_descriptors_are_rejected(self):
+            d = image()
+            for access in (os.O_RDONLY,os.O_WRONLY):
+                fd = os.open(paths[d.fd],access|os.O_NOFOLLOW|os.O_CLOEXEC)
+                descriptors.append(fd)
+                with self.assertRaises(block.DeviceError):
+                    block.Disk(fd,"data")
+            with self.assertRaises(block.DeviceError):
+                block.Disk(d.fd,"data",readonly=True)
+            flags = fcntl.fcntl(d.fd,fcntl.F_GETFL)
+            fcntl.fcntl(d.fd,fcntl.F_SETFL,flags|os.O_APPEND)
+            with self.assertRaises(block.DeviceError):
+                block.Disk(d.fd,"data")
+            before = os.pread(d.fd,d.size,0)
+            with self.assertRaises(block.DeviceError):
+                d.execute("write",1024,512,b"A"*512)
+            self.assertEqual(os.fstat(d.fd).st_size,d.size)
+            self.assertEqual(os.pread(d.fd,d.size,0),before)
+
+        def test_post_fsync_identity_and_flags_are_checked_before_ack(self):
+            real_sync = os.fsync
+            for mutation in ("size","append"):
+                d = image()
+                d.execute("write",1024,512,b"A"*512)
+                def changed(fd):
+                    self.assertEqual(fd,d.fd)
+                    real_sync(fd)
+                    if mutation == "size":
+                        os.ftruncate(fd,d.size+512)
+                    else:
+                        flags = fcntl.fcntl(fd,fcntl.F_GETFL)
+                        fcntl.fcntl(fd,fcntl.F_SETFL,flags|os.O_APPEND)
+                with patch.object(block.os,"fsync",changed):
+                    with self.assertRaises(block.DeviceError):
+                        d.execute("flush")
+                self.assertTrue(d.failed)
+                self.assertEqual(d.events[-1]["status"],"failed-no-success")
+
         def test_plan_shape_bounds_and_never_silently_truncate_prefix(self):
             d = image()
             for fault in ({},plan("read","error"),plan("write","error",1),
@@ -249,6 +291,10 @@ def main():
                     wire.simple(*args)
 
         def test_real_private_socket_fragmented_write_flush_read(self):
+            for client_flags in (1,3):
+                self._socket_session(client_flags)
+
+        def _socket_session(self,client_flags):
             d = image()
             server,client = socket.socketpair(socket.AF_UNIX,socket.SOCK_STREAM)
             client.settimeout(3)
@@ -272,7 +318,7 @@ def main():
                 return data
             try:
                 self.assertEqual(read(18),wire.HELLO)
-                client.sendall(struct.pack(">I",3))
+                client.sendall(struct.pack(">I",client_flags))
                 header,payload = option(7,go)
                 client.sendall(header+payload)
                 expected = negotiation().option(header,payload)
@@ -310,11 +356,11 @@ def main():
 
     try:
         suite = unittest.defaultTestLoader.loadTestsFromTestCase(Tests)
-        assert suite.countTestCases() == 13
+        assert suite.countTestCases() == 15
         result = unittest.TextTestRunner(verbosity=2).run(suite)
         if not result.wasSuccessful():
             raise SystemExit(1)
-        print("Modern block backend: 13 focused tests; real disposable-file durability and private socketpair; no VM or target execution")
+        print("Modern block backend: 15 focused tests; real disposable-file durability and private socketpair; no VM or target execution")
     finally:
         for fd in descriptors:
             os.close(fd)
