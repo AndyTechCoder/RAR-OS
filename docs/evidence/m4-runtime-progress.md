@@ -123,7 +123,9 @@ not the acceptance contract. M4 remains incomplete in all three sections.
   Failure artifact10074144358 has ZIP SHA256
   195e9479645b748cbf33e574695b6561210deacddb6bfb526a4596ab7784155f.
 - Correction PR171 at96897b080660afad813d52ba2c1cec6f259b2d7a passed
-  independent source review and is undergoing CI34272449883. It binds the exact
+  independent source review and full CI34272449883. It merged at
+  a31b72eb3f8e18b855c642229bc0c82b64156c26; resulting-main validation
+  34274475619 is pending. It binds the exact
   inherited image label map plus the reserved invocation label, preserves all
   ID/confinement/lifecycle checks and adds boolean mismatch diagnostics.
   Inherited labels are a plausible cause, not a recovered actual mismatch.
@@ -154,8 +156,7 @@ Numbers refer to the ten requirements in the active M4 contract.
 
 ### Immediate continuation
 
-Finish PR171 checks, merge only after passing evidence and review, then validate
-the corrected trusted-main controller and run one corrected cloud diagnostic.
+Validate the corrected trusted-main controller and run one corrected cloud diagnostic.
 Retain actual failure or success evidence; success requires complete two-VM
 pixel/block/frozen-image agreement and independent retained-envelope mutation
 tests. Then finish crypto handoff/comparisons, actual signed replacement and
