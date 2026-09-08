@@ -1,7 +1,9 @@
 # ADR 0035: Immutable IDE inputs through write-refusing private backends
 
-Status: Candidate under the owner's delegated safe-direction authority;
-independent review and concrete cloud profile validation required before use.
+Status: Proposed — concrete cloud profile validation pending
+
+Prepared under the owner's delegated safe-direction authority; source review
+and concrete cloud profile validation are required before use.
 This does not activate a VM profile or modify target formats/production promises.
 
 ## Context
@@ -19,7 +21,12 @@ Primary source at QEMU v7.2.0:
   consequently requests write permission.
 These findings are design evidence, not certification of the patched binary.
 
-## Alternatives
+## Decision drivers
+
+Preserve immutable inputs, separate disk authority and observable real persistence
+without overlays, a new DMA model or an additional emulator fork.
+
+## Considered options
 
 A. Preserve the existing IDE/firmware composition, but give QEMU only a private
 NBD socket. The backend's actual image descriptor is O_RDONLY; every WRITE fails
@@ -32,7 +39,7 @@ would require fresh firmware/runtime quiescence evidence and is unnecessary.
 D. Change or rebuild third-party QEMU to accept read-only IDE: deferred to avoid
 an additional unverified emulator fork and toolchain.
 
-## Decision and invariants
+## Decision
 
 Implement A as an explicit private write_refusing=true mode, legal only when
 the actual Disk is read-only. It never turns a writable descriptor into a
@@ -60,7 +67,7 @@ it receives only the three preconnected socket endpoints. Its firmware variables
 are fresh disposable bytes for each entire VM. No reset/snapshot/reconnect can
 substitute for process destruction.
 
-## Validation and consequences
+## Validation
 
 Extend real cloud backend tests to open boot and Data fixtures O_RDONLY, negotiate
 the IDE-compatible writable-looking export, attempt actual writes, observe EPERM,
@@ -96,3 +103,29 @@ Primary definitions: [q35 device placement](https://github.com/qemu/qemu/blob/v7
 [firmware bindings](https://github.com/qemu/qemu/blob/v7.2.0/hw/i386/pc_sysfw.c),
 [block graph schema](https://github.com/qemu/qemu/blob/v7.2.0/qapi/block-core.json).
 These source-derived expectations still require actual cloud binary evidence.
+
+
+## Consequences
+
+The IDE-visible writable flag is intentionally not a security assertion. Review
+and evidence must follow the physical descriptor and refusal path instead.
+Strict pinned topology checks may refuse an incompatible tool update.
+
+## Security and data impact
+
+No owner disk is exposed. Boot and recovery Data retain O_RDONLY access; normal
+Data/System remain independent disposable cloud files. This does not grant
+production encryption, signing, update or recovery acceptance.
+
+## Compatibility and migration
+
+Only the proposed Modern cloud harness uses this mode. Released profiles,
+persistent target formats and user-data promises remain unchanged. Activation
+requires observed compatibility of the pinned tool binary.
+
+## Replacement path
+
+The private backend may be replaced by another reviewed immutable transport,
+provided the same physical access, isolated role routing and causal persistence
+evidence remain enforceable. No consumer may infer write authority from the
+IDE-facing export flag.
