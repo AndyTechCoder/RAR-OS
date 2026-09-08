@@ -37,3 +37,18 @@ printf '%s\n' 'Modern compiler provisioning: pure fixture and guard tests passed
 # Supervisor fixtures spawn only tiny host Python test children in this container.
 /usr/bin/python3 -I -B "$root/tools/ci/parallel-policy-tests.py" --self-test
 printf '%s\n' 'Parallel policy supervisor: success/failure/timeout/output/signal fixtures passed'
+
+# Modern cloud persistence helpers: pure fixtures and bounded host-only socket children.
+# No VM, target, container or network launch in Specifications.
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/data_oracle.py" --self-test
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/data_provision.py" --self-test
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/block_tests.py" --self-test
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/block_process_tests.py" --self-test
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/vm_profile.py" --self-test
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/vm_session.py" --self-test
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/visual_oracle.py" --self-test
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/persistence.py" --self-test
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/boot_image.py" --self-test
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/runtime_evidence.py" --self-test
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/runtime_controller.py" --self-test
+printf '%s\n' 'Modern persistence tooling: focused helpers passed; actual VM acceptance remains pending'
