@@ -98,6 +98,19 @@ def terminated(code,problem):
         raise ValueError("exact observed backend termination pairing")
     return True
 
+
+def event_summary(events):
+    """Bounded fixed-vocabulary diagnostics only; never acceptance authority."""
+    if type(events) is not list:
+        return {"shape":"not-list"}
+    names=[]
+    vocabulary={"RESUME","RESET","STOP","SHUTDOWN","POWERDOWN","SUSPEND",
+                "WAKEUP","GUEST_PANICKED","BLOCK_IO_ERROR"}
+    for item in events[:32]:
+        name=item.get("event") if type(item) is dict else None
+        names.append(name if type(name) is str and name in vocabulary else "OTHER")
+    return {"count":len(events),"names":names,"truncated":len(events)>32}
+
 def validate(raw,expected_boot_digest,firmware_sizes):
     if type(raw) is not bytes or not 1<=len(raw)<=64*1024*1024 or not raw.endswith(b"\n"):
         raise ValueError("bounded retained JSON line")
@@ -163,7 +176,7 @@ def validate(raw,expected_boot_digest,firmware_sizes):
         if any(marker in proof["serial"] for marker in ("RAR-PANIC","UNEXPECTED-USER-FAULT","INVALID-USER-RETURN")):
             raise ValueError("guest failure in retained transcript")
         if type(proof["events"]) is not list or len(proof["events"])!=1:
-            raise ValueError("sole actual RESUME event")
+            raise ValueError("sole actual RESUME event: "+json.dumps(event_summary(proof["events"]),sort_keys=True))
         event=proof["events"][0]
         if type(event) is not dict or set(event)!={"event","timestamp"} or event["event"]!="RESUME":
             raise ValueError("unexpected VM event")
@@ -218,6 +231,14 @@ def self_test():
         assert terminated(code,"backend-failed")
         reject(lambda code=code:terminated(code,None))
     reject(lambda:terminated(0,"backend-failed"))
+    assert event_summary(None)=={"shape":"not-list"}
+    assert event_summary([])=={"count":0,"names":[],"truncated":False}
+    assert event_summary([{"event":"RESET"},{"event":"RESUME"}])=={
+        "count":2,"names":["RESET","RESUME"],"truncated":False}
+    assert event_summary([{"event":"arbitrary-private-text"},{"event":[]},None])=={
+        "count":3,"names":["OTHER"]*3,"truncated":False}
+    assert event_summary([{"event":"RESUME"}]*33)=={
+        "count":33,"names":["RESUME"]*32,"truncated":True}
     profile=helper("vm_profile");visual=helper("visual_oracle")
     value="abcdefghijklmnop"*2
     for index in (1,2):
