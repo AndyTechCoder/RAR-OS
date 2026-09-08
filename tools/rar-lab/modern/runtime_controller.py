@@ -77,13 +77,24 @@ def effective(info,image,name,entry,mounts,environment):
 
 OWNER_LABEL="org.rar-os.modern-invocation"
 
-def owned_identity(info,identifier,name,image,owner):
-    if (type(info) is not dict or info.get("Id")!=identifier or
-        info.get("Name")!="/"+name or info.get("Image")!=image or
-        info.get("Config",{}).get("Labels")!={OWNER_LABEL:owner}):
-        raise ValueError("exact owned container ID/name/image/label")
+def expected_labels(inherited,owner):
+    if (type(inherited) is not dict or OWNER_LABEL in inherited or len(inherited)>64 or
+        any(type(k) is not str or type(v) is not str or len(k)>256 or len(v)>4096
+            for k,v in inherited.items())):
+        raise ValueError("bounded image labels without reserved invocation identity")
+    return dict(inherited,**{OWNER_LABEL:owner})
 
-def container(command,args,name,image,entry,mounts,environment,owner,seconds,limit,owned,proofs,save):
+def owned_identity(info,identifier,name,image,owner,inherited):
+    if type(info) is not dict: raise ValueError("container inspection object")
+    checks={"id":info.get("Id")==identifier,"name":info.get("Name")=="/"+name,
+        "image":info.get("Image")==image,
+        "labels":info.get("Config",{}).get("Labels")==expected_labels(inherited,owner)}
+    if not all(checks.values()):
+        # Booleans only: no unexpected environment or label values in errors.
+        raise ValueError("exact owned container mismatch: "+json.dumps(checks,sort_keys=True))
+
+def container(command,args,name,image,entry,mounts,environment,owner,seconds,limit,owned,proofs,save,inherited=None):
+    if inherited is None: inherited={}
     # Never recover or clean up an ambiguous create by name. Fail the job;
     # final teardown of unknown objects belongs to the disposable hosted runner.
     _,raw=command(args,30,1024)
@@ -95,7 +106,7 @@ def container(command,args,name,image,entry,mounts,environment,owner,seconds,lim
     if type(objects) is not list or len(objects)!=1:
         raise ValueError("ambiguous created container inspection")
     info=objects[0]
-    owned_identity(info,identifier,name,image,owner)
+    owned_identity(info,identifier,name,image,owner,inherited)
     owned.append(identifier)
     effective(info,image,name,entry,mounts,environment)
     proof={"name":name,"id":identifier,"image":image,"created":info}
@@ -106,7 +117,7 @@ def container(command,args,name,image,entry,mounts,environment,owner,seconds,lim
     if type(objects) is not list or len(objects)!=1:
         raise ValueError("one exact post-execution object")
     ended=objects[0]
-    owned_identity(ended,identifier,name,image,owner)
+    owned_identity(ended,identifier,name,image,owner,inherited)
     if (ended.get("State",{}).get("Running") is not False or
         ended["State"].get("Status")!="exited" or ended["State"].get("ExitCode")!=0):
         raise ValueError("owned cloud process did not exit successfully")
@@ -170,13 +181,15 @@ def main():
         if type(identifier) is not str or re.fullmatch("sha256:[0-9a-f]{64}",identifier) is None:
             raise ValueError("digest-bound image")
         report[role+"_image"]=identifier
-        return identifier,info["Config"].get("Env",[])
+        labels=info["Config"].get("Labels") or {}
+        expected_labels(labels,"validation-only")
+        return identifier,info["Config"].get("Env",[]),labels
     sequence=0
     def execute(tool,entry,mounts,seconds,limit):
         nonlocal sequence
         sequence+=1
         name="rar-modern-"+run_id+"-"+attempt+"-"+str(sequence)
-        identifier,defaults=tool
+        identifier,defaults,inherited=tool
         env={"CI":"true","GITHUB_ACTIONS":"true","RAR_CI_RUNNER_OS":"Linux"}
         merged={}
         for item in defaults:
@@ -194,7 +207,7 @@ def main():
         for key,value in env.items(): args+=["--env",key+"="+value]
         args+=["--entrypoint",entry[0],identifier]+entry[1:]
         return container(command,args,name,identifier,entry,mounts,expected,owner,
-            seconds,limit,containers,report["container_proofs"],save)
+            seconds,limit,containers,report["container_proofs"],save,inherited)
     try:
         compiler=image("build.Containerfile","build")
         builds=[]
@@ -284,6 +297,15 @@ def self_test():
         reject(lambda changed=changed:effective(changed,image,"owned",entry,[],env))
     changed=json.loads(json.dumps(info));changed["Mounts"]=[{"Type":"bind","RW":True,"Destination":"/outside"}]
     reject(lambda:effective(changed,image,"owned",entry,[],env))
+    # Inherited image metadata is bound exactly, never confused with ownership.
+    label_info={"Id":"b"*64,"Name":"/owned","Image":image,
+        "Config":{"Labels":{OWNER_LABEL:"1:1:1","org.opencontainers.image.version":"24.04"}}}
+    inherited={"org.opencontainers.image.version":"24.04"}
+    owned_identity(label_info,"b"*64,"owned",image,"1:1:1",inherited)
+    reject(lambda:owned_identity(label_info,"b"*64,"owned",image,"1:1:1",{}))
+    reject(lambda:owned_identity(label_info,"b"*64,"owned",image,"wrong",inherited))
+    reject(lambda:expected_labels({OWNER_LABEL:"old"},"new"))
+    reject(lambda:expected_labels({"label":1},"new"))
     # Fake daemon lifecycle only: no subprocess or filesystem mutation.
     identifier="b"*64;owner="1:1:1"
     original=json.loads(json.dumps(info));original["Id"]=identifier
@@ -299,6 +321,7 @@ def self_test():
                 obj=json.loads(json.dumps(original))
                 after=any(c[0]=="start" for c in calls)
                 if after: obj["State"]={"Running":False,"Status":"exited","ExitCode":0}
+                if fault=="inherited-ok":obj["Config"]["Labels"]["org.opencontainers.image.version"]="24.04"
                 if fault=="id-mismatch" or (after and fault=="swapped-post"):obj["Id"]="c"*64
                 if fault=="label-mismatch":obj["Config"]["Labels"]={}
                 if fault=="name-mismatch":obj["Name"]="/other"
@@ -314,7 +337,8 @@ def self_test():
         failed=False
         try:
             assert container(command,["create"],"owned",image,entry,[],env,owner,
-                10,1024,owned,proofs,lambda:None)==b"evidence"
+                10,1024,owned,proofs,lambda:None,
+                {"org.opencontainers.image.version":"24.04"} if fault=="inherited-ok" else {})==b"evidence"
         except (ValueError,RuntimeError):failed=True
         failures=cleanup(command,owned)
         assert all(c[-1]==identifier for c in calls if c[0] in ("inspect","start","rm"))
@@ -329,8 +353,8 @@ def self_test():
             assert not failed and failures==[identifier]
         else:
             assert not failed and not failures and len(proofs)==1
-        return bool(fault)
-    for fault in ("","create-error","malformed","id-mismatch","label-mismatch",
+        return fault not in ("","inherited-ok")
+    for fault in ("","inherited-ok","create-error","malformed","id-mismatch","label-mismatch",
                   "name-mismatch","confinement","start-failed","timeout","swapped-post","cleanup-failed"):
         rejected+=scenario(fault)
     return rejected
