@@ -105,16 +105,17 @@ mod tests {
     use crate::model::{Endpoint,DEVICE_CAP};
     #[derive(Clone,Copy,Debug,PartialEq,Eq)]
     enum Access {R8(u16),W8(u16,u8),R16(u16),W16(u16,u16)}
-    struct Fake {log:Vec<Access>,fail:Option<usize>,mask:u8,status:u8}
+    struct Fake {log:Vec<Access>,fail:Option<usize>,mask:u8,status:[u8;2]}
     impl Fake {
-        fn new()->Self {Self{log:Vec::new(),fail:None,mask:0xff,status:0x40}}
+        fn new()->Self {Self{log:Vec::new(),fail:None,mask:0xff,status:[0x40;2]}}
         fn hit(&mut self,a:Access)->Result<(),Error> {
             self.log.push(a);if self.fail==Some(self.log.len()) {Err(Error::Invalid)}else{Ok(())}
         }
     }
     impl PortIo for Fake {
         fn read8(&mut self,p:u16)->Result<u8,Error> {
-            self.hit(Access::R8(p))?;Ok(if p==0xa1{self.mask}else{self.status})
+            self.hit(Access::R8(p))?;
+            match p {0xa1=>Ok(self.mask),0x3f6=>Ok(self.status[0]),0x376=>Ok(self.status[1]),_=>Err(Error::Invalid)}
         }
         fn write8(&mut self,p:u16,v:u8)->Result<(),Error>{self.hit(Access::W8(p,v))}
         fn read16(&mut self,p:u16)->Result<u16,Error>{self.hit(Access::R16(p))?;Ok(0xabcd)}
@@ -132,9 +133,11 @@ mod tests {
             let mut io=Fake::new();io.fail=Some(fail);
             assert!(initialize_with(&mut io).is_err());assert_eq!(io.log.len(),fail);
         }
-        for status in [0,255] {
-            let mut io=Fake::new();io.status=status;
-            assert_eq!(initialize_with(&mut io),Err(Error::Invalid));assert_eq!(io.log.len(),4);
+        for (device,status,count,port) in [(0,0,4,0x3f6),(0,255,4,0x3f6),
+            (1,0,5,0x376),(1,255,5,0x376)] {
+            let mut io=Fake::new();io.status[device]=status;
+            assert_eq!(initialize_with(&mut io),Err(Error::Invalid));assert_eq!(io.log.len(),count);
+            assert_eq!(io.log.last(),Some(&Access::R8(port)));
         }
     }
     #[test] fn operations_use_only_derived_fixed_registers_with_no_retry() {
