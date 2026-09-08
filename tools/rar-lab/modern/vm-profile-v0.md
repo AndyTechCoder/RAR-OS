@@ -79,11 +79,13 @@ boundary for an uninterruptible host operation. No owner file is retired.
 
 ## Still required before runtime acceptance
 
-The outer trusted-main controller and immutable launch-image/workflow integration
-are not yet supplied by these helpers. They must provide source/artifact/tool
-digest binding, effective container confinement, exclusive System/Data files,
+The outer controller, immutable launch image and manual workflow are now supplied
+for reviewed cloud diagnostic validation. Their source implements source/artifact/
+tool digest binding, effective container confinement, exclusive System/Data files,
 fresh per-image keys, independent frozen-image verification, whole-session
-budgets, complete typed audit/command/serial validation and artifact retention.
+budgets, typed audit/command/serial validation and artifact retention. Actual
+Docker/VM compatibility and end-to-end evidence remain unvalidated; supplying
+this wiring does not grant runtime or persistent-format acceptance.
 
 M4.1 must actually type an unpredictable boot1-only write through Terminal,
 capture the exact SAVED view, destroy every VM/backend process, freeze and verify
@@ -188,9 +190,10 @@ payload/zero-padding byte to that exact UEFI input, rejecting changed geometry,
 directories, FAT entries, payload, padding or transfer framing. Its tests are
 bytes-only synthetic fixtures, not boot evidence.
 
-No Modern workflow or outer-controller dispatch is introduced by this candidate.
-Effective confinement, exact source/build/helper binding, independent retained
-envelope checks and actual cloud execution remain required before acceptance.
+The complete integration now includes a manual Modern workflow and fixed outer
+controller. No dispatch or runtime acceptance is implied by their publication.
+Actual confinement, exact source/build/helper binding, independently checked
+retained envelopes and real cloud execution remain required before acceptance.
 
 
 ## Retained evidence checker candidate

@@ -86,6 +86,7 @@ Status: Gate 0 approved on 2026-07-16
 - [ADR 0032: Fast-Track Alpha Milestone Governance](adr/0032-fast-track-alpha.md)
 - [ADR 0033: Bounded Usable Alpha Composition](adr/0033-usable-alpha-composition.md)
 - [ADR 0034: Proposed Modern Alpha Update and Recovery Boundary](adr/0034-modern-alpha-update-and-recovery.md)
+- [ADR 0035: Proposed Immutable IDE Inputs](adr/0035-immutable-ide-inputs.md)
 
 Gate 0 approval covers ADRs 0001–0016 and the Release 0 task packet. Later
 indexed ADRs are authoritative only through their separately recorded approval
