@@ -217,7 +217,14 @@ never durable files, successful update, recovery or M4 acceptance.
 
 The service image input /tmp/modern-service.efi must be produced by the eventual
 pinned cloud build, not copied from Desktop as a compatible substitute.
-The source tests exercise the support functions used by this entry, but do not
-compile or execute the UEFI entry itself. Its actual pinned UEFI build, complete
+The source tests exercise the support functions used by this entry. The existing
+guarded Specifications cloud check additionally compiles the real Foundation +
+Modern entry to a Linux relocatable object, with no linking or execution.
+rar_modern_compile_only substitutes an empty service input and is rejected for
+UEFI or without rar_modern. No fake target_os cfg is used. This catches module,
+type, borrow and common-assembly errors but does NOT compile the UEFI-only native
+PIO branch or prove the real target ABI. It reuses the existing pinned compiler,
+read-only source and bounded ephemeral scratch, with no new workflow or network.
+Its actual pinned UEFI build, complete
 service/UI composition, focused unsafe review, certified cloud profile and
 causal fresh-VM persistence evidence remain mandatory before activation/release.

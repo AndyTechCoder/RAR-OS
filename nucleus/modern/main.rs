@@ -28,7 +28,12 @@ const BOOT:u64=0x160000;
 const STACK_VA:u64=0x600000;
 const STACK_END:u64=0x610000;
 const EMPTY_RANGE:UserRange=UserRange{start:0,end:0,writable:false,executable:false};
+#[cfg(not(rar_modern_compile_only))]
 static SERVICE:&[u8]=include_bytes!("/tmp/modern-service.efi");
+// Object-only Linux cloud check: no target image and no execution. The UEFI
+// build rejects this cfg at the Foundation root. Runtime PE parsing rejects [].
+#[cfg(rar_modern_compile_only)]
+static SERVICE:&[u8]=&[];
 #[derive(Clone,Copy)]
 struct Process{
     state:State,generation:u64,root:u64,kernel_bottom:u64,kernel_top:u64,frame:u64,

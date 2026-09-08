@@ -5,6 +5,8 @@ mod model;
 mod boot;
 mod paging;
 mod interrupts;
+#[cfg(all(rar_modern_compile_only,any(not(rar_modern),target_os="uefi")))]
+compile_error!("Modern compile-only fixture requires Modern and forbids UEFI");
 #[cfg(all(rar_modern,not(rar_platform)))]
 compile_error!("rar_modern requires rar_platform");
 #[cfg(all(rar_modern,rar_desktop))]

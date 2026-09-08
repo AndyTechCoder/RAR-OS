@@ -28,6 +28,17 @@ printf '%s\n' 'Modern core: focused manifest/journal model tests and no_std comp
 /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --crate-type lib -D warnings nucleus/modern/lib.rs -o "$work/focused.rlib"
 printf '%s\n' 'Modern lifecycle: focused mechanism model tests and no_std compile passed; kernel runtime integration not claimed'
 
+# Compile the real kernel entry to a Linux relocatable object only. This checks
+# module/borrow/type/assembly integration with the existing pinned compiler,
+# without linking or executing an OS, using a deliberately empty service input.
+# This is NOT an x86_64-unknown-uefi build or native PIO/VM proof.
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 \
+    --crate-type lib --emit=obj -C panic=abort -C no-redzone=yes -C debuginfo=0 \
+    --cfg rar_platform --cfg rar_modern --cfg rar_modern_compile_only \
+    --cfg 'rar_profile="normal"' nucleus/foundation/main.rs -o "$work/focused.rlib"
+printf '%s\n' 'Modern kernel: Linux object-only integration compile passed; no link, target execution or UEFI build claimed'
+
+
 /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --test -C strip=symbols -C debuginfo=0 -C opt-level=1 -C debug-assertions=yes -C overflow-checks=yes services/modern/lib.rs -o "$work/focused-tests"
 "$work/focused-tests"
 /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --crate-type lib -D warnings services/modern/lib.rs -o "$work/focused.rlib"

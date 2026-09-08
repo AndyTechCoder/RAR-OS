@@ -15,7 +15,9 @@ runtime remain separate.
 Model, ABI and support checks forbid unsafe code. The actual kernel entry uses
 documented privileged/memory mechanisms; native_pio is its fixed storage leaf.
 There is no external target dependency. Pure tests/no_std compilation run only
-in the cloud Specifications sandbox; that does not compile or execute main.rs.
+in the cloud Specifications sandbox. It additionally compiles the actual entry
+to a Linux relocatable object using an explicitly empty service fixture; it
+does not link or execute that object and is not a UEFI/native-PIO build proof.
 Actual pinned UEFI build and reviewed Modern controller execution remain gates.
 
 Staging records are private and currently populated only by test fixtures.
