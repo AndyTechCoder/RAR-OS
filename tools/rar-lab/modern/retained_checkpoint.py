@@ -95,8 +95,13 @@ def baseline(members,fixed):
               "tool-identities.txt","persistence.json","refusals.json"}
     if set(members)!=expected:raise Invalid("exact baseline artifact inventory")
     lines=members["tool-identities.txt"].decode("ascii").splitlines()
-    if len(lines)!=6 or any(re.fullmatch("[0-9]+",line) is None for line in lines[4:]):
-        raise Invalid("fixed tool inventory sizes")
+    paths=("/usr/bin/python3.11","/usr/bin/qemu-system-x86_64",
+           "/usr/share/OVMF/OVMF_CODE.fd","/usr/share/OVMF/OVMF_VARS.fd")
+    if (len(lines)!=6 or members["tool-identities.txt"]!=("\n".join(lines)+"\n").encode("ascii") or
+        any(re.fullmatch("[0-9a-f]{64}  "+re.escape(path),line) is None
+            for line,path in zip(lines[:4],paths)) or
+        any(re.fullmatch("[1-9][0-9]{0,9}",line) is None for line in lines[4:])):
+        raise Invalid("canonical fixed tool identities and sizes")
     sizes=tuple(int(line) for line in lines[4:])
     boot=hashlib.sha256(members["boot.img"]).hexdigest()
     strict(manifest["boot_sha256"],boot)
@@ -113,10 +118,50 @@ def baseline(members,fixed):
     strict(manifest["actual_refusals"],refusals)
     helper("crypto_failure").fixed_fields(refusals,dict(schema="rar-modern-actual-refusals-v1",
         base_sha256=hashlib.sha256(raw).hexdigest(),rejected=60,disk_faults_tested=False,milestone_complete=False))
-    strict([item["case"] for item in refusals["cases"]],[item[0] for item in validator.refusal_cases()])
+    fields=("schema","base_sha256","rejected","cases","disk_faults_tested","milestone_complete")
+    if type(refusals) is not dict or set(refusals)!=set(fields):
+        raise Invalid("exact retained refusal fields")
+    rows=refusals["cases"]
+    if type(rows) is not list or len(rows)!=60:raise Invalid("exact retained refusal count")
+    ordered=[]
+    for item in rows:
+        if (type(item) is not dict or set(item)!={"case","input_sha256","rejection_sha256"} or
+            any(type(item[key]) is not str or re.fullmatch("[0-9a-f]{64}",item[key]) is None
+                for key in ("input_sha256","rejection_sha256"))):
+            raise Invalid("canonical retained refusal row")
+        ordered.append({key:item[key] for key in ("case","input_sha256","rejection_sha256")})
+    strict([item["case"] for item in ordered],[item[0] for item in validator.refusal_cases()])
+    rebuilt={key:(ordered if key=="cases" else refusals[key]) for key in fields}
+    # This historical producer used ordered indented JSON, not compact JSON.
+    encoded=(json.dumps(rebuilt,indent=2,ensure_ascii=True,allow_nan=False)+"\n").encode("ascii")
+    if members["refusals.json"]!=encoded:raise Invalid("canonical historical refusal bytes")
     return dict(role="persistence",content=content,data_records=records,
         firmware_sizes=list(sizes),source=fixed["source"],controller=fixed["controller"],
         retained_refusals=refusals,execution_attempted=False)
+
+def source_binding(members,fixed,claimed):
+    snapshot=helper("source_snapshot")
+    commit_name="source-commit-"+fixed["source"]+".bin"
+    if {name for name in members if name.startswith("source-commit-")}!={commit_name}:
+        raise Invalid("exact retained source commit")
+    objects={}
+    for kind in ("tree","blob"):
+        prefix="source-"+kind+"-"
+        rows={}
+        for name,raw in members.items():
+            if not name.startswith(prefix):continue
+            if re.fullmatch(prefix+"[0-9a-f]{40}\\.bin",name) is None:
+                raise Invalid("canonical source object name")
+            rows[name[len(prefix):-4]]=raw
+        objects[kind]=rows
+    layer,report=snapshot.build_from_objects(fixed["source"],members[commit_name],
+                                            objects["tree"],objects["blob"])
+    if members["source-layer.tar"]!=layer:raise Invalid("Git-bound source layer bytes")
+    if members["source-binding.json"]!=canonical(report):
+        raise Invalid("canonical recomputed source binding")
+    strict(claimed,report)
+    snapshot.inspect(layer,fixed["source"],report["files"])
+    return report
 
 def crypto(members,fixed):
     manifest=unique(members["manifest.json"])
@@ -130,6 +175,7 @@ def crypto(members,fixed):
         raise Invalid("complete crypto member inventory")
     for name,record in inventory.items():
         strict(record,dict(size=len(members[name]),sha256=hashlib.sha256(members[name]).hexdigest()))
+    bound_source=source_binding(members,fixed,manifest["source_binding"])
     frozen=unique(members["frozen-rar-results.json"])
     results=unique(members["three-way-results.json"])
     if (type(frozen.get("cases")) is not list or len(frozen["cases"])!=288 or
@@ -158,7 +204,7 @@ def crypto(members,fixed):
     report=comparison._compare(recorded,retain)
     if count!=864:raise Invalid("exact recorded invocation count")
     strict(manifest["comparison"],report)
-    return dict(role="crypto",comparison=report,source_binding=manifest["source_binding"],
+    return dict(role="crypto",comparison=report,source_binding=bound_source,
         source=fixed["source"],controller=fixed["controller"],inventory_members=len(inventory),
         execution_attempted=False,crypto_interoperability_accepted=False,milestone_complete=False)
 
