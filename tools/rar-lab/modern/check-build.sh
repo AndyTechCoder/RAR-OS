@@ -21,3 +21,5 @@ cd "$root"
 /usr/bin/python3 -I -B tools/rar-lab/modern/fault_scenario_tests.py
 
 /usr/bin/python3 -I -B tools/rar-lab/modern/fault_evidence_tests.py
+
+/usr/bin/python3 -I -B tools/rar-lab/modern/fault_campaign_tests.py

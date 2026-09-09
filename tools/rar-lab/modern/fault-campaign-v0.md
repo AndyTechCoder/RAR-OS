@@ -148,3 +148,18 @@ trace inspection; an aggregate campaign validator enforcing exactly 60 unique
 case results and distinct writable image IDs/keys; source/container binding;
 trusted controller integration and actual faulted runs. No activation or M4
 completion is granted by these candidate APIs.
+
+## Aggregate candidate
+
+`fault_campaign.validate` requires exactly one strictly validated envelope for
+each case0..59, in canonical case order. It rejects missing/duplicate/reordered
+cases and reuse of the initial image hash, image identity, AEAD key or challenge.
+Captures remain bounded to8MiB each and384MiB total with a600-second aggregate
+deadline. Only counts/hashes and per-case validation results are returned, not
+keys. Inert aggregate tests mock the independently tested per-case boundary;
+they are not full-campaign execution evidence.
+
+Aggregate content validation still reports provenance false and milestone
+incomplete. The trusted outer controller must bind every actual capture to the
+same reviewed source/tool profile and its own confined container, and actual
+baseline trace confirmation remains a precondition to any campaign activation.
