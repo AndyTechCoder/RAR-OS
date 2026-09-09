@@ -42,3 +42,26 @@ lifecycle fixtures are not evidence that RAR target behavior works.
 The tools are experimental laboratory infrastructure; public test keys do not
 provide production confidentiality. No change to stable OS formats, dependency
 policy, tier meanings or persistent user-data promises is made here.
+
+## Bounded snapshot transport diagnostic
+
+Run 34315008347 attempts 1 and 2 stopped before VM startup while APT fetched the
+pinned OVMF package: the remote server closed the connection. The exact package
+URL still returned 200 to separate header-only checks, which do not prove a
+complete body transfer from the cloud runner. No runtime acceptance resulted.
+
+The launcher construction recipe disables HTTP pipelining on its two existing
+APT calls using Acquire::http::Pipeline-Depth=0. This is a bounded diagnostic for
+server/proxy request scheduling, not a confirmed root-cause claim. Debian's
+[Bookworm APT transport documentation](https://manpages.debian.org/bookworm/apt/apt-transport-http.1.en.html)
+defines zero for this purpose. The immutable base image, dated snapshot, exact
+package versions, signed repository metadata, package checksums and final
+firmware/executable identity checks are unchanged. No authentication bypass,
+extra dependency, alternative mirror, timeout change or retry loop is added.
+The existing outer build/job deadlines remain in force.
+
+After source review and CI, one corrected cloud diagnostic may determine whether
+this setting permits the pinned package transfer and the full persistence
+checker. Another transfer failure remains terminal; do not accumulate blind
+reruns or silently change package identities. Even a successful transfer is not
+proof that the previous failures were caused by pipelining.
