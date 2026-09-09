@@ -154,6 +154,40 @@ def receipt_phases(receipts,events,rows,drained):
                           "continue-reply" if identity==cont else "running-reply")
     return phases
 
+def checked_event_stream(events,receipts,rows,drained,rtc_path):
+    """One lifecycle RESUME plus bounded advisory RTC changes, never ignored events.
+    Receipt positions are stream observations, not event occurrence timestamps.
+    QOM paths are validated object identifiers, never host filesystem paths.
+    """
+    phases=receipt_phases(receipts,events,rows,drained)
+    if not 1<=len(events)<=5:
+        raise ValueError("one RESUME and at most four RTC events")
+    if type(rtc_path) is not str or not rtc_path.startswith("/machine/unattached/"):
+        raise ValueError("independently verified RTC identity required")
+    for index,event in enumerate(events):
+        if (type(event) is not dict or
+            phases[index] not in (("continue-reply","running-reply") if index==0 else ("running-reply",))):
+            raise ValueError("event before sole continue or malformed object")
+        name="RESUME" if index==0 else "RTC_CHANGE"
+        fields={"event","timestamp"} if index==0 else {"event","timestamp","data"}
+        if set(event)!=fields or event["event"]!=name:
+            raise ValueError("unexpected lifecycle/device event: "+
+                             json.dumps(event_summary(events,phases),sort_keys=True))
+        stamp=event["timestamp"]
+        if (type(stamp) is not dict or set(stamp)!={"seconds","microseconds"} or
+            type(stamp["seconds"]) is not int or not 0<=stamp["seconds"]<1<<63 or
+            type(stamp["microseconds"]) is not int or not 0<=stamp["microseconds"]<1000000):
+            raise ValueError("canonical bounded event timestamp")
+        if index:
+            data=event["data"]
+            if (type(data) is not dict or set(data)!={"offset","qom-path"} or
+                type(data["offset"]) is not int or not -(1<<63)<=data["offset"]<1<<63):
+                raise ValueError("exact RTC_CHANGE payload")
+            path=data["qom-path"]
+            if type(path) is not str or path!=rtc_path:
+                raise ValueError("RTC event differs from paused chipset identity")
+    return len(events)-1
+
 def validate(raw,expected_boot_digest,firmware_sizes):
     if type(raw) is not bytes or not 1<=len(raw)<=64*1024*1024 or not raw.endswith(b"\n"):
         raise ValueError("bounded retained JSON line")
@@ -219,28 +253,17 @@ def validate(raw,expected_boot_digest,firmware_sizes):
         if any(marker in proof["serial"] for marker in ("RAR-PANIC","UNEXPECTED-USER-FAULT","INVALID-USER-RETURN")):
             raise ValueError("guest failure in retained transcript")
         commands(proof["commands"],index,value,profile)
-        phases=receipt_phases(proof["event_receipts"],proof["events"],
-                              proof["commands"],proof["qmp_drained"])
-        if type(proof["events"]) is not list or len(proof["events"])!=1:
-            raise ValueError("sole actual RESUME event: "+json.dumps(event_summary(proof["events"],phases),sort_keys=True))
-        if phases==["preflight-reply"]:
-            raise ValueError("RESUME observed before the sole continue request")
-        event=proof["events"][0]
-        if type(event) is not dict or set(event)!={"event","timestamp"} or event["event"]!="RESUME":
-            raise ValueError("unexpected VM event")
-        stamp=event["timestamp"]
-        if (type(stamp) is not dict or set(stamp)!={"seconds","microseconds"} or
-            type(stamp["seconds"]) is not int or stamp["seconds"]<0 or
-            type(stamp["microseconds"]) is not int or not 0<=stamp["microseconds"]<1000000):
-            raise ValueError("canonical event timestamp")
         argv(proof["argv"],index,profile)
         # Source-specific preflight geometry is already recorded/checked in VM;
         # here recheck against independently tool-image-bound firmware sizes.
         preflight=proof["preflight"]
         if type(preflight) is not dict or set(preflight)!={"raw","verified"}:
             raise ValueError("actual paused preflight results")
-        if profile.validate_preflight(preflight["raw"],index==2,index,firmware_sizes)!=preflight["verified"]:
+        verified=profile.validate_preflight(preflight["raw"],index==2,index,firmware_sizes)
+        if verified!=preflight["verified"]:
             raise ValueError("retained topology does not revalidate")
+        checked_event_stream(proof["events"],proof["event_receipts"],
+                             proof["commands"],proof["qmp_drained"],verified["rtc_path"])
         summaries=[];current=[]
         for role,report in zip(("data","system","boot"),cut["backends"]):
             if (type(report) is not dict or set(report)!={"returncode","problem","records","joined"} or
@@ -302,6 +325,65 @@ def self_test():
         changed=[{"event_index":i,"request_id":n} for i,n in enumerate(requests)]
         reject(lambda changed=changed:receipt_phases(changed,events,rows,True))
     reject(lambda:receipt_phases(receipts,events,rows+[{"execute":"cont","id":5}],True))
+
+    # QMP RTC_CHANGE is advisory clock metadata, not a reset or another boot.
+    stamp={"seconds":1,"microseconds":2}
+    resume={"event":"RESUME","timestamp":stamp}
+    rtc={"event":"RTC_CHANGE","timestamp":stamp,
+         "data":{"offset":-1,"qom-path":"/machine/unattached/device[7]"}}
+    def stream(sequence,identities=None,drained=True):
+        if identities is None:identities=[3]+[4]*(len(sequence)-1)
+        rs=[{"event_index":i,"request_id":n} for i,n in enumerate(identities)]
+        return checked_event_stream(sequence,rs,rows,drained,"/machine/unattached/device[7]")
+    assert stream([resume])==0
+    assert stream([resume,rtc,rtc])==2
+    assert stream([resume]+[rtc]*4)==4
+    reject(lambda:stream([resume,rtc],(3,None)))
+    reject(lambda:stream([resume],(None,)))
+    for offset in (-(1<<63),0,(1<<63)-1):
+        changed=json.loads(json.dumps(rtc));changed["data"]["offset"]=offset
+        assert stream([resume,changed])==1
+    for sequence in ([],[rtc],[rtc,resume],[resume,resume],[resume]+[rtc]*5):
+        reject(lambda sequence=sequence:stream(sequence))
+    for name in ("RESET","STOP","SHUTDOWN","POWERDOWN","SUSPEND","SUSPEND_DISK","WAKEUP",
+                 "WATCHDOG","GUEST_PANICKED","BLOCK_IO_ERROR","DEVICE_DELETED","UNKNOWN"):
+        changed=dict(rtc,event=name)
+        reject(lambda changed=changed:stream([resume,changed]))
+    reject(lambda:stream([resume,rtc],(1,4)))
+    reject(lambda:stream([resume,rtc],(3,2)))
+    reject(lambda:stream([resume,rtc],(3,3)))
+    assert stream([resume,rtc],(4,4))==1
+    reject(lambda:stream([resume,rtc],(None,4)))
+    for flag in (False,1,None):reject(lambda flag=flag:stream([resume],drained=flag))
+    for value in (True,1.0,"0",-(1<<63)-1,1<<63):
+        changed=json.loads(json.dumps(rtc));changed["data"]["offset"]=value
+        reject(lambda changed=changed:stream([resume,changed]))
+    for path in ("","/machine","/host/rtc","/machine/../rtc","/machine/./rtc",
+                 "/machine//rtc","/machine/rtc/","/machine/rtc\nprivate",
+                 "/machine/"+("a"*65),"/machine/"+"/".join(["r"]*9),
+                 "/machine/device[x]","/machine/rtc;command","/machine/clocké",None,1):
+        changed=json.loads(json.dumps(rtc));changed["data"]["qom-path"]=path
+        reject(lambda changed=changed:stream([resume,changed]))
+    changed=json.loads(json.dumps(rtc));changed["data"]["qom-path"]="/machine/peripheral/rtc"
+    reject(lambda:stream([resume,rtc,changed]))
+    for source in (resume,rtc):
+        for field,value in (("seconds",-1),("seconds",True),("seconds",1<<63),
+                            ("microseconds",-1),("microseconds",1000000),("microseconds",True)):
+            changed=json.loads(json.dumps(source));changed["timestamp"][field]=value
+            sequence=[changed] if source is resume else [resume,changed]
+            reject(lambda sequence=sequence:stream(sequence))
+        for field in source:
+            changed=json.loads(json.dumps(source));del changed[field]
+            sequence=[changed] if source is resume else [resume,changed]
+            reject(lambda sequence=sequence:stream(sequence))
+        changed=dict(source,extra=0)
+        sequence=[changed] if source is resume else [resume,changed]
+        reject(lambda sequence=sequence:stream(sequence))
+    for data in (None,{},{"offset":0},{"qom-path":"/machine/rtc"},
+                 {"offset":0,"qom-path":"/machine/rtc","extra":0}):
+        reject(lambda data=data:stream([resume,dict(rtc,data=data)]))
+    reject(lambda:stream([dict(resume,data={})]))
+
     profile=helper("vm_profile");visual=helper("visual_oracle")
     value="abcdefghijklmnop"*2
     for index in (1,2):

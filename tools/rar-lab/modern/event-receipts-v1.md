@@ -38,11 +38,50 @@ A failed cleanup cannot be retried by the scenario finally block or mistaken
 for successful frozen-image authority. Never-started cleanup grants no drain
 proof.
 
-## Diagnostics do not relax event acceptance
+## Lifecycle events and advisory RTC changes
 
-The exact sole canonical RESUME requirement remains. A RESUME first parsed by a
-preflight reply is rejected. Extra events remain rejected pending actual names,
-exact public QEMU schema/semantics and appropriate fault/mutation evidence.
+Run34313003802/job102343354846, controller94fbb6b7c75e0307e79b4e1f5a3cd885f963a2bb,
+captured RESUME in the continue reply and two RTC_CHANGE events in running
+replies. Their data fields were exactly offset:int and qom-path:str. The retained
+artifact is10089064023, ZIP215060 bytes, SHA256
+4ca17240b654edf561d937d1d1091df0443daa70de70cd3c765943c61b172b4a.
+The complete EOF/drain proof reached the checker; full persistence acceptance
+still failed and is not claimed.
+
+QEMU's official QMP reference defines RTC_CHANGE as a guest RTC time change,
+with signed offset seconds and an RTC object QOM path. It is rate-limited and
+is not RESET, STOP, RESUME, disk mutation or a new firmware instance:
+https://www.qemu.org/docs/master/interop/qemu-qmp-ref.html#event-RTC_CHANGE
+
+The correction requires exactly one canonical RESUME as the first retained
+event, with no preflight receipt. Subsequent events may only be RTC_CHANGE,
+with at most four RTC changes (five total), below the capture limit of32. Each has exact event/timestamp/data
+fields, a bounded canonical timestamp, exact signed64-bit offset and one
+exact chipset RTC QOM identifier derived independently during paused preflight. This is an object identifier, never a filesystem path or
+permission to open anything. No offset value changes the acceptance verdict.
+
+The sole RESUME receipt must be continue-reply or running-reply. RTC receipts
+must be running-reply and follow RESUME in retained stream order. Post-reap
+RTC/RESUME is rejected by this observed-profile policy even though receipt time
+is not event occurrence time. No events are discarded. Duplicate
+RESUME, reset, stop, shutdown, suspend, watchdog, panic, block-error,
+device-change and unknown events remain rejected.
+
+Paused preflight adds exactly one read-only qom-list request at the fixed
+/machine/unattached parent. Its bounded unique property inventory must contain
+exactly one child<mc146818rtc>. The parent plus that child's validated name
+defines the exact allowed RTC event path; the checker derives it again from raw
+preflight and compares the recorded verified result. Missing/duplicate RTC,
+wrong type, duplicate/malformed names or extra fields fail before guest start.
+No dynamic query path or extra launch argument is supplied by an event.
+
+The trusted image, unchanged fixed launch arguments and independently checked
+paused topology remain mandatory. Historical retained artifacts without this
+new source-specific preflight result are not newly accepted; their exact
+historical checkers and failure status remain recorded. RTC notifications are not used as boot/reboot, persistence,
+elapsed-time or device-authority evidence. Whole QEMU destruction, fresh
+firmware, all command/backend checks and frozen disk/pixel comparisons remain
+unchanged. A source-only event fixture is not a runtime pass.
 
 Logs expose bounded exact uppercase QMP event names, sanitized property names,
 data-field type names, event hashes and derived receipt phases. Arbitrary data
@@ -54,5 +93,8 @@ Pure cloud tests cover request-time receipts, buffered/post-reap event records,
 partial EOF, unexpected replies/errors, missing EOF, cumulative limits,
 one-pass cleanup after drain failure, no freeze after failure, receipt ordering
 and redacted diagnostic values. No local Mac/SSD files are written, downloaded
-or executed. Actual revised stream-capture behavior and all remaining M4
-acceptance requirements still need cloud evidence.
+or executed. Actual corrected full-checker behavior and all remaining M4 acceptance
+requirements still need cloud evidence. Focused event mutations cover every
+forbidden lifecycle class, missing/duplicate resume, preflight/invalid receipts,
+unknown/extra fields, boolean/noninteger/overflow offsets and timestamps,
+malformed/multiple QOM identifiers and event-count boundaries.
