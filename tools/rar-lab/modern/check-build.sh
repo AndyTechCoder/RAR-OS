@@ -15,4 +15,14 @@ cd "$root"
 
 /usr/bin/python3 -I -B tools/rar-lab/modern/crypto_failure.py --self-test
 
+/usr/bin/python3 -I -B tools/rar-lab/modern/fault_audit_tests.py
+/usr/bin/python3 -I -B tools/rar-lab/modern/vm_session.py --self-test
+
+/usr/bin/python3 -I -B tools/rar-lab/modern/fault_scenario_tests.py
+
+/usr/bin/python3 -I -B tools/rar-lab/modern/fault_evidence_tests.py
+
+/usr/bin/python3 -I -B tools/rar-lab/modern/fault_campaign_tests.py
+
 /usr/bin/python3 -I -B tools/rar-lab/modern/retained_checkpoint_tests.py
+/usr/bin/python3 -I -B tools/rar-lab/modern/fault_campaign_controller_tests.py
