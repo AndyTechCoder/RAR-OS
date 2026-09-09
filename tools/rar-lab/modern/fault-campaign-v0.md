@@ -68,3 +68,33 @@ only: actual fault case selection, reboot/UI/oracle scenarios, retained evidence
 validation, source/controller exact binding and reviewed cloud activation are
 still required. Signed live replacement, rollback and System-only recovery remain
 separate M4 requirements. No crypto reference is linked into target images.
+
+## Fixed interrupted-save scenario candidate
+
+The unactivated `fault_scenarios.run(session, index)` API selects one of 66
+controller-owned cases: each of the six CREATE/WRITE write and flush boundaries
+with before/after cuts, no-success errors and 255-byte short/torn prefixes, plus
+reversed dirty-flush order at each flush. Selection is an exact integer, never a
+path, command or user-controlled backend plan. Each invocation requires its own
+fresh disposable cloud container and uniquely keyed public empty Data fixture.
+
+The first guest receives the unpredictable challenge through Terminal only.
+Only a typed planned-fault receipt can initiate successful scenario teardown;
+unexpected errors fail and clean up. The whole first VM and all three backends
+must be joined before frozen Data inspection. The independent authenticated
+oracle must recover the exact complete revision permitted at that boundary.
+A fresh second VM has read-only Data authority and receives only F1; its Files
+pixels must independently match no file, an empty NOTE, or the complete value.
+Data headers, System and immutable boot bytes are checked unchanged as applicable.
+
+The orchestration tests replace all I/O and VM construction with inert objects;
+they verify all fixed case paths, stop/freeze/reboot ordering, read-only observer
+selection, unexpected-error rejection and failed-disk rejection. These are not
+VM evidence. The existing four baseline visual scenes remain unchanged.
+
+Still required before activation/acceptance: confirm actual baseline block
+ordinals from retained cloud evidence, independent scenario/security review,
+cloud source tests, retained fault-evidence validator and negative mutations,
+trusted-controller integration, and actual exact-source faulted runs. The
+candidate API explicitly returns `observed-not-independently-accepted` and
+`milestone_complete: false`. No fault scenario is activated by this change.
