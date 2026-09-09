@@ -41,7 +41,27 @@ def scene(index,nonce):
     return False,(4,),4,lines,False
 
 def expected(index,nonce):
-    light,order,focus,lines,stopped=scene(index,nonce)
+    return _render_scene(scene(index,nonce))
+
+def recovered_expected(state,value=None):
+    """Independent post-cut Files layout; no target source imported."""
+    if state=="written":return expected(3,value_check(value))
+    if state not in ("absent","empty") or value is not None:
+        raise ValueError("fixed recovered Files state")
+    lines={4:["DATA VAULT - UP/DOWN SELECT, F1 REFRESH",
+        "" if state=="absent" else "NOTE",
+        "NO FILES" if state=="absent" else "SELECTED: NOTE",
+        "","","PUBLIC LAB DATA - NOT PRIVATE"]}
+    return _render_scene((False,(4,),4,lines,False))
+
+def recovered_validate(frame,state,value=None):
+    import hashlib
+    if type(frame) is not bytes or frame!=recovered_expected(state,value):
+        raise ValueError("recovered Files pixels differ from independent disk state")
+    return hashlib.sha256(frame).hexdigest()
+
+def _render_scene(layout):
+    light,order,focus,lines,stopped=layout
     bg=(224,233,240) if light else (12,18,30)
     panel=(250,252,255) if light else (19,29,45)
     ink=(24,36,52) if light else (230,240,250)
@@ -114,6 +134,15 @@ def self_test():
     assert first[0] == "f3" and first[-1] == "ret" and second == ["f1"]
     assert "".join(" " if key=="spc" else key for key in first[1:-1]) == "write note "+value
     assert len(first) == 45 and len("write note "+value) <= 64
+    absent=recovered_expected("absent");empty=recovered_expected("empty")
+    assert absent!=empty and empty!=frames[3] and absent!=frames[3]
+    assert len(recovered_validate(absent,"absent"))==64
+    assert len(recovered_validate(empty,"empty"))==64
+    assert recovered_validate(frames[3],"written",value)==validate(frames[3],3,value)
+    reject(lambda:recovered_validate(absent,"empty"))
+    reject(lambda:recovered_validate(empty,"written",value))
+    reject(lambda:recovered_expected("absent",value))
+    reject(lambda:recovered_expected("unknown"))
     return rejected
 
 if __name__ == "__main__":

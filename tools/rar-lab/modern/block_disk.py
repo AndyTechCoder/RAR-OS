@@ -143,6 +143,8 @@ class Disk:
             if effect in ("torn-cut","short-error"):
                 parts = [(offset,data)] if operation == "write" else self._pending()
                 self._persist(parts,self.fault["prefix"])
+                # Evidence only after prefix write, fsync and identity checks returned.
+                event["persisted_prefix_bytes"] = self.fault["prefix"]
                 if effect == "short-error":
                     raise DeviceError("injected short persistence error")
                 self.cut = True

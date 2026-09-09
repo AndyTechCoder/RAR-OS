@@ -1,0 +1,188 @@
+# Modern Data fault campaign integration (candidate)
+
+Status: source implementation under validation; no fault scenario is activated.
+The baseline persistence diagnostic remains separate. This does not complete
+M4.1 or authorize a VM run, claim physical power-loss safety, or touch owner data.
+
+## Observation and authority
+
+fault_audit.record accepts only the bounded canonical ASCII JSON emitted by
+the synthetic backend. Duplicate keys, nonfinite numbers, alternate whitespace,
+malformed or oversized records fail through the existing owned-child stop path.
+The fault plan is a fixed controller-owned operation/ordinal/effect/prefix.
+scan binds every complete request and event by order, per-operation ordinal,
+geometry and exact injection. Only Data may carry an injection.
+
+For torn-cut and short-error, block_disk emits persisted_prefix_bytes only AFTER
+the selected persistence prefix, fsync and descriptor identity checks succeed.
+An underlying I/O error lacks that field and cannot impersonate the planned
+short error. Flush prefixes are bounded by unique dirty sectors from completed
+writes; successful flush clears that set. Failed devices may emit subsequent
+request-only refusals, never another acknowledged operation.
+
+observe requires exact cut terminal evidence plus exit20/problem cut/complete
+pipe drain for cut effects. Error effects require no terminal record, no exit,
+no transport problem and no EOF at observation. A process-poll race after a
+terminal record cannot be labeled live. A cut whose pipe is still draining is
+bounded to one second while the VM controller continues checking all peers.
+
+## VM-control ordering
+
+PlannedDataFault is a distinct, one-shot controller signal, not ValueError.
+Unexpected System/Boot/Data/QEMU failures, stderr, panic/isolation markers and
+invalid QMP messages remain failures. Exact pending QMP replies are consumed and
+validated before the planned signal is delivered, but success cannot escape to
+a screenshot/action caller before that signal. Partial unsolicited QMP records
+are bounded; unknown replies/errors are not hidden. Error-mode continuation is
+only for a fixed observation script; no mutation retry/remount or write unlock.
+Cut delivery permits only whole-VM destruction, not further VM commands.
+
+## Stop and frozen evidence
+
+VM.fault_receipt accepts only its exact delivered signal and immutable tuple
+fields. joined_fault checks the actual signal, performs an additional live check
+for error effects, then destroys the whole QEMU before stopping all three
+backends. Entry snapshots bind QEMU/peer liveness and effect-specific Data state.
+QEMU must end with exact integer -9. Data cut requires20/cut/complete terminal;
+error Data and peers require -9 or21/backend-failed, with complete matching
+terminal records for21. Final serial drain also rejects panic markers, including
+markers split across prior/final reads. Snapshot failure never skips cleanup.
+No failed join/drain/identity/status grants frozen-image authority.
+
+The caller must still freeze the retained images only after all joins, use the
+independent authenticated Data oracle, verify unchanged System/Boot/header bytes,
+and launch a fresh VM with fresh firmware and read-only Data. A record match or
+joined receipt alone never proves old/new persistence or GUI recovery.
+
+## Validation and unfinished integration
+
+Pure cloud tests cover canonical parsing through the actual Backend.poll path,
+real Disk.execute marker placement with inert I/O adapters, unique dirty-sector
+bounds, child state/terminal races, QMP reply ordering, failure precedence,
+one-shot delivery, exact stop receipts, cut and error teardown mutations, and
+entry-snapshot exceptions with cleanup of every owned child. VM self-tests cover
+final-drain panic fragments. Existing block and baseline regressions remain.
+
+The launcher recipe includes the exact new helper. Changes are candidate source
+only: actual fault case selection, reboot/UI/oracle scenarios, retained evidence
+validation, source/controller exact binding and reviewed cloud activation are
+still required. Signed live replacement, rollback and System-only recovery remain
+separate M4 requirements. No crypto reference is linked into target images.
+
+## Fixed interrupted-save scenario candidate
+
+The unactivated `fault_scenarios.run(session, index)` API selects one of 60
+controller-owned cases: each of the six CREATE/WRITE write and flush boundaries
+with before/after cuts, no-success errors and 255-byte short/torn prefixes. Each publication flush contains one dirty
+sector, so reversed ordering would be a no-op and is not counted as separate
+coverage; multi-sector backend ordering remains a distinct test obligation. Selection is an exact integer, never a
+path, command or user-controlled backend plan. Each invocation requires its own
+fresh disposable cloud container and uniquely keyed public empty Data fixture.
+
+The first guest receives the unpredictable challenge through Terminal only.
+Only a typed planned-fault receipt can initiate successful scenario teardown;
+unexpected errors fail and clean up. The whole first VM and all three backends
+must be joined before frozen Data inspection. The independent authenticated
+oracle must recover the exact complete revision, committed/burned slot lists,
+next-slot position and non-exhausted classification permitted at that boundary.
+A fresh second VM has read-only Data authority and receives only F1; its Files
+pixels must independently match no file, an empty NOTE, or the complete value.
+Data headers, System and immutable boot bytes are checked unchanged as applicable.
+
+The orchestration tests replace all I/O and VM construction with inert objects;
+they verify all fixed case paths, stop/freeze/reboot ordering, read-only observer
+selection, unexpected-error rejection and failed-disk rejection. These are not
+VM evidence. The existing four baseline visual scenes remain unchanged.
+
+Still required before activation/acceptance: confirm actual baseline block
+ordinals from retained cloud evidence, independent scenario/security review,
+cloud source tests, retained fault-evidence validator and negative mutations,
+trusted-controller integration, and actual exact-source faulted runs. The
+candidate API explicitly returns `observed-not-independently-accepted` and
+`milestone_complete: false`. No fault scenario is activated by this change.
+
+## Fault-only QMP observation boundary
+
+The fault stop entry snapshot additionally records the exact event count before
+the owned QEMU kill. This distinguishes advisory RTC events already parsed by
+the live fault drain from events parsed only after reap. It is an observation
+boundary, not a timestamp claim about when an event occurred.
+
+The separate pure `fault_events` checker requires one RESUME tied to a running
+request and at most four exact chipset-bound RTC_CHANGE events observed before
+the entry boundary. Live null-request receipts are allowed only before that
+boundary; post-reap receipts, RESET, BLOCK_IO_ERROR and other device/lifecycle
+events remain rejected. Baseline persistence evidence semantics are unchanged.
+Tests bind the actual destroy snapshot before kill/final drain and reject
+malformed, shifted and post-reap boundaries.
+
+The retained fault envelope validator and complete read/write replay are still
+under implementation. This change grants no scenario or VM activation.
+
+## Independent retained fault candidate
+
+`fault_evidence.validate` checks canonical bounded envelopes and independently
+maps the 60 case indices and allowed slot outcomes without importing the
+scenario producer. It validates both Data images, unchanged public headers,
+caller-bound boot hash, System-zero hash, four actual pixel frames, submitted
+input commands, exact backend fault/termination records, pre-kill event boundary,
+paused topology, distinct VM PIDs and identical separated disk inodes.
+
+`fault_replay` independently computes the fixed public workload's six intended
+sectors in memory using the host-only reference oracle, never target code.
+It predicts mount reads, virgin-slot prereads, write/flush/readback ordering and
+the exact durable prefix; compares actual write hashes and every frozen byte.
+These expected bytes are never written to disk, supplied to the guest, used
+to repair a capture, or treated as actual VM evidence. Repeated public fixture
+keys occur only in inert unit tests, not writable campaign images.
+
+The exact NBD request geometry is source-predicted and MUST be confirmed against
+the retained successful baseline before activation. Pure tests use an inert
+topology result; actual paused preflight remains required by the production
+validator. Unit tests cover all 60 byte outcomes and reject altered claims,
+disk/pixel bytes even when rehashed, reused PIDs, changed disk authority/identity,
+wrong fault hits, missing joins, shifted event boundaries and unplanned input.
+
+Still required: independent source review and cloud tests; retained baseline
+trace inspection; an aggregate campaign validator enforcing exactly 60 unique
+case results and distinct writable image IDs/keys; source/container binding;
+trusted controller integration and actual faulted runs. No activation or M4
+completion is granted by these candidate APIs.
+
+## Aggregate candidate
+
+`fault_campaign.validate` requires exactly one strictly validated envelope for
+each case0..59, in canonical case order. It rejects missing/duplicate/reordered
+cases and reuse of the initial image hash, image identity, AEAD key or challenge.
+Captures remain bounded to8MiB each and384MiB total with a600-second aggregate
+deadline. Only counts/hashes and per-case validation results are returned, not
+keys. Inert aggregate tests mock the independently tested per-case boundary;
+they are not full-campaign execution evidence.
+
+Aggregate content validation still reports provenance false and milestone
+incomplete. The trusted outer controller must bind every actual capture to the
+same reviewed source/tool profile and its own confined container, and actual
+baseline trace confirmation remains a precondition to any campaign activation.
+
+## Retained baseline geometry confirmed — 2026-09-09
+
+The reviewed read-only inspection run34350130709, job102461080386, controller
+4a71afc6b546a3865252a5ec28b62dc86542953c successfully validated artifact10091254514
+from persistence run34319265996/source977aa66f8b4cc3d83370c10d88ea9763e31c11e7.
+Its entire recorded Data request sequence was compared with the proposed replay.
+
+Observed startup performs one512-byte read at offset0 to probe the header, then
+the full194-sector scan at offsets0..98816. The initial prediction omitted that
+probe. The corrected independent replay now requires both offset0 reads:
+195 mount requests, not194. The first VM has219 total requests:207 reads,
+six512-byte writes at offsets1024..3584, and six immediately paired flushes.
+Each CREATE/WRITE has three virgin-sector prereads, followed by three ordered
+write/flush/readback publications. The second VM has exactly195 read-only requests.
+Every recorded request agrees with this corrected full sequence.
+
+This correction changes only expected evidence, not the target, disk format,
+fault plan or actual observation. Tests reject both omitted and extra probes.
+The inspection also revalidated the existing288-case/864-response crypto
+comparison and its full Git-bound source closure; it does not complete crypto
+acceptance or M4. The real60-case fault campaign still must run under its
+independently reviewed trusted controller.

@@ -138,6 +138,7 @@ class Backend:
         encoded = json.dumps(config,separators=(",",":"),sort_keys=True)
         if len(encoded) > 1024:
             raise ValueError("configuration budget")
+        self.audit = load("fault_audit")
         self.records, self.buffer = [],bytearray()
         self.total = 0
         self.problem = None
@@ -218,7 +219,7 @@ class Backend:
                     self._fail("record-budget")
                     continue
                 try:
-                    record = json.loads(line)
+                    record = self.audit.record(line)
                     if type(record) is not dict or record.get("type") not in ("ready","request","event","terminal"):
                         raise ValueError("record")
                     self.records.append(record)

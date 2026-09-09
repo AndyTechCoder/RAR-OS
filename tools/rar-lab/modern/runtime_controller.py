@@ -131,7 +131,9 @@ def cleanup(command,owned):
         except BaseException: failures.append(identifier)
     return failures
 
-def main():
+def main(mode="persistence"):
+    if mode not in ("persistence","fault-campaign"):
+        raise ValueError("fixed Modern controller mode")
     import sys
     if (sys.argv!=[sys.argv[0]] or sys.platform!="linux" or not sys.flags.isolated or not sys.dont_write_bytecode or
         os.environ.get("GITHUB_ACTIONS")!="true" or os.environ.get("GITHUB_REPOSITORY")!="AndyTechCoder/RAR-OS" or
@@ -157,8 +159,9 @@ def main():
     run_id,attempt=os.environ["GITHUB_RUN_ID"],os.environ["GITHUB_RUN_ATTEMPT"]
     if any(re.fullmatch("[0-9]+",x) is None for x in (run_id,attempt)):
         raise ValueError("fixed run identity")
-    evidence=workspace/"modern-runtime-evidence";evidence.mkdir(exist_ok=False)
-    work=workspace/"modern-runtime-work";work.mkdir(mode=0o700,exist_ok=False)
+    prefix="modern-runtime" if mode=="persistence" else "modern-fault"
+    evidence=workspace/(prefix+"-evidence");evidence.mkdir(exist_ok=False)
+    work=workspace/(prefix+"-work");work.mkdir(mode=0o700,exist_ok=False)
     config=work/"docker-config";config.mkdir(mode=0o700,exist_ok=False)
     docker=["docker","--config",str(config),"--host","unix:///var/run/docker.sock"]
     bootcheck=load("boot_image")
@@ -244,18 +247,23 @@ def main():
                 raise ValueError("exact tool hash inventory")
         sizes=tuple(int(line) for line in lines[4:])
         (evidence/"tool-identities.txt").write_bytes(identities)
-        output=execute(launcher,["/usr/bin/python3","-I","-B","/opt/rar-modern/launch.py"],
-            [(inputs,"/artifact")],300,64*1024*1024)
-        (evidence/"persistence.json").write_bytes(output)
-        report["content_check"]=content.validate(output,digest(boot),sizes)
-        # Alter in-memory copies only after positive content validation. Keep
-        # the exact original capture and all target/device state untouched.
-        report["actual_refusals"]=content.actual_refusals(output,digest(boot),sizes)
-        (evidence/"refusals.json").write_text(json.dumps(report["actual_refusals"],indent=2)+"\n")
-        report["status"]="observed"
-        report["persistence_sha256"]=digest(output)
-        save()
-        print("Modern: actual two-VM persistence envelope independently checked; M4 and crypto acceptance remain incomplete.",flush=True)
+        if mode=="fault-campaign":
+            campaign=load("fault_campaign_controller")
+            campaign.observe(execute,launcher,inputs,digest(boot),sizes,
+                lambda name,raw:(evidence/name).write_bytes(raw),save,report)
+        else:
+            output=execute(launcher,["/usr/bin/python3","-I","-B","/opt/rar-modern/launch.py"],
+                [(inputs,"/artifact")],300,64*1024*1024)
+            (evidence/"persistence.json").write_bytes(output)
+            report["content_check"]=content.validate(output,digest(boot),sizes)
+            # Alter in-memory copies only after positive content validation. Keep
+            # the exact original capture and all target/device state untouched.
+            report["actual_refusals"]=content.actual_refusals(output,digest(boot),sizes)
+            (evidence/"refusals.json").write_text(json.dumps(report["actual_refusals"],indent=2)+"\n")
+            report["status"]="observed"
+            report["persistence_sha256"]=digest(output)
+            save()
+            print("Modern: actual two-VM persistence envelope independently checked; M4 and crypto acceptance remain incomplete.",flush=True)
     except BaseException as error:
         report["status"]="failed";report["failure"]=str(error);save();raise
     finally:
