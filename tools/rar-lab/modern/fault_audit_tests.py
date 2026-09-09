@@ -16,10 +16,37 @@ def load(name):
     return module
 audit=load("fault_audit")
 block=load("block_disk")
+process=load("block_process")
 
 class Tests(unittest.TestCase):
     def test_pure_parser_and_matcher(self):
         self.assertGreater(audit.self_test(),90)
+
+    def test_backend_poll_requires_canonical_duplicate_free_records(self):
+        from types import SimpleNamespace as NS
+        good=audit.canonical(dict(type="ready",kind="data"))+b"\n"
+        for raw,accepted in ((good,True),(b'{"type":"ready","type":"event"}\n',False),
+                             (b'{"type": "ready"}\n',False),
+                             (b'{"type":"ready","bad":NaN}\n',False)):
+            with self.subTest(raw=raw):
+                backend=object.__new__(process.Backend)
+                stream=NS(fileno=lambda:99);code=[None]
+                backend.closed=False;backend.deadline=10;backend.problem=None
+                backend.audit=audit;backend.records=[];backend.buffer=bytearray();backend.total=0
+                backend.process=NS(stderr=object(),poll=lambda:code[0],
+                                   kill=lambda:code.__setitem__(0,-9))
+                backend.selector=NS(select=lambda seconds:[(NS(fileobj=stream),None)],
+                                    get_map=lambda:{1:stream})
+                with patch.object(process.time,"monotonic",return_value=0),\
+                     patch.object(process.os,"read",return_value=raw):
+                    backend.poll()
+                if accepted:
+                    self.assertEqual(backend.records,[dict(type="ready",kind="data")])
+                    self.assertIsNone(backend.problem)
+                else:
+                    self.assertEqual(backend.records,[])
+                    self.assertEqual(backend.problem,"malformed-record")
+                    self.assertEqual(code[0],-9)
 
     def test_real_emitter_distinguishes_completed_prefix_from_storage_failure(self):
         ready=dict(type="ready",kind="data",readonly=False,export_readonly=False,
