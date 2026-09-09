@@ -38,11 +38,41 @@ A failed cleanup cannot be retried by the scenario finally block or mistaken
 for successful frozen-image authority. Never-started cleanup grants no drain
 proof.
 
-## Diagnostics do not relax event acceptance
+## Lifecycle events and advisory RTC changes
 
-The exact sole canonical RESUME requirement remains. A RESUME first parsed by a
-preflight reply is rejected. Extra events remain rejected pending actual names,
-exact public QEMU schema/semantics and appropriate fault/mutation evidence.
+Run34313003802/job102343354846, controller94fbb6b7c75e0307e79b4e1f5a3cd885f963a2bb,
+captured RESUME in the continue reply and two RTC_CHANGE events in running
+replies. Their data fields were exactly offset:int and qom-path:str. The retained
+artifact is10089064023, ZIP215060 bytes, SHA256
+4ca17240b654edf561d937d1d1091df0443daa70de70cd3c765943c61b172b4a.
+The complete EOF/drain proof reached the checker; full persistence acceptance
+still failed and is not claimed.
+
+QEMU's official QMP reference defines RTC_CHANGE as a guest RTC time change,
+with signed offset seconds and an RTC object QOM path. It is rate-limited and
+is not RESET, STOP, RESUME, disk mutation or a new firmware instance:
+https://www.qemu.org/docs/master/interop/qemu-qmp-ref.html#event-RTC_CHANGE
+
+The correction requires exactly one canonical RESUME as the first retained
+event, with no preflight receipt. Subsequent events may only be RTC_CHANGE,
+within the existing total32-event limit. Each has exact event/timestamp/data
+fields, a bounded canonical timestamp, exact signed64-bit offset and one
+bounded canonical machine QOM identifier; all RTC events in a VM refer to the
+same identifier. This is an object identifier, never a filesystem path or
+permission to open anything. No offset value changes the acceptance verdict.
+
+RTC receipts may be continue/running/post-reap observations after RESUME in the
+stream. Post-reap receipt means buffered stream data was parsed after the cut,
+not that the guest executed afterward. No events are discarded. Duplicate
+RESUME, reset, stop, shutdown, suspend, watchdog, panic, block-error,
+device-change and unknown events remain rejected.
+
+QOM syntax validation alone is not device attestation. The trusted image,
+unchanged fixed launch arguments and independently checked paused topology
+remain mandatory. RTC notifications are not used as boot/reboot, persistence,
+elapsed-time or device-authority evidence. Whole QEMU destruction, fresh
+firmware, all command/backend checks and frozen disk/pixel comparisons remain
+unchanged. A source-only event fixture is not a runtime pass.
 
 Logs expose bounded exact uppercase QMP event names, sanitized property names,
 data-field type names, event hashes and derived receipt phases. Arbitrary data
@@ -54,5 +84,8 @@ Pure cloud tests cover request-time receipts, buffered/post-reap event records,
 partial EOF, unexpected replies/errors, missing EOF, cumulative limits,
 one-pass cleanup after drain failure, no freeze after failure, receipt ordering
 and redacted diagnostic values. No local Mac/SSD files are written, downloaded
-or executed. Actual revised stream-capture behavior and all remaining M4
-acceptance requirements still need cloud evidence.
+or executed. Actual corrected full-checker behavior and all remaining M4 acceptance
+requirements still need cloud evidence. Focused event mutations cover every
+forbidden lifecycle class, missing/duplicate resume, preflight/invalid receipts,
+unknown/extra fields, boolean/noninteger/overflow offsets and timestamps,
+malformed/multiple QOM identifiers and event-count boundaries.
