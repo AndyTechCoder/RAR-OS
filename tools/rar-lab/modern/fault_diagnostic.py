@@ -104,13 +104,18 @@ def inspect(raw,binding):
 
 def acquire(client,run_id,artifact_id,source):
     try:
-        run=client.metadata("/repos/AndyTechCoder/RAR-OS/actions/runs/"+str(run_id))
-        metadata=client.metadata("/repos/AndyTechCoder/RAR-OS/actions/artifacts/"+str(artifact_id))
-        binding=receipt(metadata,run,run_id,artifact_id,source)
-        raw=client.zip(artifact_id,binding["size"])
-    finally:
-        client.token=""
-    return inspect(raw,binding)
+        try:
+            run=client.metadata("/repos/AndyTechCoder/RAR-OS/actions/runs/"+str(run_id))
+            metadata=client.metadata("/repos/AndyTechCoder/RAR-OS/actions/artifacts/"+str(artifact_id))
+            binding=receipt(metadata,run,run_id,artifact_id,source)
+            raw=client.zip(artifact_id,binding["size"])
+        finally:
+            client.token=""
+        return inspect(raw,binding)
+    except BaseException:
+        # Transport exceptions can contain a signed artifact URL. Do not print
+        # exception messages, chained contexts, or payload-derived diagnostics.
+        raise ValueError("retained fault diagnostic failed") from None
 
 def main():
     handoff=helper("crypto_handoff")

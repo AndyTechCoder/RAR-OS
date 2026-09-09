@@ -5,6 +5,7 @@ import importlib.util
 import io
 from pathlib import Path
 import stat
+import traceback
 import unittest
 import zipfile
 from unittest.mock import patch
@@ -100,8 +101,14 @@ class Tests(unittest.TestCase):
             return real(data,bound)
         with patch.object(d,"inspect",inspect):d.acquire(client,1,2,SOURCE)
         client.token="secret"
-        with patch.object(client,"zip",side_effect=ValueError("network")):
-            with self.assertRaises(ValueError):d.acquire(client,1,2,SOURCE)
+        with patch.object(client,"zip",side_effect=ValueError("https://signed.invalid/SENTINEL?secret=URL")):
+            try:d.acquire(client,1,2,SOURCE)
+            except ValueError as error:
+                displayed="".join(traceback.format_exception(error))
+                self.assertNotIn("SENTINEL",displayed)
+                self.assertNotIn("signed.invalid",displayed)
+                self.assertTrue(error.__suppress_context__)
+            else:self.fail("download failure accepted")
         self.assertEqual(client.token,"")
 
 if __name__=="__main__":unittest.main(verbosity=2)
