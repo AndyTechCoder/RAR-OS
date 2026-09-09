@@ -126,6 +126,33 @@ def scan(records,expected,ready):
     if hit is None:return None
     return dict(hit,counts=dict(counts),terminal=terminal)
 
+def observe(records,expected,code,problem,eof):
+    """Combine strict receipts with observed child status, not VM acceptance.
+    'waiting' asks the VM controller to boundedly drain an already-cut child.
+    None means no fault observed yet. Unexpected failures always raise.
+    """
+    expected=plan(expected)
+    if (code is not None and type(code) is not int) or type(eof) is not bool:
+        raise Invalid("typed child observation")
+    cut=expected["effect"] in ("before-cut","after-cut","torn-cut")
+    if not records:
+        if code is not None or problem is not None or eof:raise Invalid("child ended without readiness")
+        return None
+    hit=scan(records,expected,records[0])
+    if cut:
+        if code not in (None,20) or problem not in (None,"cut"):
+            raise Invalid("unexpected Data child failure")
+        if code==20 and problem!="cut":raise Invalid("cut exit requires matching backend classification")
+        if hit is not None and hit["terminal"] and code==20 and problem=="cut" and eof:
+            return hit
+        if code==20 and eof:raise Invalid("complete cut stream lacks exact fault evidence")
+        if hit is not None or code==20:return "waiting"
+        if problem is not None or eof:raise Invalid("unexpected Data stream closure")
+        return None
+    if code is not None or problem is not None or eof:
+        raise Invalid("error observation requires a live healthy transport")
+    return hit
+
 def self_test():
     ready=dict(type="ready",kind="data",readonly=False,export_readonly=False,
                capacity=99328,device=1,inode=2)

@@ -71,6 +71,12 @@ def line_json(raw):
         raise ValueError("QMP object required")
     return item
 
+class PlannedDataFault(RuntimeError):
+    """One exact controller observation; never a generic device/VM failure."""
+    def __init__(self,receipt):
+        self.receipt=tuple(receipt)
+        super().__init__("controller-observed planned Data fault")
+
 class VM:
     """One fresh firmware instance and one non-reconnectable backend per role.
     All public operations are synchronous but continuously service the backend
@@ -84,6 +90,13 @@ class VM:
         self.index = index
         self.work = Path(self.profile.directory(index))
         self.readonly_data = readonly_data
+        self.fault_audit=load("fault_audit") if data_fault is not None else None
+        selected=self.fault_audit.plan(data_fault) if data_fault is not None else None
+        self.fault_plan=None if selected is None else tuple(selected[k] for k in
+            ("operation","ordinal","effect","prefix"))
+        self.fault_notice=None;self.fault_delivered=False;self.fault_deadline=None
+        self.qmp_pending=None
+        self.fault_qmp_deadline=None
         self.boot_fd = None
         self.child = None
         self.connection = None
@@ -192,38 +205,73 @@ class VM:
             raise
 
     def service(self):
-        if self.closed:
-            raise ValueError("closed VM")
-        if time.monotonic() >= self.deadline:
-            raise TimeoutError("whole VM proof deadline")
-        for backend in self.backends:
-            code = backend.poll()
-            if code is not None or backend.problem is not None:
-                raise ValueError("block backend stopped before deliberate whole-VM cut")
-        if self.child is not None and self.child.poll() is not None:
-            raise ValueError("VM exited before deliberate cut")
-        for key,_ in self.selector.select(0.01):
-            try:
-                raw = os.read(key.fileobj.fileno(),65536)
-            except BlockingIOError:
+        if self.closed:raise ValueError("closed VM")
+        if (getattr(self,"fault_delivered",False) and self.fault_plan[2] in
+            ("before-cut","after-cut","torn-cut")):
+            raise ValueError("planned cut requires whole-VM destruction")
+        while True:
+            if time.monotonic()>=self.deadline:raise TimeoutError("whole VM proof deadline")
+            codes=[backend.poll() for backend in self.backends]
+            expected=getattr(self,"fault_plan",None)
+            for index,(backend,code) in enumerate(zip(self.backends,codes)):
+                if index==0 and expected is not None:continue
+                if code is not None or backend.problem is not None:
+                    raise ValueError("block backend stopped before deliberate whole-VM cut")
+            if self.child is not None and self.child.poll() is not None:
+                raise ValueError("VM exited before deliberate cut")
+            # Drain/check VM channels before a planned signal can be delivered.
+            for key,_ in self.selector.select(0.01):
+                try:raw=os.read(key.fileobj.fileno(),65536)
+                except BlockingIOError:continue
+                if not raw:raise EOFError("VM/QMP output closed")
+                if key.data=="stderr":raise ValueError("unexpected QEMU stderr")
+                if key.data=="serial":
+                    self.serial.extend(raw)
+                    if len(self.serial)>self.profile.SERIAL_LIMIT:raise ValueError("serial budget")
+                    if any(marker in self.serial for marker in
+                        (b"RAR-PANIC",b"UNEXPECTED-USER-FAULT",b"INVALID-USER-RETURN")):
+                        raise ValueError("guest panic/isolation failure")
+                elif key.data=="qmp":
+                    self.qmp_total+=len(raw);self.qmp_bytes.extend(raw)
+                    if self.qmp_total>2*1024*1024 or len(self.qmp_bytes)>262144:
+                        raise ValueError("QMP output budget")
+                else:raise ValueError("unknown monitored descriptor")
+            if expected is None:return
+            if len(self.backends)!=3:raise ValueError("three fault campaign backends required")
+            data=self.backends[0]
+            selected=dict(zip(("operation","ordinal","effect","prefix"),expected))
+            observed=self.fault_audit.observe(data.records,selected,codes[0],data.problem,data.eof)
+            if observed=="waiting":
+                if self.fault_deadline is None:self.fault_deadline=min(self.deadline,time.monotonic()+1)
+                if time.monotonic()>=self.fault_deadline:
+                    raise TimeoutError("bounded planned-cut audit drain")
                 continue
-            if not raw:
-                raise EOFError("VM/QMP output closed")
-            if key.data == "stderr":
-                raise ValueError("unexpected QEMU stderr")
-            if key.data == "serial":
-                self.serial.extend(raw)
-                if len(self.serial) > self.profile.SERIAL_LIMIT:
-                    raise ValueError("serial budget")
-                if b"RAR-PANIC" in self.serial or b"UNEXPECTED-USER-FAULT" in self.serial or b"INVALID-USER-RETURN" in self.serial:
-                    raise ValueError("guest panic/isolation failure")
-            elif key.data == "qmp":
-                self.qmp_total += len(raw)
-                self.qmp_bytes.extend(raw)
-                if self.qmp_total > 2*1024*1024 or len(self.qmp_bytes) > 262144:
-                    raise ValueError("QMP output budget")
-            else:
-                raise ValueError("unknown monitored descriptor")
+            self.fault_deadline=None
+            if observed is not None:
+                receipt=expected+(observed["request_index"],observed["event_index"],
+                    observed["offset"],observed["length"])
+                if self.fault_notice is not None and self.fault_notice!=receipt:
+                    raise ValueError("planned observation changed")
+                self.fault_notice=receipt
+            if (self.fault_notice is not None and not self.fault_delivered and
+                getattr(self,"qmp_pending",None) is None):
+                # Unsolicited replies/errors cannot hide behind the planned
+                # signal; asynchronous events retain explicit stream receipts.
+                while b"\n" in self.qmp_bytes:
+                    at=self.qmp_bytes.index(10)
+                    raw=bytes(self.qmp_bytes[:at]).rstrip(b"\r")
+                    del self.qmp_bytes[:at+1]
+                    self.record_event(line_json(raw),None)
+                if self.qmp_bytes:
+                    if self.fault_qmp_deadline is None:
+                        self.fault_qmp_deadline=min(self.deadline,time.monotonic()+1)
+                    if time.monotonic()>=self.fault_qmp_deadline:
+                        raise TimeoutError("planned-fault partial QMP record")
+                    continue
+                self.fault_qmp_deadline=None
+                self.fault_delivered=True
+                raise PlannedDataFault(self.fault_notice)
+            return
 
     def receive(self):
         while b"\n" not in self.qmp_bytes:
@@ -297,9 +345,13 @@ class VM:
             self.qmp_bytes.extend(raw)
 
     def request(self,command):
-        if not self.allowed(command) or self.identity >= 512:
+        if (not self.allowed(command) or self.identity >= 512 or
+            getattr(self,"qmp_pending",None) is not None):
             raise ValueError("unapproved QMP command/state/budget")
+        # A completed prior reply must be consumed before signaling the fault.
+        if getattr(self,"fault_plan",None) is not None:self.service()
         self.identity += 1
+        self.qmp_pending=self.identity
         message = dict(command,id=self.identity)
         raw = json.dumps(message,separators=(",",":")).encode()+b"\n"
         if len(raw)>2048:
@@ -319,6 +371,7 @@ class VM:
             if (set(answer)!={"return","id"} or type(answer["id"]) is not int or
                 answer["id"] != self.identity):
                 raise ValueError("QMP error/mismatched reply")
+            self.qmp_pending=None
             return answer["return"]
 
     def start(self):

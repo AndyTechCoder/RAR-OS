@@ -17,10 +17,93 @@ def load(name):
 audit=load("fault_audit")
 block=load("block_disk")
 process=load("block_process")
+session=load("vm_session")
 
 class Tests(unittest.TestCase):
     def test_pure_parser_and_matcher(self):
         self.assertGreater(audit.self_test(),90)
+
+    def fault_vm(self):
+        from types import SimpleNamespace as NS
+        vm=object.__new__(session.VM)
+        p=dict(operation="write",ordinal=1,effect="error",prefix=0)
+        ready=dict(type="ready",kind="data",readonly=False,export_readonly=False,
+                   capacity=99328,device=1,inode=2)
+        req=dict(type="request",operation="write",offset=1024,length=512)
+        event=dict(type="event",event=dict(operation="write",ordinal=1,offset=1024,
+            length=512,status="failed-no-success",payload_sha256="a"*64,injection=p))
+        data=NS(records=[ready,req,event],problem=None,eof=False,poll=lambda:None)
+        vm.backends=[data,NS(problem=None,poll=lambda:None),NS(problem=None,poll=lambda:None)]
+        vm.closed=False;vm.deadline=100;vm.child=NS(poll=lambda:None)
+        vm.fault_audit=audit;vm.fault_plan=tuple(p[k] for k in ("operation","ordinal","effect","prefix"))
+        vm.fault_notice=None;vm.fault_delivered=False;vm.fault_deadline=None
+        vm.fault_qmp_deadline=None;vm.qmp_pending=None
+        vm.selector=NS(select=lambda timeout:[])
+        vm.serial=bytearray();vm.qmp_bytes=bytearray();vm.qmp_total=0
+        vm.profile=NS(SERIAL_LIMIT=65536)
+        vm.events=[];vm.event_receipts=[];vm.identity=0;vm.commands=[]
+        vm.allowed=lambda command:True
+        vm.connection=NS(settimeout=lambda value:None,setblocking=lambda value:None,
+                         sendall=lambda value:None)
+        return vm
+
+    def test_cut_requires_exact_records_exit_and_complete_pipe_drain(self):
+        vm=self.fault_vm()
+        records=vm.backends[0].records
+        p=dict(operation="write",ordinal=1,effect="before-cut",prefix=0)
+        records[2]["event"].update(injection=p,status="cut-no-reply")
+        term=dict(type="terminal",outcome="cut",fault_hit=True,failed=False)
+        self.assertEqual(audit.observe(records,p,20,"cut",False),"waiting")
+        self.assertEqual(audit.observe(records,p,None,None,False),"waiting")
+        hit=audit.observe(records+[term],p,20,"cut",True)
+        self.assertEqual(hit["event_index"],2)
+        for rows,code,problem,eof in ((records,20,"cut",True),
+                ([records[0]],20,"cut",True),(records+[term],21,"backend-failed",True),
+                (records+[term],20,None,True),(records+[term],20,"malformed-record",True)):
+            with self.assertRaises(audit.Invalid):audit.observe(rows,p,code,problem,eof)
+        vm=self.fault_vm();p=dict(zip(("operation","ordinal","effect","prefix"),vm.fault_plan))
+        for code,problem,eof in ((21,"backend-failed",True),(None,None,True),(-9,None,False)):
+            with self.assertRaises(audit.Invalid):
+                audit.observe(vm.backends[0].records,p,code,problem,eof)
+
+    def test_planned_signal_is_one_shot_and_unexpected_failures_win(self):
+        from types import SimpleNamespace as NS
+        with patch.object(session.time,"monotonic",return_value=0):
+            vm=self.fault_vm()
+            with self.assertRaises(session.PlannedDataFault):vm.service()
+            self.assertTrue(vm.fault_delivered)
+            vm.service()  # The error backend stays live; signal is not repeated.
+            for failure in ("peer","qemu","stderr","panic","qmp"):
+                vm=self.fault_vm()
+                if failure=="peer":vm.backends[1].poll=lambda:21
+                if failure=="qemu":vm.child.poll=lambda:1
+                if failure in ("stderr","panic"):
+                    key=NS(fileobj=NS(fileno=lambda:99),
+                           data="stderr" if failure=="stderr" else "serial")
+                    vm.selector=NS(select=lambda timeout:[(key,None)])
+                if failure=="qmp":vm.qmp_bytes=bytearray(b'{"error":{},"id":1}\n')
+                with patch.object(session.os,"read",return_value=b"RAR-PANIC:fixture"):
+                    with self.assertRaises(ValueError):vm.service()
+                self.assertFalse(vm.fault_delivered)
+
+    def test_pending_qmp_reply_is_consumed_before_fault_delivery(self):
+        with patch.object(session.time,"monotonic",return_value=0):
+            for bad_reply in (False,True):
+                vm=self.fault_vm();data=vm.backends[0];tail=data.records[1:];data.records=data.records[:1]
+                def receive():
+                    if len(data.records)==1:data.records.extend(tail)
+                    vm.service()  # Fault arrives while the exact command is pending.
+                    return {"return":{},"id":True if bad_reply else vm.identity}
+                vm.receive=receive
+                if bad_reply:
+                    with self.assertRaises(ValueError):vm.request({"execute":"send-key"})
+                    self.assertFalse(vm.fault_delivered)
+                else:
+                    self.assertEqual(vm.request({"execute":"send-key"}),{})
+                    self.assertIsNone(vm.qmp_pending)
+                    with self.assertRaises(session.PlannedDataFault):vm.service()
+                    self.assertEqual(vm.request({"execute":"screendump"}),{})
+                    self.assertEqual([m["id"] for m in vm.commands],[1,2])
 
     def test_backend_poll_requires_canonical_duplicate_free_records(self):
         from types import SimpleNamespace as NS
