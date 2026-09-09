@@ -268,7 +268,7 @@ def validate_pci(buses):
 
 def rtc_identity(items):
     """Derive one chipset RTC path from actual paused QOM child types."""
-    if type(items) is not list or not 1<=len(items)<=128:
+    if type(items) is not list or not 1<=len(items)<=64:
         raise ValueError("bounded paused RTC parent inventory")
     names=set();found=[]
     for item in items:
@@ -279,7 +279,10 @@ def rtc_identity(items):
             re.fullmatch(r"[A-Za-z0-9_-][A-Za-z0-9_.-]*(?:\[[0-9]+\])?",item["name"]) is None):
             raise ValueError("canonical unique QOM parent property")
         names.add(item["name"])
-        if item["type"]==RTC_TYPE:found.append(RTC_PARENT+"/"+item["name"])
+        if item["type"]==RTC_TYPE:
+            if re.fullmatch(r"device\[(?:0|[1-9][0-9]{0,3})\]",item["name"]) is None:
+                raise ValueError("canonical default RTC child name")
+            found.append(RTC_PARENT+"/"+item["name"])
     if len(found)!=1:raise ValueError("one exact chipset RTC child required")
     return found[0]
 
@@ -434,13 +437,15 @@ def self_test():
         reject(lambda bad=bad:validate_preflight(bad))
 
     assert validate_preflight(fixture)["rtc_path"]==RTC_PARENT+"/device[7]"
+    for name in ("rtc","device[-1]","device[01]","device[10000]","device[]"):
+        reject(lambda name=name:rtc_identity([{"name":name,"type":RTC_TYPE}]))
     for children in ([],[{"name":"device[7]","type":"child<wrong>"}],
         fixture["rtc-children"]*2,
         fixture["rtc-children"]+[{"name":"device[8]","type":RTC_TYPE}],
         [{"name":"../rtc","type":RTC_TYPE}],[{"name":"rtc","type":RTC_TYPE,"extra":0}],
         [{"name":True,"type":RTC_TYPE}],[{"name":"r"*65,"type":RTC_TYPE}],
         [{"name":"rtc","type":None}],[{"name":"rtc","type":"é"}],
-        [{"name":"rtc","type":RTC_TYPE}]*129):
+        [{"name":"device[7]","type":RTC_TYPE}]*65):
         bad=dict(fixture);bad["rtc-children"]=children
         reject(lambda bad=bad:validate_preflight(bad))
     return rejected
