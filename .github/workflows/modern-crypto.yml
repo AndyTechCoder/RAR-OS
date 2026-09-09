@@ -7,6 +7,11 @@ on:
         description: Exact reviewed RAR source commit (five adapter input files only)
         required: true
         type: string
+      inspect_first_failure:
+        description: Inspect only the fixed retained failure artifact; do not rebuild or execute adapters
+        required: false
+        default: false
+        type: boolean
 permissions:
   contents: read
   actions: read
@@ -28,13 +33,21 @@ jobs:
           persist-credentials: false
           path: controller
       - name: Integrated bounded compiler and independent reference comparison
+        if: ${{ !inputs.inspect_first_failure }}
         env:
           RAR_SOURCE_SHA: ${{ inputs.source_sha }}
           RAR_CONTROLLER_SHA: ${{ github.sha }}
           RAR_ARTIFACT_TOKEN: ${{ github.token }}
         run: /usr/bin/python3 -I -B controller/tools/rar-lab/modern/crypto_handoff.py
+      - name: Inspect fixed retained failure without target execution
+        if: ${{ inputs.inspect_first_failure }}
+        env:
+          RAR_SOURCE_SHA: ${{ inputs.source_sha }}
+          RAR_CONTROLLER_SHA: ${{ github.sha }}
+          RAR_ARTIFACT_TOKEN: ${{ github.token }}
+        run: /usr/bin/python3 -I -B controller/tools/rar-lab/modern/crypto_failure.py
       - name: Retain exact success or failure evidence
-        if: always()
+        if: ${{ always() && !inputs.inspect_first_failure }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: modern-crypto-${{ github.run_id }}-${{ github.run_attempt }}

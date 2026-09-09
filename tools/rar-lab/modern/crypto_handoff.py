@@ -544,6 +544,10 @@ def main():
         summary.update(status="failed",error_type=type(error).__name__)
         if phase!="artifact-intake":
             summary["validation_error"]=str(error)[:2048]
+        print(canonical({"diagnostic":"rar-modern-crypto-failure-v0","phase":phase,
+            "error_type":summary["error_type"],
+            **({"validation_error":summary["validation_error"]} if "validation_error" in summary else {})
+            }).decode("ascii"),end="",flush=True)
         # Do not leak a signed archive URL or credential via an exception repr.
         raise Invalid("handoff failed during "+phase+" ("+type(error).__name__+")") from None
     finally:
