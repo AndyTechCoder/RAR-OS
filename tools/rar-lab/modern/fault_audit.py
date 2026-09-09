@@ -55,6 +55,7 @@ def scan(records,expected,ready):
         canonical(records[0])!=canonical(ready)):
         raise Invalid("exact Data descriptor readiness")
     counts={"read":0,"write":0,"flush":0}
+    dirty=set()
     pending=None;pending_index=None;hit=None;terminal=False
     cut=expected["effect"] in ("before-cut","after-cut","torn-cut")
     for index,row in enumerate(records[1:],1):
@@ -82,7 +83,9 @@ def scan(records,expected,ready):
             fields={"operation","ordinal","offset","length","status"}
             if op=="write":fields.add("payload_sha256")
             selected=op==expected["operation"] and counts[op]+1==expected["ordinal"]
-            if selected:fields.add("injection")
+            if selected:
+                fields.add("injection")
+                if expected["effect"] in ("short-error","torn-cut"):fields.add("persisted_prefix_bytes")
             if (type(event) is not dict or set(event)!=fields or event["operation"]!=op or
                 type(event["ordinal"]) is not int or event["ordinal"]!=counts[op]+1 or
                 type(event["offset"]) is not int or event["offset"]!=pending["offset"] or
@@ -97,6 +100,12 @@ def scan(records,expected,ready):
             if selected:
                 if op=="write" and expected["prefix"]>pending["length"]:
                     raise Invalid("fault prefix exceeds observed write")
+                if op=="flush" and expected["prefix"]>len(dirty)*512:
+                    raise Invalid("fault prefix exceeds pending unique sectors")
+                if expected["effect"] in ("short-error","torn-cut"):
+                    if (type(event["persisted_prefix_bytes"]) is not int or
+                        event["persisted_prefix_bytes"]!=expected["prefix"]):
+                        raise Invalid("durable prefix completion required")
                 if canonical(event["injection"])!=canonical(expected):
                     raise Invalid("exact fault injection")
                 if event["status"]!=("cut-no-reply" if cut else "failed-no-success"):
@@ -104,6 +113,8 @@ def scan(records,expected,ready):
                 hit={"request_index":pending_index,"event_index":index,
                     "plan":dict(expected),"offset":pending["offset"],"length":pending["length"]}
             elif event["status"]!="completed":raise Invalid("unplanned device failure")
+            elif op=="write":dirty.update(range(pending["offset"],pending["offset"]+pending["length"],512))
+            elif op=="flush":dirty.clear()
             pending=None;pending_index=None
         elif kind=="terminal":
             if (hit is None or set(row)!={"type","outcome","fault_hit","failed"} or
@@ -136,6 +147,7 @@ def self_test():
             e=dict(operation=op,ordinal=1,offset=req["offset"],length=req["length"],
                    status="cut-no-reply" if cut else "failed-no-success",injection=dict(p))
             if op=="write":e["payload_sha256"]="a"*64
+            if effect in ("short-error","torn-cut"):e["persisted_prefix_bytes"]=0
             rows=[ready,req,dict(type="event",event=e)]
             assert scan([ready],p,ready) is None
             assert scan([ready,req],p,ready) is None
@@ -154,6 +166,26 @@ def self_test():
             for field,value in (("fault_hit",1),("failed",int(not cut)),("outcome","closed")):
                 changed=dict(term);changed[field]=value
                 reject(lambda changed=changed:scan(rows+[changed],p,ready))
+    # Overlapping successful writes dirty one physical sector, not two.
+    p=dict(operation="flush",ordinal=1,effect="short-error",prefix=512)
+    req=dict(type="request",operation="write",offset=1024,length=512)
+    prefix=[ready]
+    for ordinal in (1,2):
+        prefix.extend([req,dict(type="event",event=dict(operation="write",ordinal=ordinal,
+            offset=1024,length=512,status="completed",payload_sha256="a"*64))])
+    flush=dict(type="request",operation="flush",offset=0,length=0)
+    e=dict(operation="flush",ordinal=1,offset=0,length=0,status="failed-no-success",
+           injection=p,persisted_prefix_bytes=512)
+    assert scan(prefix+[flush,dict(type="event",event=e)],p,ready)["counts"]["write"]==2
+    too_large=dict(p,prefix=513)
+    reject(lambda:scan(prefix+[flush,dict(type="event",event=dict(e,injection=too_large,
+        persisted_prefix_bytes=513))],too_large,ready))
+    # An underlying _persist failure never receives the completion field.
+    missing=dict(e);del missing["persisted_prefix_bytes"]
+    reject(lambda:scan(prefix+[flush,dict(type="event",event=missing)],p,ready))
+    for value in (True,511,513):
+        reject(lambda value=value:scan(prefix+[flush,dict(type="event",
+            event=dict(e,persisted_prefix_bytes=value))],p,ready))
     return rejected
 
 if __name__=="__main__":
