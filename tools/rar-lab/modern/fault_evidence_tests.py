@@ -27,18 +27,22 @@ provision=load("data_provision")
 replay=load("fault_replay")
 fault_events=load("fault_events")
 
-def document():
+def document(case=0,data_exit=None,peer_exit=21):
     # Fixed public synthetic in-memory bytes, not a writable replay fixture.
     data=provision.Provisioner().fresh(bytes(range(68)))
-    value="a"*32;plan,_=scenario.selected(0)
-    _,requests,write_hashes=replay.expected(data,value,plan)
+    value="a"*32;plan,_=scenario.selected(case)
+    frozen,requests,write_hashes=replay.expected(data,value,plan)
+    state=evidence.classification(plan);revision=state["revision"]
+    iscut=plan["effect"] in ("before-cut","after-cut","torn-cut")
+    if data_exit is None:data_exit=20 if iscut else -9
     frames=[]
     for scene in (0,1,0):
         pixels=visual.expected(scene,None)
         frames.append(dict(scene=visual.SCENES[scene],sha256=base.sha(pixels),
             actual_ppm=base64.b64encode(pixels).decode("ascii")))
-    pixels=visual.recovered_expected("absent")
-    frames.append(dict(scene="recovered-absent",sha256=base.sha(pixels),
+    recovered=("absent","empty","written")[revision]
+    pixels=visual.recovered_expected(recovered,value if revision==2 else None)
+    frames.append(dict(scene="recovered-"+recovered,sha256=base.sha(pixels),
         actual_ppm=base64.b64encode(pixels).decode("ascii")))
     proofs=[]
     for number in (1,2):
@@ -64,18 +68,21 @@ def document():
                     event=dict(operation=op,ordinal=counts[op],offset=request["offset"],
                         length=request["length"],status="completed")
                     if op=="write":event["payload_sha256"]=next(written)
-                    if position==len(requests)-1:event.update(status="cut-no-reply",injection=plan)
+                    if position==len(requests)-1:
+                        event.update(status="cut-no-reply" if iscut else "failed-no-success",injection=plan)
+                        if plan["effect"] in ("short-error","torn-cut"):event["persisted_prefix_bytes"]=255
                     rows.extend([request,dict(type="event",event=event)])
-                rows.append(dict(type="terminal",outcome="cut",fault_hit=True,failed=False))
-                summary=audit.scan(rows,plan,ready);code=20;problem="cut"
+                if iscut or data_exit==21:
+                    rows.append(dict(type="terminal",outcome="cut" if iscut else "failed",fault_hit=True,failed=not iscut))
+                summary=audit.scan(rows,plan,ready);code=data_exit;problem="cut" if iscut else "backend-failed"
             else:
                 if number==2 and index==0:
                     for sector in range(194):
                         rows.extend([dict(type="request",operation="read",offset=sector*512,length=512),
                             dict(type="event",event=dict(operation="read",ordinal=sector+1,
                                 offset=sector*512,length=512,status="completed"))])
-                rows.append(dict(type="terminal",outcome="failed",fault_hit=False,failed=False))
-                summary=persistence.audit(rows,role,ready,number==2);code=21;problem="backend-failed"
+                if peer_exit==21:rows.append(dict(type="terminal",outcome="failed",fault_hit=False,failed=False))
+                summary=persistence.audit(rows,role,ready,number==2);code=peer_exit;problem="backend-failed"
             reports.append(dict(returncode=code,problem=problem,records=rows,joined=True))
             summaries.append(summary)
         cut=dict(vm_pid=number+100,vm_returncode=-9,backends=reports,joined=True)
@@ -85,21 +92,25 @@ def document():
             event_receipts=[dict(event_index=0,request_id=cont)],qmp_drained=True,
             serial="RAR-MODERN:GUI-READY\n")
         if number==1:
-            cut["entry"]=dict(vm_code=None,backend_codes=[20,None,None],
-                backend_problems=["cut",None,None],event_count=1)
+            cut["entry"]=dict(vm_code=None,backend_codes=[20 if iscut else None,None,None],
+                backend_problems=["cut" if iscut else None,None,None],event_count=1)
             hit=summaries[0]
             proof["fault"]={key:hit[key] for key in ("request_index","event_index","offset","length")}
-            proof["fault"].update(plan=plan,delivery=dict(code=20,problem="cut",eof=True))
+            proof["fault"].update(plan=plan,delivery=dict(code=20 if iscut else None,
+                problem="cut" if iscut else None,eof=iscut))
         proofs.append(proof)
-    return dict(schema="rar-modern-data-fault-candidate-v0",case=0,plan=plan,reverse_flush=False,
+    return dict(schema="rar-modern-data-fault-candidate-v0",case=case,plan=plan,reverse_flush=False,
         challenge=value,frames=frames,vm_proofs=proofs,initial_data_sha256=base.sha(data),
-        frozen_data_sha256=base.sha(data),initial_data_base64=base64.b64encode(data).decode("ascii"),
-        frozen_data_base64=base64.b64encode(data).decode("ascii"),expected_revision=0,
-        expected_classification=scenario.expected_state(plan),system_sha256=base.sha(bytes(8388608)),
+        frozen_data_sha256=base.sha(frozen),initial_data_base64=base64.b64encode(data).decode("ascii"),
+        frozen_data_base64=base64.b64encode(frozen).decode("ascii"),expected_revision=revision,
+        expected_classification=state,system_sha256=base.sha(bytes(8388608)),
         boot_sha256="a"*64,status="observed-not-independently-accepted",milestone_complete=False)
 
 class Tests(unittest.TestCase):
     def check(self,doc):
+        return self.check_raw(evidence.canonical(doc),doc["case"])
+
+    def check_raw(self,raw,case=0):
         # Topology parser has its own real fixtures; this isolates retained
         # envelope/commands/audit/lifecycle validation with an inert topology.
         modules={"runtime_evidence":base,"fault_scenarios":scenario,"visual_oracle":visual,
@@ -107,7 +118,7 @@ class Tests(unittest.TestCase):
             "persistence":persistence,"fault_audit":audit,"fault_events":fault_events,"fault_replay":replay}
         with patch.object(evidence,"helper",side_effect=modules.__getitem__), \
              patch.object(profile,"validate_preflight",return_value=dict(rtc_path="/machine/unattached/device[7]")):
-            return evidence.validate(evidence.canonical(doc),0,"a"*64,(1966080,131072))
+            return evidence.validate(raw,case,"a"*64,(1966080,131072))
 
     def test_positive_inert_retained_capture(self):
         result=self.check(document())
@@ -153,6 +164,44 @@ class Tests(unittest.TestCase):
             with self.assertRaises(ValueError):self.check(changed)
         changed=copy.deepcopy(doc);changed["extra"]=0
         with self.assertRaises(ValueError):self.check(changed)
+
+    def test_representative_complete_envelopes_and_termination_mutations(self):
+        for case,data_exit,peer_exit in ((0,20,-9),(2,-9,21),(4,21,-9),
+                (17,-9,-9),(24,21,21),(28,20,21),(41,20,-9),(56,20,21)):
+            doc=document(case,data_exit,peer_exit)
+            self.assertTrue(self.check(doc)["content_validated"])
+            for path,value in (
+                (("vm_proofs",0,"fault","delivery","code"),99),
+                (("vm_proofs",0,"cut","entry","backend_codes",0),99),
+                (("vm_proofs",0,"cut","backends",0,"returncode"),99),
+                (("vm_proofs",0,"cut","backends",0,"problem"),"unknown"),
+                (("vm_proofs",0,"cut","backends",1,"returncode"),0)):
+                changed=copy.deepcopy(doc);at=changed
+                for key in path[:-1]:at=at[key]
+                at[path[-1]]=value
+                with self.subTest(case=case,path=path):
+                    with self.assertRaises(ValueError):self.check(changed)
+            changed=copy.deepcopy(doc);report=changed["vm_proofs"][0]["cut"]["backends"][0]
+            event=next(row["event"] for row in report["records"]
+                if row.get("type")=="event" and "injection" in row["event"])
+            event["status"]="completed"
+            with self.assertRaises(ValueError):self.check(changed)
+            if report["records"][-1].get("type")=="terminal":
+                changed=copy.deepcopy(doc)
+                changed["vm_proofs"][0]["cut"]["backends"][0]["records"].pop()
+                with self.assertRaises(ValueError):self.check(changed)
+
+    def test_raw_parser_boundary(self):
+        raw=evidence.canonical(document())
+        values=(b"",raw[:-1],raw+b"x",b'{"a":1,"a":2}\n',
+            b'{"a":{"b":1,"b":2}}\n',b'{"a":NaN}\n',b'{"a":Infinity}\n',
+            b'[]\n',b'null\n',b'"x"\n',b'{}\n',b' {"a":1}\n',
+            b'{"b":1,"a":2}\n',b'\xff\n',b'{"x":"\xc3\xa9"}\n',
+            b"x"*(64*1024*1024+1))
+        for malformed in values:
+            with self.assertRaises(ValueError):self.check_raw(malformed)
+        spaced=raw.replace(b'":',b'": ',1)
+        with self.assertRaises(ValueError):self.check_raw(spaced)
 
     def test_live_fault_clock_receipt_is_not_post_reap(self):
         doc=document();proof=doc["vm_proofs"][0]
