@@ -138,7 +138,7 @@ pub struct Cutover {pub previous:Option<Endpoint>,pub current:Endpoint}
 // bridge must populate this kernel-owned object from the exact sealed verified
 // image. Only cfg(test) fixtures can create one at this unactivated checkpoint.
 #[derive(Clone,Copy)]
-struct StagedImage {seal:u64,digest:[u8;32],generation:u64,signed_budget:u32}
+struct StagedImage {seal:u64,slot:u8,digest:[u8;32],generation:u64,signed_budget:u32}
 pub struct Runtime {
     processes:[Process;TASKS],bindings:[Option<Endpoint>;PRINCIPALS],
     clock:u64,next_token:u64,trial:Option<Trial>,staged:Option<StagedImage>,recovery_required:bool,
@@ -225,7 +225,11 @@ impl Runtime {
         let budget=stage.signed_budget;
         let previous=self.bindings[5];
         if previous.is_some_and(|e|!self.endpoint_alive(e)){return Err(Error::Stale);}
-        let index=[5usize,7].into_iter().find(|&i|self.processes[i].state==State::Vacant).ok_or(Error::Busy)?;
+        // The staging bridge reserves one physically Clean slot before copying.
+        // Never select another vacant slot after verification of sealed bytes.
+        let index=stage.slot as usize;
+        if !matches!(index,5|7){return Err(Error::Invalid);}
+        if self.processes[index].state!=State::Vacant{return Err(Error::Busy);}
         let incarnation=self.clock.checked_add(1).ok_or(Error::Exhausted)?;
         let next_token=self.next_token.checked_add(1).ok_or(Error::Exhausted)?;
         let endpoint=Endpoint {slot:index as u8,incarnation};
@@ -349,7 +353,8 @@ mod tests {
     use super::*;
     fn manager(r:&Runtime)->u64{r.handle(8,MANAGER_CAP).unwrap()}
     fn stage(r:&mut Runtime,seal:u64,budget:u32){
-        r.staged=Some(StagedImage {seal,digest:[0x42;32],generation:7,signed_budget:budget});
+        let slot=[5usize,7].into_iter().find(|&i|r.processes[i].state==State::Vacant).unwrap_or(7);
+        r.staged=Some(StagedImage {seal,slot:slot as u8,digest:[0x42;32],generation:7,signed_budget:budget});
     }
     fn prepare(r:&mut Runtime,seal:u64,budget:u32)->Trial{
         stage(r,seal,budget);r.begin_trial(8,manager(r),seal).unwrap()
@@ -357,6 +362,34 @@ mod tests {
     fn healthy(r:&mut Runtime)->Trial{
         let t=prepare(r,23,50);
         r.ready(t.endpoint.slot as usize,r.handle(t.endpoint.slot as usize,HEALTH_CAP).unwrap(),t.token).unwrap();t
+    }
+    #[test] fn trial_uses_exact_reserved_slot_not_first_vacant_slot() {
+        let mut r=Runtime::new();
+        r.fault(Endpoint{slot:5,incarnation:1}).unwrap();
+        assert_eq!(r.state(5),Ok(State::Vacant));
+        assert_eq!(r.state(7),Ok(State::Vacant));
+        stage(&mut r,91,2);r.staged.as_mut().unwrap().slot=7;
+        let trial=r.begin_trial(8,manager(&r),91).unwrap();
+        assert_eq!(trial.endpoint.slot,7);
+        assert_eq!(r.state(5),Ok(State::Vacant));
+        assert_eq!(r.state(7),Ok(State::Trial));
+    }
+    #[test] fn invalid_or_occupied_reservation_never_consumes_stage_or_identity() {
+        let mut r=Runtime::new();stage(&mut r,92,3);
+        let clock=r.clock;let token=r.next_token;let prior=r.binding(5).unwrap();
+        for slot in [0,4,6,8,15,16,255] {
+            r.staged.as_mut().unwrap().slot=slot;
+            assert_eq!(r.begin_trial(8,manager(&r),92),Err(Error::Invalid));
+            assert_eq!(r.staged.unwrap().slot,slot);
+            assert_eq!(r.clock,clock);assert_eq!(r.next_token,token);
+            assert!(r.trial.is_none());assert_eq!(r.binding(5).unwrap(),prior);
+        }
+        r.staged.as_mut().unwrap().slot=5;
+        assert_eq!(r.begin_trial(8,manager(&r),92),Err(Error::Busy));
+        assert_eq!(r.staged.unwrap().slot,5);assert_eq!(r.state(7),Ok(State::Vacant));
+        assert_eq!(r.clock,clock);assert_eq!(r.next_token,token);
+        r.staged.as_mut().unwrap().slot=7;
+        assert_eq!(r.begin_trial(8,manager(&r),92).unwrap().endpoint.slot,7);
     }
     #[test] fn delivered_irq_charges_only_the_exact_trial_and_expires_once() {
         let mut r=Runtime::new();let t=prepare(&mut r,71,2);

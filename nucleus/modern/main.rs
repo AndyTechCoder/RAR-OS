@@ -3,6 +3,7 @@
 mod model;
 mod support;
 mod retirement;
+mod staging;
 mod native_pio;
 #[path="../platform/arch.rs"] mod arch;
 #[path="../platform/display.rs"] pub(crate) mod display;

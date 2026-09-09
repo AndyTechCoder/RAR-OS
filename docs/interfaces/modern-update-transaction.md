@@ -181,3 +181,40 @@ branch is source-reviewed, not exercised by those model tests. These are source/
 a real signed replacement demonstration. Staging, trial process construction,
 physical unmap/TLB invalidation/zero-before-reuse and durable cutover remain
 required before any replacement or M4 completion claim.
+
+## Bounded staging bytes and slot binding implementation
+
+The nucleus now has a no-allocation staging byte buffer in
+nucleus/modern/staging.rs. Its backing region is exactly513 pages
+(2,101,248 bytes), with a logical package length from896 through2,097,536 bytes.
+The external native adapter must provide the guarded, exclusively owned region;
+this Rust type does not allocate it or establish page-table protection.
+
+One accepted begin consumes a nonzero full-u64 seal and binds the kernel-selected
+Settings slot5 or7 and exact logical length. Copy requests are1..512 bytes,
+strictly sequential, and cannot overlap, skip, overrun or replay. Rejections do
+not change bytes/progress. Complete copying is required before a shared byte
+view; the page-rounded tail remains zero. Clear zeros the full buffer and
+invalidates the transaction without reusing its seal. Exhaustion refuses later
+transactions rather than wrapping.
+
+The lifecycle staged record now retains its reserved slot. begin_trial uses
+that exact slot, rejects invalid or occupied reservations without consuming
+staged state/counters, and never substitutes another vacant slot. The production
+staged-record insertion bridge is still absent: test fixtures cannot activate
+a runtime trial.
+
+These are actual byte-copy and logical-binding primitives, not a claim of
+physical sealing or live replacement. Before activating the native bridge:
+reserve a logically Vacant and physically Clean slot; extend the Modern-only
+arena with guards; remove all writable aliases before exposing a verifier view;
+remove the verifier view before trial scheduling; and retire mappings/TLBs before
+clear or reuse. The safe Rust borrow alone cannot enforce cross-address-space
+aliases. No new syscall or device authority is enabled by this checkpoint.
+
+Focused cloud tests cover the exact maximum package and zero padding, invalid
+backing sizes/slots/lengths, partial copies, stale/full-width seals, ordering,
+duplicate finish, whole-buffer clear after large-to-small reuse, exhaustion,
+exact reserved-slot selection with two vacancies and occupied/invalid reservation
+refusals preserving state. Actual VM staging/immutable-view/trial tests remain
+part of the integrated M4.2 acceptance path.
