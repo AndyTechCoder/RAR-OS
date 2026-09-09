@@ -58,7 +58,7 @@ class Tests(unittest.TestCase):
         from types import SimpleNamespace as NS
         snapshot=h.module("source_snapshot")
         receipts=h.module("construction_artifacts").RECEIPTS
-        for failure in (None,"compiler","tag","sysroot","client"):
+        for failure in (None,"compiler","tag","sysroot","client","config-budget"):
             root=Path(tempfile.mkdtemp(prefix="rar-handoff-pipeline-"))
             here=root/"controller/tools/rar-lab/modern";here.mkdir(parents=True)
             for name,raw in (("compiler_driver.rs",b"fn main() {}\n"),
@@ -179,8 +179,8 @@ class Tests(unittest.TestCase):
                 "compiler_driver_layer":NS(build=lambda *a:(b"driver layer",{})),
                 "derived_compiler_image":NS(
                     build=lambda *a:(b"derived",{"image":images["derived"]}),inspect=lambda *a:None,
-                    _parts=lambda raw:{images["derived"][7:]+".json":h.canonical(
-                        {"rootfs":{"diff_ids":diffs["derived"]},"config":compiler_process})}),
+                    _parts=lambda raw:{images["derived"][7:]+".json":memoryview(b" "*65537 if failure=="config-budget" else h.canonical(
+                        {"rootfs":{"diff_ids":diffs["derived"]},"config":compiler_process}))}),
                 "adapter_image":NS(notices_from_parent=lambda *a:{"licenses/public":b"notice"},
                     build=lambda *a:(b"adapter",adapter_report),inspect=lambda *a:None,PROCESS=process),
                 "compiler_runner":NS(execute=compile_adapter),
@@ -202,13 +202,13 @@ class Tests(unittest.TestCase):
                 else:h.main()
             manifest=h.unique((root/"modern-crypto-evidence/manifest.json").read_bytes())
             self.assertEqual(build_count,0 if failure=="client" else 1 if failure in ("tag","sysroot") else 2)
-            self.assertEqual(compile_count,0 if failure in ("tag","sysroot","client") else 2)
+            self.assertEqual(compile_count,0 if failure in ("tag","sysroot","client","config-budget") else 2)
             self.assertEqual(len(api_calls),4)
             self.assertFalse(manifest["milestone_complete"])
             if failure is not None:
                 self.assertEqual(adapter_count,0)
-                self.assertEqual(loaded,[b"compiler"] if failure in ("tag","sysroot","client") else [b"compiler",b"derived"])
-                self.assertEqual(manifest["phase"],"driver-construction" if failure in ("tag","sysroot","client") else "adapter-compilation")
+                self.assertEqual(loaded,[b"compiler"] if failure in ("tag","sysroot","client","config-budget") else [b"compiler",b"derived"])
+                self.assertEqual(manifest["phase"],"derived-compiler" if failure=="config-budget" else "driver-construction" if failure in ("tag","sysroot","client") else "adapter-compilation")
                 self.assertEqual(manifest["status"],"failed")
                 if failure=="client":
                     lines=diagnostics.getvalue().splitlines()

@@ -531,7 +531,11 @@ def main():
         derived.inspect(image_raw,parent,driver_layer,sha(drivers[0]),source_layer,target,source_report["files"])
         evidence.retain("derived-compiler.json",canonical(image_report))
         # The derived helper reports the exact ordered rootfs as layer digests.
-        parsed=unique(derived._parts(image_raw)[image_report["image"][7:]+".json"])
+        config_raw=derived._parts(image_raw)[image_report["image"][7:]+".json"]
+        # _parts intentionally returns immutable views over large archives.
+        # Copy only this bounded JSON member, never the multi-gigabyte layers.
+        if len(config_raw)>65536:raise Invalid("derived config JSON budget")
+        parsed=unique(bytes(config_raw))
         load_report={"image":image_report["image"],"diff_ids":parsed["rootfs"]["diff_ids"]}
         compiler_image=load_image(image_raw,load_report,parsed["config"])
         del image_raw

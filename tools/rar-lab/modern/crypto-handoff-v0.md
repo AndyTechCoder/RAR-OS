@@ -196,3 +196,16 @@ Newlines and non-ASCII bytes are escaped; workflow-command text stays inert.
 Artifact HTTP acquisition is not part of this command path. Tests force a
 client failure before any build and verify bounded tails and escaped framing.
 This avoids needing a separate artifact-reader change for ordinary tool errors.
+
+## Derived-config view compatibility
+
+Corrected diagnostic34339075018/job102425323963 passed the preceding
+source/inventory/driver-construction stages and failed in derived-compiler with
+TypeError: JSON input was a memoryview. The image helper intentionally indexes
+large archive members as immutable views; the handoff incorrectly passed that
+view directly to json.loads. The controller now enforces the 65536-byte config
+budget before copying only that JSON member to bytes. Image/layer data remains
+view-backed, and every existing derived inspection and image identity gate stays
+in place. The integrated test now returns a memoryview at the same helper seam,
+so its previous bytes-only mock cannot conceal this mismatch.
+This is not adapter compilation, interoperability, or milestone acceptance.
