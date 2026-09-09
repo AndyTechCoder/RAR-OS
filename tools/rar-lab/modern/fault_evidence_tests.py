@@ -213,6 +213,44 @@ class Tests(unittest.TestCase):
         proof["cut"]["entry"]["event_count"]=1
         with self.assertRaises(ValueError):self.check(doc)
 
+    def test_planned_data_error_report_is_narrowly_bound(self):
+        for case in (0,2,30,32):
+            doc=document(case);proof=doc["vm_proofs"][0]
+            event=dict(event="BLOCK_IO_ERROR",timestamp=dict(seconds=1,microseconds=2),
+                data={"device":"","node-name":"rar-data","operation":"write",
+                      "action":"report","reason":"Input/output error"})
+            proof["events"].append(event)
+            proof["event_receipts"].append(dict(event_index=1,request_id=None))
+            proof["cut"]["entry"]["event_count"]=2
+            self.assertTrue(self.check(doc)["content_validated"])
+            proof["event_receipts"][1]["request_id"]=proof["commands"][-1]["id"]
+            self.assertTrue(self.check(doc)["content_validated"])
+            for field,value in (("node-name","rar-system"),("node-name","rar-boot"),
+                ("device","rar-data-disk"),("operation","read"),("action","stop"),
+                ("action","ignore"),("reason","x"*257),("reason","bad"+chr(10)+"line"),("reason",chr(127)),("reason",None)):
+                bad=copy.deepcopy(doc);bad["vm_proofs"][0]["events"][1]["data"][field]=value
+                with self.subTest(case=case,field=field,value=value):
+                    with self.assertRaises(ValueError):self.check(bad)
+            for name in ("STOP","RESET","SHUTDOWN","GUEST_PANICKED"):
+                bad=copy.deepcopy(doc);bad["vm_proofs"][0]["events"][1]["event"]=name
+                with self.assertRaises(ValueError):self.check(bad)
+            bad=copy.deepcopy(doc);bad["vm_proofs"][0]["event_receipts"][1]["request_id"]=proof["commands"][-2]["id"]
+            with self.assertRaises(ValueError):self.check(bad)
+            bad=copy.deepcopy(doc);bad["vm_proofs"][0]["cut"]["entry"]["event_count"]=1
+            with self.assertRaises(ValueError):self.check(bad)
+            bad=copy.deepcopy(doc);p=bad["vm_proofs"][0]
+            p["events"].append(copy.deepcopy(event))
+            p["event_receipts"].append(dict(event_index=2,request_id=None))
+            p["cut"]["entry"]["event_count"]=3
+            with self.assertRaises(ValueError):self.check(bad)
+            bad=copy.deepcopy(doc);bad["vm_proofs"][0]["fault"]["delivery"]["code"]=99
+            with self.assertRaises(ValueError):self.check(bad)
+            # A fresh read-only recovery VM never receives an injected fault.
+            bad=document(case);p=bad["vm_proofs"][1]
+            p["events"].append(copy.deepcopy(event))
+            p["event_receipts"].append(dict(event_index=1,request_id=None))
+            with self.assertRaises(ValueError):self.check(bad)
+
     def test_rehashed_tampering_does_not_hide_changed_bytes(self):
         doc=document()
         raw=bytearray(base.decoded(doc["frozen_data_base64"],99328));raw[1536]^=1
