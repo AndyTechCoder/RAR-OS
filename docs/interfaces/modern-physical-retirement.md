@@ -43,3 +43,14 @@ A cloud VM must still demonstrate the retirement path and surviving desktop;
 later trial/replacement/reuse tests must prove stale accesses fail and no
 candidate becomes runnable before complete construction. The serial marker
 RAR-MODERN:PRIVATE-MEMORY-RETIRED follows physical completion, not logical death.
+
+The process records both its exact reserved PT address and table allocation
+count. Retirement walks the existing table path without allocation and checks
+that it still resolves to that address, then repeats the empty-path check after
+removal. Victim root clear and all removed PTEs receive volatile readback.
+Before future begin_trial integration, every model-selectable vacant slot must
+be physically Clean before staged state is consumed; checking only after model
+allocation is too late. That allocation bridge does not exist in this change.
+If no survivor reaches a trap, Retiring remains unavailable indefinitely; no
+fallback path marks it Clean. Volatile VM-memory clearing is not a claim about
+physical DRAM remanence or hypervisor memory sanitization.

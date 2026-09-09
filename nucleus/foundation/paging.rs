@@ -68,8 +68,16 @@ impl Tables {
     /// may fill it with supervisor RW/NX entries during deferred retirement.
     #[cfg(rar_modern)]
     pub unsafe fn reserve_modern_aperture(&mut self)->Result<u64,Error>{
-        let first=unsafe{self.leaf(0x1000000,true)?};
-        if first as u64%4096!=0{return Err(Error::Invalid);}
+        unsafe{self.leaf(0x1000000,true)?;}
+        unsafe{self.modern_aperture()}
+    }
+    /// Validate the already reserved empty aperture without allocating pages.
+    /// Caller exclusively owns the live current table pool with IF=0.
+    #[cfg(rar_modern)]
+    pub unsafe fn modern_aperture(&mut self)->Result<u64,Error>{
+        if !(1..=256).contains(&self.used){return Err(Error::Invalid);}
+        let first=unsafe{self.leaf(0x1000000,false)?};
+        if (first as u64)%4096!=0{return Err(Error::Invalid);}
         for i in 0..512{
             if unsafe{first.add(i).read()}!=0{return Err(Error::Overlap);}
         }

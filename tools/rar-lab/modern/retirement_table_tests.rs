@@ -27,6 +27,8 @@ mod tests{
         // SAFETY: only the fresh test-owned 1 MiB pool is accessed; reservation
         // performs no CR3 write, INVLPG, syscall, device I/O or target execution.
         let mut tables=unsafe{paging::Tables::new(base)};
+        assert!(unsafe{tables.modern_aperture()}.is_err());
+        assert_eq!(tables.used(),1);
         let leaf=unsafe{tables.reserve_modern_aperture().unwrap()};
         assert_eq!(leaf%4096,0);
         assert!(leaf>=base+4096&&leaf<base+tables.used() as u64*4096);
@@ -34,9 +36,12 @@ mod tests{
         let used=tables.used();
         assert_eq!(unsafe{tables.reserve_modern_aperture().unwrap()},leaf);
         assert_eq!(tables.used(),used);
+        assert_eq!(unsafe{tables.modern_aperture().unwrap()},leaf);
+        assert_eq!(tables.used(),used);
         // Any residue, even a nonpresent software value, forbids reservation.
         unsafe{(leaf as *mut u64).add(511).write(2);}
         assert!(unsafe{tables.reserve_modern_aperture()}.is_err());
+        assert!(unsafe{tables.modern_aperture()}.is_err());
     }
     #[test]fn aperture_actual_capacity_failure_never_escapes_pool(){
         let pool=Pool::new();let base=pool.address();

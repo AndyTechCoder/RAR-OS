@@ -37,12 +37,12 @@ static SERVICE:&[u8]=include_bytes!("/tmp/modern-service.efi");
 static SERVICE:&[u8]=&[];
 #[derive(Clone,Copy)]
 struct Process{
-    memory:retirement::Memory,aperture:u64,
+    memory:retirement::Memory,aperture:u64,table_used:usize,
     state:State,generation:u64,root:u64,kernel_bottom:u64,kernel_top:u64,frame:u64,
     ranges:[UserRange;24],range_count:usize,preemptions:u64,entry:u64,
 }
 impl Process{
-    const EMPTY:Self=Self{memory:retirement::Memory::Clean,aperture:0,state:State::Dead,generation:1,root:0,kernel_bottom:0,kernel_top:0,frame:0,
+    const EMPTY:Self=Self{memory:retirement::Memory::Clean,aperture:0,table_used:0,state:State::Dead,generation:1,root:0,kernel_bottom:0,kernel_top:0,frame:0,
         ranges:[EMPTY_RANGE;24],range_count:0,preemptions:0,entry:0};
     fn range(&mut self,start:u64,end:u64,writable:bool,executable:bool){
         if self.range_count>=self.ranges.len()||start>=end||writable&&executable{fatal("RAR-PANIC:CODE=USER-RANGE");}
@@ -149,6 +149,7 @@ pub unsafe fn start(info:&boot::BootInfo)->!{
         process.frame=frame;
         process.aperture=unsafe{tables.reserve_modern_aperture()}
             .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=RETIRE-APERTURE"));
+        process.table_used=tables.used();
         process.memory=retirement::Memory::Live;
     }
     // Retire writable bootstrap aliases as well, before executing any user page.
@@ -283,7 +284,11 @@ impl Runtime{
     /// therefore never erase current here or call this after selecting a root.
     fn retire_pending(&mut self){
         let current=self.current;
-        if self.processes[current].memory!=retirement::Memory::Live{
+        let owner=self.processes[current];
+        let expected=private_region(self.arena,current);
+        if owner.memory!=retirement::Memory::Live||owner.root!=expected||
+            owner.kernel_bottom!=expected+KERNEL_BOTTOM||owner.kernel_top!=expected+KERNEL_TOP||
+            !(1..=256).contains(&owner.table_used){
             fatal("RAR-PANIC:CODE=RETIRE-CURRENT");
         }
         let root:u64;let cr4:u64;let flags:u64;
@@ -312,6 +317,10 @@ impl Runtime{
             // user translations. IF=0 prevents scheduling during the operation.
             // The empty aperture is supervisor-only RW/NX, never exported.
             unsafe{
+                let mut tables=Tables::resume(owner.root,owner.table_used);
+                if tables.modern_aperture()!=Ok(plan.leaf){
+                    fatal("RAR-PANIC:CODE=RETIRE-TABLE-PATH");
+                }
                 let leaf=plan.leaf as *mut u64;
                 for i in 0..retirement::APERTURE_PAGES{
                     if leaf.add(i).read_volatile()!=0{fatal("RAR-PANIC:CODE=RETIRE-ALIAS");}
@@ -319,6 +328,11 @@ impl Runtime{
                 // Inactive victim root is supervisor identity-mapped here.
                 // Destroy every user/executable mapping before writable scrub.
                 for i in 0..512{(plan.victim as *mut u64).add(i).write_volatile(0);}
+                for i in 0..512{
+                    if (plan.victim as *const u64).add(i).read_volatile()!=0{
+                        fatal("RAR-PANIC:CODE=RETIRE-ROOT");
+                    }
+                }
                 for i in 0..retirement::APERTURE_PAGES{
                     leaf.add(i).write_volatile((plan.victim+i as u64*4096)|3|(1<<63));
                 }
@@ -335,6 +349,12 @@ impl Runtime{
                 for i in 0..retirement::APERTURE_PAGES{
                     let address=retirement::APERTURE+i as u64*4096;
                     core::arch::asm!("invlpg [{}]",in(reg)address,options(nostack,preserves_flags));
+                }
+                if tables.modern_aperture()!=Ok(plan.leaf){
+                    fatal("RAR-PANIC:CODE=RETIRE-ALIAS-REMOVAL");
+                }
+                for i in 0..retirement::APERTURE_PAGES{
+                    if leaf.add(i).read_volatile()!=0{fatal("RAR-PANIC:CODE=RETIRE-ALIAS-REMOVAL");}
                 }
             }
             // No fallible work after this clean publication; a logical vacancy
