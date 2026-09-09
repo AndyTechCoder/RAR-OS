@@ -218,3 +218,22 @@ duplicate finish, whole-buffer clear after large-to-small reuse, exhaustion,
 exact reserved-slot selection with two vacancies and occupied/invalid reservation
 refusals preserving state. Actual VM staging/immutable-view/trial tests remain
 part of the integrated M4.2 acceptance path.
+
+### Native arena backing (source integration; VM proof pending)
+
+Modern alone now allocates9731 pages: the historical9216-page arena, one lower
+guard,513 staging pages and one upper guard. Foundation without Platform retains
+1024 pages; historical Platform/Desktop retain9216 pages. The lower guard starts
+at arena+0x2400000, immediately after all16 private2MiB process strides.
+The staging bytes start one page later; the upper guard follows the513 pages.
+Both bootstrap and each Modern process root omit these guards. The buffer has
+no user mapping and is non-executable in the existing supervisor arena mappings.
+
+The kernel validates exact total pages, alignment, lower bound, checked end
+below/equal4GiB and region arithmetic before creating its single boot-lifetime
+Buffer owner. Reinitializing an already present owner halts instead of resetting
+the seal sequence. This initializes actual backing memory but does not yet
+enable System copy syscalls, manager views or trial construction. Before any
+such publication the adapter must still remove all writable aliases and
+invalidate translations; before reuse it must perform the required non-elidable
+physical clear/readback. No VM runtime proof is claimed from this source change.

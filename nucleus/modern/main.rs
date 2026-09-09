@@ -3,7 +3,7 @@
 mod model;
 mod support;
 mod retirement;
-mod staging;
+pub(crate) mod staging;
 mod native_pio;
 #[path="../platform/arch.rs"] mod arch;
 #[path="../platform/display.rs"] pub(crate) mod display;
@@ -56,15 +56,17 @@ impl Process{
 struct Runtime{
     processes:[Process;TASKS],current:usize,arena:u64,proofs:u8,ready:bool,
     policy:Option<model::Runtime>,device:Option<native_pio::Adapter>,ticks:Option<u64>,
+    staging:Option<staging::Buffer<'static>>,
 }
 static mut RUNTIME:Runtime=Runtime{processes:[Process::EMPTY;TASKS],current:0,arena:0,proofs:0,ready:false,
-    policy:None,device:None,ticks:Some(0)};
+    policy:None,device:None,ticks:Some(0),staging:None};
 fn private_region(arena:u64,index:usize)->u64{
     retirement::region(arena,boot::ARENA_PAGES,index)
         .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=PRIVATE-GEOMETRY"))
 }
 fn omit(arena:u64,address:u64)->bool{
     let offset=address-arena;
+    if staging::guard_offset(offset){return true;}
     if [boot::STACK_GUARD,boot::STACK_TOP,0x160000,boot::EMERGENCY_TOP].contains(&offset){return true;}
     for index in 0..TASKS{
         let base=PRIVATE_BASE+index as u64*STRIDE;
@@ -105,6 +107,18 @@ pub unsafe fn start(info:&boot::BootInfo)->!{
     let layout=pe::parse(SERVICE).unwrap_or_else(|_|fatal("RAR-PANIC:CODE=SERVICE-PE"));
     let runtime=unsafe{&mut *ptr::addr_of_mut!(RUNTIME)};
     runtime.arena=info.arena;
+    let stage_region=staging::region(info.arena,boot::ARENA_PAGES)
+        .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=STAGING-GEOMETRY"));
+    if runtime.staging.is_some(){fatal("RAR-PANIC:CODE=STAGING-REINITIALIZE");}
+    // SAFETY: UEFI allocated/zeroed this exact Modern arena before entering.
+    // Checked513-page region is disjoint from all16 process strides, stack/
+    // table/Boot allocations and both unmapped guards. No user mappings name
+    // it. Kernel start runs once with IF=0 before any process. This sole static
+    // mutable borrow remains owned by Runtime for the whole boot session;
+    // no recovery path may reconstruct Buffer and reset the seal sequence.
+    runtime.staging=Some(staging::Buffer::new(unsafe{
+        core::slice::from_raw_parts_mut(stage_region.start as *mut u8,staging::BUFFER_BYTES)
+    }).unwrap_or_else(|_|fatal("RAR-PANIC:CODE=STAGING-BUFFER")));
     runtime.policy=Some(model::Runtime::new());
     for index in support::INITIAL{
         let handoff=support::bootstrap(runtime.policy.as_ref().unwrap(),index,layout.entry,

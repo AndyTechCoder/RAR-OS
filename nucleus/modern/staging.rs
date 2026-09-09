@@ -9,6 +9,24 @@ pub const MIN_PACKAGE:usize=MANIFEST_BYTES+512;
 pub const MAX_PACKAGE:usize=MANIFEST_BYTES+2*1024*1024;
 pub const BUFFER_BYTES:usize=513*4096;
 pub const MAX_CHUNK:usize=512;
+pub const PRIVATE_PAGES:usize=9216;
+pub const ARENA_PAGES:usize=PRIVATE_PAGES+513+2;
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub struct Region {pub lower_guard:u64,pub start:u64,pub end:u64,pub arena_end:u64}
+pub fn guard_offset(offset:u64)->bool {
+    offset==PRIVATE_PAGES as u64*4096||offset==(ARENA_PAGES as u64-1)*4096
+}
+/// Exact Modern-only extension. Existing 16 process strides end immediately
+/// before lower_guard; neither guard belongs to the backing byte slice.
+pub fn region(arena:u64,pages:usize)->Result<Region,Error>{
+    if pages!=ARENA_PAGES||arena<0x2000000||arena%4096!=0{return Err(Error::Bounds);}
+    let arena_end=arena.checked_add(ARENA_PAGES as u64*4096).ok_or(Error::Bounds)?;
+    if arena_end>0x1_0000_0000{return Err(Error::Bounds);}
+    let lower_guard=arena+PRIVATE_PAGES as u64*4096;
+    let start=lower_guard+4096;let end=start+BUFFER_BYTES as u64;
+    if end+4096!=arena_end{return Err(Error::Bounds);}
+    Ok(Region{lower_guard,start,end,arena_end})
+}
 
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 pub enum Error {Bounds,Busy,Stale,Order,Incomplete,Exhausted,State}
@@ -28,6 +46,8 @@ pub struct Buffer<'a> {
     bytes:&'a mut [u8],phase:Phase,identity:Option<Identity>,copied:usize,next:Option<u64>,
 }
 impl<'a> Buffer<'a> {
+    /// Construct once per kernel boot session. Do not reconstruct to recover a
+    /// failed transaction: that would reset seals while stale requests exist.
     pub fn new(bytes:&'a mut [u8])->Result<Self,Error>{
         if bytes.len()!=BUFFER_BYTES{return Err(Error::Bounds);}
         bytes.fill(0);
@@ -97,6 +117,23 @@ mod tests{
         while offset<id.length(){
             let n=MAX_CHUNK.min(id.length()-offset);
             b.append(id.seal(),offset,&chunk[..n]).unwrap();offset+=n;
+        }
+    }
+    #[test] fn native_region_is_guarded_disjoint_and_bounded(){
+        assert_eq!(ARENA_PAGES,9731);
+        for arena in [0x2000000,0x4000000,0x1_0000_0000-ARENA_PAGES as u64*4096]{
+            let r=region(arena,ARENA_PAGES).unwrap();
+            assert_eq!(r.lower_guard,arena+0x2400000);
+            assert_eq!(r.start%4096,0);assert_eq!(r.end-r.start,BUFFER_BYTES as u64);
+            assert!(guard_offset(r.lower_guard-arena));assert!(guard_offset(r.end-arena));
+            assert!(!guard_offset(r.start-arena));assert!(!guard_offset(r.end-arena-4096));
+            assert_eq!(r.arena_end-r.end,4096);
+            assert_eq!((0..ARENA_PAGES).filter(|&p|guard_offset(p as u64*4096)).count(),2);
+        }
+        for (arena,pages) in [(0,ARENA_PAGES),(0x2000001,ARENA_PAGES),
+            (0x2000000,9216),(0x2000000,ARENA_PAGES-1),(0x2000000,ARENA_PAGES+1),
+            (u64::MAX-4095,ARENA_PAGES),(0xfffff000,ARENA_PAGES)]{
+            assert_eq!(region(arena,pages),Err(Error::Bounds));
         }
     }
     #[test] fn exact_maximum_package_and_padding_survive_seal(){
