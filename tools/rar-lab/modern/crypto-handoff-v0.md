@@ -151,3 +151,8 @@ Future comparison failures print the bounded phase/type and, outside the
 credential-sensitive acquisition phase, the retained validation error as one
 escaped JSON line. They still retain the full evidence artifact and fail.
 No guard, acceptance condition or retry rule changes.
+
+Receipt verification uses exact types and values for every fixed field, including
+both canonical repository numeric IDs and names on the run and both repository
+IDs on the artifact receipt. Booleans cannot alias integer run attempts. Pure
+negative tests mutate/delete every fixed leaf and exercise type aliases.

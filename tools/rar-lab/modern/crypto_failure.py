@@ -30,19 +30,30 @@ def unique(raw):
     def constant(value):raise Invalid("nonfinite JSON")
     return json.loads(raw,object_pairs_hook=pairs,parse_constant=constant)
 
+def fixed_fields(actual,expected):
+    if type(actual) is not dict:raise Invalid("typed receipt object")
+    for key,want in expected.items():
+        if key not in actual:raise Invalid("missing receipt field")
+        value=actual[key]
+        if type(want) is dict:fixed_fields(value,want)
+        elif type(value) is not type(want) or value!=want:
+            raise Invalid("strict receipt field type/value")
+
+def receipt_expectations():
+    repository={"id":1302587720,"full_name":"AndyTechCoder/RAR-OS"}
+    metadata={"id":ARTIFACT,"size_in_bytes":SIZE,"digest":"sha256:"+DIGEST,
+        "expired":False,"name":"modern-crypto-"+str(RUN)+"-1",
+        "workflow_run":{"id":RUN,"head_sha":CONTROLLER,"head_branch":"main",
+            "repository_id":1302587720,"head_repository_id":1302587720}}
+    run={"id":RUN,"head_sha":CONTROLLER,"run_attempt":1,"event":"workflow_dispatch",
+        "head_branch":"main","status":"completed","conclusion":"failure",
+        "path":".github/workflows/modern-crypto.yml",
+        "repository":dict(repository),"head_repository":dict(repository)}
+    return metadata,run
+
 def receipt(metadata,run):
-    if (metadata.get("id")!=ARTIFACT or metadata.get("size_in_bytes")!=SIZE or
-        metadata.get("digest")!="sha256:"+DIGEST or metadata.get("expired") is not False or
-        metadata.get("name")!="modern-crypto-"+str(RUN)+"-1" or
-        metadata.get("workflow_run",{}).get("id")!=RUN or
-        metadata.get("workflow_run",{}).get("head_sha")!=CONTROLLER or
-        run.get("id")!=RUN or run.get("head_sha")!=CONTROLLER or
-        run.get("run_attempt")!=1 or run.get("event")!="workflow_dispatch" or
-        run.get("head_branch")!="main" or run.get("status")!="completed" or
-        run.get("conclusion")!="failure" or
-        run.get("path")!=".github/workflows/modern-crypto.yml" or
-        run.get("repository",{}).get("full_name")!="AndyTechCoder/RAR-OS"):
-        raise Invalid("exact retained failure receipt")
+    expected_metadata,expected_run=receipt_expectations()
+    fixed_fields(metadata,expected_metadata);fixed_fields(run,expected_run)
 
 def inspect_archive(raw,expected_sha=DIGEST,expected_size=SIZE):
     # Optional expectations are for pure synthetic tests only. The cloud
@@ -90,7 +101,7 @@ def inspect_archive(raw,expected_sha=DIGEST,expected_size=SIZE):
             record["sha256"]!=hashlib.sha256(data).hexdigest()):
             raise Invalid("member inventory binding")
     commands=sorted(int(m.group(1)) for name in members
-        if (m:=re.fullmatch(r"command-([1-9][0-9]*)-argv.json",name)))
+        if (m:=re.fullmatch(r"command-([1-9][0-9]*)-argv\.json",name)))
     if not commands or commands!=list(range(1,max(commands)+1)):
         raise Invalid("complete command sequence")
     selected=[]
@@ -142,7 +153,7 @@ def main():
         client.token=""
         print(render(inspect_archive(raw)),flush=True)
     except BaseException as error:
-        # Only this module\'s fixed parser errors are safe to explain; HTTP
+        # Only this module's fixed parser errors are safe to explain; HTTP
         # exceptions can contain credential-bearing redirect URLs.
         detail=str(error)[:512] if type(error) is Invalid else type(error).__name__
         raise Invalid("fixed cloud failure inspection failed ("+detail+")") from None
@@ -196,17 +207,32 @@ def self_test():
                            lambda i:setattr(i,"external_attr",(stat.S_IFLNK|0o777)<<16)):
                 with self.assertRaises(Invalid):inspect(archive(entry_change=mutate))
         def test_receipt_exact_failure(self):
-            metadata={"id":ARTIFACT,"size_in_bytes":SIZE,"digest":"sha256:"+DIGEST,
-                "expired":False,"name":"modern-crypto-"+str(RUN)+"-1",
-                "workflow_run":{"id":RUN,"head_sha":CONTROLLER}}
-            run={"id":RUN,"head_sha":CONTROLLER,"run_attempt":1,"event":"workflow_dispatch",
-                "head_branch":"main","status":"completed","conclusion":"failure",
-                "path":".github/workflows/modern-crypto.yml",
-                "repository":{"full_name":"AndyTechCoder/RAR-OS"}}
+            import copy
+            metadata,run=receipt_expectations()
             receipt(metadata,run)
-            for field,value in (("id",0),("expired",True),("digest","sha256:"+"0"*64)):
-                with self.assertRaises(Invalid):receipt({**metadata,field:value},run)
-            with self.assertRaises(Invalid):receipt(metadata,{**run,"conclusion":"success"})
+            def leaves(value,path=()):
+                for key,item in value.items():
+                    if type(item) is dict:yield from leaves(item,path+(key,))
+                    else:yield path+(key,),item
+            for position,expected in enumerate((metadata,run)):
+                for path,value in leaves(expected):
+                    bads=((True,str(value),float(value),value+1) if type(value) is int else
+                          (0,1,"false",None) if type(value) is bool else
+                          (None,1,value+"x"))
+                    for bad in bads:
+                        pair=[copy.deepcopy(metadata),copy.deepcopy(run)]
+                        item=pair[position]
+                        for key in path[:-1]:item=item[key]
+                        item[path[-1]]=bad
+                        with self.subTest(position=position,path=path,bad=bad):
+                            with self.assertRaises(Invalid):receipt(*pair)
+                    pair=[copy.deepcopy(metadata),copy.deepcopy(run)]
+                    item=pair[position]
+                    for key in path[:-1]:item=item[key]
+                    del item[path[-1]]
+                    with self.assertRaises(Invalid):receipt(*pair)
+            with self.assertRaises(Invalid):receipt([],run)
+            with self.assertRaises(Invalid):receipt(metadata,{"repository":[]})
     result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(Tests))
     if not result.wasSuccessful():raise SystemExit(1)
 
