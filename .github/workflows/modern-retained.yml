@@ -1,0 +1,29 @@
+name: Inspect fixed M4 retained checkpoints
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: modern-fixed-retained-inspection
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.repository == 'AndyTechCoder/RAR-OS' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      CI: 'true'
+    steps:
+      - name: Check out exact trusted main only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          path: controller
+      - name: Inspect fixed retained bytes without rebuilding or executing targets
+        env:
+          RAR_SOURCE_SHA: bfd8647b10e1daa38934b1e12363ba919938bbf7
+          RAR_CONTROLLER_SHA: ${{ github.sha }}
+          RAR_ARTIFACT_TOKEN: ${{ github.token }}
+        run: /usr/bin/python3 -I -B controller/tools/rar-lab/modern/retained_checkpoint.py
