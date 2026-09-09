@@ -219,8 +219,16 @@ def execute(image: str, implementation: int, request: bytes) -> tuple[int, int, 
                 if remaining != b"":
                     raise RunFailure("owned container remains")
             except (OSError, subprocess.SubprocessError, RunFailure):
-                failure = RunFailure("cleanup unconfirmed; terminate disposable job, no retry")
+                cleanup_failure = RunFailure("cleanup unconfirmed; terminate disposable job, no retry")
+                for key in ("partial_stdout","partial_stderr","stream_truncated"):
+                    if failure is not None and hasattr(failure,key):
+                        setattr(cleanup_failure,key,getattr(failure,key))
+                failure = cleanup_failure
     if failure is not None:
+        if result is not None:
+            failure.partial_stdout=result[2]
+            failure.partial_stderr=result[3]
+            failure.stream_truncated=False
         raise failure
     if result is None:
         raise RunFailure("missing result; terminate disposable job")
@@ -269,6 +277,14 @@ def self_test() -> None:
                         self.assertEqual(execute(image, 1, bytes(16)), (1, 0, b"result", b""))
                         self.assertEqual(ex.call_args_list[1].args[0][-4:], ["start", "--attach", "--interactive", cid])
                         self.assertEqual(ctl.call_args_list[1].args[0], ["container", "rm", "--force", cid])
+                for response,expected in (((0,b"result",b""),b"result"),
+                        (stream_failure(RunFailure("deadline"),{1:bytearray(b"partial"),2:bytearray()},4176,1024),b"partial")):
+                    with patch(module+".confined_container"),patch(module+".exchange",
+                            side_effect=[(0,(cid+chr(10)).encode(),b""),response]):
+                        with patch(module+".control",side_effect=[json.dumps([item]).encode(),b"",(cid+chr(10)).encode()]):
+                            with self.assertRaises(RunFailure) as caught:execute(image,1,bytes(16))
+                            self.assertEqual(caught.exception.partial_stdout,expected)
+                            self.assertEqual(caught.exception.partial_stderr,b"")
                 for key, value in (("Env", None), ("Env", []), ("Env", ["PATH=/bin"]),
                                    ("Env", ["PATH=/nonexistent", "LD_PRELOAD=/x"]),
                                    ("Env", ["PATH=/nonexistent", "PATH=/nonexistent"]),
