@@ -14,3 +14,5 @@ cd "$root"
 /usr/bin/python3 -I -B tools/rar-lab/modern/crypto_handoff_tests.py
 
 /usr/bin/python3 -I -B tools/rar-lab/modern/crypto_failure.py --self-test
+
+/usr/bin/python3 -I -B tools/rar-lab/modern/retained_checkpoint_tests.py
