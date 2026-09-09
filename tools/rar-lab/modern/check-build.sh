@@ -11,3 +11,4 @@ cd "$root"
 /usr/bin/python3 -I -B tools/rar-lab/modern/reference_runner.py --self-test
 /usr/bin/python3 -I -B tools/rar-lab/modern/compiler_runner.py --self-test
 /usr/bin/python3 -I -B tools/rar-lab/modern/adapter_image.py --self-test
+/usr/bin/python3 -I -B tools/rar-lab/modern/crypto_handoff_tests.py

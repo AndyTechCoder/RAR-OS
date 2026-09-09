@@ -3,6 +3,7 @@ No image acquisition/build/signing or OS/VM launch. Caller must validate the
 reviewed image inventory before invoking this helper; digest alone is not trust.
 """
 import os
+import hashlib
 import json
 import re
 import selectors
@@ -195,13 +196,30 @@ def confined_container(item):
     if any(type(x) is not dict for x in limits) or any(x not in limits for x in required):
         raise RunFailure("effective core/descriptor limits")
 
-def execute(image: str, implementation: int, request: bytes) -> tuple[int, int, bytes, bytes]:
+def execute(image: str, implementation: int, request: bytes, retain=None) -> tuple[int, int, bytes, bytes]:
     """Create, verify ownership, then start by ID. Any failure is job-fatal.
+    Production comparison controllers supply a fresh durable retain(leaf,bytes)
+    callback. Its SHA256 acknowledgement enables full create/before/after/output/
+    cleanup evidence and exact stopped-state checks. The optional legacy path
+    remains for earlier command-policy fixtures, not full runtime acceptance.
     Caller must terminate the disposable job on error, not catch/retry/continue.
     Ambiguous create is never started or removed by name: daemon completion can
     race client disconnect. Only full job teardown closes that unresolved case.
     """
     cloud_guard()
+    if retain is not None and not callable(retain):
+        raise RunFailure("trusted adapter evidence callback")
+    def keep(leaf, raw):
+        if retain is None:return
+        if (leaf not in {"create.json","before.json","after.json","request.bin",
+                         "stdout.bin","stderr.bin","failure.json","cleanup.json",
+                         "failure-stdout.bin","failure-stderr.bin"} or
+            type(raw) is not bytes or len(raw)>65536):
+            raise RunFailure("bounded adapter evidence")
+        if retain(leaf,raw)!=hashlib.sha256(raw).hexdigest():
+            raise RunFailure("adapter evidence acknowledgement")
+    def record(leaf,value):
+        keep(leaf,json.dumps(value,sort_keys=True,separators=(",",":"),allow_nan=False).encode()+b"\n")
     if type(request) is not bytes or not 16 <= len(request) <= 4432:
         raise RunFailure("request size")
     name = "rar-modern-ref-" + uuid.uuid4().hex
@@ -211,12 +229,16 @@ def execute(image: str, implementation: int, request: bytes) -> tuple[int, int, 
     failure = None
     result = None
     try:
+        keep("request.bin",request)
         code, raw, error = exchange(argv, b"", 10, 65, 1024)
+        record("create.json",{"exit_code":code,"stdout":raw.hex(),"stderr":error.hex()})
         if code != 0 or error or re.fullmatch(b"[0-9a-f]{64}" + bytes([10]), raw) is None:
             raise RunFailure("ambiguous create; terminate disposable job")
         cid = raw[:-1].decode("ascii")
-        item = owned_container(control(["container", "inspect", cid]), cid, name, image)
+        before = control(["container", "inspect", cid])
+        item = owned_container(before, cid, name, image)
         owned = True
+        keep("before.json",before)
         confined_container(item)
         config = item["Config"]
         state = item.get("State", {})
@@ -232,10 +254,29 @@ def execute(image: str, implementation: int, request: bytes) -> tuple[int, int, 
             ["/usr/bin/docker", "--host=unix:///var/run/docker.sock",
              "start", "--attach", "--interactive", cid], request, 10, 4176, 1024)
         result = (implementation, code, output, error)
-    except (OSError, subprocess.SubprocessError, RunFailure) as exc:
+        keep("stdout.bin",output);keep("stderr.bin",error)
+        if retain is not None:
+            after=control(["container","inspect",cid])
+            ended=owned_container(after,cid,name,image)
+            keep("after.json",after)
+            state=ended.get("State")
+            if (type(state) is not dict or state.get("Status")!="exited" or
+                state.get("Running") is not False or state.get("Paused") is not False or
+                state.get("Restarting") is not False or state.get("OOMKilled") is not False or
+                state.get("Dead") is not False or state.get("Error")!="" or
+                type(state.get("ExitCode")) is not int or state["ExitCode"]!=code or
+                type(state.get("Pid")) is not int or state["Pid"]!=0):
+                raise RunFailure("adapter completion state")
+    except Exception as exc:
         failure = RunFailure(str(exc) + "; terminate disposable job, no retry")
         for key in ("partial_stdout","partial_stderr","stream_truncated"):
             if hasattr(exc,key):setattr(failure,key,getattr(exc,key))
+        try:
+            for field,leaf in (("partial_stdout","failure-stdout.bin"),("partial_stderr","failure-stderr.bin")):
+                value=getattr(exc,field,None)
+                if type(value) is bytes:keep(leaf,value)
+            record("failure.json",{"error_type":type(exc).__name__,"successful_execution":False})
+        except Exception:failure=RunFailure("adapter execution/evidence failed; terminate disposable job")
     finally:
         if owned:
             try:
@@ -245,7 +286,8 @@ def execute(image: str, implementation: int, request: bytes) -> tuple[int, int, 
                                      "--filter", "id=" + cid, "--format", "{{.ID}}"], 65)
                 if remaining != b"":
                     raise RunFailure("owned container remains")
-            except (OSError, subprocess.SubprocessError, RunFailure):
+                record("cleanup.json",{"container_id":cid,"confirmed_absent":True})
+            except Exception:
                 cleanup_failure = RunFailure("cleanup unconfirmed; terminate disposable job, no retry")
                 for key in ("partial_stdout","partial_stderr","stream_truncated"):
                     if failure is not None and hasattr(failure,key):
@@ -278,6 +320,45 @@ def self_test() -> None:
                     self.assertIn(flag, argv)
                 for forbidden in ("--privileged", "--volume", "--mount", "--device", "--env", "--pid=host"):
                     self.assertFalse(any(x == forbidden or x.startswith(forbidden + "=") for x in argv))
+        def test_recorded_lifecycle_and_retention_failures(self):
+            import copy
+            image="sha256:"+"a"*64;cid="c"*64;name="rar-modern-ref-"+"b"*32
+            before={"Id":cid,"Image":image,"Name":"/"+name,
+                "Config":{"Labels":{"rar.modern.owner":name},"User":"65532:65532",
+                    "Entrypoint":["/target-reference"],"Cmd":None,
+                    "Env":["PATH=/nonexistent"],"WorkingDir":"/"},
+                "State":{"Status":"created","Running":False}}
+            after=copy.deepcopy(before)
+            after["State"]={"Status":"exited","Running":False,"Paused":False,"Restarting":False,
+                "OOMKilled":False,"Dead":False,"Error":"","ExitCode":0,"Pid":0}
+            kept={}
+            def retain(leaf,raw):
+                if leaf in kept:raise RunFailure("exclusive evidence")
+                kept[leaf]=raw;return hashlib.sha256(raw).hexdigest()
+            with patch(__name__+".cloud_guard"),patch(__name__+".uuid.uuid4") as uid:
+                uid.return_value.hex="b"*32
+                with patch(__name__+".confined_container"),patch(__name__+".exchange",
+                        side_effect=[(0,(cid+"\n").encode(),b""),(0,b"wire",b"")]):
+                    with patch(__name__+".control",
+                            side_effect=[json.dumps([before]).encode(),json.dumps([after]).encode(),b"",b""]):
+                        self.assertEqual(execute(image,3,bytes(16),retain),(3,0,b"wire",b""))
+            self.assertEqual(set(kept),{"request.bin","create.json","before.json","stdout.bin",
+                "stderr.bin","after.json","cleanup.json"})
+            for field,value in (("Running",True),("OOMKilled",True),("Pid",True),("ExitCode",True)):
+                changed=copy.deepcopy(after);changed["State"][field]=value
+                kept.clear()
+                with patch(__name__+".cloud_guard"),patch(__name__+".uuid.uuid4") as uid:
+                    uid.return_value.hex="b"*32
+                    with patch(__name__+".confined_container"),patch(__name__+".exchange",
+                            side_effect=[(0,(cid+"\n").encode(),b""),(0,b"wire",b"")]):
+                        with patch(__name__+".control",
+                                side_effect=[json.dumps([before]).encode(),json.dumps([changed]).encode(),b"",b""]):
+                            with self.assertRaises(RunFailure):execute(image,3,bytes(16),retain)
+                self.assertIn("failure.json",kept);self.assertIn("cleanup.json",kept)
+            with patch(__name__+".cloud_guard"),patch(__name__+".exchange") as exchange_mock:
+                with self.assertRaises(RunFailure):execute(image,3,bytes(16),lambda leaf,raw:"bad")
+                exchange_mock.assert_not_called()
+
         def test_no_arbitrary_identity_entrypoint_or_name(self):
             image = "sha256:" + "a" * 64
             name = "rar-modern-ref-" + "b" * 32
