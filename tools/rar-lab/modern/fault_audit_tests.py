@@ -18,6 +18,7 @@ audit=load("fault_audit")
 block=load("block_disk")
 process=load("block_process")
 session=load("vm_session")
+persistence=load("persistence")
 
 class Tests(unittest.TestCase):
     def test_pure_parser_and_matcher(self):
@@ -47,6 +48,41 @@ class Tests(unittest.TestCase):
                          sendall=lambda value:None)
         return vm
 
+    def test_fault_stop_requires_exact_signal_then_all_joins(self):
+        from types import SimpleNamespace as NS
+        with patch.object(session.time,"monotonic",return_value=0):
+            vm=self.fault_vm()
+            try:vm.service()
+            except session.PlannedDataFault as error:signal=error
+            else:self.fail("missing planned signal")
+            receipt=vm.fault_receipt(signal)
+            self.assertEqual(receipt["delivery"],dict(code=None,problem=None,eof=False))
+            with self.assertRaises(ValueError):vm.fault_receipt(RuntimeError("not planned"))
+            wrong=session.PlannedDataFault(("wrong",))
+            with self.assertRaises(ValueError):vm.fault_receipt(wrong)
+            for fail_join in (False,True):
+                trace=[];data=vm.backends[0].records
+                def ready(role):
+                    return dict(type="ready",kind=role,readonly=role=="boot",
+                        export_readonly=False,capacity=8388608 if role=="system" else 16777216,
+                        device=1,inode=3 if role=="system" else 4)
+                rows=[data,[ready("system")],[ready("boot")]]
+                fake=NS(fault_receipt=lambda error:receipt,
+                    service=lambda:trace.append("service"),fault_audit=audit,
+                    backends=[NS(records=r) for r in rows],argv=[],preflight={},
+                    commands=[],events=[],event_receipts=[],serial=b"",
+                    cleanup_succeeded=False,qmp_drained=False)
+                def destroy():
+                    trace.append("destroy")
+                    fake.cleanup_succeeded=not fail_join;fake.qmp_drained=not fail_join
+                    return dict(joined=not fail_join,backends=[
+                        dict(joined=True,records=r,returncode=-9,problem="backend-failed") for r in rows])
+                fake.destroy=destroy
+                if fail_join:
+                    with self.assertRaises(ValueError):persistence.joined_fault(fake,signal)
+                else:self.assertEqual(persistence.joined_fault(fake,signal)["fault"],receipt)
+                self.assertEqual(trace,["service","destroy"])
+
     def test_cut_requires_exact_records_exit_and_complete_pipe_drain(self):
         vm=self.fault_vm()
         records=vm.backends[0].records
@@ -62,6 +98,8 @@ class Tests(unittest.TestCase):
                 (records+[term],20,None,True),(records+[term],20,"malformed-record",True)):
             with self.assertRaises(audit.Invalid):audit.observe(rows,p,code,problem,eof)
         vm=self.fault_vm();p=dict(zip(("operation","ordinal","effect","prefix"),vm.fault_plan))
+        terminated=vm.backends[0].records+[dict(type="terminal",outcome="failed",fault_hit=True,failed=True)]
+        with self.assertRaises(audit.Invalid):audit.observe(terminated,p,None,None,False)
         for code,problem,eof in ((21,"backend-failed",True),(None,None,True),(-9,None,False)):
             with self.assertRaises(audit.Invalid):
                 audit.observe(vm.backends[0].records,p,code,problem,eof)
@@ -99,9 +137,9 @@ class Tests(unittest.TestCase):
                     with self.assertRaises(ValueError):vm.request({"execute":"send-key"})
                     self.assertFalse(vm.fault_delivered)
                 else:
-                    self.assertEqual(vm.request({"execute":"send-key"}),{})
+                    with self.assertRaises(session.PlannedDataFault):vm.request({"execute":"send-key"})
                     self.assertIsNone(vm.qmp_pending)
-                    with self.assertRaises(session.PlannedDataFault):vm.service()
+                    self.assertTrue(vm.fault_delivered)
                     self.assertEqual(vm.request({"execute":"screendump"}),{})
                     self.assertEqual([m["id"] for m in vm.commands],[1,2])
 

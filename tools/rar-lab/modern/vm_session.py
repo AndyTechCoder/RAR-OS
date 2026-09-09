@@ -95,6 +95,7 @@ class VM:
         self.fault_plan=None if selected is None else tuple(selected[k] for k in
             ("operation","ordinal","effect","prefix"))
         self.fault_notice=None;self.fault_delivered=False;self.fault_deadline=None
+        self.fault_delivery=None
         self.qmp_pending=None
         self.fault_qmp_deadline=None
         self.boot_fd = None
@@ -269,6 +270,7 @@ class VM:
                         raise TimeoutError("planned-fault partial QMP record")
                     continue
                 self.fault_qmp_deadline=None
+                self.fault_delivery=dict(code=codes[0],problem=data.problem,eof=data.eof)
                 self.fault_delivered=True
                 raise PlannedDataFault(self.fault_notice)
             return
@@ -371,7 +373,12 @@ class VM:
             if (set(answer)!={"return","id"} or type(answer["id"]) is not int or
                 answer["id"] != self.identity):
                 raise ValueError("QMP error/mismatched reply")
+            if command.get("execute") in ("cont","send-key","screendump") and answer["return"]!={}:
+                raise ValueError("QMP action did not succeed")
             self.qmp_pending=None
+            # Consume and validate the exact reply before delivering its fault;
+            # callers must not observe a successful capture/action first.
+            if getattr(self,"fault_plan",None) is not None:self.service()
             return answer["return"]
 
     def start(self):
@@ -403,6 +410,17 @@ class VM:
         if not frame.startswith(b"P6\n640 480\n255\n"):
             raise ValueError("fixed RGB capture")
         return frame
+
+    def fault_receipt(self,error):
+        """Only the exact one-shot signal owns a fault scenario's stop receipt."""
+        if (type(error) is not PlannedDataFault or self.fault_delivered is not True or
+            error.receipt!=self.fault_notice or self.fault_notice is None or
+            self.fault_notice[:4]!=self.fault_plan or self.fault_delivery is None):
+            raise ValueError("exact delivered planned-fault identity")
+        operation,ordinal,effect,prefix,request,event,offset,length=self.fault_notice
+        return dict(plan=dict(operation=operation,ordinal=ordinal,effect=effect,prefix=prefix),
+            request_index=request,event_index=event,offset=offset,length=length,
+            delivery=dict(self.fault_delivery))
 
     def destroy(self):
         """Deliberately kill the WHOLE QEMU first, then all three backends.

@@ -149,7 +149,7 @@ def observe(records,expected,code,problem,eof):
         if hit is not None or code==20:return "waiting"
         if problem is not None or eof:raise Invalid("unexpected Data stream closure")
         return None
-    if code is not None or problem is not None or eof:
+    if code is not None or problem is not None or eof or (hit is not None and hit["terminal"]):
         raise Invalid("error observation requires a live healthy transport")
     return hit
 

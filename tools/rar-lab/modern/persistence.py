@@ -57,7 +57,7 @@ class Fixture:
         if not vms:
             raise ValueError("actual terminated VM ownership required")
         for vm in vms:
-            if (not vm.closed or vm.child is None or vm.child.poll() is None or
+            if (not vm.closed or vm.cleanup_succeeded is not True or vm.qmp_drained is not True or vm.child is None or vm.child.poll() is None or
                 len(vm.backends)!=3 or any(not b.closed or b.process.poll() is None for b in vm.backends)):
                 raise ValueError("no frozen-image authority before every VM/backend reaped")
         if identity(self.fd,self.size,False)!=self.bound or identity(self.observer,self.size,True)!=self.bound:
@@ -151,7 +151,8 @@ def audit(records,role,ready,readonly_data=False):
 def joined(vm):
     vm.service()
     stopped=vm.destroy()
-    if stopped.get("joined") is not True or len(stopped.get("backends",[]))!=3:
+    if (stopped.get("joined") is not True or vm.cleanup_succeeded is not True or
+        vm.qmp_drained is not True or len(stopped.get("backends",[]))!=3):
         raise ValueError("whole VM and three backend joins required")
     summaries=[]
     for backend,report,role in zip(vm.backends,stopped["backends"],("data","system","boot")):
@@ -159,7 +160,54 @@ def joined(vm):
             raise ValueError("actual joined backend records required")
         summaries.append(audit(report["records"],role,backend.records[0],vm.readonly_data))
     return dict(cut=stopped,audit=summaries,argv=vm.argv,preflight=vm.preflight,
-                commands=vm.commands,events=vm.events,serial=bytes(vm.serial).decode("ascii"))
+                commands=vm.commands,events=vm.events,event_receipts=vm.event_receipts,
+                qmp_drained=vm.qmp_drained,serial=bytes(vm.serial).decode("ascii"))
+
+def joined_fault(vm,observation):
+    """Stop after an exact planned signal; no generic exception can authorize it.
+    This receipt alone is NOT crash-consistency acceptance. The caller must
+    freeze after all joins and independently validate Data/Boot/System and UI.
+    """
+    receipt=vm.fault_receipt(observation)
+    expected=receipt["plan"]
+    cut=expected["effect"] in ("before-cut","after-cut","torn-cut")
+    delivery=receipt["delivery"]
+    if cut:
+        if delivery!={"code":20,"problem":"cut","eof":True}:
+            raise ValueError("complete cut evidence at signal delivery")
+    else:
+        if delivery!={"code":None,"problem":None,"eof":False}:
+            raise ValueError("live error transport at signal delivery")
+        # Error effects can leave the guest alive; check for any subsequent
+        # unexpected event before the deliberate whole-VM stop.
+        vm.service()
+    stopped=vm.destroy()
+    if (stopped.get("joined") is not True or vm.cleanup_succeeded is not True or
+        vm.qmp_drained is not True or len(stopped.get("backends",[]))!=3):
+        raise ValueError("whole VM and all backend joins required")
+    summaries=[]
+    for index,(backend,report,role) in enumerate(zip(vm.backends,stopped["backends"],
+                                                   ("data","system","boot"))):
+        if report.get("joined") is not True or report.get("records")!=backend.records:
+            raise ValueError("actual joined backend records required")
+        if index:
+            summaries.append(audit(report["records"],role,backend.records[0],False))
+            continue
+        matched=vm.fault_audit.scan(report["records"],expected,backend.records[0])
+        if matched is None or any(matched[key]!=receipt[key] for key in
+            ("request_index","event_index","offset","length")):
+            raise ValueError("joined records differ from delivered planned fault")
+        if cut:
+            if (matched["terminal"] is not True or type(report.get("returncode")) is not int or
+                report["returncode"]!=20 or report.get("problem")!="cut"):
+                raise ValueError("cut child exact final termination")
+        elif (type(report.get("returncode")) is not int or report["returncode"] not in (-9,21) or
+              report.get("problem")!="backend-failed"):
+            raise ValueError("error child must end only with owned stop or transport EOF")
+        summaries.append(matched)
+    return dict(cut=stopped,audit=summaries,fault=receipt,argv=vm.argv,preflight=vm.preflight,
+        commands=vm.commands,events=vm.events,event_receipts=vm.event_receipts,
+        qmp_drained=vm.qmp_drained,serial=bytes(vm.serial).decode("ascii"))
 
 def scene(vm,oracle,index,value=None):
     until=min(vm.deadline,time.monotonic()+12)
@@ -244,7 +292,7 @@ def run(session):
             raise ValueError("immutable boot bytes changed")
         if data.freeze(vms)!=frozen or sha(system.freeze(vms))!=system.initial:
             raise ValueError("fresh read-only workload changed retained images")
-        output=dict(schema="rar-modern-persistence-candidate-v0",status="observed",
+        output=dict(schema="rar-modern-persistence-candidate-v1",status="observed",
             challenge=value,frames=frames,vm_proofs=proofs,
             initial_data_sha256=sha(empty),frozen_data_sha256=sha(frozen),
             frozen_data_base64=base64.b64encode(frozen).decode("ascii"),
@@ -304,6 +352,12 @@ def self_test():
     assert audit([ro_ready],"data",ro_ready,True)["dirty"] is False
     reject(lambda:audit([ro_ready,req,event,flush,flushed],"data",ro_ready,True))
     reject(lambda:audit([ready_record],"data",ready_record,True))
+    # Failed cleanup/drain never authorizes a frozen read, even after closure.
+    from types import SimpleNamespace
+    fixture=object.__new__(Fixture)
+    for cleanup,drained in ((False,True),(True,False),(1,True),(True,1)):
+        vm=SimpleNamespace(closed=True,cleanup_succeeded=cleanup,qmp_drained=drained,child=None)
+        reject(lambda vm=vm:fixture.freeze([vm]))
     return rejected
 
 if __name__=="__main__":
