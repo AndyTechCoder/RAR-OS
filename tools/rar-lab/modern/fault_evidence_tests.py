@@ -227,7 +227,7 @@ class Tests(unittest.TestCase):
             self.assertTrue(self.check(doc)["content_validated"])
             for field,value in (("node-name","rar-system"),("node-name","rar-boot"),
                 ("device","rar-data-disk"),("operation","read"),("action","stop"),
-                ("action","ignore"),("reason","x"*257),("reason","bad\\nline")):
+                ("action","ignore"),("reason","x"*257),("reason","bad"+chr(10)+"line"),("reason",chr(127)),("reason",None)):
                 bad=copy.deepcopy(doc);bad["vm_proofs"][0]["events"][1]["data"][field]=value
                 with self.subTest(case=case,field=field,value=value):
                     with self.assertRaises(ValueError):self.check(bad)
