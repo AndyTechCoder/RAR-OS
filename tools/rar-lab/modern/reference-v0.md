@@ -213,3 +213,14 @@ identity/process/mismatch/timeout behavior. They are not crypto execution
 evidence. This component does not yet wire a production controller, acquire or
 construct images, prove oracle absence, add challenge-driven cases, exercise
 actual confinement failures, or satisfy the complete M4 crypto gate.
+
+### Failure diagnostics and writable-mount denial
+
+The shared transport preserves bounded partial stdout/stderr and a truncation
+flag on stream/deadline exceptions. These remain failures; no partial output is
+normalized into a result. The adapter wrapper carries those diagnostic fields
+to the trusted caller, which must retain them with the failure record. Its
+effective confinement check now explicitly rejects nonempty/invalid Tmpfs in
+addition to existing mount/resource checks. Mock transport tests exercise an
+output-limit failure, truncated diagnostic capture and CLI reaping without
+creating a process. Actual timeout/crash/container cleanup tests remain pending.

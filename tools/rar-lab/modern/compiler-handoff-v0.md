@@ -195,3 +195,42 @@ accepted compiler artifact; its upstream inventory is explicitly mocked. Real ac
 compatibility, reproducible driver construction/provenance, cloud memory use,
 Docker loading and compiler execution remain unproved. This module performs
 no file write/extraction/process/network operation and activates no image.
+
+## Bounded compiler-role runner candidate
+
+compiler_runner.py invokes only the independently verified derived compiler
+image, under the existing trusted-main Linux cloud guard. The fixed driver
+entrypoint runs as65532:65532 on a read-only root with no network, IPC, host
+mounts/devices or extra capabilities. Only/build is writable: private32MiB tmpfs,
+noexec/nosuid/nodev, mode0700 and owned by65532. CPU2, memory/swap1GiB,64processes,
+disabled core dumps and64descriptors are checked against effective daemon
+configuration, not merely command-line intent.
+
+Creation and execution are separate. The returned full container ID, immutable
+image, random ownership label and name must match before start-by-ID. Rejected
+configuration never starts. Ambiguous or foreign ownership never permits
+delete-by-name; the disposable job must terminate. Cleanup removes only the
+verified ID and requires an empty subsequent ID query. Any uncertain cleanup or
+evidence failure prevents a successful result.
+
+The compiler receives empty stdin, has a120-second attached transport deadline
+and8MiB stdout/1KiB stderr limits. Actual stopped state, exit0, no OOM/error,
+empty stderr and separate independent static ET_EXEC/ELF/W^X/entry/mapping checks
+are required before returning output bytes. The helper never executes output.
+It retains bounded create/before/after records, raw output/error, failures and
+cleanup through a trusted callback; that callback must exclusively/durably write
+a new invocation-owned evidence directory and acknowledge each SHA256.
+
+Transport deadline/output failures preserve bounded partial bytes explicitly as
+failed diagnostics, not a successful compile. The shared adapter transport now
+preserves these fields as well, and its effective configuration forbids any
+unexpected writable tmpfs. The image acquisition, durable evidence writer and
+outer hard job deadline remain the trusted controller's responsibility.
+
+Source tests mock all process/control calls and cover positive ID lifecycle,
+effective policy mutations, static output mutations, rejection-before-start,
+retention failure, foreign/ambiguous ownership, timeout partial-byte retention,
+cleanup failure, stopped/OOM anomalies and default host denial. They do not
+establish actual compiler compatibility, resource use, reproducibility, Docker
+confinement or adapter execution. Real two-build and runtime evidence is still
+required; no image or OS is activated by adding this source.

@@ -8,3 +8,5 @@ cd "$root"
 /usr/bin/python3 -I -B tools/rar-lab/modern/construction_artifacts.py --self-test
 /usr/bin/python3 -I -B tools/rar-lab/modern/reference_comparison.py --self-test
 /usr/bin/python3 -I -B tools/rar-lab/modern/derived_compiler_image.py --self-test
+/usr/bin/python3 -I -B tools/rar-lab/modern/reference_runner.py --self-test
+/usr/bin/python3 -I -B tools/rar-lab/modern/compiler_runner.py --self-test

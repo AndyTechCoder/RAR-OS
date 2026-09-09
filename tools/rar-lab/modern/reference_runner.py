@@ -91,6 +91,8 @@ def exchange(argv, request, timeout, stdout_limit, stderr_limit):
             if remaining <= 0:
                 raise RunFailure("CLI deadline")
             return proc.wait(timeout=remaining), bytes(output[1]), bytes(output[2])
+    except (OSError,subprocess.SubprocessError,RunFailure) as error:
+        raise stream_failure(error,output,stdout_limit,stderr_limit) from error
     finally:
         if proc.poll() is None:
             proc.kill()
@@ -98,6 +100,14 @@ def exchange(argv, request, timeout, stdout_limit, stderr_limit):
         for stream in (proc.stdin, proc.stdout, proc.stderr):
             if stream is not None and not stream.closed:
                 stream.close()
+
+def stream_failure(error,output,stdout_limit,stderr_limit):
+    """Retain bounded partial bytes as diagnostics, never a successful result."""
+    failure=RunFailure(str(error))
+    failure.partial_stdout=bytes(output[1][:stdout_limit])
+    failure.partial_stderr=bytes(output[2][:stderr_limit])
+    failure.stream_truncated=(len(output[1])>stdout_limit or len(output[2])>stderr_limit)
+    return failure
 
 def control(arguments, limit=65536):
     code, output, error = exchange(
@@ -138,6 +148,8 @@ def confined_container(item):
                 "Links", "ExtraHosts", "PortBindings", "CapAdd"):
         if host.get(key) not in (None, [], {}):
             raise RunFailure("unexpected host resource: " + key)
+    if host.get("Tmpfs") not in (None, {}):
+        raise RunFailure("unexpected adapter tmpfs")
     if item.get("Mounts") not in (None, []):
         raise RunFailure("unexpected effective mount")
     if (host.get("CapDrop") != ["ALL"] or
@@ -195,6 +207,8 @@ def execute(image: str, implementation: int, request: bytes) -> tuple[int, int, 
         result = (implementation, code, output, error)
     except (OSError, subprocess.SubprocessError, RunFailure) as exc:
         failure = RunFailure(str(exc) + "; terminate disposable job, no retry")
+        for key in ("partial_stdout","partial_stderr","stream_truncated"):
+            if hasattr(exc,key):setattr(failure,key,getattr(exc,key))
     finally:
         if owned:
             try:
@@ -294,6 +308,9 @@ def self_test() -> None:
                     "Ulimits": [{"Name": "core", "Soft": 0, "Hard": 0},
                                 {"Name": "nofile", "Soft": 64, "Hard": 64}]}
             confined_container({"HostConfig": host, "Mounts": []})
+            for value in ({"/tmp":"rw"},[]):
+                changed=copy.deepcopy(host);changed["Tmpfs"]=value
+                with self.assertRaises(RunFailure):confined_container({"HostConfig":changed,"Mounts":[]})
             for key in host:
                 changed = copy.deepcopy(host)
                 changed[key] = None
@@ -305,6 +322,46 @@ def self_test() -> None:
                 with self.assertRaises(RunFailure): confined_container({"HostConfig": changed})
             with self.assertRaises(RunFailure):
                 confined_container({"HostConfig": host, "Mounts": [{"Source": "/host"}]})
+        def test_partial_transport_diagnostics_are_bounded_failures(self):
+            failure=stream_failure(RunFailure("deadline"),{1:bytearray(b"abcdef"),2:bytearray(b"error")},3,2)
+            self.assertIsInstance(failure,RunFailure)
+            self.assertEqual(failure.partial_stdout,b"abc")
+            self.assertEqual(failure.partial_stderr,b"er")
+            self.assertTrue(failure.stream_truncated)
+            self.assertEqual(str(failure),"deadline")
+        def test_exchange_preserves_bounded_failure_bytes_and_reaps_cli(self):
+            from types import SimpleNamespace
+            class Stream:
+                def __init__(self,fd):self.fd=fd;self.closed=False
+                def fileno(self):return self.fd
+                def close(self):self.closed=True
+            class Proc:
+                def __init__(self):
+                    self.stdin=Stream(10);self.stdout=Stream(11);self.stderr=Stream(12)
+                    self.returncode=None;self.waits=0
+                def poll(self):return self.returncode
+                def kill(self):self.returncode=-9
+                def wait(self,timeout):
+                    self.waits+=1
+                    if self.returncode is None:self.returncode=0
+                    return self.returncode
+            class Selector:
+                def __init__(self):self.items={}
+                def __enter__(self):return self
+                def __exit__(self,*args):return False
+                def register(self,stream,event,data):
+                    self.items[stream.fileno()]=SimpleNamespace(fileobj=stream,fd=stream.fileno(),data=data)
+                def get_map(self):return self.items
+                def select(self,timeout):return [(self.items[11],0)]
+            proc=Proc()
+            with patch.object(subprocess,"Popen",return_value=proc),patch.object(selectors,"DefaultSelector",return_value=Selector()):
+                with patch.object(os,"set_blocking"),patch.object(os,"read",return_value=b"abcdef"):
+                    with self.assertRaises(RunFailure) as caught:exchange(["fake"],b"",10,3,2)
+            self.assertEqual(caught.exception.partial_stdout,b"abc")
+            self.assertEqual(caught.exception.partial_stderr,b"")
+            self.assertTrue(caught.exception.stream_truncated)
+            self.assertEqual(proc.returncode,-9);self.assertEqual(proc.waits,1)
+            self.assertTrue(all(stream.closed for stream in (proc.stdin,proc.stdout,proc.stderr)))
         def test_missing_confinement_fails(self):
             for item in ({}, {"HostConfig": None}, {"HostConfig": {}},
                          {"HostConfig": {"NetworkMode": "host"}}):
