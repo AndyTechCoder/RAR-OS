@@ -13,6 +13,8 @@ BOOT = ("boot",None,None,None,32768*512,"RAR-M4-BOOT-00000001","RAR M4 IMMUTABLE
 PREFIX = "/machine/peripheral/"
 WORK = "/tmp/rar-modern"
 SERIAL_LIMIT = 65536
+RTC_PARENT = "/machine/unattached"
+RTC_TYPE = "child<mc146818rtc>"
 
 def directory(index):
     if type(index) is not int or not 1 <= index <= 8192:
@@ -111,7 +113,8 @@ def preflight_requests():
                           "arguments":{"command-line":"info mtree -f -o"}}),
                 ("nodes",{"execute":"query-named-block-nodes"}),
                 ("graph",{"execute":"x-debug-query-block-graph"}),
-                ("pci",{"execute":"query-pci"})]
+                ("pci",{"execute":"query-pci"}),
+                ("rtc-children",{"execute":"qom-list","arguments":{"path":RTC_PARENT}})]
     for (path,key),value in qom_expected().items():
         requests.append((path+"#"+key,{"execute":"qom-get","arguments":{"path":path,"property":key}}))
     for path,count in buses():
@@ -262,6 +265,24 @@ def validate_pci(buses):
         raise ValueError("wrong boot controller model or PCI address")
     return True
 
+
+def rtc_identity(items):
+    """Derive one chipset RTC path from actual paused QOM child types."""
+    if type(items) is not list or not 1<=len(items)<=128:
+        raise ValueError("bounded paused RTC parent inventory")
+    names=set();found=[]
+    for item in items:
+        if (type(item) is not dict or set(item)!={"name","type"} or
+            type(item["name"]) is not str or type(item["type"]) is not str or
+            not 1<=len(item["name"])<=64 or not 1<=len(item["type"])<=128 or
+            not item["type"].isascii() or item["name"] in names or
+            re.fullmatch(r"[A-Za-z0-9_-][A-Za-z0-9_.-]*(?:\[[0-9]+\])?",item["name"]) is None):
+            raise ValueError("canonical unique QOM parent property")
+        names.add(item["name"])
+        if item["type"]==RTC_TYPE:found.append(RTC_PARENT+"/"+item["name"])
+    if len(found)!=1:raise ValueError("one exact chipset RTC child required")
+    return found[0]
+
 def validate_preflight(results,readonly_data=False,index=1,firmware_sizes=(1966080,131072)):
     if type(readonly_data) is not bool:
         raise ValueError("explicit Data mode")
@@ -296,7 +317,8 @@ def validate_preflight(results,readonly_data=False,index=1,firmware_sizes=(19660
                 children.append(item)
         if children != ([{"name":"child[0]","type":"link<ide-hd>"}] if count else []):
             raise ValueError("one master-only disk on the exact bus")
-    return dict(ports=port_map,block_graph=graph,guest_stopped=True)
+    return dict(ports=port_map,block_graph=graph,guest_stopped=True,
+                rtc_path=rtc_identity(results["rtc-children"]))
 
 def self_test():
     # Synthetic primary-format fixtures, not a QEMU certification claim.
@@ -339,6 +361,8 @@ def self_test():
     for path,count in buses():
         fixture[path+"#children"] = [{"name":"type","type":"string"}]+(
             [{"name":"child[0]","type":"link<ide-hd>"}] if count else [])
+    fixture["rtc-children"]=[{"name":"type","type":"string"},
+                             {"name":"device[7]","type":RTC_TYPE}]
     assert validate_preflight(fixture)["guest_stopped"]
     rejected = 0
     def reject(fn):
@@ -407,6 +431,17 @@ def self_test():
     reject(lambda:validate_preflight(bad))
     for field,value in (("class_info",None),("id",[]),("bus",False),("slot","31")):
         bad = json.loads(json.dumps(fixture));bad["pci"][0]["devices"][0][field]=value
+        reject(lambda bad=bad:validate_preflight(bad))
+
+    assert validate_preflight(fixture)["rtc_path"]==RTC_PARENT+"/device[7]"
+    for children in ([],[{"name":"device[7]","type":"child<wrong>"}],
+        fixture["rtc-children"]*2,
+        fixture["rtc-children"]+[{"name":"device[8]","type":RTC_TYPE}],
+        [{"name":"../rtc","type":RTC_TYPE}],[{"name":"rtc","type":RTC_TYPE,"extra":0}],
+        [{"name":True,"type":RTC_TYPE}],[{"name":"r"*65,"type":RTC_TYPE}],
+        [{"name":"rtc","type":None}],[{"name":"rtc","type":"é"}],
+        [{"name":"rtc","type":RTC_TYPE}]*129):
+        bad=dict(fixture);bad["rtc-children"]=children
         reject(lambda bad=bad:validate_preflight(bad))
     return rejected
 

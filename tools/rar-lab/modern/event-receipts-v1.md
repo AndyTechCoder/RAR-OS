@@ -55,21 +55,30 @@ https://www.qemu.org/docs/master/interop/qemu-qmp-ref.html#event-RTC_CHANGE
 
 The correction requires exactly one canonical RESUME as the first retained
 event, with no preflight receipt. Subsequent events may only be RTC_CHANGE,
-within the existing total32-event limit. Each has exact event/timestamp/data
+with at most four RTC changes (five total), below the capture limit of32. Each has exact event/timestamp/data
 fields, a bounded canonical timestamp, exact signed64-bit offset and one
-bounded canonical machine QOM identifier; all RTC events in a VM refer to the
-same identifier. This is an object identifier, never a filesystem path or
+exact chipset RTC QOM identifier derived independently during paused preflight. This is an object identifier, never a filesystem path or
 permission to open anything. No offset value changes the acceptance verdict.
 
-RTC receipts may be continue/running/post-reap observations after RESUME in the
-stream. Post-reap receipt means buffered stream data was parsed after the cut,
-not that the guest executed afterward. No events are discarded. Duplicate
+The sole RESUME receipt must be continue-reply or running-reply. RTC receipts
+must be running-reply and follow RESUME in retained stream order. Post-reap
+RTC/RESUME is rejected by this observed-profile policy even though receipt time
+is not event occurrence time. No events are discarded. Duplicate
 RESUME, reset, stop, shutdown, suspend, watchdog, panic, block-error,
 device-change and unknown events remain rejected.
 
-QOM syntax validation alone is not device attestation. The trusted image,
-unchanged fixed launch arguments and independently checked paused topology
-remain mandatory. RTC notifications are not used as boot/reboot, persistence,
+Paused preflight adds exactly one read-only qom-list request at the fixed
+/machine/unattached parent. Its bounded unique property inventory must contain
+exactly one child<mc146818rtc>. The parent plus that child's validated name
+defines the exact allowed RTC event path; the checker derives it again from raw
+preflight and compares the recorded verified result. Missing/duplicate RTC,
+wrong type, duplicate/malformed names or extra fields fail before guest start.
+No dynamic query path or extra launch argument is supplied by an event.
+
+The trusted image, unchanged fixed launch arguments and independently checked
+paused topology remain mandatory. Historical retained artifacts without this
+new source-specific preflight result are not newly accepted; their exact
+historical checkers and failure status remain recorded. RTC notifications are not used as boot/reboot, persistence,
 elapsed-time or device-authority evidence. Whole QEMU destruction, fresh
 firmware, all command/backend checks and frozen disk/pixel comparisons remain
 unchanged. A source-only event fixture is not a runtime pass.

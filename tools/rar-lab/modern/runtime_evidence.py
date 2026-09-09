@@ -154,18 +154,19 @@ def receipt_phases(receipts,events,rows,drained):
                           "continue-reply" if identity==cont else "running-reply")
     return phases
 
-def checked_event_stream(events,receipts,rows,drained):
+def checked_event_stream(events,receipts,rows,drained,rtc_path):
     """One lifecycle RESUME plus bounded advisory RTC changes, never ignored events.
     Receipt positions are stream observations, not event occurrence timestamps.
     QOM paths are validated object identifiers, never host filesystem paths.
     """
     phases=receipt_phases(receipts,events,rows,drained)
-    if not events:
-        raise ValueError("missing actual RESUME")
-    rtc_path=None
+    if not 1<=len(events)<=5:
+        raise ValueError("one RESUME and at most four RTC events")
+    if type(rtc_path) is not str or not rtc_path.startswith("/machine/unattached/"):
+        raise ValueError("independently verified RTC identity required")
     for index,event in enumerate(events):
         if (type(event) is not dict or
-            phases[index]=="preflight-reply"):
+            phases[index] not in (("continue-reply","running-reply") if index==0 else ("running-reply",))):
             raise ValueError("event before sole continue or malformed object")
         name="RESUME" if index==0 else "RTC_CHANGE"
         fields={"event","timestamp"} if index==0 else {"event","timestamp","data"}
@@ -183,13 +184,8 @@ def checked_event_stream(events,receipts,rows,drained):
                 type(data["offset"]) is not int or not -(1<<63)<=data["offset"]<1<<63):
                 raise ValueError("exact RTC_CHANGE payload")
             path=data["qom-path"]
-            if (type(path) is not str or not 1<=len(path)<=255 or
-                re.fullmatch(r"/machine(?:/[A-Za-z0-9_.-]+(?:\[[0-9]+\])?){1,8}",path) is None or
-                any(part in (".","..") or len(part)>64 for part in path.split("/")[1:])):
-                raise ValueError("bounded canonical RTC object identifier")
-            if rtc_path is not None and rtc_path!=path:
-                raise ValueError("multiple RTC object identities")
-            rtc_path=path
+            if type(path) is not str or path!=rtc_path:
+                raise ValueError("RTC event differs from paused chipset identity")
     return len(events)-1
 
 def validate(raw,expected_boot_digest,firmware_sizes):
@@ -257,16 +253,17 @@ def validate(raw,expected_boot_digest,firmware_sizes):
         if any(marker in proof["serial"] for marker in ("RAR-PANIC","UNEXPECTED-USER-FAULT","INVALID-USER-RETURN")):
             raise ValueError("guest failure in retained transcript")
         commands(proof["commands"],index,value,profile)
-        checked_event_stream(proof["events"],proof["event_receipts"],
-                             proof["commands"],proof["qmp_drained"])
         argv(proof["argv"],index,profile)
         # Source-specific preflight geometry is already recorded/checked in VM;
         # here recheck against independently tool-image-bound firmware sizes.
         preflight=proof["preflight"]
         if type(preflight) is not dict or set(preflight)!={"raw","verified"}:
             raise ValueError("actual paused preflight results")
-        if profile.validate_preflight(preflight["raw"],index==2,index,firmware_sizes)!=preflight["verified"]:
+        verified=profile.validate_preflight(preflight["raw"],index==2,index,firmware_sizes)
+        if verified!=preflight["verified"]:
             raise ValueError("retained topology does not revalidate")
+        checked_event_stream(proof["events"],proof["event_receipts"],
+                             proof["commands"],proof["qmp_drained"],verified["rtc_path"])
         summaries=[];current=[]
         for role,report in zip(("data","system","boot"),cut["backends"]):
             if (type(report) is not dict or set(report)!={"returncode","problem","records","joined"} or
@@ -337,23 +334,25 @@ def self_test():
     def stream(sequence,identities=None,drained=True):
         if identities is None:identities=[3]+[4]*(len(sequence)-1)
         rs=[{"event_index":i,"request_id":n} for i,n in enumerate(identities)]
-        return checked_event_stream(sequence,rs,rows,drained)
+        return checked_event_stream(sequence,rs,rows,drained,"/machine/unattached/device[7]")
     assert stream([resume])==0
     assert stream([resume,rtc,rtc])==2
-    assert stream([resume]+[rtc]*31)==31
-    assert stream([resume,rtc],(3,None))==1
-    assert stream([resume],(None,))==0
+    assert stream([resume]+[rtc]*4)==4
+    reject(lambda:stream([resume,rtc],(3,None)))
+    reject(lambda:stream([resume],(None,)))
     for offset in (-(1<<63),0,(1<<63)-1):
         changed=json.loads(json.dumps(rtc));changed["data"]["offset"]=offset
         assert stream([resume,changed])==1
-    for sequence in ([],[rtc],[rtc,resume],[resume,resume],[resume]+[rtc]*32):
+    for sequence in ([],[rtc],[rtc,resume],[resume,resume],[resume]+[rtc]*5):
         reject(lambda sequence=sequence:stream(sequence))
-    for name in ("RESET","STOP","SHUTDOWN","SUSPEND","SUSPEND_DISK","WAKEUP",
+    for name in ("RESET","STOP","SHUTDOWN","POWERDOWN","SUSPEND","SUSPEND_DISK","WAKEUP",
                  "WATCHDOG","GUEST_PANICKED","BLOCK_IO_ERROR","DEVICE_DELETED","UNKNOWN"):
         changed=dict(rtc,event=name)
         reject(lambda changed=changed:stream([resume,changed]))
     reject(lambda:stream([resume,rtc],(1,4)))
     reject(lambda:stream([resume,rtc],(3,2)))
+    reject(lambda:stream([resume,rtc],(3,3)))
+    assert stream([resume,rtc],(4,4))==1
     reject(lambda:stream([resume,rtc],(None,4)))
     for flag in (False,1,None):reject(lambda flag=flag:stream([resume],drained=flag))
     for value in (True,1.0,"0",-(1<<63)-1,1<<63):
