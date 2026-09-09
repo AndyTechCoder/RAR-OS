@@ -23,3 +23,8 @@ cd "$root"
 /usr/bin/python3 -I -B tools/rar-lab/modern/fault_evidence_tests.py
 
 /usr/bin/python3 -I -B tools/rar-lab/modern/fault_campaign_tests.py
+
+/usr/bin/python3 -I -B tools/rar-lab/modern/retained_checkpoint_tests.py
+/usr/bin/python3 -I -B tools/rar-lab/modern/fault_campaign_controller_tests.py
+
+/usr/bin/python3 -I -B tools/rar-lab/modern/fault_diagnostic_tests.py

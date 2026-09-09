@@ -1,7 +1,7 @@
 """Independent in-memory expected bytes/requests for the fixed public fault lab.
 Never writes an image, mounts it, feeds expected bytes to a guest, or imports
-RAR target code. Source-predicted request geometry needs retained baseline
-confirmation before this candidate may be activated.
+RAR target code. Request geometry is confirmed by the retained baseline inspection34350130709:
+one header-probe read precedes the complete194-sector mount scan.
 """
 import hashlib
 import importlib.util
@@ -53,6 +53,7 @@ def expected(initial,value,plan):
         row=dict(type="request",operation=operation,offset=sector*512 if operation!="flush" else 0,
             length=512 if operation!="flush" else 0)
         requests.append(row)
+    request("read",0)  # Observed header probe before the independent full mount scan.
     for sector in range(194):request("read",sector)
     for slot in range(2):
         for sector in range(2+3*slot,5+3*slot):request("read",sector)
@@ -86,10 +87,10 @@ def validate(records,initial,frozen,value,plan):
 def readonly(records):
     requests=[row for row in records if row.get("type")=="request"]
     expected=[dict(type="request",operation="read",offset=sector*512,length=512)
-              for sector in range(194)]
+              for sector in [0]+list(range(194))]
     if requests!=expected:raise ValueError("fresh readonly VM complete sequential mount")
     events=[row["event"] for row in records if row.get("type")=="event"]
-    if len(events)!=194 or any(event.get("operation")!="read" or
+    if len(events)!=195 or any(event.get("operation")!="read" or
         event.get("status")!="completed" for event in events):
         raise ValueError("fresh readonly mount read completion")
     return True

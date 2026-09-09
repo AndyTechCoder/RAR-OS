@@ -163,3 +163,26 @@ Aggregate content validation still reports provenance false and milestone
 incomplete. The trusted outer controller must bind every actual capture to the
 same reviewed source/tool profile and its own confined container, and actual
 baseline trace confirmation remains a precondition to any campaign activation.
+
+## Retained baseline geometry confirmed — 2026-09-09
+
+The reviewed read-only inspection run34350130709, job102461080386, controller
+4a71afc6b546a3865252a5ec28b62dc86542953c successfully validated artifact10091254514
+from persistence run34319265996/source977aa66f8b4cc3d83370c10d88ea9763e31c11e7.
+Its entire recorded Data request sequence was compared with the proposed replay.
+
+Observed startup performs one512-byte read at offset0 to probe the header, then
+the full194-sector scan at offsets0..98816. The initial prediction omitted that
+probe. The corrected independent replay now requires both offset0 reads:
+195 mount requests, not194. The first VM has219 total requests:207 reads,
+six512-byte writes at offsets1024..3584, and six immediately paired flushes.
+Each CREATE/WRITE has three virgin-sector prereads, followed by three ordered
+write/flush/readback publications. The second VM has exactly195 read-only requests.
+Every recorded request agrees with this corrected full sequence.
+
+This correction changes only expected evidence, not the target, disk format,
+fault plan or actual observation. Tests reject both omitted and extra probes.
+The inspection also revalidated the existing288-case/864-response crypto
+comparison and its full Git-bound source closure; it does not complete crypto
+acceptance or M4. The real60-case fault campaign still must run under its
+independently reviewed trusted controller.

@@ -77,9 +77,9 @@ def document(case=0,data_exit=None,peer_exit=21):
                 summary=audit.scan(rows,plan,ready);code=data_exit;problem="cut" if iscut else "backend-failed"
             else:
                 if number==2 and index==0:
-                    for sector in range(194):
+                    for ordinal,sector in enumerate([0]+list(range(194)),1):
                         rows.extend([dict(type="request",operation="read",offset=sector*512,length=512),
-                            dict(type="event",event=dict(operation="read",ordinal=sector+1,
+                            dict(type="event",event=dict(operation="read",ordinal=ordinal,
                                 offset=sector*512,length=512,status="completed"))])
                 if peer_exit==21:rows.append(dict(type="terminal",outcome="failed",fault_hit=False,failed=False))
                 summary=persistence.audit(rows,role,ready,number==2);code=peer_exit;problem="backend-failed"
@@ -213,6 +213,44 @@ class Tests(unittest.TestCase):
         proof["cut"]["entry"]["event_count"]=1
         with self.assertRaises(ValueError):self.check(doc)
 
+    def test_planned_data_error_report_is_narrowly_bound(self):
+        for case in (0,2,30,32):
+            doc=document(case);proof=doc["vm_proofs"][0]
+            event=dict(event="BLOCK_IO_ERROR",timestamp=dict(seconds=1,microseconds=2),
+                data={"device":"","node-name":"rar-data","operation":"write",
+                      "action":"report","reason":"Input/output error"})
+            proof["events"].append(event)
+            proof["event_receipts"].append(dict(event_index=1,request_id=None))
+            proof["cut"]["entry"]["event_count"]=2
+            self.assertTrue(self.check(doc)["content_validated"])
+            proof["event_receipts"][1]["request_id"]=proof["commands"][-1]["id"]
+            self.assertTrue(self.check(doc)["content_validated"])
+            for field,value in (("node-name","rar-system"),("node-name","rar-boot"),
+                ("device","rar-data-disk"),("operation","read"),("action","stop"),
+                ("action","ignore"),("reason","x"*257),("reason","bad"+chr(10)+"line"),("reason",chr(127)),("reason",None)):
+                bad=copy.deepcopy(doc);bad["vm_proofs"][0]["events"][1]["data"][field]=value
+                with self.subTest(case=case,field=field,value=value):
+                    with self.assertRaises(ValueError):self.check(bad)
+            for name in ("STOP","RESET","SHUTDOWN","GUEST_PANICKED"):
+                bad=copy.deepcopy(doc);bad["vm_proofs"][0]["events"][1]["event"]=name
+                with self.assertRaises(ValueError):self.check(bad)
+            bad=copy.deepcopy(doc);bad["vm_proofs"][0]["event_receipts"][1]["request_id"]=proof["commands"][-2]["id"]
+            with self.assertRaises(ValueError):self.check(bad)
+            bad=copy.deepcopy(doc);bad["vm_proofs"][0]["cut"]["entry"]["event_count"]=1
+            with self.assertRaises(ValueError):self.check(bad)
+            bad=copy.deepcopy(doc);p=bad["vm_proofs"][0]
+            p["events"].append(copy.deepcopy(event))
+            p["event_receipts"].append(dict(event_index=2,request_id=None))
+            p["cut"]["entry"]["event_count"]=3
+            with self.assertRaises(ValueError):self.check(bad)
+            bad=copy.deepcopy(doc);bad["vm_proofs"][0]["fault"]["delivery"]["code"]=99
+            with self.assertRaises(ValueError):self.check(bad)
+            # A fresh read-only recovery VM never receives an injected fault.
+            bad=document(case);p=bad["vm_proofs"][1]
+            p["events"].append(copy.deepcopy(event))
+            p["event_receipts"].append(dict(event_index=1,request_id=None))
+            with self.assertRaises(ValueError):self.check(bad)
+
     def test_rehashed_tampering_does_not_hide_changed_bytes(self):
         doc=document()
         raw=bytearray(base.decoded(doc["frozen_data_base64"],99328));raw[1536]^=1
@@ -236,10 +274,25 @@ class Tests(unittest.TestCase):
             for key,item in wanted.items():self.assertEqual(actual[key],item)
             self.assertEqual(actual["files"],({}, {b"note":b""}, {b"note":value.encode()})[wanted["revision"]])
             self.assertEqual(len(hashes),plan["ordinal"])
-            self.assertEqual(requests[:194],[dict(type="request",operation="read",
-                offset=sector*512,length=512) for sector in range(194)])
+            self.assertEqual(requests[:195],[dict(type="request",operation="read",
+                offset=sector*512,length=512) for sector in [0]+list(range(194))])
         for case in (True,False,-1,60,None,"0"):
             with self.assertRaises(ValueError):evidence.selection(case)
+
+    def test_observed_probe_read_cannot_be_omitted_or_added(self):
+        doc=document()
+        first=doc["vm_proofs"][0]["cut"]["backends"][0]["records"]
+        second=doc["vm_proofs"][1]["cut"]["backends"][0]["records"]
+        self.assertTrue(replay.readonly(second))
+        self.assertEqual(len([row for row in second if row["type"]=="request"]),195)
+        initial=base.decoded(doc["initial_data_base64"],99328)
+        frozen=base.decoded(doc["frozen_data_base64"],99328)
+        replay.validate(first,initial,frozen,doc["challenge"],doc["plan"])
+        for rows in (second[:1]+second[3:],second[:1]+second[1:3]+second[1:]):
+            with self.assertRaises(ValueError):replay.readonly(rows)
+        for rows in (first[:1]+first[3:],first[:1]+first[1:3]+first[1:]):
+            with self.assertRaises(ValueError):
+                replay.validate(rows,initial,frozen,doc["challenge"],doc["plan"])
 
     def test_exact_mutation_prefix_all_sixty_cases(self):
         for case in range(60):

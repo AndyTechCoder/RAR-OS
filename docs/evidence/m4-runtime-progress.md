@@ -1,3 +1,63 @@
+# Latest M4 checkpoint — 2026-09-09, actual Data fault campaign passed
+
+M4 and all three sections remain incomplete. This checkpoint supersedes older
+status statements below without removing their historical evidence.
+
+| Section | Demonstrated or implemented | Remaining end-to-end work |
+| --- | --- | --- |
+| M4.1 Persistent files | Actual fresh-VM persistence; retained crypto/source inspection; all 60 fixed Data fault cases observed and content-checked | Close remaining crypto/confinement and storage authority acceptance, then rerun relevant proof at the integrated final head |
+| M4.2 Signed live updates | Reviewed manifest/lifecycle foundations; physical retirement implementation with all four source checks passed | Connect immutable staging, manager/System protocol, actual signed Settings loader, durable cutover, peer continuity and fallback; demonstrate privileged retirement in the VM |
+| M4.3 Recovery/release | Reviewed contract and reusable evidence infrastructure | Actual immutable System-only repair, interrupted repair with unchanged Data, final regressions/reproducibility/review and exact-main release |
+
+## Actual 60-case Data fault evidence
+
+Run [34359925328](https://github.com/AndyTechCoder/RAR-OS/actions/runs/34359925328),
+job102493991562, completed successfully. Trusted controller:
+9e8dd1522300b2b5a178596a1ca979407ab0696d. Target source:
+5b8555e86b54056efa2927e094b3f1746e66d668.
+
+Its completed log confirms all 60 fixed cloud Data faults were observed and
+content-checked. The reviewed controller performs per-case evidence validation,
+fresh image/key/challenge uniqueness checks, then independent complete-campaign
+aggregation before emitting that result. Coverage is write/flush operations,
+ordinals1..6, and before-cut/after-cut/error/torn-cut/short-error effects.
+This is virtual-device crash-consistency evidence, not physical power-loss proof
+or System update/recovery fault coverage.
+
+Retained artifact10108193805, modern-data-faults-34359925328-1:
+2,501,628 ZIP bytes; SHA256
+23ff91f174dbc709973ca8b7ac9cb0b3b43d0a36ae34ea5ff803398034fb782e.
+No artifact was downloaded locally. This result does not cover the later
+physical-retirement source or establish final-head/release acceptance.
+
+The separate retained reader run34350130709 successfully inspected the baseline
+persistence and fixed crypto comparison reports. It confirmed the actual195-read
+mount sequence and the retained288-case/864-response comparison with its Git-bound
+source closure. Remaining crypto/confinement requirements are not waived.
+
+## Integrated source checkpoint and next action
+
+Physical retirement at6d62a066bc934736ea6507f539628e3f7531229b passed independent
+source review and Foundation34358858179, Platform34358858336,
+Desktop34358858199 and Specifications34358858139. These checks compile/test
+the implementation but do not execute its privileged retirement path.
+
+Bring exact reviewed trusted-main controller blobs into the continuing draft
+implementation branch, retaining all target source and runtime-only tests.
+No main merge or M4 release is authorized by this integration.
+
+The next implementation outcome is the complete signed Settings path: bounded
+immutable staging and reserved physical slot, manager verification, System
+durable publication, isolated trial and prepared cutover, surviving peers and
+verified fallback. Batch related code, tests and interface details in PR158.
+Do not add authorization-only PRs, repeat the successful Data campaign unchanged,
+or treat model/source checks as executable replacement proof.
+
+All work remains GitHub-only. No Mac/SSD mutation, deletion, build or target/VM
+execution. Certified disposable cloud execution only.
+
+---
+
 # Latest M4 checkpoint — 2026-09-09, fault-scenario source review
 
 M4 is incomplete. This checkpoint supersedes older progress statements below;
