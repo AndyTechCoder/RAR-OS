@@ -102,7 +102,7 @@ class Tests(unittest.TestCase):
             def compile_adapter(image,retain):
                 nonlocal compile_count
                 compile_count+=1
-                value=b"different" if failure=="compiler" and compile_count==2 else executable()
+                value=executable()[:-1]+b"\x01" if failure=="compiler" and compile_count==2 else executable()
                 retain("compiler-stdout.bin",value)
                 return value,{"cleanup_confirmed":True}
             def adapter_run(image,implementation,request,retain):
@@ -307,6 +307,10 @@ class Tests(unittest.TestCase):
         for name in proofs:
             changed=dict(proofs);changed[name]=b"wrong consumed bytes\n"
             with self.assertRaises(h.Invalid):h.driver_export(export(proofs=changed),notices,gate,parent)
+        for field,value in (("mode",0o555),("uid",1)):
+            def change(item,field=field,value=value):
+                if item.name==h.CONSUMED[0]:setattr(item,field,value)
+            with self.assertRaises(h.Invalid):h.driver_export(export(change),notices,gate,parent)
         altered=copy.deepcopy(parent)
         next(iter(altered["files"].values()))["sha256"]="0"*64
         with self.assertRaises(h.Invalid):h.driver_export(export(),notices,gate,altered)
