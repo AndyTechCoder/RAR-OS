@@ -271,7 +271,10 @@ class Tests(unittest.TestCase):
                              ("second.bin",b"123456"),("third.bin",bytearray(b"x"))):
                 with self.assertRaises(h.Invalid):evidence.retain(name,raw)
             (evidence.root/"link.bin").symlink_to(evidence.root/"first.bin")
-            with self.assertRaises(OSError):evidence.retain("link.bin",b"overwrite")
+            # Stay below the quota so this exercises exclusive/no-follow open.
+            with self.assertRaises(OSError):evidence.retain("link.bin",b"x")
+            self.assertNotIn("link.bin",evidence.entries)
+            self.assertEqual(evidence.total,3)
             self.assertEqual((evidence.root/"first.bin").read_bytes(),b"abc")
         finally:evidence.close()
         with self.assertRaises(h.Invalid):evidence.retain("closed",b"")
