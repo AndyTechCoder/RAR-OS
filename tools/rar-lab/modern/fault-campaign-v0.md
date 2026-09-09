@@ -118,3 +118,33 @@ malformed, shifted and post-reap boundaries.
 
 The retained fault envelope validator and complete read/write replay are still
 under implementation. This change grants no scenario or VM activation.
+
+## Independent retained fault candidate
+
+`fault_evidence.validate` checks canonical bounded envelopes and independently
+maps the 60 case indices and allowed slot outcomes without importing the
+scenario producer. It validates both Data images, unchanged public headers,
+caller-bound boot hash, System-zero hash, four actual pixel frames, submitted
+input commands, exact backend fault/termination records, pre-kill event boundary,
+paused topology, distinct VM PIDs and identical separated disk inodes.
+
+`fault_replay` independently computes the fixed public workload's six intended
+sectors in memory using the host-only reference oracle, never target code.
+It predicts mount reads, virgin-slot prereads, write/flush/readback ordering and
+the exact durable prefix; compares actual write hashes and every frozen byte.
+These expected bytes are never written to disk, supplied to the guest, used
+to repair a capture, or treated as actual VM evidence. Repeated public fixture
+keys occur only in inert unit tests, not writable campaign images.
+
+The exact NBD request geometry is source-predicted and MUST be confirmed against
+the retained successful baseline before activation. Pure tests use an inert
+topology result; actual paused preflight remains required by the production
+validator. Unit tests cover all 60 byte outcomes and reject altered claims,
+disk/pixel bytes even when rehashed, reused PIDs, changed disk authority/identity,
+wrong fault hits, missing joins, shifted event boundaries and unplanned input.
+
+Still required: independent source review and cloud tests; retained baseline
+trace inspection; an aggregate campaign validator enforcing exactly 60 unique
+case results and distinct writable image IDs/keys; source/container binding;
+trusted controller integration and actual faulted runs. No activation or M4
+completion is granted by these candidate APIs.
