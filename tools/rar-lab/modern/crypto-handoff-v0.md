@@ -189,3 +189,10 @@ refusal without changing or deleting any prior fixture.
 This is a diagnosed compatibility correction, not runtime acceptance. One
 reviewed bounded diagnostic retry may follow exact-head source validation and
 trusted-main merge. Do not run an unchanged retry.
+
+Failed public CLI commands also print one canonical JSON record with their
+sequence, argv, exit status, final 8192 stderr bytes and final 2048 stdout bytes.
+Newlines and non-ASCII bytes are escaped; workflow-command text stays inert.
+Artifact HTTP acquisition is not part of this command path. Tests force a
+client failure before any build and verify bounded tails and escaped framing.
+This avoids needing a separate artifact-reader change for ordinary tool errors.

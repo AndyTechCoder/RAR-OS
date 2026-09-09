@@ -351,7 +351,15 @@ def main():
             "stdout_size":len(out),"stderr_sha256":sha(error),"stderr_size":len(error)}))
         evidence.retain(prefix+"-stderr.bin",error)
         if len(out)<=2*1024**2:evidence.retain(prefix+"-stdout.bin",out)
-        if type(code) is not int or code!=0:raise Invalid("cloud command failed")
+        if type(code) is not int or code!=0:
+            # CLI environments are scrubbed and inputs are public fixed data.
+            # Canonical JSON escapes newlines and workflow-command prefixes.
+            print(canonical({"diagnostic":"rar-modern-command-failure-v0",
+                "sequence":sequence,"argv":argv,"exit":code,
+                "stderr_tail":error[-8192:].decode("utf-8","backslashreplace"),
+                "stdout_tail":out[-2048:].decode("utf-8","backslashreplace")
+                }).decode("ascii"),end="",flush=True)
+            raise Invalid("cloud command failed")
         return out
     def git(root,args,maximum=131072):
         return command(["/usr/bin/env","-i","PATH=/usr/bin:/bin","LANG=C","LC_ALL=C",
