@@ -23,6 +23,7 @@ persistence=load("persistence")
 class Tests(unittest.TestCase):
     def test_pure_parser_and_matcher(self):
         self.assertGreater(audit.self_test(),90)
+        self.assertGreaterEqual(load("fault_events").self_test(),19)
 
     def fault_vm(self):
         from types import SimpleNamespace as NS
@@ -74,7 +75,7 @@ class Tests(unittest.TestCase):
                     cleanup_succeeded=True,qmp_drained=True)
                 stopped=dict(joined=True,vm_returncode=0 if failure=="qemu" else -9,
                     entry=dict(vm_code=None,backend_codes=[None if failure=="entry" else 20,None,None],
-                               backend_problems=["cut",None,None]),
+                               backend_problems=["cut",None,None],event_count=len(vm.events)),
                     backends=[dict(joined=True,records=rows[0],returncode=21 if failure=="exit" else 20,
                         problem="cut")]+[dict(joined=True,records=r,returncode=-9,
                         problem="backend-failed") for r in rows[1:]])
@@ -120,6 +121,38 @@ class Tests(unittest.TestCase):
             self.assertFalse(vm.cleanup_succeeded)
             self.assertTrue(vm.child.stdout.closed and vm.child.stderr.closed)
 
+    def test_event_boundary_precedes_kill_and_final_stream_drain(self):
+        import io
+        from types import SimpleNamespace as NS
+        class Pipe(io.BytesIO):
+            def fileno(self):return 99
+        vm=object.__new__(session.VM)
+        vm.events=[dict(event="RESUME")]
+        class Child:
+            pid=1
+            def __init__(self):
+                self.returncode=None;self.stdout=Pipe(b"");self.stderr=Pipe(b"")
+            def poll(self):return self.returncode
+            def kill(self):
+                self.asserted_boundary=len(vm.events)
+                self.returncode=-9
+            def wait(self,timeout):return self.returncode
+        class Backend:
+            process=NS(poll=lambda:None)
+            problem=None
+            def stop(self):return dict(joined=True)
+        vm.closed=False;vm.started=True;vm.fault_plan=("write",1,"error",0)
+        vm.child=Child();vm.backends=[Backend() for _ in range(3)]
+        vm.serial=bytearray();vm.profile=NS(SERIAL_LIMIT=65536);vm.boot_fd=None
+        vm.connection=None;vm.sockets=[];vm.selector=NS(close=lambda:None)
+        vm.drain_qmp_after_reap=lambda:vm.events.append(dict(event="RTC_CHANGE"))
+        with patch.object(session.os,"set_blocking",return_value=None):
+            result=vm.destroy()
+        self.assertEqual(result["entry"]["event_count"],1)
+        self.assertEqual(vm.child.asserted_boundary,1)
+        self.assertEqual(len(vm.events),2)
+        self.assertTrue(vm.cleanup_succeeded)
+
     def test_fault_stop_requires_exact_signal_then_all_joins(self):
         from types import SimpleNamespace as NS
         with patch.object(session.time,"monotonic",return_value=0):
@@ -132,7 +165,7 @@ class Tests(unittest.TestCase):
             with self.assertRaises(ValueError):vm.fault_receipt(RuntimeError("not planned"))
             wrong=session.PlannedDataFault(("wrong",))
             with self.assertRaises(ValueError):vm.fault_receipt(wrong)
-            for failure in (None,"join","qmp","vm0","vm1","vm-bool","peer0","peer20","peer22","peer-problem","data21","entry-peer","all21"):
+            for failure in (None,"join","qmp","vm0","vm1","vm-bool","peer0","peer20","peer22","peer-problem","data21","entry-peer","entry-count-bool","entry-count-high","entry-count-negative","all21"):
                 trace=[];data=vm.backends[0].records
                 def ready(role):
                     return dict(type="ready",kind=role,readonly=role=="boot",
@@ -149,7 +182,7 @@ class Tests(unittest.TestCase):
                     fake.cleanup_succeeded=failure!="join";fake.qmp_drained=failure!="qmp"
                     result=dict(joined=failure!="join",vm_returncode=-9,
                         entry=dict(vm_code=None,backend_codes=[None,None,None],
-                                   backend_problems=[None,None,None]),backends=[
+                                   backend_problems=[None,None,None],event_count=len(vm.events)),backends=[
                         dict(joined=True,records=r,returncode=-9,problem="backend-failed") for r in rows])
                     if failure in ("vm0","vm1","vm-bool"):
                         result["vm_returncode"]={"vm0":0,"vm1":1,"vm-bool":True}[failure]
@@ -158,6 +191,8 @@ class Tests(unittest.TestCase):
                     if failure=="peer-problem":result["backends"][2]["problem"]="unexpected-stderr"
                     if failure=="data21":result["backends"][0]["returncode"]=21
                     if failure=="entry-peer":result["entry"]["backend_codes"][1]=21
+                    if type(failure) is str and failure.startswith("entry-count-"):
+                        result["entry"]["event_count"]={"entry-count-bool":True,"entry-count-high":1,"entry-count-negative":-1}[failure]
                     if failure=="all21":
                         for index,report in enumerate(result["backends"]):
                             report["returncode"]=21

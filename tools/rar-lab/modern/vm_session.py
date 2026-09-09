@@ -438,7 +438,8 @@ class VM:
             try:
                 result["entry"]=dict(vm_code=self.child.poll(),
                     backend_codes=[backend.process.poll() for backend in self.backends],
-                    backend_problems=[backend.problem for backend in self.backends])
+                    backend_problems=[backend.problem for backend in self.backends],
+                    event_count=len(self.events))
             except BaseException:
                 failures.append("fault teardown entry snapshot failed")
         if self.child is not None:

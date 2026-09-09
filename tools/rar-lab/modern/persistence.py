@@ -190,8 +190,10 @@ def joined_fault(vm,observation):
         raise ValueError("whole VM and all backend joins required")
     entry=stopped.get("entry")
     expected_entry=dict(vm_code=None,backend_codes=[20 if cut else None,None,None],
-                        backend_problems=["cut" if cut else None,None,None])
-    if (type(entry) is not dict or canonical_entry(entry)!=canonical_entry(expected_entry) or
+                        backend_problems=["cut" if cut else None,None,None],event_count=entry.get("event_count") if type(entry) is dict else None)
+    if (type(entry) is not dict or type(entry.get("event_count")) is not int or
+        not 0<=entry["event_count"]<=len(vm.events) or
+        canonical_entry(entry)!=canonical_entry(expected_entry) or
         type(stopped.get("vm_returncode")) is not int or stopped["vm_returncode"]!=-9):
         raise ValueError("exact live teardown entry and deliberate QEMU kill")
     summaries=[]

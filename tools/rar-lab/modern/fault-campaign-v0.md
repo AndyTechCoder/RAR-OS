@@ -100,3 +100,21 @@ cloud source tests, retained fault-evidence validator and negative mutations,
 trusted-controller integration, and actual exact-source faulted runs. The
 candidate API explicitly returns `observed-not-independently-accepted` and
 `milestone_complete: false`. No fault scenario is activated by this change.
+
+## Fault-only QMP observation boundary
+
+The fault stop entry snapshot additionally records the exact event count before
+the owned QEMU kill. This distinguishes advisory RTC events already parsed by
+the live fault drain from events parsed only after reap. It is an observation
+boundary, not a timestamp claim about when an event occurred.
+
+The separate pure `fault_events` checker requires one RESUME tied to a running
+request and at most four exact chipset-bound RTC_CHANGE events observed before
+the entry boundary. Live null-request receipts are allowed only before that
+boundary; post-reap receipts, RESET, BLOCK_IO_ERROR and other device/lifecycle
+events remain rejected. Baseline persistence evidence semantics are unchanged.
+Tests bind the actual destroy snapshot before kill/final drain and reject
+malformed, shifted and post-reap boundaries.
+
+The retained fault envelope validator and complete read/write replay are still
+under implementation. This change grants no scenario or VM activation.
