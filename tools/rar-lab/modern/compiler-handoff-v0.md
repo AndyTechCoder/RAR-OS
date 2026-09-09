@@ -243,3 +243,38 @@ failure diagnostics and fails the job if cleanup is unconfirmed. Static adapter
 checks additionally reject overlapping virtual or nonempty file PT_LOAD ranges;
 adjacent nonoverlapping ranges remain allowed. Focused mocked/byte-fixture tests
 cover all three paths; these remain source checks, not actual runtime evidence.
+
+## Adapter-only scratch image candidate
+
+adapter_binary.py is the shared pure8MiB static adapter byte gate. The compiler
+runner wraps its validation errors as process failures; adapter_image.py uses
+the identical ELF/W^X/range/entry/mapping checks before image construction and
+again during inspection. No parser policy is relaxed by this factoring.
+
+adapter_image.py independently inventories the accepted compiler parent and
+copies every exact captured upstream notice under licenses/, with unchanged
+bytes and readonly permissions. It reads parent layers through a forward-only
+bounded memoryview stream rather than duplicating whole large layers for notice
+extraction. All notices must be present and hash/size/metadata-bound to the
+accepted parent inventory (at most48MiB,512files,16MiB perfile).
+
+The new single-layer scratch image contains only /target-reference, those
+notices and a fixed RAR source-revision attribution. That attribution grants no
+license; no repository license is invented and no legal-sufficiency claim is
+made. The fresh config is amd64/Linux, user65532:65532, working directory/,
+entrypoint/target-reference, sole PATH=/nonexistent and no CMD/extra authority.
+The adapter is0555, notices0444 and directories0555, root-owned at the fixed
+epoch. The complete Docker-save image is capped at64MiB.
+
+Public build/inspect source fixtures exercise actual static adapter parsing,
+notice extraction, canonical layer and exact scratch configuration with only
+the large upstream compiler inventory mocked. Mutation tests reject missing,
+changed or executable notices, extra compiler/oracle/source files, changed
+config/manifest/layer, trailing bytes and wrong notice provenance. This is
+source validation, not a successful load or independent crypto comparison.
+
+The trusted controller must still bind the two reproducible compiler outputs
+and source objects, validate real parent/notice compatibility, enforce aggregate
+resources, inspect before Docker load and retain actual execution/confinement
+evidence. The image builder performs no extraction to paths, write, subprocess,
+load or execution, and grants no authority to run an arbitrary image.

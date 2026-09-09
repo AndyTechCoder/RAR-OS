@@ -11,7 +11,6 @@ import struct
 import sys
 import uuid
 
-MAX_OUTPUT=8*1024*1024
 TMPFS="rw,noexec,nosuid,nodev,size=33554432,uid=65532,gid=65532,mode=0700"
 ENV=["PATH=/nonexistent","RAR_COMPILER_ROLE=modern-v0"]
 EVIDENCE={"compiler-create.json","compiler-before.json","compiler-after.json",
@@ -30,7 +29,8 @@ def _load(name):
     return module
 
 transport=_load("reference_runner")
-elf=_load("compiler_elf")
+binary=_load("adapter_binary")
+MAX_OUTPUT=binary.MAX_OUTPUT
 RunFailure=transport.RunFailure
 cloud_guard=transport.cloud_guard
 exchange=transport.exchange
@@ -90,32 +90,8 @@ def confined_container(item):
         raise RunFailure("compiler core/descriptor limits")
 
 def static_output(raw):
-    if type(raw) is not bytes or not 176<=len(raw)<=MAX_OUTPUT:
-        raise RunFailure("bounded static adapter output")
-    metadata=elf.inspect(raw)
-    if metadata!={"kind":2,"interpreter":None,"needed":[],"soname":None,"search":None}:
-        raise RunFailure("adapter must be static ET_EXEC")
-    entry,phoff=struct.unpack_from("<QQ",raw,24)
-    phsize,phnum=struct.unpack_from("<HH",raw,54)
-    mappings=0;total=0;virtual_ranges=[];file_ranges=[]
-    for n in range(phnum):
-        typ,flags,offset,address,_,filesz,memsz,align=struct.unpack_from("<IIQQQQQQ",raw,phoff+n*phsize)
-        if typ in (2,3):raise RunFailure("adapter dynamic/interpreter segment")
-        if typ==1:
-            for start,length,ranges in ((address,memsz,virtual_ranges),(offset,filesz,file_ranges)):
-                if length:
-                    end=start+length
-                    if any(start<old_end and old_start<end for old_start,old_end in ranges):
-                        raise RunFailure("overlapping adapter load ranges")
-                    ranges.append((start,end))
-            total+=memsz
-            if (total>64*1024*1024 or flags&~7 or
-                (align not in (0,1) and (align&(align-1) or align>2*1024*1024)) or
-                (align>1 and offset%align!=address%align)):
-                raise RunFailure("adapter mapping/alignment budget")
-            if flags&1 and address<=entry<address+filesz:mappings+=1
-    if mappings!=1:raise RunFailure("unique executable file-backed adapter entry")
-    return {"sha256":hashlib.sha256(raw).hexdigest(),"size":len(raw),"mapped_bytes":total}
+    try:return binary.inspect(raw)
+    except ValueError as error:raise RunFailure("adapter ELF: "+str(error)) from error
 
 def _stopped(item):
     state=item.get("State")
