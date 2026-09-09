@@ -135,3 +135,27 @@ archives and trailing padding fail. The expected inventory must come from the
 trusted parent's raw-object verification, never a manifest supplied by the layer.
 This closes source-layer consumption validation only; no build, derived image,
 compiler invocation, adapter comparison or Modern VM is activated by this API.
+
+## Construction artifact intake
+
+construction_artifacts.py is a pure, non-activating intake helper for the two
+recorded compiler/reference construction artifacts. The trusted cloud caller
+must obtain metadata directly from the canonical GitHub repository. It verifies
+the fixed artifact/run/source/workflow identities, successful first attempt,
+non-expiry, byte count and whole ZIP SHA256 before parsing any member.
+
+Only bounded, flat, regular, unique ZIP members are permitted. Manifest JSON
+rejects duplicate keys and non-finite constants; construction status, false
+execution/activation flags and equal two-build inventories are required. Only
+the fixed manifests, inventories and two role image archives may be returned.
+Compiler image identity is additionally pinned to the reviewed parent.
+
+This is not image acceptance: each returned image archive still needs the
+independent compiler/reference inventory checker before loading. Process the
+two archives sequentially under the cloud job's aggregate memory/disk limits.
+No acquisition, extraction, file write, subprocess, Docker load or target
+execution is implemented here. Cloud source self-tests cover metadata identity,
+ZIP framing, positive synthetic manifest parsing and altered-manifest refusals;
+synthetic fixture archives are never represented as accepted real artifacts.
+Actual cloud acquisition and all subsequent compiler/adapter integration remain
+pending. This helper does not satisfy independent crypto comparisons or M4.
