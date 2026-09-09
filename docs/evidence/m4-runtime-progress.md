@@ -1,3 +1,60 @@
+# Latest M4 checkpoint — 2026-09-09, fault-scenario source review
+
+M4 is incomplete. This checkpoint supersedes older progress statements below;
+it does not change the acceptance requirements or authorize local execution.
+
+| Section | Evidence-backed progress | Next completion work |
+| --- | --- | --- |
+| M4.1 Persistent files | Retained successful two-VM Terminal/DataVault/Files proof; successful cloud fixed-corpus crypto handoff; reviewed fault-control integration and 60-case interrupted-save scenario source | Inspect retained crypto comparison evidence, complete remaining crypto/confinement cases, bind actual baseline block ordinals, validate retained fault receipts and run the actual guest fault campaign |
+| M4.2 Signed live updates | Existing manifest/lifecycle models and reviewed design | Actual Settings executable staging/replacement, durable cutover, physical authority retirement, health/fallback and surviving peer apps |
+| M4.3 Recovery/release | Existing recovery contract and fault infrastructure | Actual immutable System-only repair with Data unchanged, interrupted repair, full regression/reproduction/review and exact-main v0.4 release |
+
+## New actual cloud result
+
+Crypto run [34340985436](https://github.com/AndyTechCoder/RAR-OS/actions/runs/34340985436)
+completed successfully (job102431464710), using controller
+18146218af1c6f2a3dd629235cc17be0c964347b and RAR source
+bfd8647b10e1daa38934b1e12363ba919938bbf7. Its controller requires two driver
+constructions, two adapter compilations and the fixed 864 comparison calls
+before reporting fixed-corpus success. Retained artifact10099863097 contains
+6488 files, ZIP8803217 bytes, SHA256
+a74400671ae13808b0755391e10018c05650312749d8a4421b923c52bc77db7c.
+
+The retained manifest/comparison/inventory still require cloud-side inspection.
+This is not full crypto interoperability acceptance, independent production
+audit, current-runtime evidence, or M4.1 completion. No artifact was downloaded
+locally. The earlier Docker private-client-directory and bounded memoryview
+JSON defects were corrected in reviewed, tested and merged PR179/180; the
+successful run used those corrections. Do not rerun the failed versions.
+
+## Reviewed source work, not guest fault proof
+
+Fault-control integration44765a41ebba13d8f0afafac22022a0a3b153695 passed
+independent source review. Its Foundation34342143959, Platform34342144002 and
+Desktop34342144020 checks passed; Specifications34342143948 was still running
+when this checkpoint was written.
+
+Scenario candidatee6212b25e16d550606fb276b597d75197b9fb41f passed focused
+independent correctness/security review with no blocking source finding.
+Its 60 cases cover six CREATE/WRITE write and flush boundaries, before/after
+cuts, no-success errors and short/torn prefixes. Frozen authenticated state
+must match exact committed/burned slots and next-slot position as well as file
+contents; only then may a fresh read-only guest show the matching Files view.
+Unexpected failures cannot substitute for a planned fault receipt. Inert tests
+exercise orchestration without a real VM or file I/O.
+
+Six proposed reverse-order cases were removed because this workload has one
+dirty sector per flush and reversal would do nothing. Multi-sector ordering
+remains a separate obligation, not claimed coverage. The scenario is not
+activated. Required next work is retained-evidence validation, actual baseline
+trace binding, trusted-controller integration and real faulted VM runs.
+
+PR158 stays draft/unmerged. Preserve the released v0.3 graphical Alpha.
+All repository mutation is GitHub API-only; no Mac/SSD files are created,
+changed, deleted or downloaded, and no RAR OS/VM/reference adapter runs locally.
+
+---
+
 # Current M4 checkpoint — 2026-09-09
 
 M4 remains incomplete. The approved delivery sections are M4.1 persistent
