@@ -114,7 +114,8 @@ paths/metadata. Per-process CPU and file-size ceilings apply; the outer trusted
 job must additionally enforce wall-time, output and disk budgets. No driver or
 compiled adapter is executed during construction.
 
-The export contains only the bounded driver and all captured parent notices;
+The export contains the bounded driver, all captured parent notices and two
+fixed consumed-musl tree/SHA256 inventory files;
 its deliberately nonexistent entrypoint is not a runtime profile. Independently
 verify export paths/types/metadata/content, complete notice identity against the
 parent, static ELF framing, actual compiler/tool/source/recipe identities and
@@ -278,3 +279,17 @@ and source objects, validate real parent/notice compatibility, enforce aggregate
 resources, inspect before Docker load and retain actual execution/confinement
 evidence. The image builder performs no extraction to paths, write, subprocess,
 load or execution, and grants no authority to run an arbitrary image.
+
+## Integrated consumption binding
+
+crypto-handoff-v0.md defines the integrated controller candidate. It checks the
+fresh parent tag immediately before and after each independent driver build.
+The pinned bootstrap uses explicit find/sort/sha256sum commands to record the
+actual copied musl tree and file hashes before and after rustc; pipefail and
+cmp require unchanged records. The outer controller independently compares the
+exported records with the already-accepted parent inventory, rather than trusting
+a claimed BuildKit digest as if it were the Docker config ID. Wrong tags,
+different consumed bytes, missing/extra entries, modes or ownership fail before
+the driver can execute. The exclusive disposable-daemon assumption remains; no
+shared untrusted daemon is authorized. These two inert proof files are not added
+to the final compiler-driver layer or adapter-only runtime image.

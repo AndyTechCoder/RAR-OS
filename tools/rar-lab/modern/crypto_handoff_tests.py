@@ -30,8 +30,15 @@ def executable():
     struct.pack_into("<IIQQQQQQ",raw,120,0x6474e551,6,0,0,0,0,0,16)
     return bytes(raw)
 
-def export(change=None):
-    files={"rar-compile-driver":executable(),"licenses/musl/COPYRIGHT":b"public notice"}
+def parent_fixture():
+    root=h.MUSL_ROOT;value=b"public musl fixture"
+    return {"files":{root+"/lib/libfixture.rlib":{"size":len(value),"sha256":h.sha(value),
+        "mode":0o444,"uid":0,"gid":0}},
+        "directories":{root:(0o555,0,0,h.EPOCH),root+"/lib":(0o555,0,0,h.EPOCH)}}
+
+def export(change=None,proofs=None):
+    files={"rar-compile-driver":executable(),"licenses/musl/COPYRIGHT":b"public notice",
+        **(h.consumed_inventory(parent_fixture()) if proofs is None else proofs)}
     directories=("licenses","licenses/musl")
     out=io.BytesIO()
     with tarfile.open(fileobj=out,mode="w",format=tarfile.USTAR_FORMAT) as archive:
@@ -46,6 +53,158 @@ def export(change=None):
     return out.getvalue()
 
 class Tests(unittest.TestCase):
+    def test_integrated_pipeline_and_compiler_mismatch_stop(self):
+        from types import SimpleNamespace as NS
+        snapshot=h.module("source_snapshot")
+        receipts=h.module("construction_artifacts").RECEIPTS
+        for failure in (None,"compiler","tag","sysroot"):
+            root=Path(tempfile.mkdtemp(prefix="rar-handoff-pipeline-"))
+            here=root/"controller/tools/rar-lab/modern";here.mkdir(parents=True)
+            for name,raw in (("compiler_driver.rs",b"fn main() {}\n"),
+                             ("compiler-driver.Containerfile",b"FROM scratch\n")):
+                (here/name).write_bytes(raw)
+            tree_node={};objects={}
+            for path in snapshot.FILES:
+                node=tree_node;parts=path.split("/")
+                for name in parts[:-1]:node=node.setdefault(name,{})
+                node[parts[-1]]=("// public fixture "+path+"\n").encode()
+            def tree(node):
+                raw=bytearray()
+                for name,value in sorted(node.items()):
+                    if isinstance(value,dict):mode=b"40000";oid=tree(value)
+                    else:
+                        mode=b"100644";oid=snapshot._git_hash(b"blob",value);objects[oid]=value
+                    raw.extend(mode+b" "+name.encode()+b"\0"+bytes.fromhex(oid))
+                raw=bytes(raw);oid=snapshot._git_hash(b"tree",raw);objects[oid]=raw;return oid
+            commit=b"tree "+tree(tree_node).encode()+b"\nauthor Fixture <x@example.invalid> 1 +0000\n\nfixture\n"
+            target=snapshot._git_hash(b"commit",commit);objects[target]=commit
+            controller="1"*40
+            images={key:"sha256:"+letter*64 for key,letter in
+                    (("compiler","a"),("reference","b"),("derived","c"),("adapter","d"))}
+            diffs={key:["sha256:"+letter*64] for key,letter in
+                   (("compiler","e"),("reference","f"),("derived","1"),("adapter","2"))}
+            process={"User":"65532:65532","WorkingDir":"/",
+                     "Entrypoint":["/target-reference"],"Env":["PATH=/nonexistent"]}
+            compiler_process={**process,"WorkingDir":"/source",
+                              "Entrypoint":["/rar-compile-driver"],
+                              "Env":["PATH=/nonexistent","RAR_COMPILER_ROLE=modern-v0"]}
+            reports={role:{"image":images[role],"diff_ids":diffs[role]} for role in ("compiler","reference")}
+            def member(role,raw,metadata,run,name):
+                if name=="manifest.json":return h.canonical({"builds":[reports[role],reports[role]]})
+                return role.encode()
+            gate=NS(RECEIPTS=receipts,receipt=lambda *a:None,member=member)
+            api_calls=[]
+            class API:
+                def __init__(self,token):self.token=token
+                def metadata(self,path):api_calls.append(path);return {}
+                def zip(self,artifact,size):return b"symbolic-archive"
+            compile_count=0;adapter_count=0;build_count=0;tagged=False;loaded=[]
+            def compile_adapter(image,retain):
+                nonlocal compile_count
+                compile_count+=1
+                value=b"different" if failure=="compiler" and compile_count==2 else executable()
+                retain("compiler-stdout.bin",value)
+                return value,{"cleanup_confirmed":True}
+            def adapter_run(image,implementation,request,retain):
+                nonlocal adapter_count
+                self.assertEqual(compile_count,2)
+                adapter_count+=1
+                if adapter_count in (1,288,289,864):retain("wire.bin",b"fixture")
+                return implementation,0,b"fixture",b""
+            def comparison(execute,retain):
+                # The real comparison component has separate full ordering and
+                # protocol fixtures. This tests the outer pipeline's invocation
+                # count, lifecycle sequencing, selected images and evidence path.
+                for _ in range(288):execute(3,b"fixed fixture")
+                retain("frozen-rar-results.json",b"{}\n")
+                for _ in range(288):
+                    execute(1,b"fixed fixture");execute(2,b"fixed fixture")
+                return {"three_way_agreement":True,"milestone_complete":False}
+            def inspect_image(key):
+                return {"Id":images[key],"Architecture":"amd64","Os":"linux",
+                    "RootFS":{"Type":"layers","Layers":diffs[key]},
+                    "Config":compiler_process if key=="derived" else process}
+            def exchange(argv,request,seconds,maximum,error_max):
+                nonlocal build_count,tagged
+                if argv[0]=="/usr/bin/env":
+                    at=argv.index("-C");args=argv[at+2:]
+                    if args[:2]==["rev-parse","HEAD"]:out=controller.encode()+b"\n"
+                    elif args[0]=="status":out=b""
+                    elif args[0]=="show":out=(here/args[1].rsplit("/",1)[-1]).read_bytes()
+                    elif args[0] in ("init","fetch"):out=b""
+                    elif args[:2]==["cat-file","-s"]:out=str(len(objects[args[2]])).encode()+b"\n"
+                    elif args[0]=="cat-file":out=objects[args[2]]
+                    else:raise AssertionError(args)
+                    return 0,out,b""
+                self.assertEqual(argv[:2],h.DOCKER);args=argv[2:]
+                if args[0]=="version":out=b"{}\n"
+                elif args[:2]==["image","load"]:
+                    loaded.append(request);out=b"loaded\n"
+                elif args[:2]==["image","inspect"]:
+                    name=args[2]
+                    if name==h.BASE:
+                        out=h.canonical([{"Architecture":"amd64","Os":"linux","RepoDigests":[h.BASE]}])
+                    else:
+                        key="compiler" if name.startswith("rar-modern-parent:") else next(k for k,v in images.items() if v==name)
+                        item=inspect_image(key)
+                        if failure=="tag" and name.startswith("rar-modern-parent:") and build_count:
+                            item["Id"]=images["reference"]
+                        out=h.canonical([item])
+                elif args[0]=="pull":out=b"pulled\n"
+                elif args[:2]==["buildx","inspect"]:out=b"Driver: docker\nBuildKit version: fixture\n"
+                elif args[:2]==["image","ls"]:out=b"existing\n" if tagged else b""
+                elif args[:2]==["image","tag"]:tagged=True;out=b""
+                elif args[0]=="build":
+                    build_count+=1
+                    output=args[args.index("--output")+1].removeprefix("type=tar,dest=")
+                    Path(output).write_bytes(b"symbolic driver export")
+                    out=b"built\n"
+                else:raise AssertionError(args)
+                return 0,out,b""
+            adapter_report={"image":images["adapter"],"diff_id":diffs["adapter"][0]}
+            helpers={
+                "construction_artifacts":gate,"source_snapshot":snapshot,
+                "compiler_inventory":NS(inspect=lambda *a:reports["compiler"]),
+                "reference_inventory":NS(inspect=lambda *a:reports["reference"]),
+                "compiler_driver_layer":NS(build=lambda *a:(b"driver layer",{})),
+                "derived_compiler_image":NS(
+                    build=lambda *a:(b"derived",{"image":images["derived"]}),inspect=lambda *a:None,
+                    _parts=lambda raw:{images["derived"][7:]+".json":h.canonical(
+                        {"rootfs":{"diff_ids":diffs["derived"]},"config":compiler_process})}),
+                "adapter_image":NS(notices_from_parent=lambda *a:{"licenses/public":b"notice"},
+                    build=lambda *a:(b"adapter",adapter_report),inspect=lambda *a:None,PROCESS=process),
+                "compiler_runner":NS(execute=compile_adapter),
+                "reference_runner":NS(exchange=exchange,execute=adapter_run),
+                "reference_comparison":NS(compare_all=comparison)}
+            def checked_export(*args):
+                if failure=="sysroot":raise h.Invalid("consumed sysroot mismatch fixture")
+                return executable(),{}
+            env={"GITHUB_RUN_ID":"1","ImageVersion":"fixture","RAR_ARTIFACT_TOKEN":"fixture"}
+            with patch.dict(os.environ,env,clear=True),patch.object(h,"HERE",here),\
+                patch.object(h,"guard",return_value=(root,controller,target,{})),\
+                patch.object(h,"GitHub",API),patch.object(h,"module",side_effect=lambda n:helpers[n]),\
+                patch.object(h,"driver_export",side_effect=checked_export),\
+                patch.object(h,"tool_identities",return_value={"fixture":{}}),\
+                patch.object(h.resource,"setrlimit"),patch.object(h.signal,"signal"),patch.object(h.signal,"alarm"):
+                if failure is not None:
+                    with self.assertRaises(h.Invalid):h.main()
+                else:h.main()
+            manifest=h.unique((root/"modern-crypto-evidence/manifest.json").read_bytes())
+            self.assertEqual(build_count,1 if failure in ("tag","sysroot") else 2)
+            self.assertEqual(compile_count,0 if failure in ("tag","sysroot") else 2)
+            self.assertEqual(len(api_calls),4)
+            self.assertFalse(manifest["milestone_complete"])
+            if failure is not None:
+                self.assertEqual(adapter_count,0)
+                self.assertEqual(loaded,[b"compiler"] if failure in ("tag","sysroot") else [b"compiler",b"derived"])
+                self.assertEqual(manifest["phase"],"driver-construction" if failure in ("tag","sysroot") else "adapter-compilation")
+                self.assertEqual(manifest["status"],"failed")
+            else:
+                self.assertEqual(adapter_count,864)
+                self.assertEqual(loaded,[b"compiler",b"derived",b"adapter",b"reference"])
+                self.assertEqual(manifest["status"],"fixed-corpus-compared")
+                self.assertFalse(manifest["crypto_interoperability_accepted"])
+
     def test_host_default_denied_before_mutation_or_loading(self):
         with patch.dict(os.environ,{},clear=True),patch.object(h,"Evidence") as writer,patch.object(h,"module") as loader:
             with self.assertRaises(h.Invalid):h.main()
@@ -128,16 +287,35 @@ class Tests(unittest.TestCase):
     def test_driver_export_positive_real_static_gate_and_mutations(self):
         gate=h.module("compiler_driver_layer")
         notices={"licenses/musl/COPYRIGHT":b"public notice"}
-        self.assertEqual(h.driver_export(export(),notices,gate),executable())
+        self.assertEqual(h.driver_export(export(),notices,gate,parent_fixture())[0],executable())
         for field,value in (("mode",0o777),("uid",1),("mtime",h.EPOCH+1),
                             ("name","../outside"),("type",tarfile.SYMTYPE)):
             def change(item,field=field,value=value):
                 if item.name=="rar-compile-driver":setattr(item,field,value)
             with self.assertRaises((h.Invalid,ValueError)):
-                h.driver_export(export(change),notices,gate)
+                h.driver_export(export(change),notices,gate,parent_fixture())
         with self.assertRaises(h.Invalid):
-            h.driver_export(export(),{"licenses/musl/COPYRIGHT":b"altered"},gate)
-        with self.assertRaises(h.Invalid):h.driver_export(b"bad",notices,gate)
+            h.driver_export(export(),{"licenses/musl/COPYRIGHT":b"altered"},gate,parent_fixture())
+        with self.assertRaises(h.Invalid):h.driver_export(b"bad",notices,gate,parent_fixture())
+    def test_consumed_sysroot_and_parent_tag_substitution_refusals(self):
+        import copy
+        parent=parent_fixture();proofs=h.consumed_inventory(parent)
+        notices={"licenses/musl/COPYRIGHT":b"public notice"};gate=h.module("compiler_driver_layer")
+        driver,report=h.driver_export(export(),notices,gate,parent)
+        self.assertEqual(driver,executable())
+        self.assertEqual(set(report),set(h.CONSUMED))
+        for name in proofs:
+            changed=dict(proofs);changed[name]=b"wrong consumed bytes\n"
+            with self.assertRaises(h.Invalid):h.driver_export(export(proofs=changed),notices,gate,parent)
+        altered=copy.deepcopy(parent)
+        next(iter(altered["files"].values()))["sha256"]="0"*64
+        with self.assertRaises(h.Invalid):h.driver_export(export(),notices,gate,altered)
+        good=[{"Id":"sha256:"+"a"*64,"Architecture":"amd64","Os":"linux"}]
+        self.assertTrue(h.verify_parent_tag(h.canonical(good),good[0]["Id"]))
+        for field,value in (("Id","sha256:"+"b"*64),("Architecture","arm64"),("Os","other")):
+            changed=copy.deepcopy(good);changed[0][field]=value
+            with self.assertRaises(h.Invalid):h.verify_parent_tag(h.canonical(changed),good[0]["Id"])
+
     def test_owned_output_read_and_symlink_refusal(self):
         root=Path(tempfile.mkdtemp(prefix="rar-handoff-read-"))
         path=root/"output";path.write_bytes(b"public fixture")

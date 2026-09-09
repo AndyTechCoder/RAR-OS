@@ -42,10 +42,15 @@ objects and prompting, and permit only HTTPS transport to the fixed repository.
 3. Load the inventoried compiler parent and verify its actual immutable daemon
    identity and ordered rootfs. Acquire only the already-pinned Rust1.95 bootstrap
    digest. Create a fresh run-owned parent tag, refusing to overwrite an existing
-   tag; build the fixed driver recipe twice with no cache, pull or build networking.
+   tag; revalidate and retain its exact ID immediately before and after each build.
+   Build the fixed driver recipe twice with no cache, pull or build networking.
 4. Independently inspect both bounded driver exports: exactly the static driver
-   plus complete byte-identical parent notices, no links or extra files. Both
-   drivers must match. Construct the reviewed driver/source layers and derived
+   plus complete byte-identical parent notices and two fixed consumed-musl
+   inventory files, no links or extra files. The pinned bootstrap's explicit
+   find/sort/sha256sum commands record the complete copied sysroot before and
+   after rustc; pipefail and cmp require equality. The outer parser independently
+   compares both exported inventories byte-for-byte with the accepted parent
+   files/directories, hashes, modes and numeric ownership. Both drivers must match. Construct the reviewed driver/source layers and derived
    compiler image, independently inspect it before loading, then verify the
    daemon's image/config/rootfs against that inspected image.
 5. Invoke the existing confined compiler runner twice. It owns no host mounts,
@@ -74,7 +79,8 @@ successful retention. It never replaces an earlier evidence file. Evidence is
 limited to256MiB,10000files and64MiB perfile. Source bytes, exact source/main
 identities, host tool hashes, daemon/bootstrap/builder identities, image and
 notice inventories, driver bytes, compiler outputs and comparison wire data are
-retained. Large original compiler/reference archives remain in their already
+retained. Large input streams are SHA256/size-recorded and sent in bounded zero-copy64KiB
+chunks, avoiding repeated full-tail allocations. Large original compiler/reference archives remain in their already
 recorded immutable construction artifacts; no Mac/SSD downloads occur.
 
 Recorded adapter execution includes request, create, before-state, output,
@@ -106,6 +112,10 @@ artifact-host scope, credential-free redirect construction, HTTP size bounds,
 actual fresh scratch evidence durability/exclusivity/link refusal, bounded
 owned output reads, and real static-driver/export notice validation. They mock
 network/process activation and do not replace a real integrated diagnostic.
+A mocked full main() path additionally checks the864-invocation success sequence
+and stops before any adapter execution on compiler-output mismatch, parent tag
+substitution, or consumed-sysroot mismatch. This uses symbolic images and mocked
+network/process helpers; it is orchestration coverage, not runtime proof.
 The optional legacy unrecorded adapter-runner path remains for earlier fixtures;
 this integrated controller always supplies durable recording and enforces the
 stronger actual stopped-state check.

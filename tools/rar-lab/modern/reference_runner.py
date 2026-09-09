@@ -41,6 +41,12 @@ def cloud_guard() -> None:
         os.environ.get("GITHUB_REF") != "refs/heads/main"):
         raise RunFailure("trusted-main cloud invocation only")
 
+def input_chunk(request,position):
+    if (type(request) is not bytes or type(position) is not int or
+        not 0<=position<=len(request)):
+        raise RunFailure("immutable bounded input position")
+    return memoryview(request)[position:position+65536]
+
 def exchange(argv, request, timeout, stdout_limit, stderr_limit):
     """Bounded attached CLI transport. Killing the CLI is NOT container cleanup."""
     env = {"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C",
@@ -67,7 +73,7 @@ def exchange(argv, request, timeout, stdout_limit, stderr_limit):
                 for key, _ in selector.select(min(remaining, 0.1)):
                     if key.data == 0:
                         try:
-                            count = os.write(key.fd, request[position:])
+                            count = os.write(key.fd, input_chunk(request,position))
                         except BrokenPipeError as exc:
                             raise RunFailure("adapter closed input") from exc
                         except BlockingIOError:
@@ -320,6 +326,15 @@ def self_test() -> None:
                     self.assertIn(flag, argv)
                 for forbidden in ("--privileged", "--volume", "--mount", "--device", "--env", "--pid=host"):
                     self.assertFalse(any(x == forbidden or x.startswith(forbidden + "=") for x in argv))
+        def test_large_input_chunks_are_bounded_zero_copy(self):
+            raw=b"public fixture"*20000
+            chunks=[input_chunk(raw,pos) for pos in range(0,len(raw),65536)]
+            self.assertEqual(b"".join(chunks),raw)
+            self.assertTrue(all(value.obj is raw and value.readonly and len(value)<=65536 for value in chunks))
+            self.assertEqual(bytes(input_chunk(raw,len(raw))),b"")
+            for value in (-1,len(raw)+1,True):
+                with self.assertRaises(RunFailure):input_chunk(raw,value)
+
         def test_recorded_lifecycle_and_retention_failures(self):
             import copy
             image="sha256:"+"a"*64;cid="c"*64;name="rar-modern-ref-"+"b"*32

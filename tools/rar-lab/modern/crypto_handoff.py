@@ -24,6 +24,8 @@ HERE=Path(__file__).resolve().parent
 REPO="AndyTechCoder/RAR-OS"
 BASE="rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3"
 EPOCH=1785715200
+MUSL_ROOT="usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-musl"
+CONSUMED=("consumed-musl.tree","consumed-musl.sha256")
 DOCKER=["/usr/bin/docker","--host=unix:///var/run/docker.sock"]
 MODULES=("construction_artifacts","source_snapshot","compiler_inventory",
     "reference_inventory","compiler_driver_layer","derived_compiler_image",
@@ -180,9 +182,42 @@ class GitHub:
         if len(raw)!=size:raise Invalid("exact artifact bytes")
         return raw
 
-def driver_export(raw,notices,driver_gate):
+def consumed_inventory(parent):
+    """Expected bytes come from the independent pinned parent inspector."""
+    files={name:entry for name,entry in parent["files"].items() if name.startswith(MUSL_ROOT+"/")}
+    dirs={name:entry for name,entry in parent["directories"].items()
+          if name==MUSL_ROOT or name.startswith(MUSL_ROOT+"/")}
+    if not files or MUSL_ROOT not in dirs or len(files)+len(dirs)>4096:
+        raise Invalid("complete bounded consumed sysroot")
+    lines=[]
+    for name,entry in dirs.items():
+        if tuple(entry[:3])!=(0o555,0,0):raise Invalid("parent sysroot directory metadata")
+        lines.append("d 555 0 0 /"+name+"\n")
+    for name,entry in files.items():
+        if (entry["mode"]!=0o444 or entry["uid"]!=0 or entry["gid"]!=0 or
+            re.fullmatch("[0-9a-f]{64}",entry["sha256"]) is None):
+            raise Invalid("parent sysroot file metadata")
+        lines.append("f 444 0 0 /"+name+"\n")
+    tree="".join(sorted(lines)).encode("ascii")
+    hashes="".join(files[name]["sha256"]+"  /"+name+"\n" for name in sorted(files)).encode("ascii")
+    if max(len(tree),len(hashes))>2*1024**2:raise Invalid("consumption evidence bound")
+    return {CONSUMED[0]:tree,CONSUMED[1]:hashes}
+
+def verify_parent_tag(raw,parent_image):
+    if type(parent_image) is not str or re.fullmatch("sha256:[0-9a-f]{64}",parent_image) is None:
+        raise Invalid("immutable compiler parent image")
+    rows=unique(raw)
+    if (type(rows) is not list or len(rows)!=1 or type(rows[0]) is not dict or
+        rows[0].get("Id")!=parent_image or rows[0].get("Architecture")!="amd64" or
+        rows[0].get("Os")!="linux"):
+        raise Invalid("compiler parent tag changed")
+    return True
+
+def driver_export(raw,notices,driver_gate,parent):
     if type(raw) is not bytes or not 10240<=len(raw)<=64*1024**2:
         raise Invalid("bounded driver export")
+    consumed=consumed_inventory(parent)
+    expected_files={**notices,**consumed}
     directories={"licenses"}
     for name in notices:
         parts=name.split("/")
@@ -198,11 +233,11 @@ def driver_export(raw,notices,driver_gate):
                 item.sparse is not None or item.linkname or item.mode&0o7022):
                 raise Invalid("driver export metadata")
             seen.add(name)
-            if len(seen)>len(notices)+len(directories)+1:raise Invalid("driver export member budget")
+            if len(seen)>len(expected_files)+len(directories)+1:raise Invalid("driver export member budget")
             if name in directories:
                 if not item.isdir() or item.mode not in (0o555,0o755):raise Invalid("driver export directory")
                 continue
-            expected=notices.get(name)
+            expected=expected_files.get(name)
             if name!="rar-compile-driver" and expected is None:raise Invalid("unexpected driver export file")
             maximum=2*1024**2 if name=="rar-compile-driver" else len(expected)
             if (not item.isfile() or not 1<=item.size<=maximum or item.mtime!=EPOCH or
@@ -213,10 +248,10 @@ def driver_export(raw,notices,driver_gate):
             value=stream.read(maximum+1)
             if len(value)!=item.size:raise Invalid("driver export exact bytes")
             if name=="rar-compile-driver":driver_gate.static_driver(value);driver=value
-            elif value!=expected:raise Invalid("upstream notice identity")
-    if seen!=set(notices)|directories|{"rar-compile-driver"} or driver is None:
+            elif value!=expected:raise Invalid("upstream notice or consumed sysroot identity")
+    if seen!=set(expected_files)|directories|{"rar-compile-driver"} or driver is None:
         raise Invalid("complete driver export")
-    return driver
+    return driver,{name:{"sha256":sha(value),"size":len(value)} for name,value in consumed.items()}
 
 def read_owned(path,maximum):
     fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW)
@@ -236,6 +271,23 @@ def read_owned(path,maximum):
             raise Invalid("stable exact cloud output")
         return bytes(out)
     finally:os.close(fd)
+
+def tool_identities():
+    tools={}
+    for path in (Path(sys.executable),Path("/usr/bin/git"),Path("/usr/bin/docker")):
+        resolved=path.resolve(strict=True)
+        if not resolved.is_file() or not 1<=resolved.stat().st_size<=128*1024**2:
+            raise Invalid("bounded hosted tool identity")
+        digest=hashlib.sha256();total=0
+        with resolved.open("rb") as stream:
+            while True:
+                part=stream.read(65536)
+                if not part:break
+                total+=len(part)
+                if total>128*1024**2:raise Invalid("hosted tool growth")
+                digest.update(part)
+        tools[str(path)]={"resolved":str(resolved),"sha256":digest.hexdigest(),"size":total}
+    return tools
 
 def main():
     workspace,controller,target,required=guard()
@@ -263,6 +315,7 @@ def main():
         nonlocal sequence
         sequence+=1;prefix="command-"+str(sequence)
         evidence.retain(prefix+"-argv.json",canonical(argv))
+        if request:evidence.retain(prefix+"-input.json",canonical({"sha256":sha(request),"size":len(request)}))
         try:code,out,error=transport.exchange(argv,request,seconds,maximum,2*1024**2)
         except Exception as failure:
             evidence.retain(prefix+"-failure.json",canonical({"type":type(failure).__name__}))
@@ -381,21 +434,7 @@ def main():
             if bound!=raw:raise Invalid("controller helper differs from main blob")
             measured[relative]={"sha256":sha(raw),"size":len(raw)}
         evidence.retain("controller-sources.json",canonical(measured))
-        tools={}
-        for path in (Path(sys.executable),Path("/usr/bin/git"),Path("/usr/bin/docker")):
-            resolved=path.resolve(strict=True)
-            if not resolved.is_file() or not 1<=resolved.stat().st_size<=128*1024**2:
-                raise Invalid("bounded hosted tool identity")
-            digest=hashlib.sha256();total=0
-            with resolved.open("rb") as stream:
-                while True:
-                    part=stream.read(65536)
-                    if not part:break
-                    total+=len(part)
-                    if total>128*1024**2:raise Invalid("hosted tool growth")
-                    digest.update(part)
-            tools[str(path)]={"resolved":str(resolved),"sha256":digest.hexdigest(),"size":total}
-        evidence.retain("host-tools.json",canonical(tools))
+        evidence.retain("host-tools.json",canonical(tool_identities()))
         evidence.retain("docker-version.json",docker(["version","--format","{{json .}}"]))
         phase="artifact-intake"
         parent,parent_report=obtain("compiler")
@@ -423,9 +462,7 @@ def main():
         if docker(["image","ls","--no-trunc","--filter","reference="+local_tag,"--format","{{.ID}}"])!=b"":
             raise Invalid("parent tag already exists; no overwrite")
         docker(["image","tag",parent_image,local_tag])
-        tagged=unique(docker(["image","inspect",local_tag]))
-        if type(tagged) is not list or len(tagged)!=1 or tagged[0].get("Id")!=parent_image:
-            raise Invalid("local parent tag binding")
+        verify_parent_tag(docker(["image","inspect",local_tag]),parent_image)
         driver_source=(HERE/"compiler_driver.rs").read_bytes()
         recipe=(HERE/"compiler-driver.Containerfile").read_bytes()
         drivers=[]
@@ -436,16 +473,23 @@ def main():
                 (context/name).chmod(0o444);os.utime(context/name,(EPOCH,EPOCH))
             output=work/("driver-export-"+str(number)+".tar")
             if output.exists() or output.is_symlink():raise Invalid("new owned driver output")
+            before=docker(["image","inspect",local_tag])
+            evidence.retain("driver-"+str(number)+"-parent-before.json",before)
+            verify_parent_tag(before,parent_image)
             docker(["build","--platform=linux/amd64","--network=none","--no-cache",
                 "--pull=false","--progress=plain","--build-arg","COMPILER_PARENT="+local_tag,
                 "--output","type=tar,dest="+str(output),"--file",str(context/"compiler-driver.Containerfile"),
                 str(context)],900,2*1024**2)
+            after=docker(["image","inspect",local_tag])
+            evidence.retain("driver-"+str(number)+"-parent-after.json",after)
+            verify_parent_tag(after,parent_image)
             export=read_owned(output,64*1024**2)
             evidence.retain("driver-export-"+str(number)+".tar",export)
-            driver=driver_export(export,notices,helpers["compiler_driver_layer"])
+            driver,consumed=driver_export(export,notices,helpers["compiler_driver_layer"],parent_report)
             evidence.retain("driver-"+str(number)+".bin",driver)
             evidence.retain("driver-export-"+str(number)+".json",canonical({"sha256":sha(export),
-                "size":len(export),"driver_sha256":sha(driver),"notice_sha256":{k:sha(v) for k,v in notices.items()}}))
+                "size":len(export),"driver_sha256":sha(driver),"consumed_sysroot":consumed,
+                "notice_sha256":{k:sha(v) for k,v in notices.items()}}))
             drivers.append(driver)
         if drivers[0]!=drivers[1]:raise Invalid("two driver constructions differ")
         driver_layer,driver_report=helpers["compiler_driver_layer"].build(drivers[0],controller,sha(driver_source),sha(recipe))
