@@ -174,9 +174,10 @@ selection. Healthy candidates remain blocked and are not charged. Stale CPU
 incarnations halt on the kernel identity invariant rather than charging a reused
 slot. No user register can choose the charged endpoint, token or budget.
 
-Focused tests cover exact exhaustion, unrelated process ticks, stale incarnation
-before and after slot reuse, Healthy, abort, manager failure, invalid slots and
-idle exclusion. These are source/model tests plus actual trap-path wiring, not
+Focused model tests cover exact exhaustion, unrelated process ticks, stale
+incarnation before and after slot reuse, Healthy, abort, manager failure and
+invalid slots. They reject idle as a logical endpoint; the actual idle-skip
+branch is source-reviewed, not exercised by those model tests. These are source/model tests plus actual trap-path wiring, not
 a real signed replacement demonstration. Staging, trial process construction,
 physical unmap/TLB invalidation/zero-before-reuse and durable cutover remain
 required before any replacement or M4 completion claim.
