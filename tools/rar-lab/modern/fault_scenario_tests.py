@@ -22,11 +22,11 @@ visual=load("visual_oracle")
 
 class Tests(unittest.TestCase):
     def test_fixed_case_geometry(self):
-        self.assertEqual(len(scenario.cases()),66)
-        self.assertEqual(len({tuple(sorted(x.items())) for x in scenario.cases()}),66)
-        for bad in (-1,66,True,False,None,"1",1.0):
+        self.assertEqual(len(scenario.cases()),60)
+        self.assertEqual(len({tuple(sorted(x.items())) for x in scenario.cases()}),60)
+        for bad in (-1,60,True,False,None,"1",1.0):
             with self.assertRaises(ValueError):scenario.selected(bad)
-        for index in range(66):
+        for index in range(60):
             p,reverse=scenario.selected(index)
             self.assertIs(type(reverse),bool)
             self.assertEqual(set(p),{"operation","ordinal","effect","prefix"})
@@ -39,6 +39,20 @@ class Tests(unittest.TestCase):
             self.assertEqual(scenario.expected_revision(p),old+int(publishes))
         p,_=scenario.selected(0);p["ordinal"]=999
         self.assertEqual(scenario.selected(0)[0]["ordinal"],1)
+
+    def test_exact_slot_classification(self):
+        for index in range(60):
+            p,_=scenario.selected(index)
+            result=scenario.expected_state(p)
+            slot=(p["ordinal"]-1)//3
+            new=scenario.expected_revision(p)>slot
+            reservation=p["ordinal"] in (1,4)
+            virgin=reservation and (p["effect"] in ("before-cut","error") or
+                p["operation"]=="write" and p["effect"]=="after-cut")
+            self.assertEqual(result,dict(revision=slot+int(new),
+                committed_slots=list(range(slot+int(new))),
+                burned_slots=[] if new or virgin else [slot],
+                next_slot=slot+int(new or not virgin),readonly=False))
 
     def test_actual_visual_contract(self):
         self.assertGreater(visual.self_test(),30)
@@ -85,9 +99,12 @@ class Tests(unittest.TestCase):
             trace.append(("inspect","initial" if raw is initial else "frozen"))
             if raw is initial:return {"revision":0,"files":{}}
             files=({}, {b"note":b""}, {b"note":value.encode()})[revision]
-            return {"revision":revision+(1 if failure=="disk" else 0),
-                    "files":files,"readonly":False}
-        persistence=NS(Fixture=Fixture,sha=lambda raw:"system" if raw==b"system" else "digest",
+            result=dict(scenario.expected_state(plan),files=files)
+            if failure=="disk":result["revision"]+=1
+            if failure=="slots":result["burned_slots"]=[63]
+            return result
+        persistence=NS(canonical_entry=lambda value:__import__("json").dumps(value,sort_keys=True),
+            Fixture=Fixture,sha=lambda raw:"system" if raw==b"system" else "digest",
             ready=lambda vm:trace.append(("ready",vm.number)),
             scene=lambda vm,*args:{"scene":"inert"},
             challenge=lambda entropy:value,joined_fault=joined_fault,joined=joined)
@@ -113,7 +130,7 @@ class Tests(unittest.TestCase):
         return trace,result
 
     def test_all_fixed_flows_are_two_joined_vms_and_readonly_reboot(self):
-        for index in range(66):
+        for index in range(60):
             trace,result=self.exercise(index)
             self.assertEqual(result["status"],"observed-not-independently-accepted")
             self.assertIs(result["milestone_complete"],False)
@@ -126,7 +143,7 @@ class Tests(unittest.TestCase):
             self.assertLess(trace.index(("inspect","frozen")),trace.index(creates[1]))
 
     def test_unplanned_failure_or_bad_disk_never_starts_reboot(self):
-        for failure in ("unexpected","disk"):
+        for failure in ("unexpected","disk","slots"):
             trace,_=self.exercise(failure=failure)
             self.assertEqual([x[1] for x in trace if x[0]=="vm"],[1])
             self.assertNotIn(("join",1),trace)

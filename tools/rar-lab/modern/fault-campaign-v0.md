@@ -71,10 +71,11 @@ separate M4 requirements. No crypto reference is linked into target images.
 
 ## Fixed interrupted-save scenario candidate
 
-The unactivated `fault_scenarios.run(session, index)` API selects one of 66
+The unactivated `fault_scenarios.run(session, index)` API selects one of 60
 controller-owned cases: each of the six CREATE/WRITE write and flush boundaries
-with before/after cuts, no-success errors and 255-byte short/torn prefixes, plus
-reversed dirty-flush order at each flush. Selection is an exact integer, never a
+with before/after cuts, no-success errors and 255-byte short/torn prefixes. Each publication flush contains one dirty
+sector, so reversed ordering would be a no-op and is not counted as separate
+coverage; multi-sector backend ordering remains a distinct test obligation. Selection is an exact integer, never a
 path, command or user-controlled backend plan. Each invocation requires its own
 fresh disposable cloud container and uniquely keyed public empty Data fixture.
 
@@ -82,7 +83,8 @@ The first guest receives the unpredictable challenge through Terminal only.
 Only a typed planned-fault receipt can initiate successful scenario teardown;
 unexpected errors fail and clean up. The whole first VM and all three backends
 must be joined before frozen Data inspection. The independent authenticated
-oracle must recover the exact complete revision permitted at that boundary.
+oracle must recover the exact complete revision, committed/burned slot lists,
+next-slot position and non-exhausted classification permitted at that boundary.
 A fresh second VM has read-only Data authority and receives only F1; its Files
 pixels must independently match no file, an empty NOTE, or the complete value.
 Data headers, System and immutable boot bytes are checked unchanged as applicable.

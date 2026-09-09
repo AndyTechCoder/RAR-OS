@@ -16,11 +16,7 @@ def cases():
                 result.append(dict(operation=operation,ordinal=ordinal,effect=effect,
                     prefix=255 if effect in ("torn-cut","short-error") else 0,
                     reverse_flush=False))
-    # The guest flushes each publication sector individually. Reverse ordering
-    # is explicitly exercised, but is not a claim of multi-sector guest batching.
-    for ordinal in range(1,7):
-        result.append(dict(operation="flush",ordinal=ordinal,effect="after-cut",
-                           prefix=0,reverse_flush=True))
+    # Each flush has only one dirty sector; reverse order would be a no-op.
     return result
 
 def selected(index):
@@ -39,6 +35,18 @@ def expected_revision(plan):
         plan["effect"] in ("torn-cut","short-error") or
         (plan["operation"]=="flush" and plan["effect"]=="after-cut"))
     return old+int(published)
+
+def expected_state(plan):
+    """Exact authenticated slot classification, not just the visible revision."""
+    revision=expected_revision(plan)
+    slot,stage=divmod(plan["ordinal"]-1,3)
+    committed=revision>slot
+    virgin=(stage==0 and (
+        plan["operation"]=="write" and plan["effect"] in ("error","before-cut","after-cut") or
+        plan["operation"]=="flush" and plan["effect"] in ("error","before-cut")))
+    burned=[] if committed or virgin else [slot]
+    return dict(revision=revision,committed_slots=list(range(revision)),
+        burned_slots=burned,next_slot=slot+int(committed or not virgin),readonly=False)
 
 def recovered_scene(vm,oracle,state,value):
     deadline=min(vm.deadline,time.monotonic()+12)
@@ -90,9 +98,12 @@ def run(session,index):
         frozen=data.freeze(vms)
         if frozen[:1024]!=empty[:1024]:raise ValueError("immutable Data header changed")
         recovered=disk_oracle.inspect(frozen)
-        revision=expected_revision(plan)
+        classification=expected_state(plan)
+        revision=classification["revision"]
         expected=({}, {b"note":b""}, {b"note":value.encode("ascii")})[revision]
-        if (recovered["revision"]!=revision or recovered["files"]!=expected or recovered["readonly"]):
+        if (recovered["files"]!=expected or any(
+            persistence.canonical_entry(recovered[key])!=persistence.canonical_entry(wanted)
+            for key,wanted in classification.items())):
             raise ValueError("fault boundary did not recover its exact complete old/new state")
         if persistence.sha(system.freeze(vms))!=system.initial:
             raise ValueError("System changed in Data-only fault scenario")
@@ -110,7 +121,7 @@ def run(session,index):
             initial_data_sha256=persistence.sha(empty),frozen_data_sha256=persistence.sha(frozen),
             initial_data_base64=base64.b64encode(empty).decode("ascii"),
             frozen_data_base64=base64.b64encode(frozen).decode("ascii"),
-            expected_revision=revision,system_sha256=system.initial,boot_sha256=boot_digest,
+            expected_revision=revision,expected_classification=classification,system_sha256=system.initial,boot_sha256=boot_digest,
             status="observed-not-independently-accepted",milestone_complete=False)
         if len(json.dumps(result,separators=(",",":")).encode())>64*1024*1024:
             raise ValueError("bounded retained fault evidence")
