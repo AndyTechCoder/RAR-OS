@@ -224,3 +224,8 @@ effective confinement check now explicitly rejects nonempty/invalid Tmpfs in
 addition to existing mount/resource checks. Mock transport tests exercise an
 output-limit failure, truncated diagnostic capture and CLI reaping without
 creating a process. Actual timeout/crash/container cleanup tests remain pending.
+
+CLI cleanup uses nested finally handling so a kill/reap exception cannot skip
+pipe-close attempts or replace bounded partial diagnostics with an unannotated
+exception. Unconfirmed cleanup remains job-fatal. Mock transport coverage
+includes normal EOF/completion, output-limit failure and kill/wait failures.

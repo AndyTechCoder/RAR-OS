@@ -234,3 +234,12 @@ cleanup failure, stopped/OOM anomalies and default host denial. They do not
 establish actual compiler compatibility, resource use, reproducibility, Docker
 confinement or adapter execution. Real two-build and runtime evidence is still
 required; no image or OS is activated by adding this source.
+
+The compiler's attached-stream failure capture is scoped only to that exchange.
+Post-run Docker inspection failures use distinct compiler-control diagnostic
+leaves, so they cannot overwrite or collide with retained compiler output.
+The transport closes every pipe even when kill/reap fails, preserves bounded
+failure diagnostics and fails the job if cleanup is unconfirmed. Static adapter
+checks additionally reject overlapping virtual or nonempty file PT_LOAD ranges;
+adjacent nonoverlapping ranges remain allowed. Focused mocked/byte-fixture tests
+cover all three paths; these remain source checks, not actual runtime evidence.

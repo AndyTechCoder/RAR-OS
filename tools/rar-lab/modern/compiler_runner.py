@@ -16,7 +16,7 @@ TMPFS="rw,noexec,nosuid,nodev,size=33554432,uid=65532,gid=65532,mode=0700"
 ENV=["PATH=/nonexistent","RAR_COMPILER_ROLE=modern-v0"]
 EVIDENCE={"compiler-create.json","compiler-before.json","compiler-after.json",
           "compiler-stdout.bin","compiler-stderr.bin","compiler-failure.json",
-          "compiler-cleanup.json"}
+          "compiler-cleanup.json","compiler-control-stdout.bin","compiler-control-stderr.bin"}
 
 def _load(name):
     if sys.flags.isolated!=1 or not sys.dont_write_bytecode:
@@ -97,11 +97,17 @@ def static_output(raw):
         raise RunFailure("adapter must be static ET_EXEC")
     entry,phoff=struct.unpack_from("<QQ",raw,24)
     phsize,phnum=struct.unpack_from("<HH",raw,54)
-    mappings=0;total=0
+    mappings=0;total=0;virtual_ranges=[];file_ranges=[]
     for n in range(phnum):
         typ,flags,offset,address,_,filesz,memsz,align=struct.unpack_from("<IIQQQQQQ",raw,phoff+n*phsize)
         if typ in (2,3):raise RunFailure("adapter dynamic/interpreter segment")
         if typ==1:
+            for start,length,ranges in ((address,memsz,virtual_ranges),(offset,filesz,file_ranges)):
+                if length:
+                    end=start+length
+                    if any(start<old_end and old_start<end for old_start,old_end in ranges):
+                        raise RunFailure("overlapping adapter load ranges")
+                    ranges.append((start,end))
             total+=memsz
             if (total>64*1024*1024 or flags&~7 or
                 (align not in (0,1) and (align&(align-1) or align>2*1024*1024)) or
@@ -140,7 +146,7 @@ def execute(image,retain):
             raise RunFailure("compiler evidence retention acknowledgement")
     def record(leaf,value):
         keep(leaf,json.dumps(value,sort_keys=True,separators=(",",":"),allow_nan=False).encode()+b"\n")
-    cid=None;owned=False;failure=None;result=None;started=False
+    cid=None;owned=False;failure=None;result=None;attach_active=False
     try:
         code,raw,error=exchange(argv,b"",10,65,1024)
         record("compiler-create.json",{"exit_code":code,"stdout":raw.hex(),"stderr":error.hex()})
@@ -160,10 +166,11 @@ def execute(image,retain):
             type(state) is not dict or state.get("Status")!="created" or
             state.get("Running") is not False):
             raise RunFailure("compiler pre-start process state")
-        started=True
+        attach_active=True
         code,output,error=exchange(
             ["/usr/bin/docker","--host=unix:///var/run/docker.sock",
              "start","--attach","--interactive",cid],b"",120,MAX_OUTPUT,1024)
+        attach_active=False
         keep("compiler-stdout.bin",output);keep("compiler-stderr.bin",error)
         after=control(["container","inspect",cid])
         completed=owned_container(after,cid,name,image)
@@ -177,9 +184,10 @@ def execute(image,retain):
     except Exception as error:
         failure=RunFailure(str(error)[:4096]+"; terminate disposable job, no retry")
         try:
-            if started and hasattr(error,"partial_stdout") and hasattr(error,"partial_stderr"):
-                keep("compiler-stdout.bin",error.partial_stdout)
-                keep("compiler-stderr.bin",error.partial_stderr)
+            if hasattr(error,"partial_stdout") and hasattr(error,"partial_stderr"):
+                prefix="compiler" if attach_active else "compiler-control"
+                keep(prefix+"-stdout.bin",error.partial_stdout)
+                keep(prefix+"-stderr.bin",error.partial_stderr)
             record("compiler-failure.json",{"failure":str(failure),
                 "stream_truncated":bool(getattr(error,"stream_truncated",False)),
                 "successful_compilation":False})
@@ -266,6 +274,15 @@ def self_test():
                 with self.assertRaises((ValueError,RunFailure)):static_output(bytes(bad))
             for bad in (b"",raw[:175],bytes(MAX_OUTPUT+1)):
                 with self.assertRaises(RunFailure):static_output(bad)
+        def test_adjacent_loads_allowed_and_overlaps_refused(self):
+            raw=bytearray(executable())
+            struct.pack_into("<H",raw,56,3)
+            struct.pack_into("<QQ",raw,96,232,232)
+            struct.pack_into("<IIQQQQQQ",raw,176,1,6,232,0x4000e8,0,24,24,1)
+            self.assertEqual(static_output(bytes(raw))["mapped_bytes"],256)
+            for offset,value in ((192,0x4000e7),(184,231)):
+                bad=bytearray(raw);struct.pack_into("<Q",bad,offset,value)
+                with self.assertRaises(RunFailure):static_output(bytes(bad))
         def test_complete_owned_lifecycle_retains_bytes(self):
             image,cid,before,after=fixture();saved={}
             def keep(leaf,raw):
@@ -334,6 +351,23 @@ def self_test():
             self.assertEqual(saved["compiler-stdout.bin"],b"partial")
             self.assertEqual(saved["compiler-stderr.bin"],b"diagnostic")
             self.assertFalse(json.loads(saved["compiler-failure.json"])["successful_compilation"])
+        def test_post_run_inspect_failure_keeps_compiler_and_control_bytes_separate(self):
+            image,cid,before,after=fixture();saved={}
+            failure=transport.stream_failure(RunFailure("inspect deadline"),
+                {1:bytearray(b"partial Docker JSON"),2:bytearray(b"inspect diagnostic")},65536,1024)
+            def keep(leaf,raw):
+                if leaf in saved:raise AssertionError("exclusive evidence leaf reused")
+                saved[leaf]=raw;return retain(leaf,raw)
+            with patch(__name__+".cloud_guard"),patch(__name__+".uuid.uuid4") as uid:
+                uid.return_value.hex="b"*32
+                with patch(__name__+".exchange",side_effect=[(0,(cid+"\n").encode(),b""),(0,executable(),b"")]):
+                    with patch(__name__+".control",side_effect=[json.dumps([before]).encode(),failure,b"",b""]):
+                        with self.assertRaises(RunFailure):execute(image,keep)
+            self.assertEqual(saved["compiler-stdout.bin"],executable())
+            self.assertEqual(saved["compiler-stderr.bin"],b"")
+            self.assertEqual(saved["compiler-control-stdout.bin"],b"partial Docker JSON")
+            self.assertEqual(saved["compiler-control-stderr.bin"],b"inspect diagnostic")
+            self.assertIn("compiler-cleanup.json",saved)
         def test_cleanup_failure_never_returns_success(self):
             image,cid,before,after=fixture()
             with patch(__name__+".cloud_guard"),patch(__name__+".uuid.uuid4") as uid:

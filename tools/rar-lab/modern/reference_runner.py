@@ -46,8 +46,10 @@ def exchange(argv, request, timeout, stdout_limit, stderr_limit):
            "DOCKER_CONFIG": "/nonexistent"}
     proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, env=env, close_fds=True)
+    output = {1: bytearray(), 2: bytearray()}
+    failure = None
+    result = None
     try:
-        output = {1: bytearray(), 2: bytearray()}
         position = 0
         deadline = time.monotonic() + timeout
         with selectors.DefaultSelector() as selector:
@@ -90,16 +92,41 @@ def exchange(argv, request, timeout, stdout_limit, stderr_limit):
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise RunFailure("CLI deadline")
-            return proc.wait(timeout=remaining), bytes(output[1]), bytes(output[2])
-    except (OSError,subprocess.SubprocessError,RunFailure) as error:
-        raise stream_failure(error,output,stdout_limit,stderr_limit) from error
+            result = (proc.wait(timeout=remaining), bytes(output[1]), bytes(output[2]))
+    except BaseException as error:
+        failure = stream_failure(error,output,stdout_limit,stderr_limit)
+        failure.__cause__ = error
     finally:
-        if proc.poll() is None:
-            proc.kill()
-        proc.wait(timeout=2)
-        for stream in (proc.stdin, proc.stdout, proc.stderr):
-            if stream is not None and not stream.closed:
-                stream.close()
+        cleanup_errors = []
+        try:
+            try:
+                if proc.poll() is None:
+                    proc.kill()
+            except BaseException as error:
+                cleanup_errors.append(error)
+            try:
+                proc.wait(timeout=2)
+            except BaseException as error:
+                cleanup_errors.append(error)
+        finally:
+            # A failed kill/reap must never skip any pipe-close attempt.
+            for stream in (proc.stdin,proc.stdout,proc.stderr):
+                try:
+                    if stream is not None and not stream.closed:
+                        stream.close()
+                except BaseException as error:
+                    cleanup_errors.append(error)
+        if cleanup_errors:
+            cause = failure if failure is not None else cleanup_errors[0]
+            failure = stream_failure(
+                RunFailure("CLI reap/pipe cleanup unconfirmed; terminate disposable job"),
+                output,stdout_limit,stderr_limit)
+            failure.__cause__ = cause
+    if failure is not None:
+        raise failure
+    if result is None:
+        raise RunFailure("missing CLI result; terminate disposable job")
+    return result
 
 def stream_failure(error,output,stdout_limit,stderr_limit):
     """Retain bounded partial bytes as diagnostics, never a successful result."""
@@ -368,7 +395,8 @@ def self_test() -> None:
                 def register(self,stream,event,data):
                     self.items[stream.fileno()]=SimpleNamespace(fileobj=stream,fd=stream.fileno(),data=data)
                 def get_map(self):return self.items
-                def select(self,timeout):return [(self.items[11],0)]
+                def unregister(self,stream):del self.items[stream.fileno()]
+                def select(self,timeout):return [(self.items[next(iter(self.items))],0)]
             proc=Proc()
             with patch.object(subprocess,"Popen",return_value=proc),patch.object(selectors,"DefaultSelector",return_value=Selector()):
                 with patch.object(os,"set_blocking"),patch.object(os,"read",return_value=b"abcdef"):
@@ -378,6 +406,29 @@ def self_test() -> None:
             self.assertTrue(caught.exception.stream_truncated)
             self.assertEqual(proc.returncode,-9);self.assertEqual(proc.waits,1)
             self.assertTrue(all(stream.closed for stream in (proc.stdin,proc.stdout,proc.stderr)))
+            proc=Proc()
+            with patch.object(subprocess,"Popen",return_value=proc),patch.object(selectors,"DefaultSelector",return_value=Selector()):
+                with patch.object(os,"set_blocking"),patch.object(os,"read",side_effect=[b"abc",b"",b""]):
+                    self.assertEqual(exchange(["fake"],b"",10,3,2),(0,b"abc",b""))
+            self.assertEqual(proc.waits,2)
+            self.assertTrue(all(stream.closed for stream in (proc.stdin,proc.stdout,proc.stderr)))
+            for failure_kind in ("kill","wait"):
+                proc=Proc()
+                if failure_kind=="kill":
+                    def fail_kill():raise OSError("kill refused")
+                    proc.kill=fail_kill
+                else:
+                    def fail_wait(timeout):raise subprocess.TimeoutExpired("fake",timeout)
+                    proc.wait=fail_wait
+                with patch.object(subprocess,"Popen",return_value=proc),patch.object(selectors,"DefaultSelector",return_value=Selector()):
+                    with patch.object(os,"set_blocking"),patch.object(os,"read",return_value=b"abcdef"):
+                        with self.assertRaises(RunFailure) as failed:exchange(["fake"],b"",10,3,2)
+                self.assertEqual(failed.exception.partial_stdout,b"abc")
+                self.assertTrue(failed.exception.stream_truncated)
+                self.assertIn("cleanup unconfirmed",str(failed.exception))
+                self.assertIsNotNone(failed.exception.__cause__)
+                self.assertTrue(all(stream.closed for stream in (proc.stdin,proc.stdout,proc.stderr)))
+
         def test_missing_confinement_fails(self):
             for item in ({}, {"HostConfig": None}, {"HostConfig": {}},
                          {"HostConfig": {"NetworkMode": "host"}}):
