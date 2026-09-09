@@ -93,6 +93,9 @@ def argv(rows,index,profile):
     if rows!=expected: raise ValueError("actual QEMU arguments differ from the fixed reviewed profile")
     return True
 
+def qemu_killed(code):
+    return type(code) is int and code == -9
+
 def terminated(code,problem):
     if type(code) is not int or (code,problem) not in ((-9,"backend-failed"),(21,"backend-failed")):
         raise ValueError("exact observed backend termination pairing")
@@ -245,7 +248,7 @@ def validate(raw,expected_boot_digest,firmware_sizes):
         cut=proof["cut"]
         if (type(cut) is not dict or set(cut)!={"vm_pid","vm_returncode","backends","joined"} or
             cut["joined"] is not True or type(cut["vm_pid"]) is not int or cut["vm_pid"]<=0 or
-            cut["vm_returncode"]!=-9 or type(cut["backends"]) is not list or len(cut["backends"])!=3):
+            not qemu_killed(cut["vm_returncode"]) or type(cut["backends"]) is not list or len(cut["backends"])!=3):
             raise ValueError("whole QEMU killed before three backend joins")
         pids.append(cut["vm_pid"])
         if type(proof["serial"]) is not str or not proof["serial"].isascii() or len(proof["serial"])>65536 or "RAR-MODERN:GUI-READY" not in proof["serial"]:
@@ -283,7 +286,132 @@ def validate(raw,expected_boot_digest,firmware_sizes):
     return {"frames":5,"fresh_vms":2,"data_sha256":sha(data),"boot_sha256":expected_boot_digest,
             "content_validated":True,"provenance_validated":False,"milestone_complete":False}
 
+
+def canonical(value):
+    return json.dumps(value,separators=(",",":"),sort_keys=True,allow_nan=False).encode("ascii")+b"\n"
+
+def refusal_cases():
+    """Fixed paths/operations, never instructions supplied by a captured guest."""
+    cases=[]
+    def add(name,path,operation,value=None):
+        cases.append((name,tuple(path),operation,value))
+    for field in ("schema","status","boot_sha256","initial_data_sha256",
+                  "frozen_data_sha256","system_sha256","challenge"):
+        add("envelope-"+field,(field,),"flip")
+    for field in ("milestone_complete","crypto_interoperability_accepted"):
+        add("claim-"+field,(field,),"set",True)
+    for index in range(5):
+        add("frame-%d-hash"%index,("frames",index,"sha256"),"flip")
+    add("frame-pixels-rehashed",("frames",4),"pixels")
+    add("data-bytes-rehashed",(),"data")
+    for vm in range(2):
+        root=("vm_proofs",vm)
+        for label,path,operation,value in (
+            ("not-joined",("cut","joined"),"set",False),
+            ("return-code",("cut","vm_returncode"),"set",0),
+            ("float-return-code",("cut","vm_returncode"),"set",-9.0),
+            ("no-qmp-eof",("qmp_drained",),"set",False),
+            ("invalid-command-id",("commands",0,"id"),"set",0),
+            ("unexpected-event",("events",0,"event"),"set","RESET"),
+            ("invalid-receipt",("event_receipts",0,"event_index"),"set",1),
+            ("post-reap-resume",("event_receipts",0,"request_id"),"set",None),
+            ("rtc-inventory",("preflight","raw","rtc-children"),"set",[]),
+            ("verified-rtc",("preflight","verified","rtc_path"),"set","/machine/other"),
+            ("guest-panic",("serial",),"set","RAR-MODERN:GUI-READY\nRAR-PANIC"),
+            ("extra-argv",("argv",),"append","-snapshot")):
+            add("vm%d-%s"%(vm+1,label),root+path,operation,value)
+        for role in range(3):
+            backend=root+("cut","backends",role)
+            add("vm%d-role%d-unjoined"%(vm+1,role),backend+("joined",),"set",False)
+            add("vm%d-role%d-capacity"%(vm+1,role),backend+("records",0,"capacity"),"increment")
+            add("vm%d-role%d-authority"%(vm+1,role),backend+("records",0,"readonly"),"invert")
+    add("reused-vm-pid",("vm_proofs",1,"cut","vm_pid"),"copy",("vm_proofs",0,"cut","vm_pid"))
+    add("changed-data-inode",("vm_proofs",1,"cut","backends",0,"records",0,"inode"),"increment")
+    return cases
+
+def apply_refusal(document,case):
+    _,path,operation,value=case
+    def at(parts):
+        result=document
+        for part in parts:result=result[part]
+        return result
+    if operation=="data":
+        data=bytearray(decoded(document["frozen_data_base64"],99328))
+        # Alter the retained header and recompute its outer hash. Authentication
+        # and content binding, not just the outer SHA, must still reject it.
+        data[0]^=1
+        document["frozen_data_base64"]=base64.b64encode(data).decode("ascii")
+        document["frozen_data_sha256"]=sha(data)
+        return
+    target=at(path[:-1]);key=path[-1];old=target[key]
+    if operation=="set":target[key]=value
+    elif operation=="flip":
+        if type(old) is not str or not old:raise AssertionError("nonempty captured string")
+        target[key]=("b" if old[0]=="a" else "a")+old[1:]
+    elif operation=="increment":
+        if type(old) is not int:raise AssertionError("captured integer")
+        target[key]=old+1
+    elif operation=="invert":
+        if type(old) is not bool:raise AssertionError("captured boolean")
+        target[key]=not old
+    elif operation=="copy":target[key]=at(value)
+    elif operation=="append":
+        if type(old) is not list:raise AssertionError("captured list")
+        old.append(value)
+    elif operation=="pixels":
+        pixels=bytearray(base64.b64decode(old["actual_ppm"],validate=True))
+        pixels[-1]^=1
+        old["actual_ppm"]=base64.b64encode(pixels).decode("ascii")
+        old["sha256"]=sha(pixels)
+    else:raise AssertionError("unknown fixed refusal operation")
+
+def actual_refusals(raw,expected_boot_digest,firmware_sizes):
+    """Recheck altered copies of one real positive capture; no VM/disk mutation."""
+    import time
+    positive=validate(raw,expected_boot_digest,firmware_sizes)
+    cases=refusal_cases()
+    names=[case[0] for case in cases]
+    if len(cases)!=60 or len(set(names))!=len(names):
+        raise AssertionError("fixed unique actual-evidence refusal matrix")
+    deadline=time.monotonic()+300
+    results=[]
+    for case in cases:
+        if time.monotonic()>deadline:raise TimeoutError("bounded evidence refusal matrix")
+        document=json.loads(raw)
+        apply_refusal(document,case)
+        changed=canonical(document)
+        if changed==raw:raise AssertionError("refusal did not change retained bytes")
+        try:validate(changed,expected_boot_digest,firmware_sizes)
+        except ValueError as error:
+            results.append({"case":case[0],"input_sha256":sha(changed),
+                            "rejection_sha256":sha(str(error).encode("utf-8"))})
+        except Exception as error:
+            raise RuntimeError("refusal checker crashed: "+case[0]) from error
+        else:raise AssertionError("altered actual evidence accepted: "+case[0])
+        # TypeError/KeyError/assertions/timeouts are test failures, not refusals.
+    if time.monotonic()>deadline:raise TimeoutError("bounded evidence refusal matrix")
+    if validate(raw,expected_boot_digest,firmware_sizes)!=positive:
+        raise AssertionError("positive capture changed during refusal validation")
+    return {"schema":"rar-modern-actual-refusals-v1","base_sha256":sha(raw),
+            "rejected":len(results),"cases":results,"disk_faults_tested":False,
+            "milestone_complete":False}
+
 def self_test():
+    cases=refusal_cases()
+    assert len(cases)==60 and len({row[0] for row in cases})==60
+    sample={"rows":[{"number":3,"text":"a","flag":False,"items":[]}],"source":9}
+    for op,key,value,expected in (("increment","number",None,4),("flip","text",None,"b"),
+                                  ("invert","flag",None,True),("append","items","x",["x"]),
+                                  ("set","number",0,0),("copy","number",("source",),9)):
+        changed=json.loads(json.dumps(sample))
+        apply_refusal(changed,("unit",("rows",0,key),op,value))
+        assert changed["rows"][0][key]==expected
+        assert sample=={"rows":[{"number":3,"text":"a","flag":False,"items":[]}],"source":9}
+    assert canonical({"value":-9})!=canonical({"value":-9.0})
+    assert qemu_killed(-9)
+    for code in (-9.0,True,False,0,9,"-9",None):
+        assert not qemu_killed(code)
+
     rejected=0
     def reject(fn):
         nonlocal rejected
