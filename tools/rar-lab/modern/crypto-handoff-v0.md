@@ -124,3 +124,35 @@ If the first diagnostic fails, inspect the exact retained phase and bounded
 process evidence, correct the cause, review the correction and perform one
 bounded retry. Never spin an unchanged job or describe a helper self-test as a
 successful crypto comparison.
+
+## Retained failure inspection and observable diagnostics
+
+Diagnostic34332066725 used trusted main cb863b78ef914f9a1d9e2c2dddf704928e0a91f2
+and source bfd8647b10e1daa38934b1e12363ba919938bbf7. It stopped during
+driver-construction before independent comparison. Its exact error remains to
+be read from retained artifact10096184040 (387106 bytes, SHA256
+bd5ee6fe146338fa72f3a6349a26d4705b93345a2b7c48f5dc26be30a6b19451).
+This is a failed diagnostic, not crypto acceptance.
+
+The optional inspect_first_failure workflow input selects only crypto_failure.py.
+It never calls the compiler/comparison entrypoint. It reads just that fixed
+artifact/run through the existing credential-separated GitHub client, checks
+receipt/whole-ZIP digest before parsing, reads bounded flat regular members in
+memory without extracting any file, checks the complete retained manifest/hash
+inventory and prints a bounded JSON rendering of its last three command records.
+It neither builds nor loads images, invokes a subprocess, boots a VM, writes
+workspace files, or accepts an arbitrary artifact ID, URL, path or command.
+The workflow checkout remains a disposable cloud operation. No evidence is
+downloaded to the Mac/SSD. CPU/address-space/time/output bounds apply; filesystem
+output is denied with a zero file-size limit. Inspection logs do not establish
+runtime success.
+
+Future comparison failures print the bounded phase/type and, outside the
+credential-sensitive acquisition phase, the retained validation error as one
+escaped JSON line. They still retain the full evidence artifact and fail.
+No guard, acceptance condition or retry rule changes.
+
+Receipt verification uses exact types and values for every fixed field, including
+both canonical repository numeric IDs and names on the run and both repository
+IDs on the artifact receipt. Booleans cannot alias integer run attempts. Pure
+negative tests mutate/delete every fixed leaf and exercise type aliases.
