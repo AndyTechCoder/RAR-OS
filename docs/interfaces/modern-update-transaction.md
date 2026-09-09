@@ -1,6 +1,6 @@
 # Modern Settings update transaction — integration decision
 
-Status: implementation design under focused review. No syscall, process, disk
+Status: independently reviewed implementation design; runtime acceptance pending. No syscall, process, disk
 layout, image, or runtime authority is activated by this document. It refines
 ADR0034 inside the existing M4 implementation PR; it is not a new permission
 packet or a separate release gate.
@@ -161,3 +161,22 @@ Include failure at each initial desktop preparation step (no partial logical or
 runnable publication), repeated selected-package health failure (halt rather
 than recovery loops), and both-selector corruption (unavailable, no floor reset).
 Source/model tests alone do not prove these runtime properties.
+
+## IRQ0 integration status
+
+The actual Modern trap adapter now calls the policy's delivered_preemption with
+its saved current physical slot and full CPU incarnation on every delivered IRQ0
+(except the dedicated non-principal idle context). The policy obtains its trial
+token internally, charges only the exact Trial endpoint, and destroys logical
+trial authority at the signed budget boundary. The adapter reconciles logical
+revocation into non-runnable CPU state before user-return validation or scheduler
+selection. Healthy candidates remain blocked and are not charged. Stale CPU
+incarnations halt on the kernel identity invariant rather than charging a reused
+slot. No user register can choose the charged endpoint, token or budget.
+
+Focused tests cover exact exhaustion, unrelated process ticks, stale incarnation
+before and after slot reuse, Healthy, abort, manager failure, invalid slots and
+idle exclusion. These are source/model tests plus actual trap-path wiring, not
+a real signed replacement demonstration. Staging, trial process construction,
+physical unmap/TLB invalidation/zero-before-reuse and durable cutover remain
+required before any replacement or M4 completion claim.

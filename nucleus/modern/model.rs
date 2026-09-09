@@ -306,6 +306,14 @@ impl Runtime {
     }
     /// Timer/fault hooks derive endpoint incarnation from the saved context.
     /// Delayed events cannot affect a reused physical slot.
+    /// Charge one delivered hardware preemption to the kernel-owned current
+    /// endpoint. Only the trap adapter may supply this identity; no user token,
+    /// budget or endpoint is accepted. The active trial token stays kernel-owned.
+    /// A stale CPU incarnation is an invariant error, not a charge to its reuse.
+    pub fn delivered_preemption(&mut self,endpoint:Endpoint)->Result<bool,Error>{
+        let token=self.trial.map_or(0,|trial|trial.token);
+        self.preempt(endpoint,token)
+    }
     pub fn preempt(&mut self,endpoint:Endpoint,token:u64)->Result<bool,Error>{
         let slot=endpoint.slot as usize;
         let process=self.processes.get(slot).ok_or(Error::Invalid)?;
@@ -349,6 +357,48 @@ mod tests {
     fn healthy(r:&mut Runtime)->Trial{
         let t=prepare(r,23,50);
         r.ready(t.endpoint.slot as usize,r.handle(t.endpoint.slot as usize,HEALTH_CAP).unwrap(),t.token).unwrap();t
+    }
+    #[test] fn delivered_irq_charges_only_the_exact_trial_and_expires_once() {
+        let mut r=Runtime::new();let t=prepare(&mut r,71,2);
+        let old=r.binding(5).unwrap().unwrap();
+        for endpoint in [old,Endpoint{slot:0,incarnation:1},Endpoint{slot:8,incarnation:1}]{
+            assert_eq!(r.delivered_preemption(endpoint),Ok(false));
+        }
+        assert_eq!(r.trial.unwrap().budget,2);
+        assert_eq!(r.delivered_preemption(Endpoint{slot:t.endpoint.slot,
+            incarnation:t.endpoint.incarnation-1}),Err(Error::Stale));
+        assert_eq!(r.trial.unwrap().budget,2);
+        assert_eq!(r.delivered_preemption(t.endpoint),Ok(false));
+        assert_eq!(r.trial.unwrap().budget,1);
+        assert_eq!(r.delivered_preemption(t.endpoint),Ok(true));
+        assert_eq!(r.state(t.endpoint.slot as usize),Ok(State::Vacant));
+        assert_eq!(r.binding(5),Ok(Some(old)));
+        assert_eq!(r.delivered_preemption(t.endpoint),Err(Error::Stale));
+        let next=prepare(&mut r,72,2);
+        assert_eq!(next.endpoint.slot,t.endpoint.slot);
+        assert!(next.endpoint.incarnation>t.endpoint.incarnation);
+        assert_eq!(r.delivered_preemption(t.endpoint),Err(Error::Stale));
+        assert_eq!(r.trial.unwrap().budget,2);
+        assert_eq!(r.delivered_preemption(next.endpoint),Ok(false));
+        assert_eq!(r.trial.unwrap().budget,1);
+    }
+    #[test] fn delivered_irq_does_not_charge_healthy_or_activate_revoked_state() {
+        let mut r=Runtime::new();let t=healthy(&mut r);
+        let before=r.trial.unwrap().budget;
+        assert_eq!(r.delivered_preemption(t.endpoint),Ok(false));
+        assert_eq!(r.trial.unwrap().budget,before);
+        assert_eq!(r.state(t.endpoint.slot as usize),Ok(State::Healthy));
+        r.abort(8,manager(&r),t.token).unwrap();
+        assert_eq!(r.delivered_preemption(t.endpoint),Err(Error::Stale));
+        assert_eq!(r.delivered_preemption(Endpoint{slot:16,incarnation:1}),Err(Error::Invalid));
+        assert_eq!(r.delivered_preemption(Endpoint{slot:15,incarnation:1}),Err(Error::Stale));
+        // The dedicated idle CPU is excluded by the real trap adapter.
+        assert_eq!(r.delivered_preemption(Endpoint{slot:0,incarnation:1}),Ok(false));
+        let t=prepare(&mut r,73,1);
+        r.fault(Endpoint{slot:8,incarnation:1}).unwrap();
+        assert!(r.recovery_required());
+        assert_eq!(r.delivered_preemption(t.endpoint),Err(Error::Stale));
+        assert_eq!(r.state(t.endpoint.slot as usize),Ok(State::Vacant));
     }
     #[test] fn normal_boot_device_authority_is_caller_local_and_role_exact() {
         let mut r=Runtime::new();let data=r.handle(1,DEVICE_CAP).unwrap();

@@ -304,6 +304,20 @@ pub extern "sysv64" fn trap(frame:*mut arch::Trap,saved:u64)->u64{
             unsafe{crate::out(0x20,0x20);}
             state.processes[current].preemptions=state.processes[current].preemptions.saturating_add(1);
             state.ticks=support::tick(state.ticks);
+            // IRQ0 owns current/generation under IF=0. Never take a trial token
+            // or budget from registers. Idle has no logical endpoint.
+            if current!=15{
+                let endpoint=model::Endpoint{slot:current as u8,
+                    incarnation:state.processes[current].generation};
+                let expired=state.policy.as_mut().unwrap().delivered_preemption(endpoint)
+                    .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=MODERN-TIMER-IDENTITY"));
+                if expired{
+                    // Reconcile logical death before return validation or
+                    // runnable selection. Physical teardown/reuse is a separate
+                    // mandatory lifecycle boundary, not implemented here.
+                    state.synchronize_revocations();
+                }
+            }
         }
         128=>{
             f.rax=match state.sys(f){Ok(value)=>value,Err(error)=>number(error)};
