@@ -60,7 +60,7 @@ class Tests(unittest.TestCase):
             with self.assertRaises(ValueError):vm.fault_receipt(RuntimeError("not planned"))
             wrong=session.PlannedDataFault(("wrong",))
             with self.assertRaises(ValueError):vm.fault_receipt(wrong)
-            for fail_join in (False,True):
+            for failure in (None,"join","qmp","vm0","vm1","vm-bool","peer0","peer20","peer22","peer-problem","data21","entry-peer","all21"):
                 trace=[];data=vm.backends[0].records
                 def ready(role):
                     return dict(type="ready",kind=role,readonly=role=="boot",
@@ -74,11 +74,26 @@ class Tests(unittest.TestCase):
                     cleanup_succeeded=False,qmp_drained=False)
                 def destroy():
                     trace.append("destroy")
-                    fake.cleanup_succeeded=not fail_join;fake.qmp_drained=not fail_join
-                    return dict(joined=not fail_join,backends=[
+                    fake.cleanup_succeeded=failure!="join";fake.qmp_drained=failure!="qmp"
+                    result=dict(joined=failure!="join",vm_returncode=-9,
+                        entry=dict(vm_code=None,backend_codes=[None,None,None],
+                                   backend_problems=[None,None,None]),backends=[
                         dict(joined=True,records=r,returncode=-9,problem="backend-failed") for r in rows])
+                    if failure in ("vm0","vm1","vm-bool"):
+                        result["vm_returncode"]={"vm0":0,"vm1":1,"vm-bool":True}[failure]
+                    if failure in ("peer0","peer20","peer22"):
+                        result["backends"][1]["returncode"]={"peer0":0,"peer20":20,"peer22":22}[failure]
+                    if failure=="peer-problem":result["backends"][2]["problem"]="unexpected-stderr"
+                    if failure=="data21":result["backends"][0]["returncode"]=21
+                    if failure=="entry-peer":result["entry"]["backend_codes"][1]=21
+                    if failure=="all21":
+                        for index,report in enumerate(result["backends"]):
+                            report["returncode"]=21
+                            rows[index].append(dict(type="terminal",outcome="failed",
+                                fault_hit=index==0,failed=index==0))
+                    return result
                 fake.destroy=destroy
-                if fail_join:
+                if failure not in (None,"all21"):
                     with self.assertRaises(ValueError):persistence.joined_fault(fake,signal)
                 else:self.assertEqual(persistence.joined_fault(fake,signal)["fault"],receipt)
                 self.assertEqual(trace,["service","destroy"])

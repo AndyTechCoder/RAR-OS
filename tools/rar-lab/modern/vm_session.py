@@ -434,6 +434,13 @@ class VM:
         self.cleanup_succeeded = False
         result = {"vm_pid":None,"vm_returncode":None,"backends":[],"joined":False}
         failures = []
+        if getattr(self,"fault_plan",None) is not None:
+            try:
+                result["entry"]=dict(vm_code=self.child.poll(),
+                    backend_codes=[backend.process.poll() for backend in self.backends],
+                    backend_problems=[backend.problem for backend in self.backends])
+            except BaseException:
+                failures.append("fault teardown entry snapshot failed")
         if self.child is not None:
             result["vm_pid"] = self.child.pid
             try:

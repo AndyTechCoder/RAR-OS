@@ -163,6 +163,9 @@ def joined(vm):
                 commands=vm.commands,events=vm.events,event_receipts=vm.event_receipts,
                 qmp_drained=vm.qmp_drained,serial=bytes(vm.serial).decode("ascii"))
 
+def canonical_entry(value):
+    return json.dumps(value,sort_keys=True,separators=(",",":"),allow_nan=False)
+
 def joined_fault(vm,observation):
     """Stop after an exact planned signal; no generic exception can authorize it.
     This receipt alone is NOT crash-consistency acceptance. The caller must
@@ -185,13 +188,24 @@ def joined_fault(vm,observation):
     if (stopped.get("joined") is not True or vm.cleanup_succeeded is not True or
         vm.qmp_drained is not True or len(stopped.get("backends",[]))!=3):
         raise ValueError("whole VM and all backend joins required")
+    entry=stopped.get("entry")
+    expected_entry=dict(vm_code=None,backend_codes=[20 if cut else None,None,None],
+                        backend_problems=["cut" if cut else None,None,None])
+    if (type(entry) is not dict or canonical_entry(entry)!=canonical_entry(expected_entry) or
+        type(stopped.get("vm_returncode")) is not int or stopped["vm_returncode"]!=-9):
+        raise ValueError("exact live teardown entry and deliberate QEMU kill")
     summaries=[]
     for index,(backend,report,role) in enumerate(zip(vm.backends,stopped["backends"],
                                                    ("data","system","boot"))):
         if report.get("joined") is not True or report.get("records")!=backend.records:
             raise ValueError("actual joined backend records required")
         if index:
-            summaries.append(audit(report["records"],role,backend.records[0],False))
+            summary=audit(report["records"],role,backend.records[0],False)
+            if (type(report.get("returncode")) is not int or report["returncode"] not in (-9,21) or
+                report.get("problem")!="backend-failed" or
+                (report["returncode"]==21 and summary["transport_closed"] is not True)):
+                raise ValueError("peer must end by owned kill or complete post-cut EOF")
+            summaries.append(summary)
             continue
         matched=vm.fault_audit.scan(report["records"],expected,backend.records[0])
         if matched is None or any(matched[key]!=receipt[key] for key in
@@ -202,8 +216,9 @@ def joined_fault(vm,observation):
                 report["returncode"]!=20 or report.get("problem")!="cut"):
                 raise ValueError("cut child exact final termination")
         elif (type(report.get("returncode")) is not int or report["returncode"] not in (-9,21) or
-              report.get("problem")!="backend-failed"):
-            raise ValueError("error child must end only with owned stop or transport EOF")
+              report.get("problem")!="backend-failed" or
+              (report["returncode"]==21 and matched["terminal"] is not True)):
+            raise ValueError("error child must end only with owned stop or complete transport EOF")
         summaries.append(matched)
     return dict(cut=stopped,audit=summaries,fault=receipt,argv=vm.argv,preflight=vm.preflight,
         commands=vm.commands,events=vm.events,event_receipts=vm.event_receipts,
