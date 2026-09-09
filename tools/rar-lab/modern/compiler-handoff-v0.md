@@ -159,3 +159,35 @@ ZIP framing, positive synthetic manifest parsing and altered-manifest refusals;
 synthetic fixture archives are never represented as accepted real artifacts.
 Actual cloud acquisition and all subsequent compiler/adapter integration remain
 pending. This helper does not satisfy independent crypto comparisons or M4.
+
+## Derived compiler image assembly and inspection
+
+derived_compiler_image.py composes a canonical Docker-save image entirely as
+data. It first invokes the independent pinned-parent compiler inventory,
+driver-layer inspector and Git-bound source-layer inspector. Additions may not
+replace any parent file or directory. Original parent layer bytes and ordering
+are preserved, followed by exactly the driver and source layers. Parent history
+is preserved with exactly two corresponding nonempty additions.
+
+The resulting process configuration is a fresh positive allowlist: amd64/Linux,
+user65532:65532, working directory/source, entrypoint/rar-compile-driver and only
+PATH=/nonexistent plus RAR_COMPILER_ROLE=modern-v0. No inherited command,
+volume, label, shell, port or health configuration survives. The static driver
+sets the separate child's needed compiler environment itself.
+
+Inspection independently rechecks all three inputs, parses the resulting
+archive/config/manifest, verifies each layer digest and exact process/rootfs/
+history fields, and requires exact canonical archive bytes. Extra members,
+changed parent layers, replacements, links and trailing data fail. Parent
+archive data uses the already-accepted Docker-save naming rules; its directory
+entries are not copied into the derived outer archive. Layer views avoid copying
+the parent payload solely for indexing. The caller still needs aggregate cloud
+memory/disk limits: full accepted-parent and resulting-image bytes remain live
+during construction, with a derived image ceiling of2GiB plus4MiB.
+
+The isolated source tests cover canonical encoding, readonly views, exact
+configuration, prefix/history preservation, altered/trailing bytes, unsafe
+outer members and refusal of an arbitrary parent. Real accepted-image
+compatibility, reproducible driver construction/provenance, cloud memory use,
+Docker loading and compiler execution remain unproved. This module performs
+no file write/extraction/process/network operation and activates no image.
