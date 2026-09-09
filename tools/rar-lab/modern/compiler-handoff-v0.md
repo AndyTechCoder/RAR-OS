@@ -1,0 +1,295 @@
+# Modern compiler handoff candidate
+
+Unactivated host-only infrastructure for M4 crypto comparisons. This is not
+RAR OS linkage, guest execution, or a change to the accepted compiler baseline.
+
+The reproduced compiler parent is
+sha256:9bb926e46f5789c5048af8dfad598b5ef9779ae0f1c572267a000f4b12eaf914
+from cloud run34083184108 at main d9cf06b87449391077f18566bffa1905fb3895bb.
+The derived image must have a new independently verified identity. Its exact
+ordered parent layers and files remain unchanged; no retagging, whiteouts,
+replacement paths, links or inherited extra authority are allowed.
+
+## Driver layer
+
+compiler_driver_layer.py constructs and independently inspects the one-file
+canonical USTAR layer for /rar-compile-driver: root-owned0555, fixed timestamp,
+at most2MiB static x86-64 ET_EXEC. It reuses the independent ELF byte parser,
+requires exactly one NX stack and an entry in exactly one executable file-backed
+load, rejects PT_INTERP/PT_DYNAMIC, W+X, malformed loads, and unbounded mapping.
+Canonical byte equality rejects hidden concatenated entries and extra padding.
+It has no filesystem write operations and refuses execution unless Python is
+isolated with bytecode writes disabled. It activates no image. Construction
+callers must provide read-only exact-main tool sources, not a mutable directory.
+
+The driver has a distinct RAR path, not an upstream Rust toolchain identity.
+Its fixed rustc command clears inherited environment and sets TMPDIR=/build;
+there is no fallback writable /tmp or HOME. Existing source and output bounds,
+nonroot/capability/NNP/seccomp guards, exact five-input inventory, and no output
+execution remain. Parent-enforced isolation is still mandatory.
+
+Source revision/source hash/recipe hash in the layer report are provenance
+labels only. The future trusted-main construction must bind them to exact Git
+blobs, build the driver twice with the pinned private bootstrap and network off,
+verify identical outputs, and bind output hashes independently. No caller report
+can substitute for that construction proof.
+
+## Remaining integration gates
+
+- Bind the exact five source files to a coordinator-selected immutable proposal
+  commit/tree/blob identity and source-layer bytes, not arbitrary checkout
+  content, moving references or caller labels. Control-plane code stays on
+  exact reviewed main; proposal source need not be merged before testing.
+- Inspect the full new config/rootfs: exact parent prefix, this driver layer,
+  exact source layer, no other additions, exact process environment/entrypoint.
+- Independently bind required Rust-std/musl and RAR notices to driver provenance.
+  The final static adapter image must carry its applicable notices too; notices
+  in the compiler parent do not automatically satisfy separate distribution.
+- Run the driver only in a reviewed cloud compiler role: fixed nonroot identity,
+  read-only root, no network/IPC/devices/host mounts, bounded noexec/nosuid/nodev
+  /build tmpfs, resource limits and verified effective daemon configuration.
+- Accept output only after clean process completion, bounded EOF and independent
+  static-ELF inspection. Never execute it inside the compiler role.
+- Reproduce adapter bytes and its new scratch image containing only the adapter
+  and required inert notices. Stop the compiler container before adapter runs.
+- Freeze corpus and RAR results before invoking either independent reference.
+  Oracle output never enters compiler source, adapter construction or RAR input.
+- Retain actual confinement/timeout/cleanup and three-way comparison evidence.
+
+Current tests are source-level layer, framing, refusal and command construction
+tests in the existing cloud Specifications sandbox, not runtime acceptance.
+No compiler runtime, adapter runtime, Modern VM or disk profile is activated.
+
+The layer report records SHA256 and Git blob identities of both this helper
+and its adjacent compiler_elf.py parser. Those measured identities must match
+the trusted-main tree before construction/inspection; labels alone cannot
+establish provenance. The caller's read-only source mount prevents changes
+between identity measurement and import. Both sources are bounded at128KiB.
+Focused tests cover aggregate multi-LOAD limits, address/offset congruence,
+ambiguous executable entry mappings, no-bytecode refusal and the exact2MiB limit.
+
+## Proposal source object binding
+
+source_snapshot.build_from_objects verifies the selected commit's raw Git object
+identity, its root-tree relationship, bounded raw tree/blob identities, and every
+component of each fixed path. Intermediate entries must be directories and all
+five leaves must be regular100644 blobs. Missing/extra objects, wrong hashes,
+duplicate names, malformed trees, executable/link/submodule source entries and
+LFS pointers fail. No checkout, filters, hooks, attributes or LFS resolution runs.
+The source-layer report binds the commit SHA256, root tree, five blob identities,
+per-file SHA256/size and canonical layer digest.
+
+The controller selects the immutable canonical-repository proposal commit and
+obtains raw objects with replacement objects disabled. This pure function does
+not authenticate the repository or choose/approve a revision. Compiler helper,
+driver, parser, inventories and launch commands remain exact reviewed-main code.
+The proposal contributes only bounded source bytes, never paths or commands.
+
+Before release, compare final main's five blob IDs/SHA256 values with the tested
+proposal and rerun comparisons if any differ. Rust compile-time built-ins can
+read the compiler role's visible files, so its complete positive inventory must
+contain no secrets, credentials or reference oracles. Compiled output remains
+hostile and separately confined. These boundaries avoid merging untested OS
+implementation merely to make testing possible.
+
+The report also inventories every used intermediate tree object by Git OID,
+SHA256 and size, in canonical OID order, and records commit byte length. The
+trusted parent must retain the raw commit and used tree/blob objects with the
+evidence so the complete root-to-leaf chain can be reconstructed independently.
+Unused objects and count/per-object/aggregate bounds have focused source tests.
+
+## Private driver construction recipe (not invoked or activated)
+
+compiler-driver.Containerfile builds only the reviewed RAR host-driver source.
+The trusted controller must supply a newly owned local parent tag already bound
+to the exact reproduced compiler image, inspect that association, and invoke
+BuildKit with network disabled, no cache, no pull, a fixed local output path and
+a minimal context of this recipe plus the exact reviewed driver blob. No
+proposal source, reference code, credentials or owner storage enters that build.
+
+The recipe takes only the verified musl sysroot from the compiler parent and
+uses the already pinned Rust1.95 private bootstrap. A fixed direct rustc command
+has a cleared environment, fixed linker/sysroot/static target and reproducible
+paths/metadata. Per-process CPU and file-size ceilings apply; the outer trusted
+job must additionally enforce wall-time, output and disk budgets. No driver or
+compiled adapter is executed during construction.
+
+The export contains the bounded driver, all captured parent notices and two
+fixed consumed-musl tree/SHA256 inventory files;
+its deliberately nonexistent entrypoint is not a runtime profile. Independently
+verify export paths/types/metadata/content, complete notice identity against the
+parent, static ELF framing, actual compiler/tool/source/recipe identities and
+two-build equality before making the canonical driver layer. The derived
+compiler image preserves all parent notices; the later adapter-only image
+requires its own separately inventoried notice set. This recipe alone does not
+establish legal sufficiency, role confinement, reproducibility or compilation
+success. Actual construction remains pending.
+
+## Source layer consumption
+
+Before derived-image assembly, source_snapshot.inspect independently parses the
+bounded source USTAR and compares every file to the separately Git-object-bound
+size/SHA256 inventory. It requires the fixed five paths and their exact readonly
+root-owned directory/file metadata, then requires the canonical encoding. Extra
+paths, replacements, links, alternate metadata, changed content, concatenated
+archives and trailing padding fail. The expected inventory must come from the
+trusted parent's raw-object verification, never a manifest supplied by the layer.
+This closes source-layer consumption validation only; no build, derived image,
+compiler invocation, adapter comparison or Modern VM is activated by this API.
+
+## Construction artifact intake
+
+construction_artifacts.py is a pure, non-activating intake helper for the two
+recorded compiler/reference construction artifacts. The trusted cloud caller
+must obtain metadata directly from the canonical GitHub repository. It verifies
+the fixed artifact/run/source/workflow identities, successful first attempt,
+non-expiry, byte count and whole ZIP SHA256 before parsing any member.
+
+Only bounded, flat, regular, unique ZIP members are permitted. Manifest JSON
+rejects duplicate keys and non-finite constants; construction status, false
+execution/activation flags and equal two-build inventories are required. Only
+the fixed manifests, inventories and two role image archives may be returned.
+Compiler image identity is additionally pinned to the reviewed parent.
+
+This is not image acceptance: each returned image archive still needs the
+independent compiler/reference inventory checker before loading. Process the
+two archives sequentially under the cloud job's aggregate memory/disk limits.
+No acquisition, extraction, file write, subprocess, Docker load or target
+execution is implemented here. Cloud source self-tests cover metadata identity,
+ZIP framing, positive synthetic manifest parsing and altered-manifest refusals;
+synthetic fixture archives are never represented as accepted real artifacts.
+Actual cloud acquisition and all subsequent compiler/adapter integration remain
+pending. This helper does not satisfy independent crypto comparisons or M4.
+
+## Derived compiler image assembly and inspection
+
+derived_compiler_image.py composes a canonical Docker-save image entirely as
+data. It first invokes the independent pinned-parent compiler inventory,
+driver-layer inspector and Git-bound source-layer inspector. Additions may not
+replace any parent file or directory. Original parent layer bytes and ordering
+are preserved, followed by exactly the driver and source layers. Parent history
+is preserved with exactly two corresponding nonempty additions.
+
+The resulting process configuration is a fresh positive allowlist: amd64/Linux,
+user65532:65532, working directory/source, entrypoint/rar-compile-driver and only
+PATH=/nonexistent plus RAR_COMPILER_ROLE=modern-v0. No inherited command,
+volume, label, shell, port or health configuration survives. The static driver
+sets the separate child's needed compiler environment itself.
+
+Inspection independently rechecks all three inputs, parses the resulting
+archive/config/manifest, verifies each layer digest and exact process/rootfs/
+history fields, and requires exact canonical archive bytes. Extra members,
+changed parent layers, replacements, links and trailing data fail. Parent
+archive data uses the already-accepted Docker-save naming rules; its directory
+entries are not copied into the derived outer archive. Layer views avoid copying
+the parent payload solely for indexing. The caller still needs aggregate cloud
+memory/disk limits: full accepted-parent and resulting-image bytes remain live
+during construction, with a derived image ceiling of2GiB plus4MiB.
+
+The isolated source tests cover a successful public build/inspect round trip
+with a small synthetic parent inventory, actual driver-ELF/source-layer parsers,
+preserved parent bytes/order/history, and canonical encoding/readonly views.
+They reject changed/reordered parent layers, manifest/config/history changes,
+swapped driver/source layers, extra/trailing bytes, unsafe outer members and
+both directions of file-ancestor conflicts. The synthetic parent is not an
+accepted compiler artifact; its upstream inventory is explicitly mocked. Real accepted-image
+compatibility, reproducible driver construction/provenance, cloud memory use,
+Docker loading and compiler execution remain unproved. This module performs
+no file write/extraction/process/network operation and activates no image.
+
+## Bounded compiler-role runner candidate
+
+compiler_runner.py invokes only the independently verified derived compiler
+image, under the existing trusted-main Linux cloud guard. The fixed driver
+entrypoint runs as65532:65532 on a read-only root with no network, IPC, host
+mounts/devices or extra capabilities. Only/build is writable: private32MiB tmpfs,
+noexec/nosuid/nodev, mode0700 and owned by65532. CPU2, memory/swap1GiB,64processes,
+disabled core dumps and64descriptors are checked against effective daemon
+configuration, not merely command-line intent.
+
+Creation and execution are separate. The returned full container ID, immutable
+image, random ownership label and name must match before start-by-ID. Rejected
+configuration never starts. Ambiguous or foreign ownership never permits
+delete-by-name; the disposable job must terminate. Cleanup removes only the
+verified ID and requires an empty subsequent ID query. Any uncertain cleanup or
+evidence failure prevents a successful result.
+
+The compiler receives empty stdin, has a120-second attached transport deadline
+and8MiB stdout/1KiB stderr limits. Actual stopped state, exit0, no OOM/error,
+empty stderr and separate independent static ET_EXEC/ELF/W^X/entry/mapping checks
+are required before returning output bytes. The helper never executes output.
+It retains bounded create/before/after records, raw output/error, failures and
+cleanup through a trusted callback; that callback must exclusively/durably write
+a new invocation-owned evidence directory and acknowledge each SHA256.
+
+Transport deadline/output failures preserve bounded partial bytes explicitly as
+failed diagnostics, not a successful compile. The shared adapter transport now
+preserves these fields as well, and its effective configuration forbids any
+unexpected writable tmpfs. The image acquisition, durable evidence writer and
+outer hard job deadline remain the trusted controller's responsibility.
+
+Source tests mock all process/control calls and cover positive ID lifecycle,
+effective policy mutations, static output mutations, rejection-before-start,
+retention failure, foreign/ambiguous ownership, timeout partial-byte retention,
+cleanup failure, stopped/OOM anomalies and default host denial. They do not
+establish actual compiler compatibility, resource use, reproducibility, Docker
+confinement or adapter execution. Real two-build and runtime evidence is still
+required; no image or OS is activated by adding this source.
+
+The compiler's attached-stream failure capture is scoped only to that exchange.
+Post-run Docker inspection failures use distinct compiler-control diagnostic
+leaves, so they cannot overwrite or collide with retained compiler output.
+The transport closes every pipe even when kill/reap fails, preserves bounded
+failure diagnostics and fails the job if cleanup is unconfirmed. Static adapter
+checks additionally reject overlapping virtual or nonempty file PT_LOAD ranges;
+adjacent nonoverlapping ranges remain allowed. Focused mocked/byte-fixture tests
+cover all three paths; these remain source checks, not actual runtime evidence.
+
+## Adapter-only scratch image candidate
+
+adapter_binary.py is the shared pure8MiB static adapter byte gate. The compiler
+runner wraps its validation errors as process failures; adapter_image.py uses
+the identical ELF/W^X/range/entry/mapping checks before image construction and
+again during inspection. No parser policy is relaxed by this factoring.
+
+adapter_image.py independently inventories the accepted compiler parent and
+copies every exact captured upstream notice under licenses/, with unchanged
+bytes and readonly permissions. It reads parent layers through a forward-only
+bounded memoryview stream rather than duplicating whole large layers for notice
+extraction. All notices must be present and hash/size/metadata-bound to the
+accepted parent inventory (at most48MiB,512files,16MiB perfile).
+
+The new single-layer scratch image contains only /target-reference, those
+notices and a fixed RAR source-revision attribution. That attribution grants no
+license; no repository license is invented and no legal-sufficiency claim is
+made. The fresh config is amd64/Linux, user65532:65532, working directory/,
+entrypoint/target-reference, sole PATH=/nonexistent and no CMD/extra authority.
+The adapter is0555, notices0444 and directories0555, root-owned at the fixed
+epoch. The complete Docker-save image is capped at64MiB.
+
+Public build/inspect source fixtures exercise actual static adapter parsing,
+notice extraction, canonical layer and exact scratch configuration with only
+the large upstream compiler inventory mocked. Mutation tests reject missing,
+changed or executable notices, extra compiler/oracle/source files, changed
+config/manifest/layer, trailing bytes and wrong notice provenance. This is
+source validation, not a successful load or independent crypto comparison.
+
+The trusted controller must still bind the two reproducible compiler outputs
+and source objects, validate real parent/notice compatibility, enforce aggregate
+resources, inspect before Docker load and retain actual execution/confinement
+evidence. The image builder performs no extraction to paths, write, subprocess,
+load or execution, and grants no authority to run an arbitrary image.
+
+## Integrated consumption binding
+
+crypto-handoff-v0.md defines the integrated controller candidate. It checks the
+fresh parent tag immediately before and after each independent driver build.
+The pinned bootstrap uses explicit find/sort/sha256sum commands to record the
+actual copied musl tree and file hashes before and after rustc; pipefail and
+cmp require unchanged records. The outer controller independently compares the
+exported records with the already-accepted parent inventory, rather than trusting
+a claimed BuildKit digest as if it were the Docker config ID. Wrong tags,
+different consumed bytes, missing/extra entries, modes or ownership fail before
+the driver can execute. The exclusive disposable-daemon assumption remains; no
+shared untrusted daemon is authorized. These two inert proof files are not added
+to the final compiler-driver layer or adapter-only runtime image.
