@@ -68,10 +68,11 @@ def cases():
     return tuple(out)
 
 def open_cases(seal_case, frozen_cipher_and_tag):
-    """Derive two decrypt cases AFTER three-way seal agreement.
-    Caller must freeze the RAR output before any oracle is run and must use the
-    protocol comparator before invoking this pure function. This is data only,
-    not proof that the caller followed that ordering.
+    """Derive decrypt inputs solely from the frozen RAR seal result.
+    Derivation is not acceptance: the controller must compare both the original
+    seal and every derived result with both independent references before any
+    overall verdict. Run and freeze all RAR cases before invoking an oracle so
+    reference output can never influence subsequent RAR input or execution.
     """
     if (type(seal_case) is not Case or seal_case.operation != 4 or
         type(seal_case.payload) is not bytes or len(seal_case.payload) < 48 or
@@ -152,3 +153,4 @@ if __name__ == "__main__":
         os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "linux"):
         raise SystemExit("cloud self-test entrypoint only")
     self_test()
+

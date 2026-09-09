@@ -173,10 +173,12 @@ section2.8.2 seal/open, every tag-byte mutation and representative key/nonce/AAD
 ciphertext mutations; and 70 AEAD padding/block/maximum-length combinations.
 No signature is generated. Test sealing nonces are unique per test key.
 
-After freezing RAR output and obtaining three-way seal agreement, the caller
-can derive successful-decrypt and invalid-tag cases for every seal boundary.
-The derived plaintext expectation comes from the original fixture, not from
-an oracle. This is not a substitute for independent agreement, protocol result
+After freezing each RAR seal output, the caller derives successful-decrypt and
+invalid-tag inputs solely from that output and the original fixture. Derivation
+is not acceptance: the original seal and every derived result must subsequently
+agree with both references. All RAR base and derived results are frozen before
+either reference is invoked. The derived plaintext expectation comes from the
+original fixture, not from an oracle. This is not a substitute for independent agreement, protocol result
 validation, malformed-request testing, fuzzing, constant-time analysis or
 production crypto review. The pure helper performs no file/process/network
 operation and cannot establish that a future caller followed invocation order.
@@ -184,3 +186,30 @@ Its self-tests validate corpus shape, fixture bounds, expected-result rejection
 and derived framing, not live cross-implementation correctness.
 Sources: https://www.rfc-editor.org/rfc/rfc8032#section-7.1 and
 https://www.rfc-editor.org/rfc/rfc8439#section-2.8.2 .
+
+## Causal fixed-corpus comparison component
+
+reference_comparison.py implements the fixed-corpus control flow for later
+trusted-main integration. It runs146 base RAR cases, derives142 decrypt/tag
+cases from the71 RAR seal results, runs those RAR cases, and retains a canonical
+immutable288-case request/expectation/raw-result envelope before any reference
+callback. A missing or incorrect evidence-retention acknowledgement aborts.
+Only then are IDs1 and2 invoked for each unchanged request, in order, with
+strict wire parsing and three-way comparison. The complete raw successful
+comparison transcript is retained separately and bound to the frozen hash.
+There are864 adapter invocations with no retry, under a cooperative1800-second
+global deadline in addition to the runner's individual process/output limits.
+
+The cloud caller owns both callbacks: execution must use independently
+inventoried immutable images and the reviewed bounded runner; retention must
+write only invocation-owned evidence and acknowledge its SHA256 after success.
+The caller must retain individual raw process failures as well; this component
+does not replace process/confinement evidence or grant image acquisition/load
+authority. No callback, image, filename or command comes from target inputs.
+
+The isolated cloud self-tests use synthetic wire results to prove ordering,
+retention-before-oracle, deterministic transcript encoding and fail-closed
+identity/process/mismatch/timeout behavior. They are not crypto execution
+evidence. This component does not yet wire a production controller, acquire or
+construct images, prove oracle absence, add challenge-driven cases, exercise
+actual confinement failures, or satisfy the complete M4 crypto gate.
