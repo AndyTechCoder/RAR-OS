@@ -1,8 +1,9 @@
 # Fast-Track Alpha Milestone 4: Modern Architecture
 
-Status: M4.1 integration in progress. Modern kernel/service source and reproducible
-UEFI builds exist; actual Modern guest persistence and Milestone4 completion are
-not claimed. See docs/evidence/m4-runtime-progress.md for exact evidence.
+Status: M4.1 integration in progress. Actual cross-reboot guest persistence has
+passed cloud diagnostic34319265996 at its recorded source/controller revisions.
+Independent crypto comparisons, guest fault coverage, and Milestone4 completion
+remain unproved. See docs/evidence/m4-runtime-progress.md for exact evidence.
 Direction: 2026-09-05 UTC, "Perfect. So then let's continue with the next, milestone 4".
 
 ## Baseline and purpose

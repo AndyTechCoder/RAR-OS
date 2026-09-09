@@ -1,3 +1,70 @@
+# Current M4 checkpoint — 2026-09-09
+
+M4 remains incomplete. The approved delivery sections are M4.1 persistent
+files, M4.2 signed live updates, and M4.3 recovery/release. This current
+checkpoint supersedes the historical status text retained below. It does not
+change any of the ten acceptance requirements or authorize local execution.
+
+## What actually works
+
+The cloud persistence diagnostic [34319265996](https://github.com/AndyTechCoder/RAR-OS/actions/runs/34319265996)
+succeeded using trusted main controller
+e4abb7ea966b5f65199c5f724db1633ef3dfcbb3 and target source
+977aa66f8b4cc3d83370c10d88ea9763e31c11e7.
+Terminal wrote the controller-generated challenge through the actual guest
+DataVault path; the whole first QEMU was destroyed; a new QEMU with fresh
+firmware state read the retained file through Files. Actual pixels and an
+independent frozen authenticated Data-image oracle agreed. The retained
+envelope also passed the positive revalidation and rejected 60 mutations.
+These are envelope-corruption checks, not guest interrupted-write fault cases.
+
+Run job102362089590 retained artifact10091254514 (7 files, ZIP223800 bytes,
+SHA25686d6bfe56c595408925495f39fa413dd95d9041572fb6d12ae5c42cdfd3c52e1).
+No artifact was downloaded to the Mac or SSD.
+
+This proves that particular cross-reboot scenario. It does not establish
+independent crypto interoperability, physical power-loss safety, the full
+fault matrix, later runtime revisions, or M4.1 completion.
+
+## Source validation and remaining integration
+
+Runtime PR158 remains draft and unmerged. Source
+4402f901bb0691061e48062573ffc501616abb2a passed all four cloud checks:
+Specifications34323460813 (job102375185283), Foundation34323460734,
+Platform34323460762 and Desktop34323460814. Actual specification logs include
+the derived-image public roundtrip, compiler-owned lifecycle, bounded transport
+cleanup, separate post-run diagnostics and overlapping-ELF-load regressions.
+These source fixtures do not prove actual compiler or reference execution.
+
+| Section | Verified progress | Still required |
+| --- | --- | --- |
+| M4.1 | Actual Terminal -> durable Data -> whole-VM destruction -> fresh-VM Files/oracle agreement; earlier reference/compiler candidate construction; source checks for handoff helpers | Real isolated RAR/OpenSSL/libsodium comparison, reproducible adapter handoff and confinement evidence; controller-owned guest write/flush/cut fault cases and remaining authority denials |
+| M4.2 | Signed codec and lifecycle source tests; IRQ-budget integration source | Real executable staging/loading, live Settings replacement, durable cutover, complete physical revocation/unmap/zero-before-reuse, health/fallback and continued peer apps |
+| M4.3 | Recovery contract and controlled block-fault infrastructure | Actual immutable System-only repair, identical Data hashes, interrupted repair, full fault campaign, final crypto/build/regression/review evidence and exact-main v0.4 release |
+
+## Immediate next work
+
+Complete one integrated cloud crypto handoff using the already-retained compiler
+artifact10004371629 and reference artifact9967392023 after their fixed receipt
+and independent inventory checks. Bind the exact five RAR source blobs, build
+the reviewed driver and adapter twice, inspect before loading, stop the compiler
+role before adapter execution, and freeze RAR results before either oracle.
+Use the existing bounded runners and retain actual failure/cleanup diagnostics.
+Do not treat more helper self-tests as completion of this runtime prerequisite.
+
+The adapter-only image change is a pending source candidate, not an activated
+image or a completed comparison. Afterwards complete the M4.1 guest fault cases,
+then the actual M4.2 and M4.3 behavior above. Do not restart already-successful
+construction or persistence runs without a concrete source/evidence reason.
+
+All repository writes remain GitHub API operations only. No Mac/SSD file
+creation, edit, deletion, download, build, packaging, mount or target/VM/reference
+execution. Released v0.3.0 usable graphical Alpha is unchanged.
+
+---
+
+# Historical checkpoints (preserved; superseded where noted above)
+
 # M4 runtime progress checkpoint
 
 Incomplete development checkpoint: not v0.4.0, M4.1 completion, or Modern runtime
