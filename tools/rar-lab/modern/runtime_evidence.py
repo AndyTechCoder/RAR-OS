@@ -99,17 +99,60 @@ def terminated(code,problem):
     return True
 
 
-def event_summary(events):
-    """Bounded fixed-vocabulary diagnostics only; never acceptance authority."""
-    if type(events) is not list:
-        return {"shape":"not-list"}
-    names=[]
-    vocabulary={"RESUME","RESET","STOP","SHUTDOWN","POWERDOWN","SUSPEND",
-                "WAKEUP","GUEST_PANICKED","BLOCK_IO_ERROR"}
-    for item in events[:32]:
-        name=item.get("event") if type(item) is dict else None
-        names.append(name if type(name) is str and name in vocabulary else "OTHER")
-    return {"count":len(events),"names":names,"truncated":len(events)>32}
+def event_summary(events,phases=None):
+    """Exact bounded public QMP names, not arbitrary event values in logs."""
+    if type(events) is not list:return {"shape":"not-list"}
+    result=[]
+    for index,event in enumerate(events[:32]):
+        item={"name":"INVALID"}
+        if type(event) is dict:
+            name=event.get("event")
+            if type(name) is str and re.fullmatch("[A-Z][A-Z0-9_]{0,63}",name):
+                item["name"]=name
+            item["keys"]=[k if type(k) is str and re.fullmatch("[a-zA-Z_][a-zA-Z0-9_-]{0,63}",k)
+                          else "INVALID" for k in list(event)[:16]]
+            try:
+                encoded=json.dumps(event,sort_keys=True,ensure_ascii=True,allow_nan=False).encode("ascii")
+                if len(encoded)<=2048:item["sha256"]=sha(encoded)
+                else:item["oversized"]=True
+            except (ValueError,TypeError,RecursionError):
+                item["malformed"]=True
+            data=event.get("data")
+            if type(data) is dict:
+                item["data_types"]={
+                    (key if type(key) is str and re.fullmatch("[a-zA-Z_][a-zA-Z0-9_-]{0,63}",key) else "INVALID"):
+                    type(value).__name__ for key,value in list(data.items())[:16]}
+        if type(phases) is list and index<len(phases):item["receipt"]=phases[index]
+        result.append(item)
+    return {"count":len(events),"events":result,"truncated":len(events)>32}
+
+def receipt_phases(receipts,events,rows,drained):
+    if (drained is not True or type(events) is not list or len(events)>32 or
+        type(receipts) is not list or len(receipts)!=len(events) or
+        type(rows) is not list or not 1<=len(rows)<=512):
+        raise ValueError("complete bounded post-reap event receipt proof")
+    for ordinal,row in enumerate(rows,1):
+        if type(row) is not dict or type(row.get("id")) is not int or row["id"]!=ordinal:
+            raise ValueError("receipt command identities")
+    continuations=[r["id"] for r in rows if r.get("execute")=="cont"]
+    if len(continuations)!=1:raise ValueError("sole continuation receipt boundary")
+    cont=continuations[0]
+    previous=0;postcut=False;phases=[]
+    for index,receipt in enumerate(receipts):
+        if (type(receipt) is not dict or set(receipt)!={"event_index","request_id"} or
+            type(receipt["event_index"]) is not int or receipt["event_index"]!=index):
+            raise ValueError("one contiguous receipt per retained event")
+        identity=receipt["request_id"]
+        if identity is None:
+            postcut=True;phases.append("post-reap-stream")
+        else:
+            if (postcut or type(identity) is not int or not 1<=identity<=len(rows) or
+                identity<previous):
+                raise ValueError("ordered exact receipt request identity")
+            previous=identity
+            phases.append("preflight-reply" if identity<cont else
+                          "continue-reply" if identity==cont else "running-reply")
+    return phases
 
 def validate(raw,expected_boot_digest,firmware_sizes):
     if type(raw) is not bytes or not 1<=len(raw)<=64*1024*1024 or not raw.endswith(b"\n"):
@@ -128,7 +171,7 @@ def validate(raw,expected_boot_digest,firmware_sizes):
             "frozen_data_sha256","frozen_data_base64","system_sha256","boot_sha256",
             "crypto_interoperability_accepted","milestone_complete"}
     if (type(evidence) is not dict or set(evidence)!=fields or
-        evidence["schema"]!="rar-modern-persistence-candidate-v0" or evidence["status"]!="observed" or
+        evidence["schema"]!="rar-modern-persistence-candidate-v1" or evidence["status"]!="observed" or
         evidence["crypto_interoperability_accepted"] is not False or evidence["milestone_complete"] is not False):
         raise ValueError("exact nonaccepting persistence envelope")
     if evidence["boot_sha256"]!=digest(expected_boot_digest):
@@ -163,7 +206,7 @@ def validate(raw,expected_boot_digest,firmware_sizes):
     bindings=[]
     pids=[]
     for index,proof in enumerate(proofs,1):
-        if type(proof) is not dict or set(proof)!={"cut","audit","argv","preflight","commands","events","serial"}:
+        if type(proof) is not dict or set(proof)!={"cut","audit","argv","preflight","commands","events","event_receipts","qmp_drained","serial"}:
             raise ValueError("exact retained VM proof")
         cut=proof["cut"]
         if (type(cut) is not dict or set(cut)!={"vm_pid","vm_returncode","backends","joined"} or
@@ -175,8 +218,13 @@ def validate(raw,expected_boot_digest,firmware_sizes):
             raise ValueError("bounded actual Modern readiness transcript")
         if any(marker in proof["serial"] for marker in ("RAR-PANIC","UNEXPECTED-USER-FAULT","INVALID-USER-RETURN")):
             raise ValueError("guest failure in retained transcript")
+        commands(proof["commands"],index,value,profile)
+        phases=receipt_phases(proof["event_receipts"],proof["events"],
+                              proof["commands"],proof["qmp_drained"])
         if type(proof["events"]) is not list or len(proof["events"])!=1:
-            raise ValueError("sole actual RESUME event: "+json.dumps(event_summary(proof["events"]),sort_keys=True))
+            raise ValueError("sole actual RESUME event: "+json.dumps(event_summary(proof["events"],phases),sort_keys=True))
+        if phases==["preflight-reply"]:
+            raise ValueError("RESUME observed before the sole continue request")
         event=proof["events"][0]
         if type(event) is not dict or set(event)!={"event","timestamp"} or event["event"]!="RESUME":
             raise ValueError("unexpected VM event")
@@ -193,7 +241,6 @@ def validate(raw,expected_boot_digest,firmware_sizes):
             raise ValueError("actual paused preflight results")
         if profile.validate_preflight(preflight["raw"],index==2,index,firmware_sizes)!=preflight["verified"]:
             raise ValueError("retained topology does not revalidate")
-        commands(proof["commands"],index,value,profile)
         summaries=[];current=[]
         for role,report in zip(("data","system","boot"),cut["backends"]):
             if (type(report) is not dict or set(report)!={"returncode","problem","records","joined"} or
@@ -232,13 +279,29 @@ def self_test():
         reject(lambda code=code:terminated(code,None))
     reject(lambda:terminated(0,"backend-failed"))
     assert event_summary(None)=={"shape":"not-list"}
-    assert event_summary([])=={"count":0,"names":[],"truncated":False}
-    assert event_summary([{"event":"RESET"},{"event":"RESUME"}])=={
-        "count":2,"names":["RESET","RESUME"],"truncated":False}
-    assert event_summary([{"event":"arbitrary-private-text"},{"event":[]},None])=={
-        "count":3,"names":["OTHER"]*3,"truncated":False}
-    assert event_summary([{"event":"RESUME"}]*33)=={
-        "count":33,"names":["RESUME"]*32,"truncated":True}
+    assert event_summary([])=={"count":0,"events":[],"truncated":False}
+    names=event_summary([{"event":"RESUME"},{"event":"RTC_CHANGE","data":{"offset":123}},
+                         {"event":"PRIVATE\nTEXT","data":{"message":"secret"}}])
+    assert [x["name"] for x in names["events"]]==["RESUME","RTC_CHANGE","INVALID"]
+    assert "secret" not in json.dumps(names) and "123" not in json.dumps(names["events"][1]["data_types"])
+    assert event_summary([{"event":"RESUME"}]*33)["truncated"] is True
+    assert len(event_summary([{"event":"RESUME"}]*33)["events"])==32
+    rows=[{"execute":name,"id":i+1} for i,name in enumerate(
+        ("qmp_capabilities","query-status","cont","screendump"))]
+    events=[{"event":"RESUME"}]*4
+    receipts=[{"event_index":i,"request_id":n} for i,n in enumerate((1,3,4,None))]
+    assert receipt_phases(receipts,events,rows,True)==[
+        "preflight-reply","continue-reply","running-reply","post-reap-stream"]
+    for flag in (False,1,None):reject(lambda flag=flag:receipt_phases(receipts,events,rows,flag))
+    reject(lambda:receipt_phases(receipts[:-1],events,rows,True))
+    for field,value in (("event_index",True),("event_index",2),("request_id",0),
+                        ("request_id",5),("request_id",True)):
+        changed=json.loads(json.dumps(receipts));changed[0][field]=value
+        reject(lambda changed=changed:receipt_phases(changed,events,rows,True))
+    for requests in ((3,1,4,None),(1,None,4,None)):
+        changed=[{"event_index":i,"request_id":n} for i,n in enumerate(requests)]
+        reject(lambda changed=changed:receipt_phases(changed,events,rows,True))
+    reject(lambda:receipt_phases(receipts,events,rows+[{"execute":"cont","id":5}],True))
     profile=helper("vm_profile");visual=helper("visual_oracle")
     value="abcdefghijklmnop"*2
     for index in (1,2):

@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import selectors
+import select
 import socket
 import stat
 import subprocess
@@ -91,6 +92,10 @@ class VM:
         self.serial,self.qmp_bytes = bytearray(),bytearray()
         self.qmp_total = 0
         self.events = []
+        self.event_receipts = []
+        self.qmp_drained = False
+        self.qemu_reaped = False
+        self.cleanup_succeeded = False
         self.commands = []
         self.identity = 0
         self.certified = False
@@ -249,6 +254,48 @@ class VM:
                 ("spc","ret","backspace","esc","f1","f2","f3","up","down"))
         return False
 
+    def record_event(self,answer,request_id):
+        if (type(answer) is not dict or "event" not in answer or
+            "id" in answer or "error" in answer):
+            raise ValueError("only asynchronous QMP records")
+        encoded=json.dumps(answer,ensure_ascii=True,allow_nan=False)
+        if len(self.events)>=32 or len(encoded)>2048:
+            raise ValueError("QMP event budget")
+        if request_id is not None and (type(request_id) is not int or
+            request_id<1 or request_id!=self.identity):
+            raise ValueError("QMP receipt command identity")
+        self.event_receipts.append({"event_index":len(self.events),"request_id":request_id})
+        self.events.append(answer)
+
+    def drain_qmp_after_reap(self):
+        """Stream receipt after reap, not a claim of event occurrence time."""
+        self.qmp_drained=False
+        if not self.qemu_reaped or self.connection is None:
+            raise ValueError("reaped owned QEMU and its connection required")
+        deadline=time.monotonic()+1.0
+        while True:
+            if time.monotonic()>=deadline:
+                raise TimeoutError("post-reap QMP EOF deadline")
+            if self.qmp_total>2*1024*1024 or len(self.qmp_bytes)>262144:
+                raise ValueError("cumulative QMP drain budget")
+            while b"\n" in self.qmp_bytes:
+                at=self.qmp_bytes.index(10)
+                raw=bytes(self.qmp_bytes[:at]).rstrip(b"\r")
+                del self.qmp_bytes[:at+1]
+                self.record_event(line_json(raw),None)
+            try:
+                raw=self.connection.recv(65536)
+            except BlockingIOError:
+                select.select([self.connection],[],[],min(0.02,max(0,deadline-time.monotonic())))
+                continue
+            if not raw:
+                if self.qmp_bytes:
+                    raise ValueError("partial QMP record at post-reap EOF")
+                self.qmp_drained=True
+                return
+            self.qmp_total+=len(raw)
+            self.qmp_bytes.extend(raw)
+
     def request(self,command):
         if not self.allowed(command) or self.identity >= 512:
             raise ValueError("unapproved QMP command/state/budget")
@@ -267,9 +314,7 @@ class VM:
         while True:
             answer = self.receive()
             if "event" in answer and "id" not in answer and "error" not in answer:
-                if len(self.events)>=32 or len(json.dumps(answer))>2048:
-                    raise ValueError("QMP event budget")
-                self.events.append(answer)
+                self.record_event(answer,self.identity)
                 continue
             if (set(answer)!={"return","id"} or type(answer["id"]) is not int or
                 answer["id"] != self.identity):
@@ -313,6 +358,9 @@ class VM:
         """
         if self.closed:
             raise ValueError("VM already destroyed")
+        # One terminal cleanup attempt, even if a proof/drain/cleanup step fails.
+        self.closed = True
+        self.cleanup_succeeded = False
         result = {"vm_pid":None,"vm_returncode":None,"backends":[],"joined":False}
         failures = []
         if self.child is not None:
@@ -321,6 +369,7 @@ class VM:
                 if self.child.poll() is None:
                     self.child.kill()
                 self.child.wait(timeout=2)
+                self.qemu_reaped = True
                 result["vm_returncode"] = self.child.returncode
                 # After reap, discard no unbounded stream: bounded final drain.
                 for stream,label in ((self.child.stdout,"serial"),(self.child.stderr,"stderr")):
@@ -333,6 +382,11 @@ class VM:
                             self.serial.extend(raw)
             except BaseException as error:
                 failures.append(type(error).__name__+": VM reap/drain failed")
+        if getattr(self,"started",False):
+            try:
+                self.drain_qmp_after_reap()
+            except BaseException:
+                failures.append("post-reap QMP drain failed")
         for backend in self.backends:
             try:
                 stopped = backend.stop()
@@ -358,7 +412,7 @@ class VM:
                 failures.append("boot descriptor close failed")
         if failures:
             raise RuntimeError("; ".join(failures)+"; no frozen-image authority")
-        self.closed = True
+        self.cleanup_succeeded = True
         result["joined"] = True
         return result
 
@@ -408,7 +462,7 @@ def self_test():
         def wait(self,timeout): order.append("vm-reap");return self.returncode
     class Backend:
         def stop(self): order.append("backend-reap");return {"joined":True}
-    vm.closed=False;vm.boot_fd=None;vm.child=Child();vm.backends=[Backend(),Backend(),Backend()]
+    vm.started=False;vm.closed=False;vm.boot_fd=None;vm.child=Child();vm.backends=[Backend(),Backend(),Backend()]
     vm.connection=None;vm.sockets=[];vm.serial=bytearray()
     vm.selector=SimpleNamespace(close=lambda:None)
     with patch.object(os,"set_blocking",lambda *args:None):
@@ -445,7 +499,7 @@ def self_test():
             try: broken.destroy()
             except RuntimeError: rejected+=1
             else: raise AssertionError("failed reap granted joined authority")
-        assert attempted==["vm",0,1,2] and not broken.closed
+        assert attempted==["vm",0,1,2] and broken.closed and not broken.cleanup_succeeded
         assert broken.child.stdout.closed and broken.child.stderr.closed
 
     # Run the actual constructor control flow with inert filesystem/socket/
@@ -532,6 +586,99 @@ def self_test():
         assert child.returncode==-9 and child.stdout.closed and child.stderr.closed
         assert all(b.closed for b in observed["backends"])
         assert all(s.closed for s in observed["sockets"])
+
+    # Exact request-time stream receipts. These mocks do not open a socket.
+    def event_vm():
+        value=object.__new__(VM)
+        value.identity=0;value.events=[];value.event_receipts=[]
+        value.qmp_drained=False;value.qemu_reaped=True
+        value.qmp_bytes=bytearray();value.qmp_total=0;value.commands=[]
+        value.allowed=lambda command:True
+        value.connection=SimpleNamespace(settimeout=lambda x:None,setblocking=lambda x:None,sendall=lambda x:None)
+        return value
+    tracked=event_vm()
+    for ordinal,command in enumerate(("qmp_capabilities","query-status","cont","screendump"),1):
+        answers=iter([{"event":"RESUME","timestamp":{"seconds":1,"microseconds":ordinal}},
+                      {"return":{},"id":ordinal}])
+        tracked.receive=lambda:next(answers)
+        assert tracked.request({"execute":command})=={}
+    assert tracked.event_receipts==[
+        {"event_index":i,"request_id":i+1} for i in range(4)]
+    for answer in ({"return":{},"id":1},{"event":"RESUME","id":1},
+                   {"event":"RESUME","error":{}},{"event":"X","data":"x"*2048},
+                   {"event":"X","data":float("nan")}):
+        reject(lambda answer=answer:event_vm().record_event(answer,None))
+    crowded=event_vm()
+    for _ in range(32):crowded.record_event({"event":"RESUME"},None)
+    reject(lambda:crowded.record_event({"event":"RESUME"},None))
+    reject(lambda:event_vm().record_event({"event":"RESUME"},True))
+    reject(lambda:event_vm().record_event({"event":"RESUME"},1))
+    class DrainSocket:
+        def __init__(self,chunks):self.chunks=list(chunks)
+        def recv(self,bound):
+            assert bound==65536
+            if not self.chunks:raise BlockingIOError()
+            return self.chunks.pop(0)
+    encoded=b'{"event":"RESUME","timestamp":{"seconds":1,"microseconds":2}}\r\n'
+    drained=event_vm();drained.identity=4
+    drained.record_event({"event":"RESUME"},4)
+    drained.qmp_bytes=bytearray(encoded);drained.qmp_total=len(encoded)
+    drained.connection=DrainSocket([encoded[:9],encoded[9:],b""])
+    drained.drain_qmp_after_reap()
+    assert drained.qmp_drained and not drained.qmp_bytes
+    assert drained.event_receipts==[
+        {"event_index":0,"request_id":4},{"event_index":1,"request_id":None},
+        {"event_index":2,"request_id":None}]
+    for chunks in ([b'{"event":',b""],[b"\n",b""],
+                   [b'{"return":{},"id":1}\n',b""],
+                   [b'{"error":{},"id":1}\n',b""],
+                   [b"x"*65536]*5+[b""]):
+        broken=event_vm();broken.connection=DrainSocket(chunks)
+        reject(broken.drain_qmp_after_reap)
+        assert broken.qmp_drained is False
+    for attribute,value in (("qmp_total",2*1024*1024+1),
+                            ("qmp_bytes",bytearray(262145)),("qemu_reaped",False)):
+        broken=event_vm();broken.connection=DrainSocket([b""])
+        setattr(broken,attribute,value)
+        reject(broken.drain_qmp_after_reap)
+        assert broken.qmp_drained is False
+    broken=event_vm();broken.connection=DrainSocket([encoded,b""])
+    broken.qmp_total=2*1024*1024
+    reject(broken.drain_qmp_after_reap)
+    broken=event_vm();broken.connection=DrainSocket([])
+    ticks=iter(i/10 for i in range(100))
+    with patch.object(time,"monotonic",lambda:next(ticks)),patch.object(select,"select",lambda *args:([],[],[])):
+        try:broken.drain_qmp_after_reap()
+        except TimeoutError:rejected+=1
+        else:raise AssertionError("missing EOF accepted")
+    assert broken.qmp_drained is False
+    # Drain failure cannot skip cleanup, grant success, or trigger redestruction.
+    attempted=[]
+    class CutChild(Child):
+        stdout=Pipe(b"");stderr=Pipe(b"");returncode=None
+        def kill(self):attempted.append("kill");self.returncode=-9
+        def wait(self,timeout):attempted.append("wait");return self.returncode
+    class CutBackend:
+        def __init__(self,index):self.index=index
+        def stop(self):attempted.append(self.index);return {"joined":True}
+    broken=event_vm();broken.closed=False;broken.started=True;broken.boot_fd=None
+    broken.child=CutChild();broken.serial=bytearray();broken.profile=profile
+    broken.backends=[CutBackend(i) for i in range(3)]
+    broken.selector=SimpleNamespace(close=lambda:attempted.append("selector"))
+    broken.connection=SimpleNamespace(close=lambda:attempted.append("connection"))
+    broken.sockets=[]
+    def fail_drain():raise ValueError("injected drain failure")
+    broken.drain_qmp_after_reap=fail_drain
+    with patch.object(os,"set_blocking",lambda *args:None):
+        try:broken.destroy()
+        except RuntimeError:rejected+=1
+        else:raise AssertionError("drain failure granted cleanup success")
+    assert attempted==["kill","wait",0,1,2,"selector","connection"]
+    assert broken.closed and not broken.cleanup_succeeded and not broken.qmp_drained
+    before=list(attempted)
+    reject(broken.destroy)
+    assert attempted==before and broken.child.stdout.closed and broken.child.stderr.closed
+
     return rejected
 
 if __name__ == "__main__":
