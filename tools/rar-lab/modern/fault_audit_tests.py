@@ -48,6 +48,78 @@ class Tests(unittest.TestCase):
                          sendall=lambda value:None)
         return vm
 
+    def test_cut_join_binds_entry_and_final_cut_receipts(self):
+        from types import SimpleNamespace as NS
+        with patch.object(session.time,"monotonic",return_value=0):
+            vm=self.fault_vm();data=vm.backends[0]
+            p=dict(operation="write",ordinal=1,effect="before-cut",prefix=0)
+            vm.fault_plan=tuple(p[k] for k in ("operation","ordinal","effect","prefix"))
+            data.records[2]["event"].update(injection=p,status="cut-no-reply")
+            data.records.append(dict(type="terminal",outcome="cut",fault_hit=True,failed=False))
+            data.poll=lambda:20;data.problem="cut";data.eof=True
+            try:vm.service()
+            except session.PlannedDataFault as error:signal=error
+            else:self.fail("missing cut signal")
+            receipt=vm.fault_receipt(signal)
+            for failure in (None,"entry","exit","terminal","qemu"):
+                import copy
+                rows=[copy.deepcopy(data.records)]
+                for role,size,inode in (("system",8388608,3),("boot",16777216,4)):
+                    rows.append([dict(type="ready",kind=role,readonly=role=="boot",
+                        export_readonly=False,capacity=size,device=1,inode=inode)])
+                if failure=="terminal":rows[0].pop()
+                fake=NS(fault_receipt=lambda error:receipt,fault_audit=audit,
+                    backends=[NS(records=r) for r in rows],argv=[],preflight={},
+                    commands=[],events=[],event_receipts=[],serial=b"",
+                    cleanup_succeeded=True,qmp_drained=True)
+                stopped=dict(joined=True,vm_returncode=0 if failure=="qemu" else -9,
+                    entry=dict(vm_code=None,backend_codes=[None if failure=="entry" else 20,None,None],
+                               backend_problems=["cut",None,None]),
+                    backends=[dict(joined=True,records=rows[0],returncode=21 if failure=="exit" else 20,
+                        problem="cut")]+[dict(joined=True,records=r,returncode=-9,
+                        problem="backend-failed") for r in rows[1:]])
+                fake.destroy=lambda:stopped
+                if failure is None:
+                    self.assertEqual(persistence.joined_fault(fake,signal)["fault"],receipt)
+                else:
+                    with self.assertRaises(ValueError):persistence.joined_fault(fake,signal)
+
+    def test_entry_snapshot_failure_still_cleans_every_owned_child(self):
+        import io
+        from types import SimpleNamespace as NS
+        class Pipe(io.BytesIO):
+            def fileno(self):return 99
+        for failure in ("poll","problem"):
+            trace=[]
+            class Child:
+                pid=1
+                def __init__(self):
+                    self.returncode=None;self.stdout=Pipe(b"");self.stderr=Pipe(b"")
+                def poll(self):return self.returncode
+                def kill(self):trace.append("kill");self.returncode=-9
+                def wait(self,timeout):trace.append("wait");return self.returncode
+            class Backend:
+                def __init__(self,index):
+                    self.index=index;self.process=NS(poll=self.poll)
+                def poll(self):
+                    if self.index==1 and failure=="poll":raise OSError("entry poll failed")
+                    return None
+                @property
+                def problem(self):
+                    if self.index==1 and failure=="problem":raise OSError("entry problem failed")
+                    return None
+                def stop(self):trace.append(self.index);return dict(joined=True)
+            vm=object.__new__(session.VM)
+            vm.closed=False;vm.started=False;vm.fault_plan=("write",1,"error",0)
+            vm.child=Child();vm.backends=[Backend(i) for i in range(3)]
+            vm.serial=bytearray();vm.profile=NS(SERIAL_LIMIT=65536);vm.boot_fd=None
+            vm.connection=None;vm.sockets=[];vm.selector=NS(close=lambda:trace.append("selector"))
+            with patch.object(session.os,"set_blocking",return_value=None):
+                with self.assertRaises(RuntimeError):vm.destroy()
+            self.assertEqual(trace,["kill","wait",0,1,2,"selector"])
+            self.assertFalse(vm.cleanup_succeeded)
+            self.assertTrue(vm.child.stdout.closed and vm.child.stderr.closed)
+
     def test_fault_stop_requires_exact_signal_then_all_joins(self):
         from types import SimpleNamespace as NS
         with patch.object(session.time,"monotonic",return_value=0):

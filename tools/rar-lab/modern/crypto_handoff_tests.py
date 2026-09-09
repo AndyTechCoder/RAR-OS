@@ -4,6 +4,7 @@ scratch files only. No adapter/compiler/image is started by this test entry.
 """
 import importlib.util
 import io
+from contextlib import redirect_stdout
 import os
 from pathlib import Path
 import stat
@@ -57,7 +58,7 @@ class Tests(unittest.TestCase):
         from types import SimpleNamespace as NS
         snapshot=h.module("source_snapshot")
         receipts=h.module("construction_artifacts").RECEIPTS
-        for failure in (None,"compiler","tag","sysroot"):
+        for failure in (None,"compiler","tag","sysroot","client","config-budget"):
             root=Path(tempfile.mkdtemp(prefix="rar-handoff-pipeline-"))
             here=root/"controller/tools/rar-lab/modern";here.mkdir(parents=True)
             for name,raw in (("compiler_driver.rs",b"fn main() {}\n"),
@@ -126,7 +127,7 @@ class Tests(unittest.TestCase):
                     "Config":compiler_process if key=="derived" else process}
             def exchange(argv,request,seconds,maximum,error_max):
                 nonlocal build_count,tagged
-                if argv[0]=="/usr/bin/env":
+                if "/usr/bin/git" in argv:
                     at=argv.index("-C");args=argv[at+2:]
                     if args[:2]==["rev-parse","HEAD"]:out=controller.encode()+b"\n"
                     elif args[0]=="status":out=b""
@@ -136,7 +137,13 @@ class Tests(unittest.TestCase):
                     elif args[0]=="cat-file":out=objects[args[2]]
                     else:raise AssertionError(args)
                     return 0,out,b""
-                self.assertEqual(argv[:2],h.DOCKER);args=argv[2:]
+                config=root/"modern-crypto-work/docker-config"
+                buildx=root/"modern-crypto-work/buildx-config"
+                prefix=["/usr/bin/env","-i","PATH=/usr/bin:/bin","LANG=C","LC_ALL=C",
+                    "DOCKER_CONFIG="+str(config),"BUILDX_CONFIG="+str(buildx)]+h.DOCKER+["--config",str(config)]
+                self.assertEqual(argv[:len(prefix)],prefix)
+                self.assertTrue(config.is_dir() and buildx.is_dir())
+                args=argv[len(prefix):]
                 if args[0]=="version":out=b"{}\n"
                 elif args[:2]==["image","load"]:
                     loaded.append(request);out=b"loaded\n"
@@ -151,7 +158,10 @@ class Tests(unittest.TestCase):
                             item["Id"]=images["reference"]
                         out=h.canonical([item])
                 elif args[0]=="pull":out=b"pulled\n"
-                elif args[:2]==["buildx","inspect"]:out=b"Driver: docker\nBuildKit version: fixture\n"
+                elif args[:2]==["buildx","inspect"]:
+                    if failure=="client":
+                        return 1,b"x"*3000,b"y"*9000+b"\n::error::inert public fixture\n"
+                    out=b"Driver: docker\nBuildKit version: fixture\n"
                 elif args[:2]==["image","ls"]:out=b"existing\n" if tagged else b""
                 elif args[:2]==["image","tag"]:tagged=True;out=b""
                 elif args[0]=="build":
@@ -169,8 +179,8 @@ class Tests(unittest.TestCase):
                 "compiler_driver_layer":NS(build=lambda *a:(b"driver layer",{})),
                 "derived_compiler_image":NS(
                     build=lambda *a:(b"derived",{"image":images["derived"]}),inspect=lambda *a:None,
-                    _parts=lambda raw:{images["derived"][7:]+".json":h.canonical(
-                        {"rootfs":{"diff_ids":diffs["derived"]},"config":compiler_process})}),
+                    _parts=lambda raw:{images["derived"][7:]+".json":memoryview(b" "*65537 if failure=="config-budget" else h.canonical(
+                        {"rootfs":{"diff_ids":diffs["derived"]},"config":compiler_process}))}),
                 "adapter_image":NS(notices_from_parent=lambda *a:{"licenses/public":b"notice"},
                     build=lambda *a:(b"adapter",adapter_report),inspect=lambda *a:None,PROCESS=process),
                 "compiler_runner":NS(execute=compile_adapter),
@@ -179,8 +189,9 @@ class Tests(unittest.TestCase):
             def checked_export(*args):
                 if failure=="sysroot":raise h.Invalid("consumed sysroot mismatch fixture")
                 return executable(),{}
+            diagnostics=io.StringIO()
             env={"GITHUB_RUN_ID":"1","ImageVersion":"fixture","RAR_ARTIFACT_TOKEN":"fixture"}
-            with patch.dict(os.environ,env,clear=True),patch.object(h,"HERE",here),\
+            with redirect_stdout(diagnostics),patch.dict(os.environ,env,clear=True),patch.object(h,"HERE",here),\
                 patch.object(h,"guard",return_value=(root,controller,target,{})),\
                 patch.object(h,"GitHub",API),patch.object(h,"module",side_effect=lambda n:helpers[n]),\
                 patch.object(h,"driver_export",side_effect=checked_export),\
@@ -190,20 +201,56 @@ class Tests(unittest.TestCase):
                     with self.assertRaises(h.Invalid):h.main()
                 else:h.main()
             manifest=h.unique((root/"modern-crypto-evidence/manifest.json").read_bytes())
-            self.assertEqual(build_count,1 if failure in ("tag","sysroot") else 2)
-            self.assertEqual(compile_count,0 if failure in ("tag","sysroot") else 2)
+            self.assertEqual(build_count,0 if failure=="client" else 1 if failure in ("tag","sysroot") else 2)
+            self.assertEqual(compile_count,0 if failure in ("tag","sysroot","client","config-budget") else 2)
             self.assertEqual(len(api_calls),4)
             self.assertFalse(manifest["milestone_complete"])
             if failure is not None:
                 self.assertEqual(adapter_count,0)
-                self.assertEqual(loaded,[b"compiler"] if failure in ("tag","sysroot") else [b"compiler",b"derived"])
-                self.assertEqual(manifest["phase"],"driver-construction" if failure in ("tag","sysroot") else "adapter-compilation")
+                self.assertEqual(loaded,[b"compiler"] if failure in ("tag","sysroot","client","config-budget") else [b"compiler",b"derived"])
+                self.assertEqual(manifest["phase"],"derived-compiler" if failure=="config-budget" else "driver-construction" if failure in ("tag","sysroot","client") else "adapter-compilation")
                 self.assertEqual(manifest["status"],"failed")
+                if failure=="client":
+                    lines=diagnostics.getvalue().splitlines()
+                    self.assertTrue(lines)
+                    self.assertTrue(all(line.startswith("{") for line in lines))
+                    records=[h.unique(line.encode("ascii")) for line in lines]
+                    command=[row for row in records if row.get("diagnostic")=="rar-modern-command-failure-v0"]
+                    self.assertEqual(len(command),1)
+                    self.assertEqual(command[0]["exit"],1)
+                    self.assertEqual(command[0]["stdout_tail"],"x"*2048)
+                    self.assertEqual(len(command[0]["stderr_tail"]),8192)
+                    self.assertTrue(command[0]["stderr_tail"].endswith("\n::error::inert public fixture\n"))
+                    self.assertNotIn("RAR_ARTIFACT_TOKEN"," ".join(command[0]["argv"]))
             else:
                 self.assertEqual(adapter_count,864)
                 self.assertEqual(loaded,[b"compiler",b"derived",b"adapter",b"reference"])
                 self.assertEqual(manifest["status"],"fixed-corpus-compared")
                 self.assertFalse(manifest["crypto_interoperability_accepted"])
+
+    def test_private_docker_configuration_and_substitution_refusal(self):
+        root=Path(tempfile.mkdtemp(prefix="rar-docker-client-"))
+        client=h.DockerClient(root)
+        for path in client.paths:
+            self.assertEqual(list(path.iterdir()),[])
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode),0o700)
+        argv=client.argv(["buildx","inspect","default"])
+        self.assertEqual(argv[:2],["/usr/bin/env","-i"])
+        self.assertIn("DOCKER_CONFIG="+str(root/"docker-config"),argv)
+        self.assertIn("BUILDX_CONFIG="+str(root/"buildx-config"),argv)
+        self.assertEqual(argv[-3:],["buildx","inspect","default"])
+        self.assertNotIn("/nonexistent",argv)
+        with self.assertRaises(FileExistsError):h.DockerClient(root)
+        # Read-only stat adapters simulate substitution without deleting or
+        # replacing any fixture or changing real permissions.
+        from types import SimpleNamespace as NS
+        info=client.paths[0].lstat()
+        for field,value in (("st_ino",info.st_ino+1),("st_uid",info.st_uid+1),
+                            ("st_mode",stat.S_IFLNK|0o700),("st_mode",stat.S_IFDIR|0o755)):
+            changed=NS(st_dev=info.st_dev,st_ino=info.st_ino,st_uid=info.st_uid,st_mode=info.st_mode)
+            setattr(changed,field,value)
+            with patch.object(Path,"lstat",return_value=changed):
+                with self.assertRaises(h.Invalid):client.argv(["buildx","inspect","default"])
 
     def test_host_default_denied_before_mutation_or_loading(self):
         with patch.dict(os.environ,{},clear=True),patch.object(h,"Evidence") as writer,patch.object(h,"module") as loader:

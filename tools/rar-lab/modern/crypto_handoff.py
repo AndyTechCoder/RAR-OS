@@ -289,6 +289,28 @@ def tool_identities():
         tools[str(path)]={"resolved":str(resolved),"sha256":digest.hexdigest(),"size":total}
     return tools
 
+class DockerClient:
+    """Fresh cloud-only CLI state; never import existing credentials or context."""
+    def __init__(self,work):
+        self.paths=[Path(work)/"docker-config",Path(work)/"buildx-config"]
+        self.identities=[]
+        for path in self.paths:
+            path.mkdir(mode=0o700,exist_ok=False)
+            info=path.lstat()
+            if (not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.geteuid() or
+                stat.S_IMODE(info.st_mode)!=0o700):
+                raise Invalid("owned private Docker client state")
+            self.identities.append((info.st_dev,info.st_ino))
+    def argv(self,args):
+        for path,identity in zip(self.paths,self.identities):
+            info=path.lstat()
+            if (not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.geteuid() or
+                stat.S_IMODE(info.st_mode)!=0o700 or (info.st_dev,info.st_ino)!=identity):
+                raise Invalid("Docker client directory changed")
+        config,buildx=map(str,self.paths)
+        return ["/usr/bin/env","-i","PATH=/usr/bin:/bin","LANG=C","LC_ALL=C",
+            "DOCKER_CONFIG="+config,"BUILDX_CONFIG="+buildx]+DOCKER+["--config",config]+args
+
 def main():
     workspace,controller,target,required=guard()
     token=os.environ.get("RAR_ARTIFACT_TOKEN")
@@ -305,6 +327,7 @@ def main():
     signal.signal(signal.SIGALRM,deadline);signal.alarm(3000)
     evidence=Evidence(workspace,"modern-crypto-evidence")
     work=workspace/"modern-crypto-work";work.mkdir(mode=0o700,exist_ok=False)
+    client=DockerClient(work)
     helpers={name:module(name) for name in MODULES}
     transport=helpers["reference_runner"]
     phase="preflight";summary={"schema":"rar-modern-crypto-handoff-v0","controller":controller,
@@ -328,7 +351,15 @@ def main():
             "stdout_size":len(out),"stderr_sha256":sha(error),"stderr_size":len(error)}))
         evidence.retain(prefix+"-stderr.bin",error)
         if len(out)<=2*1024**2:evidence.retain(prefix+"-stdout.bin",out)
-        if type(code) is not int or code!=0:raise Invalid("cloud command failed")
+        if type(code) is not int or code!=0:
+            # CLI environments are scrubbed and inputs are public fixed data.
+            # Canonical JSON escapes newlines and workflow-command prefixes.
+            print(canonical({"diagnostic":"rar-modern-command-failure-v0",
+                "sequence":sequence,"argv":argv,"exit":code,
+                "stderr_tail":error[-8192:].decode("utf-8","backslashreplace"),
+                "stdout_tail":out[-2048:].decode("utf-8","backslashreplace")
+                }).decode("ascii"),end="",flush=True)
+            raise Invalid("cloud command failed")
         return out
     def git(root,args,maximum=131072):
         return command(["/usr/bin/env","-i","PATH=/usr/bin:/bin","LANG=C","LC_ALL=C",
@@ -338,7 +369,7 @@ def main():
             "-c","core.attributesFile=/nonexistent","-c","protocol.allow=never",
             "-c","protocol.https.allow=always","-C",str(root)]+args,120,maximum)
     def docker(args,seconds=30,maximum=65536,request=b""):
-        return command(DOCKER+args,seconds,maximum,request)
+        return command(client.argv(args),seconds,maximum,request)
     def image_identity(image):
         raw=docker(["image","inspect",image])
         rows=unique(raw)
@@ -500,7 +531,11 @@ def main():
         derived.inspect(image_raw,parent,driver_layer,sha(drivers[0]),source_layer,target,source_report["files"])
         evidence.retain("derived-compiler.json",canonical(image_report))
         # The derived helper reports the exact ordered rootfs as layer digests.
-        parsed=unique(derived._parts(image_raw)[image_report["image"][7:]+".json"])
+        config_raw=derived._parts(image_raw)[image_report["image"][7:]+".json"]
+        # _parts intentionally returns immutable views over large archives.
+        # Copy only this bounded JSON member, never the multi-gigabyte layers.
+        if len(config_raw)>65536:raise Invalid("derived config JSON budget")
+        parsed=unique(bytes(config_raw))
         load_report={"image":image_report["image"],"diff_ids":parsed["rootfs"]["diff_ids"]}
         compiler_image=load_image(image_raw,load_report,parsed["config"])
         del image_raw
@@ -544,6 +579,10 @@ def main():
         summary.update(status="failed",error_type=type(error).__name__)
         if phase!="artifact-intake":
             summary["validation_error"]=str(error)[:2048]
+        print(canonical({"diagnostic":"rar-modern-crypto-failure-v0","phase":phase,
+            "error_type":summary["error_type"],
+            **({"validation_error":summary["validation_error"]} if "validation_error" in summary else {})
+            }).decode("ascii"),end="",flush=True)
         # Do not leak a signed archive URL or credential via an exception repr.
         raise Invalid("handoff failed during "+phase+" ("+type(error).__name__+")") from None
     finally:

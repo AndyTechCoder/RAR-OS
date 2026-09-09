@@ -248,6 +248,10 @@ def main():
             [(inputs,"/artifact")],300,64*1024*1024)
         (evidence/"persistence.json").write_bytes(output)
         report["content_check"]=content.validate(output,digest(boot),sizes)
+        # Alter in-memory copies only after positive content validation. Keep
+        # the exact original capture and all target/device state untouched.
+        report["actual_refusals"]=content.actual_refusals(output,digest(boot),sizes)
+        (evidence/"refusals.json").write_text(json.dumps(report["actual_refusals"],indent=2)+"\n")
         report["status"]="observed"
         report["persistence_sha256"]=digest(output)
         save()

@@ -93,10 +93,103 @@ def argv(rows,index,profile):
     if rows!=expected: raise ValueError("actual QEMU arguments differ from the fixed reviewed profile")
     return True
 
+def qemu_killed(code):
+    return type(code) is int and code == -9
+
 def terminated(code,problem):
     if type(code) is not int or (code,problem) not in ((-9,"backend-failed"),(21,"backend-failed")):
         raise ValueError("exact observed backend termination pairing")
     return True
+
+
+def event_summary(events,phases=None):
+    """Exact bounded public QMP names, not arbitrary event values in logs."""
+    if type(events) is not list:return {"shape":"not-list"}
+    result=[]
+    for index,event in enumerate(events[:32]):
+        item={"name":"INVALID"}
+        if type(event) is dict:
+            name=event.get("event")
+            if type(name) is str and re.fullmatch("[A-Z][A-Z0-9_]{0,63}",name):
+                item["name"]=name
+            item["keys"]=[k if type(k) is str and re.fullmatch("[a-zA-Z_][a-zA-Z0-9_-]{0,63}",k)
+                          else "INVALID" for k in list(event)[:16]]
+            try:
+                encoded=json.dumps(event,sort_keys=True,ensure_ascii=True,allow_nan=False).encode("ascii")
+                if len(encoded)<=2048:item["sha256"]=sha(encoded)
+                else:item["oversized"]=True
+            except (ValueError,TypeError,RecursionError):
+                item["malformed"]=True
+            data=event.get("data")
+            if type(data) is dict:
+                item["data_types"]={
+                    (key if type(key) is str and re.fullmatch("[a-zA-Z_][a-zA-Z0-9_-]{0,63}",key) else "INVALID"):
+                    type(value).__name__ for key,value in list(data.items())[:16]}
+        if type(phases) is list and index<len(phases):item["receipt"]=phases[index]
+        result.append(item)
+    return {"count":len(events),"events":result,"truncated":len(events)>32}
+
+def receipt_phases(receipts,events,rows,drained):
+    if (drained is not True or type(events) is not list or len(events)>32 or
+        type(receipts) is not list or len(receipts)!=len(events) or
+        type(rows) is not list or not 1<=len(rows)<=512):
+        raise ValueError("complete bounded post-reap event receipt proof")
+    for ordinal,row in enumerate(rows,1):
+        if type(row) is not dict or type(row.get("id")) is not int or row["id"]!=ordinal:
+            raise ValueError("receipt command identities")
+    continuations=[r["id"] for r in rows if r.get("execute")=="cont"]
+    if len(continuations)!=1:raise ValueError("sole continuation receipt boundary")
+    cont=continuations[0]
+    previous=0;postcut=False;phases=[]
+    for index,receipt in enumerate(receipts):
+        if (type(receipt) is not dict or set(receipt)!={"event_index","request_id"} or
+            type(receipt["event_index"]) is not int or receipt["event_index"]!=index):
+            raise ValueError("one contiguous receipt per retained event")
+        identity=receipt["request_id"]
+        if identity is None:
+            postcut=True;phases.append("post-reap-stream")
+        else:
+            if (postcut or type(identity) is not int or not 1<=identity<=len(rows) or
+                identity<previous):
+                raise ValueError("ordered exact receipt request identity")
+            previous=identity
+            phases.append("preflight-reply" if identity<cont else
+                          "continue-reply" if identity==cont else "running-reply")
+    return phases
+
+def checked_event_stream(events,receipts,rows,drained,rtc_path):
+    """One lifecycle RESUME plus bounded advisory RTC changes, never ignored events.
+    Receipt positions are stream observations, not event occurrence timestamps.
+    QOM paths are validated object identifiers, never host filesystem paths.
+    """
+    phases=receipt_phases(receipts,events,rows,drained)
+    if not 1<=len(events)<=5:
+        raise ValueError("one RESUME and at most four RTC events")
+    if type(rtc_path) is not str or not rtc_path.startswith("/machine/unattached/"):
+        raise ValueError("independently verified RTC identity required")
+    for index,event in enumerate(events):
+        if (type(event) is not dict or
+            phases[index] not in (("continue-reply","running-reply") if index==0 else ("running-reply",))):
+            raise ValueError("event before sole continue or malformed object")
+        name="RESUME" if index==0 else "RTC_CHANGE"
+        fields={"event","timestamp"} if index==0 else {"event","timestamp","data"}
+        if set(event)!=fields or event["event"]!=name:
+            raise ValueError("unexpected lifecycle/device event: "+
+                             json.dumps(event_summary(events,phases),sort_keys=True))
+        stamp=event["timestamp"]
+        if (type(stamp) is not dict or set(stamp)!={"seconds","microseconds"} or
+            type(stamp["seconds"]) is not int or not 0<=stamp["seconds"]<1<<63 or
+            type(stamp["microseconds"]) is not int or not 0<=stamp["microseconds"]<1000000):
+            raise ValueError("canonical bounded event timestamp")
+        if index:
+            data=event["data"]
+            if (type(data) is not dict or set(data)!={"offset","qom-path"} or
+                type(data["offset"]) is not int or not -(1<<63)<=data["offset"]<1<<63):
+                raise ValueError("exact RTC_CHANGE payload")
+            path=data["qom-path"]
+            if type(path) is not str or path!=rtc_path:
+                raise ValueError("RTC event differs from paused chipset identity")
+    return len(events)-1
 
 def validate(raw,expected_boot_digest,firmware_sizes):
     if type(raw) is not bytes or not 1<=len(raw)<=64*1024*1024 or not raw.endswith(b"\n"):
@@ -115,7 +208,7 @@ def validate(raw,expected_boot_digest,firmware_sizes):
             "frozen_data_sha256","frozen_data_base64","system_sha256","boot_sha256",
             "crypto_interoperability_accepted","milestone_complete"}
     if (type(evidence) is not dict or set(evidence)!=fields or
-        evidence["schema"]!="rar-modern-persistence-candidate-v0" or evidence["status"]!="observed" or
+        evidence["schema"]!="rar-modern-persistence-candidate-v1" or evidence["status"]!="observed" or
         evidence["crypto_interoperability_accepted"] is not False or evidence["milestone_complete"] is not False):
         raise ValueError("exact nonaccepting persistence envelope")
     if evidence["boot_sha256"]!=digest(expected_boot_digest):
@@ -150,37 +243,30 @@ def validate(raw,expected_boot_digest,firmware_sizes):
     bindings=[]
     pids=[]
     for index,proof in enumerate(proofs,1):
-        if type(proof) is not dict or set(proof)!={"cut","audit","argv","preflight","commands","events","serial"}:
+        if type(proof) is not dict or set(proof)!={"cut","audit","argv","preflight","commands","events","event_receipts","qmp_drained","serial"}:
             raise ValueError("exact retained VM proof")
         cut=proof["cut"]
         if (type(cut) is not dict or set(cut)!={"vm_pid","vm_returncode","backends","joined"} or
             cut["joined"] is not True or type(cut["vm_pid"]) is not int or cut["vm_pid"]<=0 or
-            cut["vm_returncode"]!=-9 or type(cut["backends"]) is not list or len(cut["backends"])!=3):
+            not qemu_killed(cut["vm_returncode"]) or type(cut["backends"]) is not list or len(cut["backends"])!=3):
             raise ValueError("whole QEMU killed before three backend joins")
         pids.append(cut["vm_pid"])
         if type(proof["serial"]) is not str or not proof["serial"].isascii() or len(proof["serial"])>65536 or "RAR-MODERN:GUI-READY" not in proof["serial"]:
             raise ValueError("bounded actual Modern readiness transcript")
         if any(marker in proof["serial"] for marker in ("RAR-PANIC","UNEXPECTED-USER-FAULT","INVALID-USER-RETURN")):
             raise ValueError("guest failure in retained transcript")
-        if type(proof["events"]) is not list or len(proof["events"])!=1:
-            raise ValueError("sole actual RESUME event")
-        event=proof["events"][0]
-        if type(event) is not dict or set(event)!={"event","timestamp"} or event["event"]!="RESUME":
-            raise ValueError("unexpected VM event")
-        stamp=event["timestamp"]
-        if (type(stamp) is not dict or set(stamp)!={"seconds","microseconds"} or
-            type(stamp["seconds"]) is not int or stamp["seconds"]<0 or
-            type(stamp["microseconds"]) is not int or not 0<=stamp["microseconds"]<1000000):
-            raise ValueError("canonical event timestamp")
+        commands(proof["commands"],index,value,profile)
         argv(proof["argv"],index,profile)
         # Source-specific preflight geometry is already recorded/checked in VM;
         # here recheck against independently tool-image-bound firmware sizes.
         preflight=proof["preflight"]
         if type(preflight) is not dict or set(preflight)!={"raw","verified"}:
             raise ValueError("actual paused preflight results")
-        if profile.validate_preflight(preflight["raw"],index==2,index,firmware_sizes)!=preflight["verified"]:
+        verified=profile.validate_preflight(preflight["raw"],index==2,index,firmware_sizes)
+        if verified!=preflight["verified"]:
             raise ValueError("retained topology does not revalidate")
-        commands(proof["commands"],index,value,profile)
+        checked_event_stream(proof["events"],proof["event_receipts"],
+                             proof["commands"],proof["qmp_drained"],verified["rtc_path"])
         summaries=[];current=[]
         for role,report in zip(("data","system","boot"),cut["backends"]):
             if (type(report) is not dict or set(report)!={"returncode","problem","records","joined"} or
@@ -200,7 +286,132 @@ def validate(raw,expected_boot_digest,firmware_sizes):
     return {"frames":5,"fresh_vms":2,"data_sha256":sha(data),"boot_sha256":expected_boot_digest,
             "content_validated":True,"provenance_validated":False,"milestone_complete":False}
 
+
+def canonical(value):
+    return json.dumps(value,separators=(",",":"),sort_keys=True,allow_nan=False).encode("ascii")+b"\n"
+
+def refusal_cases():
+    """Fixed paths/operations, never instructions supplied by a captured guest."""
+    cases=[]
+    def add(name,path,operation,value=None):
+        cases.append((name,tuple(path),operation,value))
+    for field in ("schema","status","boot_sha256","initial_data_sha256",
+                  "frozen_data_sha256","system_sha256","challenge"):
+        add("envelope-"+field,(field,),"flip")
+    for field in ("milestone_complete","crypto_interoperability_accepted"):
+        add("claim-"+field,(field,),"set",True)
+    for index in range(5):
+        add("frame-%d-hash"%index,("frames",index,"sha256"),"flip")
+    add("frame-pixels-rehashed",("frames",4),"pixels")
+    add("data-bytes-rehashed",(),"data")
+    for vm in range(2):
+        root=("vm_proofs",vm)
+        for label,path,operation,value in (
+            ("not-joined",("cut","joined"),"set",False),
+            ("return-code",("cut","vm_returncode"),"set",0),
+            ("float-return-code",("cut","vm_returncode"),"set",-9.0),
+            ("no-qmp-eof",("qmp_drained",),"set",False),
+            ("invalid-command-id",("commands",0,"id"),"set",0),
+            ("unexpected-event",("events",0,"event"),"set","RESET"),
+            ("invalid-receipt",("event_receipts",0,"event_index"),"set",1),
+            ("post-reap-resume",("event_receipts",0,"request_id"),"set",None),
+            ("rtc-inventory",("preflight","raw","rtc-children"),"set",[]),
+            ("verified-rtc",("preflight","verified","rtc_path"),"set","/machine/other"),
+            ("guest-panic",("serial",),"set","RAR-MODERN:GUI-READY\nRAR-PANIC"),
+            ("extra-argv",("argv",),"append","-snapshot")):
+            add("vm%d-%s"%(vm+1,label),root+path,operation,value)
+        for role in range(3):
+            backend=root+("cut","backends",role)
+            add("vm%d-role%d-unjoined"%(vm+1,role),backend+("joined",),"set",False)
+            add("vm%d-role%d-capacity"%(vm+1,role),backend+("records",0,"capacity"),"increment")
+            add("vm%d-role%d-authority"%(vm+1,role),backend+("records",0,"readonly"),"invert")
+    add("reused-vm-pid",("vm_proofs",1,"cut","vm_pid"),"copy",("vm_proofs",0,"cut","vm_pid"))
+    add("changed-data-inode",("vm_proofs",1,"cut","backends",0,"records",0,"inode"),"increment")
+    return cases
+
+def apply_refusal(document,case):
+    _,path,operation,value=case
+    def at(parts):
+        result=document
+        for part in parts:result=result[part]
+        return result
+    if operation=="data":
+        data=bytearray(decoded(document["frozen_data_base64"],99328))
+        # Alter the retained header and recompute its outer hash. Authentication
+        # and content binding, not just the outer SHA, must still reject it.
+        data[0]^=1
+        document["frozen_data_base64"]=base64.b64encode(data).decode("ascii")
+        document["frozen_data_sha256"]=sha(data)
+        return
+    target=at(path[:-1]);key=path[-1];old=target[key]
+    if operation=="set":target[key]=value
+    elif operation=="flip":
+        if type(old) is not str or not old:raise AssertionError("nonempty captured string")
+        target[key]=("b" if old[0]=="a" else "a")+old[1:]
+    elif operation=="increment":
+        if type(old) is not int:raise AssertionError("captured integer")
+        target[key]=old+1
+    elif operation=="invert":
+        if type(old) is not bool:raise AssertionError("captured boolean")
+        target[key]=not old
+    elif operation=="copy":target[key]=at(value)
+    elif operation=="append":
+        if type(old) is not list:raise AssertionError("captured list")
+        old.append(value)
+    elif operation=="pixels":
+        pixels=bytearray(base64.b64decode(old["actual_ppm"],validate=True))
+        pixels[-1]^=1
+        old["actual_ppm"]=base64.b64encode(pixels).decode("ascii")
+        old["sha256"]=sha(pixels)
+    else:raise AssertionError("unknown fixed refusal operation")
+
+def actual_refusals(raw,expected_boot_digest,firmware_sizes):
+    """Recheck altered copies of one real positive capture; no VM/disk mutation."""
+    import time
+    positive=validate(raw,expected_boot_digest,firmware_sizes)
+    cases=refusal_cases()
+    names=[case[0] for case in cases]
+    if len(cases)!=60 or len(set(names))!=len(names):
+        raise AssertionError("fixed unique actual-evidence refusal matrix")
+    deadline=time.monotonic()+300
+    results=[]
+    for case in cases:
+        if time.monotonic()>deadline:raise TimeoutError("bounded evidence refusal matrix")
+        document=json.loads(raw)
+        apply_refusal(document,case)
+        changed=canonical(document)
+        if changed==raw:raise AssertionError("refusal did not change retained bytes")
+        try:validate(changed,expected_boot_digest,firmware_sizes)
+        except ValueError as error:
+            results.append({"case":case[0],"input_sha256":sha(changed),
+                            "rejection_sha256":sha(str(error).encode("utf-8"))})
+        except Exception as error:
+            raise RuntimeError("refusal checker crashed: "+case[0]) from error
+        else:raise AssertionError("altered actual evidence accepted: "+case[0])
+        # TypeError/KeyError/assertions/timeouts are test failures, not refusals.
+    if time.monotonic()>deadline:raise TimeoutError("bounded evidence refusal matrix")
+    if validate(raw,expected_boot_digest,firmware_sizes)!=positive:
+        raise AssertionError("positive capture changed during refusal validation")
+    return {"schema":"rar-modern-actual-refusals-v1","base_sha256":sha(raw),
+            "rejected":len(results),"cases":results,"disk_faults_tested":False,
+            "milestone_complete":False}
+
 def self_test():
+    cases=refusal_cases()
+    assert len(cases)==60 and len({row[0] for row in cases})==60
+    sample={"rows":[{"number":3,"text":"a","flag":False,"items":[]}],"source":9}
+    for op,key,value,expected in (("increment","number",None,4),("flip","text",None,"b"),
+                                  ("invert","flag",None,True),("append","items","x",["x"]),
+                                  ("set","number",0,0),("copy","number",("source",),9)):
+        changed=json.loads(json.dumps(sample))
+        apply_refusal(changed,("unit",("rows",0,key),op,value))
+        assert changed["rows"][0][key]==expected
+        assert sample=={"rows":[{"number":3,"text":"a","flag":False,"items":[]}],"source":9}
+    assert canonical({"value":-9})!=canonical({"value":-9.0})
+    assert qemu_killed(-9)
+    for code in (-9.0,True,False,0,9,"-9",None):
+        assert not qemu_killed(code)
+
     rejected=0
     def reject(fn):
         nonlocal rejected
@@ -218,6 +429,89 @@ def self_test():
         assert terminated(code,"backend-failed")
         reject(lambda code=code:terminated(code,None))
     reject(lambda:terminated(0,"backend-failed"))
+    assert event_summary(None)=={"shape":"not-list"}
+    assert event_summary([])=={"count":0,"events":[],"truncated":False}
+    names=event_summary([{"event":"RESUME"},{"event":"RTC_CHANGE","data":{"offset":123}},
+                         {"event":"PRIVATE\nTEXT","data":{"message":"secret"}}])
+    assert [x["name"] for x in names["events"]]==["RESUME","RTC_CHANGE","INVALID"]
+    assert "secret" not in json.dumps(names) and "123" not in json.dumps(names["events"][1]["data_types"])
+    assert event_summary([{"event":"RESUME"}]*33)["truncated"] is True
+    assert len(event_summary([{"event":"RESUME"}]*33)["events"])==32
+    rows=[{"execute":name,"id":i+1} for i,name in enumerate(
+        ("qmp_capabilities","query-status","cont","screendump"))]
+    events=[{"event":"RESUME"}]*4
+    receipts=[{"event_index":i,"request_id":n} for i,n in enumerate((1,3,4,None))]
+    assert receipt_phases(receipts,events,rows,True)==[
+        "preflight-reply","continue-reply","running-reply","post-reap-stream"]
+    for flag in (False,1,None):reject(lambda flag=flag:receipt_phases(receipts,events,rows,flag))
+    reject(lambda:receipt_phases(receipts[:-1],events,rows,True))
+    for field,value in (("event_index",True),("event_index",2),("request_id",0),
+                        ("request_id",5),("request_id",True)):
+        changed=json.loads(json.dumps(receipts));changed[0][field]=value
+        reject(lambda changed=changed:receipt_phases(changed,events,rows,True))
+    for requests in ((3,1,4,None),(1,None,4,None)):
+        changed=[{"event_index":i,"request_id":n} for i,n in enumerate(requests)]
+        reject(lambda changed=changed:receipt_phases(changed,events,rows,True))
+    reject(lambda:receipt_phases(receipts,events,rows+[{"execute":"cont","id":5}],True))
+
+    # QMP RTC_CHANGE is advisory clock metadata, not a reset or another boot.
+    stamp={"seconds":1,"microseconds":2}
+    resume={"event":"RESUME","timestamp":stamp}
+    rtc={"event":"RTC_CHANGE","timestamp":stamp,
+         "data":{"offset":-1,"qom-path":"/machine/unattached/device[7]"}}
+    def stream(sequence,identities=None,drained=True):
+        if identities is None:identities=[3]+[4]*(len(sequence)-1)
+        rs=[{"event_index":i,"request_id":n} for i,n in enumerate(identities)]
+        return checked_event_stream(sequence,rs,rows,drained,"/machine/unattached/device[7]")
+    assert stream([resume])==0
+    assert stream([resume,rtc,rtc])==2
+    assert stream([resume]+[rtc]*4)==4
+    reject(lambda:stream([resume,rtc],(3,None)))
+    reject(lambda:stream([resume],(None,)))
+    for offset in (-(1<<63),0,(1<<63)-1):
+        changed=json.loads(json.dumps(rtc));changed["data"]["offset"]=offset
+        assert stream([resume,changed])==1
+    for sequence in ([],[rtc],[rtc,resume],[resume,resume],[resume]+[rtc]*5):
+        reject(lambda sequence=sequence:stream(sequence))
+    for name in ("RESET","STOP","SHUTDOWN","POWERDOWN","SUSPEND","SUSPEND_DISK","WAKEUP",
+                 "WATCHDOG","GUEST_PANICKED","BLOCK_IO_ERROR","DEVICE_DELETED","UNKNOWN"):
+        changed=dict(rtc,event=name)
+        reject(lambda changed=changed:stream([resume,changed]))
+    reject(lambda:stream([resume,rtc],(1,4)))
+    reject(lambda:stream([resume,rtc],(3,2)))
+    reject(lambda:stream([resume,rtc],(3,3)))
+    assert stream([resume,rtc],(4,4))==1
+    reject(lambda:stream([resume,rtc],(None,4)))
+    for flag in (False,1,None):reject(lambda flag=flag:stream([resume],drained=flag))
+    for value in (True,1.0,"0",-(1<<63)-1,1<<63):
+        changed=json.loads(json.dumps(rtc));changed["data"]["offset"]=value
+        reject(lambda changed=changed:stream([resume,changed]))
+    for path in ("","/machine","/host/rtc","/machine/../rtc","/machine/./rtc",
+                 "/machine//rtc","/machine/rtc/","/machine/rtc\nprivate",
+                 "/machine/"+("a"*65),"/machine/"+"/".join(["r"]*9),
+                 "/machine/device[x]","/machine/rtc;command","/machine/clocké",None,1):
+        changed=json.loads(json.dumps(rtc));changed["data"]["qom-path"]=path
+        reject(lambda changed=changed:stream([resume,changed]))
+    changed=json.loads(json.dumps(rtc));changed["data"]["qom-path"]="/machine/peripheral/rtc"
+    reject(lambda:stream([resume,rtc,changed]))
+    for source in (resume,rtc):
+        for field,value in (("seconds",-1),("seconds",True),("seconds",1<<63),
+                            ("microseconds",-1),("microseconds",1000000),("microseconds",True)):
+            changed=json.loads(json.dumps(source));changed["timestamp"][field]=value
+            sequence=[changed] if source is resume else [resume,changed]
+            reject(lambda sequence=sequence:stream(sequence))
+        for field in source:
+            changed=json.loads(json.dumps(source));del changed[field]
+            sequence=[changed] if source is resume else [resume,changed]
+            reject(lambda sequence=sequence:stream(sequence))
+        changed=dict(source,extra=0)
+        sequence=[changed] if source is resume else [resume,changed]
+        reject(lambda sequence=sequence:stream(sequence))
+    for data in (None,{},{"offset":0},{"qom-path":"/machine/rtc"},
+                 {"offset":0,"qom-path":"/machine/rtc","extra":0}):
+        reject(lambda data=data:stream([resume,dict(rtc,data=data)]))
+    reject(lambda:stream([dict(resume,data={})]))
+
     profile=helper("vm_profile");visual=helper("visual_oracle")
     value="abcdefghijklmnop"*2
     for index in (1,2):
