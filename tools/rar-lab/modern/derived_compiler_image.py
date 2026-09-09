@@ -150,7 +150,11 @@ def _prepare(base_raw,driver_layer,driver_sha,source_layer,revision,expected_fil
     source=source_reader.inspect(source_layer,revision,expected_files)
     existing=set(accepted["files"])|set(accepted["directories"])
     additions={driver["driver"]}|set(source["directories"])|{"source/"+p for p in source["files"]}
-    if existing&additions:raise Invalid("replacement of accepted parent path")
+    added_files={driver["driver"]}|{"source/"+p for p in source["files"]}
+    if (existing&additions or
+        any(path.startswith(parent+"/") for path in additions for parent in accepted["files"]) or
+        any(path.startswith(added+"/") for path in existing for added in added_files)):
+        raise Invalid("replacement or ancestor conflict with accepted parent path")
     history,layers=_parent(base_raw,accepted)
     config=_config(history,accepted["diff_ids"],driver["diff_id"],source["diff_id"])
     config_raw=canonical(config);image="sha256:"+sha(config_raw)
@@ -198,6 +202,40 @@ def inspect(raw,base_raw,driver_layer,driver_sha,source_layer,revision,expected_
 def self_test():
     import copy
     import unittest
+    import struct
+    from contextlib import contextmanager
+    from unittest.mock import patch
+    @contextmanager
+    def accepted_fixture():
+        # Only the large upstream compiler inventory is mocked. Driver ELF and
+        # canonical source layers use their actual independent byte inspectors.
+        raw=bytearray(256);raw[:7]=b"\x7fELF\x02\x01\x01"
+        struct.pack_into("<HHI",raw,16,2,62,1)
+        struct.pack_into("<QQ",raw,24,0x4000b0,64)
+        struct.pack_into("<HHH",raw,52,64,56,2)
+        struct.pack_into("<IIQQQQQQ",raw,64,1,5,0,0x400000,0,256,256,4096)
+        struct.pack_into("<IIQQQQQQ",raw,120,0x6474e551,6,0,0,0,0,0,16)
+        driver=driver_reader._encode(bytes(raw))
+        driver_sha=sha(raw)
+        revision="1"*40
+        source,source_report=source_reader.build(
+            {path:b"// public synthetic source\n" for path in source_reader.FILES},revision)
+        layers=[_encode([("compiler.bin",b"opaque compiler fixture")]),
+                _encode([("license.txt",b"public notice fixture")])]
+        diffs=["sha256:"+sha(value) for value in layers]
+        history=[{"created_by":"metadata","empty_layer":True},
+                 {"created_by":"parent-one"},{"created_by":"parent-two"}]
+        config=canonical({"history":history,"rootfs":{"type":"layers","diff_ids":diffs}})
+        pin="sha256:"+sha(config);name=pin[7:]+".json"
+        parent_parts=[("manifest.json",canonical([{"Config":name,"RepoTags":None,
+            "Layers":["original-0.tar","original-1.tar"]}])),(name,config),
+            ("original-0.tar",layers[0]),("original-1.tar",layers[1])]
+        parent=_encode(parent_parts)
+        accepted={"diff_ids":diffs,"files":{"compiler.bin":{},"license.txt":{}},
+                  "directories":{"source":{},"build":{}}}
+        with patch(__name__+".BASE_IMAGE",pin),patch.object(inventory,"inspect",return_value=accepted):
+            yield {"args":(parent,driver,driver_sha,source,revision,source_report["files"]),
+                   "layers":layers,"history":history,"accepted":accepted,"parent_parts":parent_parts}
     class Tests(unittest.TestCase):
         def test_fixed_process_and_parent_prefix(self):
             history=[{"created_by":"fixture"}]
@@ -238,6 +276,71 @@ def self_test():
             for names,kind in ((["same","same"],tarfile.REGTYPE),
                                (["../outside"],tarfile.REGTYPE),(["link"],tarfile.SYMTYPE)):
                 with self.assertRaises(Invalid):_parts(archive(names,kind))
+        def test_successful_public_build_inspect_roundtrip(self):
+            with accepted_fixture() as fixture:
+                raw,report=build(*fixture["args"])
+                self.assertEqual(inspect(raw,*fixture["args"]),report)
+                self.assertEqual((raw,report),build(*fixture["args"]))
+                values=_parts(raw)
+                for index,value in enumerate(fixture["layers"]):
+                    self.assertEqual(bytes(values["parent-"+str(index)+".tar"]),value)
+                manifest=_json(values["manifest.json"])[0]
+                self.assertEqual(manifest["Layers"],
+                    ["parent-0.tar","parent-1.tar","driver.tar","source.tar"])
+                config=_json(values[manifest["Config"]])
+                self.assertEqual(config["history"][:3],fixture["history"])
+                self.assertEqual(config["config"],PROCESS)
+                self.assertEqual(config["rootfs"]["diff_ids"],report["diff_ids"])
+        def test_complete_image_mutations_are_refused(self):
+            with accepted_fixture() as fixture:
+                raw,report=build(*fixture["args"])
+                parts=list(_parts(raw).items())
+                def replace(name,value):
+                    return _encode([(key,value if key==name else original) for key,original in parts])
+                manifest=_json(dict(parts)["manifest.json"])
+                reordered=copy.deepcopy(manifest);reordered[0]["Layers"][:2]=list(reversed(reordered[0]["Layers"][:2]))
+                swapped=copy.deepcopy(manifest);swapped[0]["Layers"][-2:]=["source.tar","driver.tar"]
+                config_name=manifest[0]["Config"]
+                config=_json(dict(parts)[config_name])
+                history=copy.deepcopy(config);history["history"][0]["created_by"]="altered"
+                process=copy.deepcopy(config);process["config"]["User"]="0:0"
+                wrong_link=copy.deepcopy(manifest);wrong_link[0]["Config"]="missing.json"
+                bad=[replace("manifest.json",canonical(reordered)),
+                     replace("manifest.json",canonical(swapped)),
+                     replace("manifest.json",canonical(wrong_link)),
+                     replace(config_name,canonical(history)),
+                     replace(config_name,canonical(process)),
+                     replace("parent-0.tar",b"altered-parent"),
+                     replace("driver.tar",fixture["args"][3]),
+                     replace("source.tar",fixture["args"][1]),
+                     _encode(parts+[("extra",b"unexpected")]),raw+b"\0"*10240]
+                for candidate in bad:
+                    with self.assertRaises(ValueError):inspect(candidate,*fixture["args"])
+        def test_parent_mapping_history_and_layer_mutations_are_refused(self):
+            with accepted_fixture() as fixture:
+                args=list(fixture["args"])
+                parts=fixture["parent_parts"]
+                manifest=_json(parts[0][1])
+                manifest[0]["Layers"].reverse()
+                args[0]=_encode([("manifest.json",canonical(manifest)),*parts[1:]])
+                with self.assertRaises(ValueError):build(*args)
+                args[0]=_encode([(name,b"altered" if name=="original-0.tar" else value) for name,value in parts])
+                with self.assertRaises(ValueError):build(*args)
+                # A self-consistent different parent pin still needs one history
+                # entry per nonempty layer; the fixture-only inventory is mocked.
+                config=_json(parts[1][1]);config["history"]=[]
+                encoded=canonical(config);pin="sha256:"+sha(encoded)
+                manifest=_json(parts[0][1]);manifest[0]["Config"]=pin[7:]+".json"
+                args[0]=_encode([("manifest.json",canonical(manifest)),
+                    (pin[7:]+".json",encoded),*parts[2:]])
+                with patch(__name__+".BASE_IMAGE",pin):
+                    with self.assertRaises(ValueError):build(*args)
+        def test_parent_addition_ancestor_conflicts_are_refused(self):
+            for path in ("source","rar-compile-driver/child"):
+                with accepted_fixture() as fixture:
+                    fixture["accepted"]["files"][path]={}
+                    fixture["accepted"]["directories"].pop(path,None)
+                    with self.assertRaises(ValueError):build(*fixture["args"])
         def test_no_arbitrary_parent_image(self):
             with self.assertRaises(ValueError):
                 build(b"not-an-accepted-image",b"", "1"*64,b"","1"*40,{})

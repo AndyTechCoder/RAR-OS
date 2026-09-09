@@ -185,9 +185,13 @@ the parent payload solely for indexing. The caller still needs aggregate cloud
 memory/disk limits: full accepted-parent and resulting-image bytes remain live
 during construction, with a derived image ceiling of2GiB plus4MiB.
 
-The isolated source tests cover canonical encoding, readonly views, exact
-configuration, prefix/history preservation, altered/trailing bytes, unsafe
-outer members and refusal of an arbitrary parent. Real accepted-image
+The isolated source tests cover a successful public build/inspect round trip
+with a small synthetic parent inventory, actual driver-ELF/source-layer parsers,
+preserved parent bytes/order/history, and canonical encoding/readonly views.
+They reject changed/reordered parent layers, manifest/config/history changes,
+swapped driver/source layers, extra/trailing bytes, unsafe outer members and
+both directions of file-ancestor conflicts. The synthetic parent is not an
+accepted compiler artifact; its upstream inventory is explicitly mocked. Real accepted-image
 compatibility, reproducible driver construction/provenance, cloud memory use,
 Docker loading and compiler execution remain unproved. This module performs
 no file write/extraction/process/network operation and activates no image.
