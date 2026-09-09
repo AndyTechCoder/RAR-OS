@@ -169,9 +169,10 @@ class GitHub:
         try:
             response=self.opener.open(request,timeout=15)
         except urllib.error.HTTPError as response:
-            if response.code!=302:raise Invalid("artifact redirect status") from None
-            location=archive_url(response.headers.get("Location"))
-            response.close()
+            try:
+                if response.code!=302:raise Invalid("artifact redirect status") from None
+                location=archive_url(response.headers.get("Location"))
+            finally:response.close()
         else:
             response.close();raise Invalid("artifact must use credential-separated redirect")
         # No Authorization, no cookies, no proxy, no second redirect, no URL logs.
@@ -239,11 +240,11 @@ def read_owned(path,maximum):
 def main():
     workspace,controller,target,required=guard()
     token=os.environ.get("RAR_ARTIFACT_TOKEN")
-    github=GitHub(token)
     run_id=os.environ["GITHUB_RUN_ID"];runner=os.environ["ImageVersion"]
     # Never inherit credentials, Git/Docker/proxy settings into child tools.
     clean={**required,"PATH":"/usr/bin:/bin","LANG":"C","LC_ALL":"C","TZ":"UTC"}
     os.environ.clear();os.environ.update(clean)
+    github=GitHub(token)
     token=None
     resource.setrlimit(resource.RLIMIT_CORE,(0,0))
     resource.setrlimit(resource.RLIMIT_AS,(5*1024**3,5*1024**3))
@@ -497,6 +498,8 @@ def main():
         phase="complete-fixed-corpus"
     except BaseException as error:
         summary.update(status="failed",error_type=type(error).__name__)
+        if phase!="artifact-intake":
+            summary["validation_error"]=str(error)[:2048]
         # Do not leak a signed archive URL or credential via an exception repr.
         raise Invalid("handoff failed during "+phase+" ("+type(error).__name__+")") from None
     finally:
