@@ -9,10 +9,19 @@ def base():
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
     return module
 
-def validate(events,receipts,commands,drained,rtc_path,entry_event_count):
+def validate(events,receipts,commands,drained,rtc_path,entry_event_count,fault_plan=None):
+    if fault_plan is not None:
+        if (type(fault_plan) is not dict or set(fault_plan)!={"operation","ordinal","effect","prefix"} or
+            fault_plan["operation"] not in ("write","flush") or
+            type(fault_plan["ordinal"]) is not int or not 1<=fault_plan["ordinal"]<=6 or
+            fault_plan["effect"] not in ("before-cut","after-cut","error","torn-cut","short-error") or
+            type(fault_plan["prefix"]) is not int or
+            fault_plan["prefix"]!=(255 if fault_plan["effect"] in ("torn-cut","short-error") else 0)):
+            raise ValueError("fixed mutation fault plan")
+    rtc_count=0;io_count=0
     phases=base().receipt_phases(receipts,events,commands,drained)
     if (type(entry_event_count) is not int or not 1<=entry_event_count<=len(events) or
-        not 1<=len(events)<=5 or type(rtc_path) is not str or
+        not 1<=len(events)<=6 or type(rtc_path) is not str or
         not rtc_path.startswith("/machine/unattached/")):
         raise ValueError("bounded pre-kill fault event boundary")
     for index,event in enumerate(events):
@@ -24,7 +33,7 @@ def validate(events,receipts,commands,drained,rtc_path,entry_event_count):
             raise ValueError("event not observed before owned VM kill")
         fields={"event","timestamp"} if index==0 else {"event","timestamp","data"}
         if (type(event) is not dict or set(event)!=fields or
-            event["event"]!=("RESUME" if index==0 else "RTC_CHANGE")):
+            (event["event"]!="RESUME" if index==0 else event["event"] not in ("RTC_CHANGE","BLOCK_IO_ERROR"))):
             raise ValueError("unexpected fault-time lifecycle/device event")
         stamp=event["timestamp"]
         if (type(stamp) is not dict or set(stamp)!={"seconds","microseconds"} or
@@ -33,11 +42,29 @@ def validate(events,receipts,commands,drained,rtc_path,entry_event_count):
             raise ValueError("bounded canonical event timestamp")
         if index:
             data=event["data"]
-            if (type(data) is not dict or set(data)!={"offset","qom-path"} or
-                type(data["offset"]) is not int or not -(1<<63)<=data["offset"]<1<<63 or
-                type(data["qom-path"]) is not str or data["qom-path"]!=rtc_path):
-                raise ValueError("exact paused-chipset RTC identity")
-    return len(events)-1
+            if event["event"]=="RTC_CHANGE":
+                rtc_count+=1
+                if (rtc_count>4 or type(data) is not dict or set(data)!={"offset","qom-path"} or
+                    type(data["offset"]) is not int or not -(1<<63)<=data["offset"]<1<<63 or
+                    type(data["qom-path"]) is not str or data["qom-path"]!=rtc_path):
+                    raise ValueError("exact paused-chipset RTC identity")
+            else:
+                io_count+=1
+                # QEMU IDE flush and write faults both use QAPI operation=write.
+                # Receipt must follow the submitted save, before deliberate kill.
+                last=commands[-1]
+                if (fault_plan is None or io_count!=1 or
+                    last.get("execute")!="send-key" or
+                    last.get("arguments")!={"keys":[{"type":"qcode","data":"ret"}],"hold-time":50} or
+                    receipts[index]["request_id"] not in (None,last["id"]) or
+                    type(data) is not dict or
+                    set(data)!={"device","node-name","operation","action","reason"} or
+                    data["device"]!="" or data["node-name"]!="rar-data" or
+                    data["operation"]!="write" or data["action"]!="report" or
+                    type(data["reason"]) is not str or not 1<=len(data["reason"])<=256 or
+                    not data["reason"].isascii() or any(ord(c)<32 or ord(c)==127 for c in data["reason"])):
+                    raise ValueError("one planned pre-kill Data write-error report only")
+    return rtc_count
 
 def self_test():
     import copy

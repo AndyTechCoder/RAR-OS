@@ -107,7 +107,7 @@ def vm_proof(proof,index,value,plan,firmware_sizes):
     if index==1:
         fields(cut["entry"],"vm_code backend_codes backend_problems event_count")
         helper("fault_events").validate(proof["events"],proof["event_receipts"],
-            proof["commands"],proof["qmp_drained"],verified["rtc_path"],cut["entry"].get("event_count"))
+            proof["commands"],proof["qmp_drained"],verified["rtc_path"],cut["entry"].get("event_count"),plan)
     else:
         base.checked_event_stream(proof["events"],proof["event_receipts"],
             proof["commands"],proof["qmp_drained"],verified["rtc_path"])
