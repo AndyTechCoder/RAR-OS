@@ -156,3 +156,43 @@ Receipt verification uses exact types and values for every fixed field, includin
 both canonical repository numeric IDs and names on the run and both repository
 IDs on the artifact receipt. Booleans cannot alias integer run attempts. Pure
 negative tests mutate/delete every fixed leaf and exercise type aliases.
+
+## First diagnostic cause and scoped correction
+
+Read-only cloud inspection34336034920/job102415522709 verified the complete
+fixed artifact receipt and inventory without extracting files or running target
+code. Command77 was docker buildx inspect default; it exited1 with
+"ERROR: mkdir /nonexistent: permission denied". Earlier pinned image acquisition,
+independent inventories, source binding and compiler-parent loading reached their
+gates; no driver build or crypto comparison had run. Peak controller RSS was
+2444788KiB, below its configured ceiling.
+
+The generic attached CLI transport deliberately supplies DOCKER_CONFIG=/nonexistent.
+That remains unchanged for reference/compiler runner operations. The integrated
+build controller now creates two fresh0700 directories under its newly owned
+disposable work root, one for Docker CLI state and one for Buildx state. It passes
+only fixed PATH/locale and those explicit paths through env -i, plus the explicit
+Docker --config option and existing fixed daemon socket. It never imports the
+runner's existing configuration, credentials, proxy settings or builder context.
+Directory inode/device/ownership/mode are rechecked before every command.
+Neither directory is in a build context or mounted into an adapter/VM.
+No change to network policy, image validation, resource limits or acceptance.
+
+Docker documents the CLI override at
+https://docs.docker.com/reference/cli/docker/#change-the-docker-directory
+and Buildx state-directory lookup at
+https://docs.docker.com/build/building/variables/#buildx_config.
+Tests cover exact full-pipeline command environment, fresh empty private
+directories, preexisting-directory refusal and substituted inode/owner/mode/link
+refusal without changing or deleting any prior fixture.
+
+This is a diagnosed compatibility correction, not runtime acceptance. One
+reviewed bounded diagnostic retry may follow exact-head source validation and
+trusted-main merge. Do not run an unchanged retry.
+
+Failed public CLI commands also print one canonical JSON record with their
+sequence, argv, exit status, final 8192 stderr bytes and final 2048 stdout bytes.
+Newlines and non-ASCII bytes are escaped; workflow-command text stays inert.
+Artifact HTTP acquisition is not part of this command path. Tests force a
+client failure before any build and verify bounded tails and escaped framing.
+This avoids needing a separate artifact-reader change for ordinary tool errors.
