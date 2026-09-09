@@ -2,6 +2,7 @@
 //! Compiled only by a distinct, not-yet-activated cloud Modern composition.
 mod model;
 mod support;
+mod retirement;
 mod native_pio;
 #[path="../platform/arch.rs"] mod arch;
 #[path="../platform/display.rs"] pub(crate) mod display;
@@ -36,11 +37,12 @@ static SERVICE:&[u8]=include_bytes!("/tmp/modern-service.efi");
 static SERVICE:&[u8]=&[];
 #[derive(Clone,Copy)]
 struct Process{
+    memory:retirement::Memory,aperture:u64,
     state:State,generation:u64,root:u64,kernel_bottom:u64,kernel_top:u64,frame:u64,
     ranges:[UserRange;24],range_count:usize,preemptions:u64,entry:u64,
 }
 impl Process{
-    const EMPTY:Self=Self{state:State::Dead,generation:1,root:0,kernel_bottom:0,kernel_top:0,frame:0,
+    const EMPTY:Self=Self{memory:retirement::Memory::Clean,aperture:0,state:State::Dead,generation:1,root:0,kernel_bottom:0,kernel_top:0,frame:0,
         ranges:[EMPTY_RANGE;24],range_count:0,preemptions:0,entry:0};
     fn range(&mut self,start:u64,end:u64,writable:bool,executable:bool){
         if self.range_count>=self.ranges.len()||start>=end||writable&&executable{fatal("RAR-PANIC:CODE=USER-RANGE");}
@@ -56,7 +58,10 @@ struct Runtime{
 }
 static mut RUNTIME:Runtime=Runtime{processes:[Process::EMPTY;TASKS],current:0,arena:0,proofs:0,ready:false,
     policy:None,device:None,ticks:Some(0)};
-fn private_region(arena:u64,index:usize)->u64{arena+PRIVATE_BASE+index as u64*STRIDE}
+fn private_region(arena:u64,index:usize)->u64{
+    retirement::region(arena,boot::ARENA_PAGES,index)
+        .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=PRIVATE-GEOMETRY"))
+}
 fn omit(arena:u64,address:u64)->bool{
     let offset=address-arena;
     if [boot::STACK_GUARD,boot::STACK_TOP,0x160000,boot::EMERGENCY_TOP].contains(&offset){return true;}
@@ -142,6 +147,9 @@ pub unsafe fn start(info:&boot::BootInfo)->!{
             ((frame+512)as *mut arch::Trap).write(arch::Trap{rip:layout.entry,rsp:STACK_END-40,..arch::Trap::EMPTY});
         }
         process.frame=frame;
+        process.aperture=unsafe{tables.reserve_modern_aperture()}
+            .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=RETIRE-APERTURE"));
+        process.memory=retirement::Memory::Live;
     }
     // Retire writable bootstrap aliases as well, before executing any user page.
     let mut old=unsafe{Tables::resume(info.arena,info.table_used)};
@@ -267,12 +275,79 @@ impl Runtime{
                 .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=MODERN-FAULT-IDENTITY"));
         }
         self.processes[index].state=State::Dead;
+        self.processes[index].memory=retirement::retire(self.processes[index].memory);
         self.synchronize_revocations();
+    }
+    /// Invoked only on a validated ring3 trap in a surviving context. The last
+    /// trap may have switched CR3 while still unwinding on an outgoing stack;
+    /// therefore never erase current here or call this after selecting a root.
+    fn retire_pending(&mut self){
+        let current=self.current;
+        if self.processes[current].memory!=retirement::Memory::Live{
+            fatal("RAR-PANIC:CODE=RETIRE-CURRENT");
+        }
+        let root:u64;let cr4:u64;let flags:u64;
+        // SAFETY: privileged current-CPU reads, sole certified CPU, kernel trap.
+        unsafe{
+            core::arch::asm!("mov {},cr3",out(reg)root,options(nostack,preserves_flags));
+            core::arch::asm!("mov {},cr4",out(reg)cr4,options(nostack,preserves_flags));
+            core::arch::asm!("pushfq","pop {}",out(reg)flags);
+        }
+        for index in 0..TASKS{
+            if index==current||self.processes[index].memory!=retirement::Memory::Retiring{continue;}
+            let victim=self.processes[index];
+            if victim.state!=State::Dead||
+                (index!=15&&self.policy.as_ref().unwrap().state(index)!=Ok(model::State::Vacant)){
+                fatal("RAR-PANIC:CODE=RETIRE-AUTHORITY");
+            }
+            let plan=retirement::plan(self.arena,boot::ARENA_PAGES,current,index,victim.memory,
+                victim.root,victim.kernel_bottom,victim.kernel_top,self.processes[current].aperture)
+                .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=RETIRE-GEOMETRY"));
+            retirement::context(root,plan.current_root,cr4,flags)
+                .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=RETIRE-CONTEXT"));
+            // SAFETY: geometry binds the PTE page to current's preallocated
+            // private table pool and the victim to another exact owned stride.
+            // No user or executable alias exists outside the victim root.
+            // PGE/PCIDE are off, so activating this survivor flushed all former
+            // user translations. IF=0 prevents scheduling during the operation.
+            // The empty aperture is supervisor-only RW/NX, never exported.
+            unsafe{
+                let leaf=plan.leaf as *mut u64;
+                for i in 0..retirement::APERTURE_PAGES{
+                    if leaf.add(i).read_volatile()!=0{fatal("RAR-PANIC:CODE=RETIRE-ALIAS");}
+                }
+                // Inactive victim root is supervisor identity-mapped here.
+                // Destroy every user/executable mapping before writable scrub.
+                for i in 0..512{(plan.victim as *mut u64).add(i).write_volatile(0);}
+                for i in 0..retirement::APERTURE_PAGES{
+                    leaf.add(i).write_volatile((plan.victim+i as u64*4096)|3|(1<<63));
+                }
+                for i in 0..retirement::APERTURE_PAGES{
+                    let address=retirement::APERTURE+i as u64*4096;
+                    core::arch::asm!("invlpg [{}]",in(reg)address,options(nostack,preserves_flags));
+                }
+                let bytes=retirement::APERTURE as *mut u64;
+                for i in 0..(STRIDE/8) as usize{bytes.add(i).write_volatile(0);}
+                for i in 0..(STRIDE/8) as usize{
+                    if bytes.add(i).read_volatile()!=0{fatal("RAR-PANIC:CODE=RETIRE-ZERO");}
+                }
+                for i in 0..retirement::APERTURE_PAGES{leaf.add(i).write_volatile(0);}
+                for i in 0..retirement::APERTURE_PAGES{
+                    let address=retirement::APERTURE+i as u64*4096;
+                    core::arch::asm!("invlpg [{}]",in(reg)address,options(nostack,preserves_flags));
+                }
+            }
+            // No fallible work after this clean publication; a logical vacancy
+            // alone never authorizes future construction in a dirty stride.
+            self.processes[index]=Process::EMPTY;
+            record("RAR-MODERN:PRIVATE-MEMORY-RETIRED");
+        }
     }
     fn synchronize_revocations(&mut self){
         for i in 0..TASKS{
             if i!=15&&self.policy.as_ref().unwrap().state(i)==Ok(model::State::Vacant){
                 self.processes[i].state=State::Dead;
+                self.processes[i].memory=retirement::retire(self.processes[i].memory);
             }
         }
     }
@@ -298,6 +373,7 @@ pub extern "sysv64" fn trap(frame:*mut arch::Trap,saved:u64)->u64{
     // SAFETY: saved/frame were range/alignment checked before dereference.
     let f=unsafe{&mut *frame};
     if f.cs&3!=3||matches!(f.vector,2|8){fatal("RAR-PANIC:CODE=KERNEL-TRAP");}
+    state.retire_pending();
     state.processes[current].frame=saved;
     match f.vector{
         32=>{
@@ -314,7 +390,7 @@ pub extern "sysv64" fn trap(frame:*mut arch::Trap,saved:u64)->u64{
                 if expired{
                     // Reconcile logical death before return validation or
                     // runnable selection. Physical teardown/reuse is a separate
-                    // mandatory lifecycle boundary, not implemented here.
+                    // mandatory boundary deferred to the next survivor trap.
                     state.synchronize_revocations();
                 }
             }
@@ -344,7 +420,7 @@ pub extern "sysv64" fn trap(frame:*mut arch::Trap,saved:u64)->u64{
         let next=support::next(&states,cursor).unwrap_or_else(|_|fatal("RAR-PANIC:CODE=NO-RUNNABLE"));
         let process=&state.processes[next];
         let expected=private_region(state.arena,next);
-        if process.root!=expected||process.kernel_bottom!=expected+KERNEL_BOTTOM||
+        if process.memory!=retirement::Memory::Live||process.root!=expected||process.kernel_bottom!=expected+KERNEL_BOTTOM||
             process.kernel_top!=expected+KERNEL_TOP||process.frame%16!=0||
             process.frame<process.kernel_bottom||process.frame.checked_add(720).is_none_or(|end|end>process.kernel_top){
             fatal("RAR-PANIC:CODE=OWNED-RETURN-FRAME");

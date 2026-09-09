@@ -135,6 +135,13 @@ printf '%s\n' 'Modern signed codec: public fixture RAR verification and tamper/p
 "$work/focused-tests"
 printf '%s\n' 'Modern trial entry: receiver consistency and pure Settings view checks; actual candidate scheduling/cutover pending'
 
+# Pure tests of actual Modern aperture reservation in owned cloud memory only.
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --test \
+    --cfg rar_modern -C strip=symbols -C debuginfo=0 -C opt-level=1 \
+    tools/rar-lab/modern/retirement_table_tests.rs -o "$work/focused-tests"
+"$work/focused-tests" aperture_
+printf '%s\n' 'Modern retirement: actual empty aperture reservation tests; no privileged operation or runtime acceptance'
+
 # Bound the final stripped executable, no_std library and signed codec fixture in the
 # existing cloud-only tmpfs; no owner files or retained evidence are affected.
 set -- $(/usr/bin/du -sk "$work")

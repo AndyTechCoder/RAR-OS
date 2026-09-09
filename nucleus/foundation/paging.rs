@@ -61,6 +61,21 @@ impl Tables {
         Ok(())
     }
 
+    /// Reserve the Modern-only 2 MiB supervisor scratch aperture while inactive.
+    /// Caller owns this zeroed 1 MiB pool; no user may run until construction
+    /// finishes. No leaf becomes present and no TLB operation occurs here.
+    /// The returned page stays kernel-private; only the current root's owner
+    /// may fill it with supervisor RW/NX entries during deferred retirement.
+    #[cfg(rar_modern)]
+    pub unsafe fn reserve_modern_aperture(&mut self)->Result<u64,Error>{
+        let first=unsafe{self.leaf(0x1000000,true)?};
+        if first as u64%4096!=0{return Err(Error::Invalid);}
+        for i in 0..512{
+            if unsafe{first.add(i).read()}!=0{return Err(Error::Overlap);}
+        }
+        Ok(first as u64)
+    }
+
     /// Platform-only user mapping, built while this address space is inactive.
     /// The caller owns the physical interval and has removed writable aliases of
     /// executable pages. Intermediate U/S promotion never changes kernel leaves.
