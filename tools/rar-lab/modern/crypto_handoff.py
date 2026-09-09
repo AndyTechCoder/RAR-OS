@@ -289,6 +289,28 @@ def tool_identities():
         tools[str(path)]={"resolved":str(resolved),"sha256":digest.hexdigest(),"size":total}
     return tools
 
+class DockerClient:
+    """Fresh cloud-only CLI state; never import existing credentials or context."""
+    def __init__(self,work):
+        self.paths=[Path(work)/"docker-config",Path(work)/"buildx-config"]
+        self.identities=[]
+        for path in self.paths:
+            path.mkdir(mode=0o700,exist_ok=False)
+            info=path.lstat()
+            if (not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.geteuid() or
+                stat.S_IMODE(info.st_mode)!=0o700):
+                raise Invalid("owned private Docker client state")
+            self.identities.append((info.st_dev,info.st_ino))
+    def argv(self,args):
+        for path,identity in zip(self.paths,self.identities):
+            info=path.lstat()
+            if (not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.geteuid() or
+                stat.S_IMODE(info.st_mode)!=0o700 or (info.st_dev,info.st_ino)!=identity):
+                raise Invalid("Docker client directory changed")
+        config,buildx=map(str,self.paths)
+        return ["/usr/bin/env","-i","PATH=/usr/bin:/bin","LANG=C","LC_ALL=C",
+            "DOCKER_CONFIG="+config,"BUILDX_CONFIG="+buildx]+DOCKER+["--config",config]+args
+
 def main():
     workspace,controller,target,required=guard()
     token=os.environ.get("RAR_ARTIFACT_TOKEN")
@@ -305,6 +327,7 @@ def main():
     signal.signal(signal.SIGALRM,deadline);signal.alarm(3000)
     evidence=Evidence(workspace,"modern-crypto-evidence")
     work=workspace/"modern-crypto-work";work.mkdir(mode=0o700,exist_ok=False)
+    client=DockerClient(work)
     helpers={name:module(name) for name in MODULES}
     transport=helpers["reference_runner"]
     phase="preflight";summary={"schema":"rar-modern-crypto-handoff-v0","controller":controller,
@@ -338,7 +361,7 @@ def main():
             "-c","core.attributesFile=/nonexistent","-c","protocol.allow=never",
             "-c","protocol.https.allow=always","-C",str(root)]+args,120,maximum)
     def docker(args,seconds=30,maximum=65536,request=b""):
-        return command(DOCKER+args,seconds,maximum,request)
+        return command(client.argv(args),seconds,maximum,request)
     def image_identity(image):
         raw=docker(["image","inspect",image])
         rows=unique(raw)

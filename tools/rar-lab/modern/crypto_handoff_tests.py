@@ -126,7 +126,7 @@ class Tests(unittest.TestCase):
                     "Config":compiler_process if key=="derived" else process}
             def exchange(argv,request,seconds,maximum,error_max):
                 nonlocal build_count,tagged
-                if argv[0]=="/usr/bin/env":
+                if "/usr/bin/git" in argv:
                     at=argv.index("-C");args=argv[at+2:]
                     if args[:2]==["rev-parse","HEAD"]:out=controller.encode()+b"\n"
                     elif args[0]=="status":out=b""
@@ -136,7 +136,13 @@ class Tests(unittest.TestCase):
                     elif args[0]=="cat-file":out=objects[args[2]]
                     else:raise AssertionError(args)
                     return 0,out,b""
-                self.assertEqual(argv[:2],h.DOCKER);args=argv[2:]
+                config=root/"modern-crypto-work/docker-config"
+                buildx=root/"modern-crypto-work/buildx-config"
+                prefix=["/usr/bin/env","-i","PATH=/usr/bin:/bin","LANG=C","LC_ALL=C",
+                    "DOCKER_CONFIG="+str(config),"BUILDX_CONFIG="+str(buildx)]+h.DOCKER+["--config",str(config)]
+                self.assertEqual(argv[:len(prefix)],prefix)
+                self.assertTrue(config.is_dir() and buildx.is_dir())
+                args=argv[len(prefix):]
                 if args[0]=="version":out=b"{}\n"
                 elif args[:2]==["image","load"]:
                     loaded.append(request);out=b"loaded\n"
@@ -204,6 +210,30 @@ class Tests(unittest.TestCase):
                 self.assertEqual(loaded,[b"compiler",b"derived",b"adapter",b"reference"])
                 self.assertEqual(manifest["status"],"fixed-corpus-compared")
                 self.assertFalse(manifest["crypto_interoperability_accepted"])
+
+    def test_private_docker_configuration_and_substitution_refusal(self):
+        root=Path(tempfile.mkdtemp(prefix="rar-docker-client-"))
+        client=h.DockerClient(root)
+        for path in client.paths:
+            self.assertEqual(list(path.iterdir()),[])
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode),0o700)
+        argv=client.argv(["buildx","inspect","default"])
+        self.assertEqual(argv[:2],["/usr/bin/env","-i"])
+        self.assertIn("DOCKER_CONFIG="+str(root/"docker-config"),argv)
+        self.assertIn("BUILDX_CONFIG="+str(root/"buildx-config"),argv)
+        self.assertEqual(argv[-3:],["buildx","inspect","default"])
+        self.assertNotIn("/nonexistent",argv)
+        with self.assertRaises(FileExistsError):h.DockerClient(root)
+        # Read-only stat adapters simulate substitution without deleting or
+        # replacing any fixture or changing real permissions.
+        from types import SimpleNamespace as NS
+        info=client.paths[0].lstat()
+        for field,value in (("st_ino",info.st_ino+1),("st_uid",info.st_uid+1),
+                            ("st_mode",stat.S_IFLNK|0o700),("st_mode",stat.S_IFDIR|0o755)):
+            changed=NS(st_dev=info.st_dev,st_ino=info.st_ino,st_uid=info.st_uid,st_mode=info.st_mode)
+            setattr(changed,field,value)
+            with patch.object(Path,"lstat",return_value=changed):
+                with self.assertRaises(h.Invalid):client.argv(["buildx","inspect","default"])
 
     def test_host_default_denied_before_mutation_or_loading(self):
         with patch.dict(os.environ,{},clear=True),patch.object(h,"Evidence") as writer,patch.object(h,"module") as loader:
