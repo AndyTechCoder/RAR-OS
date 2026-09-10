@@ -73,6 +73,20 @@ class Fake:
         if args[:2]==["container","ls"]:return (self.cid+"\n").encode() if self.fault=="cleanup" else b""
         raise AssertionError(args)
 
+
+def retained_fixture():
+    members={};rows=[]
+    for number,(ident,mode) in enumerate(((i,m) for i in (1,2,3) for m in gate.MODES),1):
+        fake=Fake(mode);fake.cid=format(number,"064x")
+        prefix="probe-"+str(number)+"-"
+        image="sha256:"+("a" if ident==3 else "b")*64
+        rows.append(gate._probe(fake,image,ident,mode,lambda leaf,raw:members.__setitem__(prefix+leaf,raw)))
+    manifest=dict(target_image="sha256:"+"a"*64,reference_image="sha256:"+"b"*64,
+        failure_probes=dict(schema="rar-modern-crypto-failure-probes-v1",cases=rows,
+        expected_failures=9,cleanup_confirmed=True,crypto_interoperability_accepted=False,milestone_complete=False))
+    members["manifest.json"]=gate.canonical(manifest)
+    return members,manifest
+
 class Tests(unittest.TestCase):
     def test_each_actual_transport_path_has_scoped_cleanup(self):
         for ident in (1,2,3):
@@ -142,5 +156,43 @@ class Tests(unittest.TestCase):
         with mock.patch.object(fake,"cloud_guard",side_effect=real.RunFailure("host refused")):
             with self.assertRaises(real.RunFailure):
                 gate.run(fake,"sha256:"+"a"*64,"sha256:"+"b"*64,retain)
+
+
+    def test_retained_nine_probes_without_process_access(self):
+        from types import SimpleNamespace
+        transport=SimpleNamespace(owned_container=real.owned_container,confined_container=real.confined_container)
+        members,manifest=retained_fixture()
+        result=gate.validate(members,manifest,transport)
+        self.assertEqual(result["cases"],9)
+        self.assertFalse(result["execution_attempted"])
+        self.assertTrue(result["confinement_and_cleanup_checked"])
+        self.assertEqual(len(result["evidence_sha256"]),64)
+        for leaf in list(members):
+            if leaf=="manifest.json":continue
+            changed=dict(members);del changed[leaf]
+            with self.subTest(leaf=leaf),self.assertRaises((gate.Invalid,ValueError,real.RunFailure)):
+                gate.validate(changed,manifest,transport)
+        changed=dict(members);changed["probe-10-result.json"]=b"{}\n"
+        with self.assertRaises(gate.Invalid):gate.validate(changed,manifest,transport)
+        changed=dict(members);changed["probe-1-result.json"]=b'{"a":1,"a":2}\n'
+        with self.assertRaises(gate.Invalid):gate.validate(changed,manifest,transport)
+        for leaf,field,value in (
+            ("probe-1-failure.json","partial_stdout","00"),
+            ("probe-3-failure.json","stream_truncated",False),
+            ("probe-2-cleanup.json","confirmed_absent",False),
+            ("probe-1-result.json","implementation",True)):
+            changed=dict(members);doc=json.loads(changed[leaf]);doc[field]=value
+            changed[leaf]=gate.canonical(doc)
+            with self.subTest(leaf=leaf),self.assertRaises(gate.Invalid):gate.validate(changed,manifest,transport)
+        for leaf,field,value in (
+            ("probe-1-running.json","Pid",True),("probe-1-after.json","Paused",True),
+            ("probe-2-after.json","ExitCode",0),("probe-2-after.json","Pid",False)):
+            changed=dict(members);doc=json.loads(changed[leaf]);doc[0]["State"][field]=value
+            changed[leaf]=gate.canonical(doc)
+            with self.subTest(leaf=leaf),self.assertRaises(gate.Invalid):gate.validate(changed,manifest,transport)
+        for leaf in ("probe-1-before.json","probe-3-after.json"):
+            changed=dict(members);doc=json.loads(changed[leaf]);doc[0]["HostConfig"]["Privileged"]=True
+            changed[leaf]=gate.canonical(doc)
+            with self.assertRaises(real.RunFailure):gate.validate(changed,manifest,transport)
 
 if __name__=="__main__":unittest.main(argv=[sys.argv[0]],verbosity=2)

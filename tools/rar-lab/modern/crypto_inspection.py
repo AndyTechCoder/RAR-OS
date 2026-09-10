@@ -8,7 +8,7 @@ import signal
 import sys
 
 def helper(name):
-    if name not in ("retained_checkpoint","crypto_handoff","crypto_failure","crypto_lifecycle_evidence"):
+    if name not in ("retained_checkpoint","crypto_handoff","crypto_failure","crypto_lifecycle_evidence","crypto_failure_probes"):
         raise ValueError("fixed crypto inspection helper")
     path=Path(__file__).with_name(name+".py")
     if path.is_symlink() or not path.is_file() or not 1<=path.stat().st_size<=131072:
@@ -59,6 +59,10 @@ def inspect(raw,binding):
         retained.unique(members["manifest.json"]),
         retained.unique(members["frozen-rar-results.json"]),
         retained.unique(members["three-way-results.json"]))
+    manifest=retained.unique(members["manifest.json"])
+    if "failure_probes" in manifest:
+        report["failure_probes"]=helper("crypto_failure_probes").validate(
+            members,manifest,helper("crypto_lifecycle_evidence").helper())
     output=retained.canonical(dict(inspection="fresh-m4-crypto-checkpoint-v1",
         artifact=binding["artifact"],archive_sha256=binding["digest"],**report))
     if len(output)>2*1024**2:raise ValueError("bounded escaped inspection report")

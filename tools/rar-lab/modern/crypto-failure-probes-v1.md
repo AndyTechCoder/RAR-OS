@@ -41,3 +41,9 @@ the job in `crypto-failure-probes`; it cannot yield comparison completion.
 The source suite covers ordering, image selection, retained evidence and failure
 propagation as well as the individual probe state/cleanup negatives. No actual
 probe coverage is claimed until the trusted-main cloud run succeeds.
+
+The same PR extends the existing retained-artifact reader with pure inspection
+of all nine probe records, exact member/manifest binding, observed states,
+confinement, unique identities and confirmed cleanup. It never executes the
+retained source or calls a process API. Historical artifacts without probe
+records retain their narrower successful-lifecycle-only coverage.
