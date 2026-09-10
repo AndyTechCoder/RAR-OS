@@ -82,6 +82,31 @@ class Tests(unittest.TestCase):
                 bad=dict(binding,source="a"*40)
                 with self.assertRaises(ValueError):check.inspect(raw,bad)
 
+
+    def test_actual_inert_archive_includes_failure_probe_inspection(self):
+        members,manifest,_,_=load("crypto_lifecycle_evidence_tests").fixture()
+        probes,probe_manifest=load("crypto_failure_probe_tests").retained_fixture()
+        # Bind fixture images to the lifecycle fixture's already inventoried IDs.
+        old_images={probe_manifest["target_image"]:manifest["target_image"],
+                    probe_manifest["reference_image"]:manifest["reference_image"]}
+        for name,raw in probes.items():
+            if name=="manifest.json":continue
+            for old,new in old_images.items():raw=raw.replace(old.encode(),new.encode())
+            members[name]=raw
+        report=probe_manifest["failure_probes"]
+        for row in report["cases"]:row["image"]=old_images[row["image"]]
+        manifest["failure_probes"]=report
+        members=fixtures.bind({name:raw for name,raw in members.items() if name!="manifest.json"},manifest)
+        stream=io.BytesIO()
+        with zipfile.ZipFile(stream,"w",compression=zipfile.ZIP_DEFLATED) as archive:
+            for name,raw in members.items():archive.writestr(name,raw)
+        raw=stream.getvalue()
+        binding=dict(fixtures.CRYPTO_FIXED,size=len(raw),digest=hashlib.sha256(raw).hexdigest())
+        result=fixtures.reader.unique(check.inspect(raw,binding))
+        self.assertEqual(result["failure_probes"]["cases"],9)
+        self.assertTrue(result["failure_probes"]["confinement_and_cleanup_checked"])
+        self.assertFalse(result["failure_probes"]["execution_attempted"])
+
     def test_acquisition_clears_token_before_parse_and_redacts_failures(self):
         meta,run,fixed=metadata()
         for failure in (None,"metadata","download","parse"):
