@@ -75,11 +75,11 @@ def baseline_fixture():
     members["manifest.json"]=reader.canonical(manifest)
     return members,content
 
-def fixture():
+def fixture(seed=None):
     comparison=load("reference_comparison")
     protocol,corpus=comparison.protocol,comparison.corpus
     answers={}
-    for case in corpus.cases():
+    for case in corpus.cases()+(() if seed is None else corpus.challenge_cases(seed)):
         value=case.value
         if value is None:
             _,length=struct.unpack_from("<HH",case.payload,44);value=bytes(length+16)
@@ -96,11 +96,11 @@ def fixture():
         return ident,0,output,b""
     def retain(name,raw):
         members[name]=raw;return hashlib.sha256(raw).hexdigest()
-    report=comparison._compare(execute,retain)
+    report=comparison._compare(execute,retain,seed)
     fixed=CRYPTO_FIXED
     manifest=dict(schema="rar-modern-crypto-handoff-v0",controller=fixed["controller"],
-        source=fixed["source"],run=str(fixed["run"]),attempt="1",status="fixed-corpus-compared",
-        phase="complete-fixed-corpus",crypto_interoperability_accepted=False,
+        source=fixed["source"],run=str(fixed["run"]),attempt="1",status="challenge-corpus-compared" if seed is not None else "fixed-corpus-compared",
+        phase="complete-challenge-corpus" if seed is not None else "complete-fixed-corpus",crypto_interoperability_accepted=False,
         milestone_complete=False,target_os_execution=False,comparison=report,source_binding=SOURCE_REPORT)
     return members,manifest
 
@@ -111,6 +111,18 @@ def bind(members,manifest):
     return dict(members,**{"manifest.json":reader.canonical(manifest)})
 
 class Tests(unittest.TestCase):
+    def test_explicit_challenge_reader_preserves_historical_default(self):
+        members,manifest=fixture(bytes(range(32)))
+        bound=bind(members,manifest)
+        result=reader.crypto(bound,CRYPTO_FIXED,challenge=True)
+        self.assertEqual(result["comparison"]["compared"],324)
+        self.assertEqual(result["comparison"]["adapter_invocations"],972)
+        self.assertFalse(result["execution_attempted"])
+        with self.assertRaises(ValueError):reader.crypto(bound,CRYPTO_FIXED)
+        with self.assertRaises(ValueError):reader.crypto(bound,CRYPTO_FIXED,challenge=1)
+        old,old_manifest=fixture()
+        with self.assertRaises(ValueError):reader.crypto(bind(old,old_manifest),CRYPTO_FIXED,challenge=True)
+
 
     def test_source_binding_requires_actual_git_object_closure(self):
         members,manifest=fixture()

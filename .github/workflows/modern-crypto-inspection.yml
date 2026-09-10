@@ -1,0 +1,44 @@
+name: Inspect fresh crypto evidence
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful first-attempt main modern-crypto run ID
+        required: true
+        type: string
+      artifact_id:
+        description: Artifact ID belonging to that exact run
+        required: true
+        type: string
+      source_sha:
+        description: Exact runtime source SHA used by that run
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: modern-crypto-inspection
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.repository == 'AndyTechCoder/RAR-OS' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      CI: 'true'
+    steps:
+      - name: Check out exact trusted controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          path: controller
+      - name: Regenerate and compare retained crypto bytes without execution
+        env:
+          RAR_SOURCE_SHA: ${{ inputs.source_sha }}
+          RAR_INSPECT_RUN: ${{ inputs.run_id }}
+          RAR_INSPECT_ARTIFACT: ${{ inputs.artifact_id }}
+          RAR_CONTROLLER_SHA: ${{ github.sha }}
+          RAR_ARTIFACT_TOKEN: ${{ github.token }}
+        run: /usr/bin/python3 -I -B controller/tools/rar-lab/modern/crypto_inspection.py
