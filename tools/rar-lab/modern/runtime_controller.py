@@ -132,7 +132,7 @@ def cleanup(command,owned):
     return failures
 
 def main(mode="persistence"):
-    if mode not in ("persistence","fault-campaign"):
+    if mode not in ("persistence","fault-campaign","mounted-error"):
         raise ValueError("fixed Modern controller mode")
     import sys
     if (sys.argv!=[sys.argv[0]] or sys.platform!="linux" or not sys.flags.isolated or not sys.dont_write_bytecode or
@@ -159,7 +159,7 @@ def main(mode="persistence"):
     run_id,attempt=os.environ["GITHUB_RUN_ID"],os.environ["GITHUB_RUN_ATTEMPT"]
     if any(re.fullmatch("[0-9]+",x) is None for x in (run_id,attempt)):
         raise ValueError("fixed run identity")
-    prefix="modern-runtime" if mode=="persistence" else "modern-fault"
+    prefix={"persistence":"modern-runtime","fault-campaign":"modern-fault","mounted-error":"modern-mounted-error"}[mode]
     evidence=workspace/(prefix+"-evidence");evidence.mkdir(exist_ok=False)
     work=workspace/(prefix+"-work");work.mkdir(mode=0o700,exist_ok=False)
     config=work/"docker-config";config.mkdir(mode=0o700,exist_ok=False)
@@ -247,7 +247,15 @@ def main(mode="persistence"):
                 raise ValueError("exact tool hash inventory")
         sizes=tuple(int(line) for line in lines[4:])
         (evidence/"tool-identities.txt").write_bytes(identities)
-        if mode=="fault-campaign":
+        if mode=="mounted-error":
+            output=execute(launcher,["/usr/bin/python3","-I","-B","/opt/rar-modern/mounted_error_launch.py"],
+                [(inputs,"/artifact")],180,64*1024*1024)
+            (evidence/"mounted-error.json").write_bytes(output)
+            report["mounted_error_check"]=load("mounted_error_evidence").validate(output,digest(boot),sizes)
+            report["mounted_error_sha256"]=digest(output)
+            report["status"]="observed";save()
+            print("Modern: actual mounted write error and same-VM followup independently checked; M4 remains incomplete.",flush=True)
+        elif mode=="fault-campaign":
             campaign=load("fault_campaign_controller")
             campaign.observe(execute,launcher,inputs,digest(boot),sizes,
                 lambda name,raw:(evidence/name).write_bytes(raw),save,report)

@@ -35,3 +35,5 @@ cd "$root"
 /usr/bin/python3 -I -B tools/rar-lab/modern/crypto_failure_probe_tests.py
 
 /usr/bin/python3 -I -B tools/rar-lab/modern/unavailable_tests.py
+
+/usr/bin/python3 -I -B tools/rar-lab/modern/mounted_error_tests.py
