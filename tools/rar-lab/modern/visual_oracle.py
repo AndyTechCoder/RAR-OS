@@ -108,6 +108,32 @@ def validate(frame,index,value=None):
         raise ValueError("actual Modern scene differs from independent pixel expectation")
     return hashlib.sha256(frame).hexdigest()
 
+
+def unavailable_expected(stage,command=None,first=False):
+    """Fixed corrupt-mount scenes. Pending text makes repeated errors causal."""
+    if type(first) is not bool:raise ValueError("typed pending state")
+    initial=["RAR TERMINAL","HELP LIST READ WRITE CRASH",
+        "CREATE + WRITE ARE SEPARATE COMMITS","> ","",""]
+    failed=["STORAGE UNAVAILABLE","STORAGE UNAVAILABLE","","> ","","STORAGE UNAVAILABLE"]
+    if stage=="pending":
+        if command not in ("list","write note denied"):raise ValueError("fixed unavailable command")
+        lines=list(initial if first else failed);lines[3]="> "+command
+        return _render_scene((False,(6,),6,{6:lines},False))
+    if command is not None or first:raise ValueError("no pending state for completed scene")
+    if stage=="home":return expected(0,None)
+    if stage=="terminal":return expected(1,None)
+    if stage=="unavailable":return _render_scene((False,(6,),6,{6:failed},False))
+    if stage=="files":
+        lines=["STORAGE UNAVAILABLE","STORAGE UNAVAILABLE","","","","STORAGE UNAVAILABLE"]
+        return _render_scene((False,(4,),4,{4:lines},False))
+    raise ValueError("fixed unavailable scene")
+
+def unavailable_validate(frame,stage,command=None,first=False):
+    import hashlib
+    if type(frame) is not bytes or frame!=unavailable_expected(stage,command,first):
+        raise ValueError("actual unavailable scene differs")
+    return hashlib.sha256(frame).hexdigest()
+
 def self_test():
     value = "abcdefghijklmnop"*2
     frames = [expected(i,value if i>=2 else None) for i in range(4)]

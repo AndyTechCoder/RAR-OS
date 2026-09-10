@@ -278,7 +278,7 @@ def validate(raw,expected_boot_digest,firmware_sizes):
             ready=records[0]
             summaries.append(persistence.audit(records,role,ready,index==2))
             current.append((ready["device"],ready["inode"],ready["capacity"]))
-        if summaries!=proof["audit"] or len(set(current))!=3:
+        if summaries!=proof["audit"] or len({(device,inode) for device,inode,_ in current})!=3:
             raise ValueError("independent role audit or disk separation mismatch")
         bindings.append(current)
     if pids[0]==pids[1] or bindings[0]!=bindings[1]:
@@ -395,6 +395,127 @@ def actual_refusals(raw,expected_boot_digest,firmware_sizes):
     return {"schema":"rar-modern-actual-refusals-v1","base_sha256":sha(raw),
             "rejected":len(results),"cases":results,"disk_faults_tested":False,
             "milestone_complete":False}
+
+
+def unavailable_plan():
+    keys=["f3"];captures=[(0,"home",None,False),(1,"terminal",None,False)]
+    for index,command in enumerate(("list","write note denied","list")):
+        keys.extend("spc" if ch==" " else ch for ch in command)
+        captures.append((len(keys),"pending",command,index==0))
+        keys.append("ret");captures.append((len(keys),"unavailable",None,False))
+    keys.extend(("esc","f1"));captures.append((len(keys),"files",None,False))
+    return keys,captures
+
+def unavailable_commands(rows,profile):
+    if type(rows) is not list or not 1<=len(rows)<=512:raise ValueError("bounded negative QMP")
+    plain=[]
+    for index,row in enumerate(rows,1):
+        if type(row) is not dict or type(row.get("id")) is not int or row["id"]!=index:
+            raise ValueError("negative QMP identity")
+        plain.append({key:value for key,value in row.items() if key!="id"})
+    start=[{"execute":"qmp_capabilities"}]+[command for _,command in profile.preflight_requests()]+[{"execute":"cont"}]
+    if plain[:len(start)]!=start:raise ValueError("negative paused preflight first")
+    keys,captures=unavailable_plan();positions={item[0] for item in captures}
+    groups={position:0 for position in positions};at=0
+    frame={"execute":"screendump","arguments":{"filename":profile.directory(1)+"/frame.ppm"}}
+    for row in plain[len(start):]:
+        if row==frame:
+            if at not in groups:raise ValueError("negative capture at wrong input boundary")
+            groups[at]+=1
+            if groups[at]>24:raise ValueError("negative capture polling budget")
+        else:
+            if at>=len(keys):raise ValueError("extra negative input")
+            wanted={"execute":"send-key","arguments":{"keys":[{"type":"qcode","data":keys[at]}],"hold-time":50}}
+            if row!=wanted:raise ValueError("unplanned negative command")
+            # Observe the previous scene before advancing past its boundary.
+            if at in groups and groups[at]==0:raise ValueError("missing causal prior frame")
+            at+=1
+    if at!=len(keys) or any(count==0 for count in groups.values()):
+        raise ValueError("incomplete negative input/captures")
+
+def validate_unavailable(raw,expected_boot_digest,firmware_sizes):
+    if type(raw) is not bytes or not 1<=len(raw)<=64*1024*1024:raise ValueError("bounded negative envelope")
+    def pairs(items):
+        value={}
+        for key,item in items:
+            if key in value:raise ValueError("duplicate negative key")
+            value[key]=item
+        return value
+    evidence=json.loads(raw,object_pairs_hook=pairs)
+    if canonical(evidence)!=raw:raise ValueError("canonical negative envelope")
+    fields={"schema","status","original_data_base64","initial_data_base64","frozen_data_base64",
+        "data_sha256","system_sha256","boot_sha256","frames","vm_proof","milestone_complete"}
+    if (type(evidence) is not dict or set(evidence)!=fields or
+        evidence["schema"]!="rar-modern-unavailable-candidate-v1" or evidence["status"]!="observed" or
+        evidence["milestone_complete"] is not False):raise ValueError("exact negative envelope")
+    if evidence["boot_sha256"]!=digest(expected_boot_digest):raise ValueError("negative build binding")
+    original=decoded(evidence["original_data_base64"],99328)
+    initial=decoded(evidence["initial_data_base64"],99328)
+    frozen=decoded(evidence["frozen_data_base64"],99328)
+    state=helper("data_oracle").inspect(original)
+    if state["revision"]!=0 or state["files"]!={} or any(original[1024:]):
+        raise ValueError("negative original must be virgin valid Data")
+    expected=bytes([original[0]^1])+original[1:512]+bytes([original[512]^1])+original[513:]
+    if initial!=expected or frozen!=initial or digest(evidence["data_sha256"])!=sha(frozen):
+        raise ValueError("negative exact corruption and unchanged Data")
+    try:helper("data_oracle").inspect(initial)
+    except ValueError:pass
+    else:raise ValueError("negative headers must be invalid")
+    if digest(evidence["system_sha256"])!=sha(bytes(8388608)):raise ValueError("negative System changed")
+    frames=evidence["frames"];oracle=helper("visual_oracle");_,capture_plan=unavailable_plan()
+    if type(frames) is not list or len(frames)!=len(capture_plan):raise ValueError("nine actual negative scenes")
+    for frame,(_,stage,command,first) in zip(frames,capture_plan):
+        if (type(frame) is not dict or set(frame)!={"stage","command","first","sha256","actual_ppm"} or
+            frame["stage"]!=stage or frame["command"]!=command or frame["first"] is not first):
+            raise ValueError("negative scene order and identity")
+        pixels=decoded(frame["actual_ppm"],len(oracle.HEADER)+640*480*3)
+        if digest(frame["sha256"])!=oracle.unavailable_validate(pixels,stage,command,first):
+            raise ValueError("negative pixel binding")
+    proof=evidence["vm_proof"]
+    if type(proof) is not dict or set(proof)!={"cut","audit","argv","preflight","commands","events","event_receipts","qmp_drained","serial"}:
+        raise ValueError("exact negative VM proof")
+    cut=proof["cut"]
+    if (type(cut) is not dict or set(cut)!={"vm_pid","vm_returncode","backends","joined"} or
+        cut["joined"] is not True or type(cut["vm_pid"]) is not int or cut["vm_pid"]<=0 or
+        not qemu_killed(cut["vm_returncode"]) or type(cut["backends"]) is not list or len(cut["backends"])!=3):
+        raise ValueError("negative whole VM termination")
+    serial=proof["serial"]
+    if (type(serial) is not str or not serial.isascii() or len(serial)>65536 or
+        "RAR-MODERN:GUI-READY" not in serial or any(x in serial for x in
+        ("RAR-PANIC","UNEXPECTED-USER-FAULT","INVALID-USER-RETURN"))):
+        raise ValueError("negative actual guest readiness")
+    profile=helper("vm_profile");persistence=helper("persistence")
+    unavailable_commands(proof["commands"],profile);argv(proof["argv"],1,profile)
+    preflight=proof["preflight"]
+    if type(preflight) is not dict or set(preflight)!={"raw","verified"}:raise ValueError("negative paused preflight")
+    verified=profile.validate_preflight(preflight["raw"],False,1,firmware_sizes)
+    if canonical(verified)!=canonical(preflight["verified"]):raise ValueError("negative topology")
+    checked_event_stream(proof["events"],proof["event_receipts"],proof["commands"],proof["qmp_drained"],verified["rtc_path"])
+    summaries=[];identities=[]
+    for role,backend in zip(("data","system","boot"),cut["backends"]):
+        if type(backend) is not dict or set(backend)!={"returncode","problem","records","joined"} or backend["joined"] is not True:
+            raise ValueError("negative joined backend")
+        terminated(backend["returncode"],backend["problem"])
+        records=backend["records"]
+        if type(records) is not list or not records:raise ValueError("negative backend records")
+        summary=persistence.audit(records,role,records[0],False);summaries.append(summary)
+        identities.append((records[0]["device"],records[0]["inode"],records[0]["capacity"]))
+        requests=[r for r in records if r["type"]=="request"]
+        if any(r["operation"]!="read" for r in requests):raise ValueError("negative mutation attempt")
+        if role=="data":
+            offsets=[r["offset"] for r in requests]
+            # Two guest header reads plus at most the known firmware sector0
+            # probe. Repeated mounts or a slot scan cannot hide in this bound.
+            if (summary["trailing_read"] or len(offsets) not in (2,3) or
+                offsets.count(512)!=1 or offsets.count(0)!=len(offsets)-1 or
+                any(r["length"]!=512 for r in requests) or
+                summary["counts"]!={"read":len(offsets),"write":0,"flush":0}):
+                raise ValueError("negative single bounded header mount, no retry")
+    if len({(device,inode) for device,inode,_ in identities})!=3 or canonical(summaries)!=canonical(proof["audit"]):
+        raise ValueError("negative independent storage domains")
+    return dict(schema="rar-modern-unavailable-result-v1",frames=9,fresh_vms=1,
+        unchanged_data_sha256=sha(frozen),header_reads=summaries[0]["counts"]["read"],
+        mutation_attempts=0,content_validated=True,provenance_validated=False,milestone_complete=False)
 
 def self_test():
     cases=refusal_cases()

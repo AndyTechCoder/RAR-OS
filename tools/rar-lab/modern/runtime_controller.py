@@ -260,10 +260,18 @@ def main(mode="persistence"):
             # the exact original capture and all target/device state untouched.
             report["actual_refusals"]=content.actual_refusals(output,digest(boot),sizes)
             (evidence/"refusals.json").write_text(json.dumps(report["actual_refusals"],indent=2)+"\n")
-            report["status"]="observed"
             report["persistence_sha256"]=digest(output)
             save()
-            print("Modern: actual two-VM persistence envelope independently checked; M4 and crypto acceptance remain incomplete.",flush=True)
+            # A separate invocation-owned container has its own fresh fixtures,
+            # firmware and VM. Never corrupt the successful persistence image.
+            negative=execute(launcher,["/usr/bin/python3","-I","-B","/opt/rar-modern/unavailable_launch.py"],
+                [(inputs,"/artifact")],180,64*1024*1024)
+            (evidence/"unavailable.json").write_bytes(negative)
+            report["unavailable_check"]=content.validate_unavailable(negative,digest(boot),sizes)
+            report["unavailable_sha256"]=digest(negative)
+            report["status"]="observed"
+            save()
+            print("Modern: actual two-VM persistence and separate corrupt-mount/no-write envelope independently checked; M4 remains incomplete.",flush=True)
     except BaseException as error:
         report["status"]="failed";report["failure"]=str(error);save();raise
     finally:

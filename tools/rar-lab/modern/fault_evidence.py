@@ -146,7 +146,7 @@ def vm_proof(proof,index,value,plan,firmware_sizes):
         summaries.append(summary)
         bindings.append(tuple(records[0][key] for key in ("device","inode","capacity")))
     exact(proof["audit"],summaries)
-    if len(set(bindings))!=3:raise ValueError("three separate disk identities")
+    if len({(device,inode) for device,inode,_ in bindings})!=3:raise ValueError("three separate disk identities")
     return cut["vm_pid"],bindings
 
 def validate(raw,case,expected_boot_digest,firmware_sizes):
