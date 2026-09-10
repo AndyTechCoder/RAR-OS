@@ -237,3 +237,46 @@ enable System copy syscalls, manager views or trial construction. Before any
 such publication the adapter must still remove all writable aliases and
 invalidate translations; before reuse it must perform the required non-elidable
 physical clear/readback. No VM runtime proof is claimed from this source change.
+
+### System-only staging copy syscall (private Modern-v1 addition)
+
+Syscall9 STAGE_COPY takes rdi=caller-local StageCopy capability, rsi=request
+pointer, rdx=48 and r10=0. Only active System principal9 receives this distinct
+capability in slot10 with internal right128. Its Boot cap mask becomes0xc01.
+Manager's slot10 remains a separate caller-local Manager object; equal numeric
+handles do not transfer rights. No Data selector, executable pointer, physical
+slot, page-table address or caller budget is accepted. Applications, trials,
+Data service and manager cannot use StageCopy. Manager loss/recovery-required
+and System revocation deny further copies.
+
+The exact48-byte request is six little-endian u64 fields:
+operation, seal, offset, input pointer, length, reply pointer.
+Operation0 begins: seal/offset/input pointer must be0, logical length896 through
+2,097,536. The kernel chooses slot5 or7 only when policy state is Vacant,
+physical memory is Clean, CPU state is Dead and root is zero, then immediately
+reserves it in the one boot-lifetime buffer under IF=0.
+Operation1 appends: nonzero full-width seal, exact sequential offset,
+input length1..512. All other operations are rejected; this interface does not
+yet finish/seal, map a verifier view, construct or activate a process.
+
+The exact16-byte reply is two little-endian u64 fields: seal and accepted byte
+count (0 for begin; new cumulative offset for append). Syscall result0 means
+this reply was written; negative results do not write a reply. Seals never pass
+through signed syscall return values. Entire request/input/output ranges are
+validated in the current owner's address space before mutation. A request and
+input are copied to bounded private kernel-stack arrays before any overlapping
+reply is written. The new512-byte read helper is separate from the retained
+152-byte IPC envelope limit; neither permits crossing adjacent range entries.
+
+A second begin is Busy; invalid pointers/framing/stale seals/overlap do not
+consume progress or a new seal. No retry/reconstruction or scheduling occurs
+inside the call. Inactive package/selector durability and manager verification
+are not implemented by this byte-copy authority. The System service's update
+loop still must be connected; no live update is claimed.
+
+The existing cloud page-table test now checks all513 physical staging leaves
+are supervisor RW/NX and both guards are absent, before and after a real
+map_user call promotes intermediate table permissions. It checks17 independently
+built test-owned roots and bounded table use. This executes actual table-building
+functions in cloud process memory, not privileged instructions or guest startup;
+certified-VM behavior remains required.

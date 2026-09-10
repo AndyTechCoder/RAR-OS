@@ -71,7 +71,7 @@ a message before validating the receive destination.
 
 Private int80 numbers retain0 yield,1 send,2 receive,3 keyboard port read,
 4 bounded evidence report,5 exit;6 is monotonic ticks,7 fixed device operation,
-8 trial ready. The initial kernel dispatcher is now a source candidate;
+8 trial ready;9 System-only staging copy (specified below). The initial kernel dispatcher is now a source candidate;
 userspace syscall/service composition is implemented in source, including the
 trial receiver handoff above. Complete UEFI runtime acceptance remains pending.
 Error returns are negative; tick success must fit nonnegative
@@ -232,3 +232,19 @@ read-only source and bounded ephemeral scratch, with no new workflow or network.
 Its actual pinned UEFI build, complete
 service/UI composition, focused unsafe review, certified cloud profile and
 causal fresh-VM persistence evidence remain mandatory before activation/release.
+
+## M4.2 bounded staging-copy addition
+
+Active System9 alone now receives slot10 StageCopy in addition to its receive
+and System-device grants (exact mask0xc01). It is a separate object/right from
+Manager8's caller-local slot10. Data/app/trial grants are unchanged. StageCopy
+cannot select a disk or map/execute bytes.
+
+Syscall9 uses a48-byte canonical request and16-byte reply, full-u64 seals and
+a separate bounded512-byte readable-input helper. The original152-byte IPC
+bound is unchanged. The kernel alone chooses a logically Vacant, physically
+Clean, dead/root-zero Settings slot; copying is sequential and output pointers
+are checked before state mutation. No finish/seal/view/trial operation is yet
+available through this syscall. Exact encoding, error-atomicity and pending
+native protections are in modern-update-transaction.md, System-only staging
+copy syscall. This is an experimental source addition, not runtime acceptance.

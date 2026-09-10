@@ -261,3 +261,28 @@ The bounded implementation and evidence requirements are documented in
 `docs/tasks/fast-track-alpha-milestone-2.md`. Engineering choices remain subject
 to independent review; this record does not claim that the owner separately
 selected every technical detail or that Milestone 2 is already complete.
+
+
+## M4.2 System-only staging-copy approval — 2026-09-10
+
+Status: Approved by Andy / RAR project owner
+
+The owner was asked to approve allowing only RAR's System service to copy update
+bytes into a reserved kernel buffer, with no Mac/SSD access and signature checks
+intact. The owner replied "I approve, is that part of 4.1?" After clarification
+that this belongs to M4.2, the owner directed "Okay, start, and finish fully work
+on M4.2 now".
+
+This resolves the specific prior staging-copy authorization denial. It covers
+the independently reviewed candidate tree
+beb6d15adc533b11b70c1f9844f6125eda3294ea: System principal9 alone receives the
+distinct StageCopy capability; private syscall9 accepts bounded Begin/Append
+requests into the kernel-owned guarded buffer. The kernel selects the slot;
+caller pointers, bounds, order and full-width seals are checked before mutation.
+No application, Data service, trial or Manager receives this copy authority.
+
+This is not general host access, local target/VM execution, unreviewed capability
+expansion, approval of whole ADR0034, or permission to bypass verification,
+isolation, rollback, independent review or final merge gates. M4.1 remains
+complete. Actual signed replacement and the rest of M4.2 remain to be proved.
+The approval is recorded with implementation, not as a separate authorization PR.

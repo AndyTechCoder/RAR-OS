@@ -15,6 +15,8 @@ pub const MANAGE:u8=8;
 pub const DEVICE:u8=16;
 pub const INPUT:u8=32;
 pub const DRAW:u8=64;
+pub const COPY_STAGE:u8=128;
+pub const STAGE_CAP:usize=10;
 pub const INPUT_CAP:usize=7;
 pub const FRAMEBUFFER_CAP:usize=8;
 pub const DEVICE_CAP:usize=11;
@@ -34,7 +36,7 @@ pub enum Device {Data,System}
 pub enum Object {
     None, NamedSend {principal:u8}, Receive(Endpoint),
     TrialHealth {endpoint:Endpoint,token:u64}, Manager,
-    Device(Device), Input, Framebuffer,
+    Device(Device), Input, Framebuffer, StageCopy,
 }
 #[derive(Clone,Copy)]
 struct Cap {generation:u32,rights:u8,object:Object,retired:bool}
@@ -53,6 +55,7 @@ impl Caps {
             Object::Device(_)=>DEVICE,
             Object::Input=>INPUT,
             Object::Framebuffer=>DRAW,
+            Object::StageCopy=>COPY_STAGE,
             _=>return Err(Error::Invalid),
         };
         if rights!=allowed||s.retired||s.object!=Object::None {return Err(Error::Denied);}
@@ -163,6 +166,7 @@ impl Runtime {
         }
         r.processes[1].caps.grant(DEVICE_CAP,Object::Device(Device::Data),DEVICE).unwrap();
         r.processes[9].caps.grant(DEVICE_CAP,Object::Device(Device::System),DEVICE).unwrap();
+        r.processes[9].caps.grant(STAGE_CAP,Object::StageCopy,COPY_STAGE).unwrap();
         r.processes[2].caps.grant(INPUT_CAP,Object::Input,INPUT).unwrap();
         r.processes[3].caps.grant(FRAMEBUFFER_CAP,Object::Framebuffer,DRAW).unwrap();
         // Principal8 manages lifecycle; only System service9 receives System I/O.
@@ -200,6 +204,23 @@ impl Runtime {
         if p.state!=State::Active||p.principal!=Some(3)||
             p.caps.resolve(handle,DRAW)?!=Object::Framebuffer {return Err(Error::Denied);}
         Ok(())
+    }
+    /// Distinct System-only byte-copy authority. It is not a device selector,
+    /// Manager grant, verification result or executable mapping capability.
+    pub fn stage_copy(&self,caller:usize,handle:u64)->Result<(),Error>{
+        let p=self.processes.get(caller).ok_or(Error::Invalid)?;
+        if self.recovery_required||p.state!=State::Active||p.principal!=Some(9)||
+            p.caps.resolve(handle,COPY_STAGE)?!=Object::StageCopy{return Err(Error::Denied);}
+        Ok(())
+    }
+    /// Native IF=0 adapter supplies physical Clean facts, never user arguments.
+    /// It must immediately reserve the returned slot in the single Buffer.
+    pub fn staging_slot(&self,caller:usize,handle:u64,clean:[bool;2])->Result<usize,Error>{
+        self.stage_copy(caller,handle)?;
+        if self.trial.is_some()||self.staged.is_some(){return Err(Error::Busy);}
+        [5usize,7].into_iter().enumerate()
+            .find(|&(n,i)|clean[n]&&self.processes[i].state==State::Vacant)
+            .map(|(_,i)|i).ok_or(Error::Busy)
     }
     fn manager(&self,caller:usize,handle:u64)->Result<(),Error>{
         let p=self.processes.get(caller).ok_or(Error::Invalid)?;
@@ -362,6 +383,24 @@ mod tests {
     fn healthy(r:&mut Runtime)->Trial{
         let t=prepare(r,23,50);
         r.ready(t.endpoint.slot as usize,r.handle(t.endpoint.slot as usize,HEALTH_CAP).unwrap(),t.token).unwrap();t
+    }
+    #[test] fn staging_authority_is_system_only_and_requires_physical_clean(){
+        let mut r=Runtime::new();let h=r.handle(9,STAGE_CAP).unwrap();
+        assert_eq!(r.stage_copy(9,h),Ok(()));
+        for caller in 0..=TASKS{if caller!=9{assert!(r.stage_copy(caller,h).is_err());}}
+        assert!(r.stage_copy(9,r.handle(9,DEVICE_CAP).unwrap()).is_err());
+        assert!(r.stage_copy(9,h^(1<<32)).is_err());
+        assert_eq!(r.staging_slot(9,h,[true,false]),Err(Error::Busy));
+        assert_eq!(r.staging_slot(9,h,[false,true]),Ok(7));
+        assert_eq!(r.staging_slot(9,h,[false,false]),Err(Error::Busy));
+        let t=prepare(&mut r,81,2);
+        assert_eq!(r.staging_slot(9,h,[true,true]),Err(Error::Busy));
+        assert!(r.stage_copy(t.endpoint.slot as usize,h).is_err());
+        r.abort(8,manager(&r),t.token).unwrap();
+        r.fault(Endpoint{slot:8,incarnation:1}).unwrap();
+        assert!(r.stage_copy(9,h).is_err());
+        let mut r=Runtime::new();let h=r.handle(9,STAGE_CAP).unwrap();
+        r.fault(Endpoint{slot:9,incarnation:1}).unwrap();assert!(r.stage_copy(9,h).is_err());
     }
     #[test] fn trial_uses_exact_reserved_slot_not_first_vacant_slot() {
         let mut r=Runtime::new();

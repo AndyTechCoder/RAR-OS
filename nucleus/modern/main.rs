@@ -191,6 +191,13 @@ fn number(error:Error)->u64{
     (match error{Error::Invalid=>-1i64,Error::Denied=>-2,Error::Stale=>-3,
         Error::Full=>-4,Error::Empty=>-5,Error::Exhausted=>-6,Error::Busy=>-7})as u64
 }
+fn stage_error(error:staging::Error)->Error{
+    match error{
+        staging::Error::Busy=>Error::Busy,staging::Error::Stale=>Error::Stale,
+        staging::Error::Exhausted=>Error::Exhausted,
+        staging::Error::Bounds|staging::Error::Order|staging::Error::Incomplete|staging::Error::State=>Error::Invalid,
+    }
+}
 impl Runtime{
     fn buffer(&self,pointer:u64,length:usize,write:bool)->Result<(),Error>{
         self.processes[self.current].buffer(pointer,length,write)
@@ -273,6 +280,49 @@ impl Runtime{
                 // Current is saved CPU ownership; policy and device borrow are
                 // serialized with revocation under the trap's IF=0 invariant.
                 unsafe{device.execute(policy,current,frame.rdi,frame.rsi,frame.rdx,frame.r10)}
+            }
+            abi::STAGE_COPY=>{
+                self.policy.as_ref().ok_or(Error::Denied)?.stage_copy(current,frame.rdi)?;
+                if frame.rdx!=abi::STAGE_REQUEST_BYTES as u64||frame.r10!=0{return Err(Error::Invalid);}
+                self.buffer(frame.rsi,abi::STAGE_REQUEST_BYTES,false)?;
+                let mut raw=[0u8;abi::STAGE_REQUEST_BYTES];
+                // SAFETY: entire current-owned readable request validated; IF=0,
+                // no scheduling or device DMA; destination is private kernel stack.
+                unsafe{ptr::copy_nonoverlapping(frame.rsi as *const u8,
+                    raw.as_mut_ptr(),raw.len());}
+                let request=abi::stage_request(&raw).ok_or(Error::Invalid)?;
+                let (seal,accepted,reply)=match request{
+                    abi::StageRequest::Begin{length,reply}=>{
+                        // Validate the entire result BEFORE reserving or consuming
+                        // a seal. Invalid output pointers cannot strand a stage.
+                        self.buffer(reply,abi::STAGE_REPLY_BYTES,true)?;
+                        let clean=[5usize,7].map(|i|
+                            self.processes[i].memory==retirement::Memory::Clean&&
+                            self.processes[i].state==State::Dead&&self.processes[i].root==0);
+                        let slot=self.policy.as_ref().unwrap().staging_slot(current,frame.rdi,clean)?;
+                        let id=self.staging.as_mut().ok_or(Error::Denied)?
+                            .begin(slot,length).map_err(stage_error)?;
+                        (id.seal(),0,reply)
+                    },
+                    abi::StageRequest::Append{seal,offset,pointer,length,reply}=>{
+                        self.buffer(reply,abi::STAGE_REPLY_BYTES,true)?;
+                        support::staging_buffer(&self.processes[current].ranges[..self.processes[current].range_count],
+                            pointer,length)?;
+                        let mut chunk=[0u8;512];
+                        // SAFETY: exact1..512 byte span validated within one
+                        // readable current-owned user range. Copy to private stack
+                        // before mutation/reply, even if request/reply overlap it.
+                        unsafe{ptr::copy_nonoverlapping(pointer as *const u8,chunk.as_mut_ptr(),length);}
+                        self.staging.as_mut().ok_or(Error::Denied)?
+                            .append(seal,offset,&chunk[..length]).map_err(stage_error)?;
+                        (seal,offset+length,reply)
+                    },
+                };
+                let response=abi::stage_reply(seal,accepted);
+                // SAFETY: writable complete result span prevalidated before any
+                // state change. Same live current root/IF=0; no intervening yield.
+                unsafe{ptr::copy_nonoverlapping(response.as_ptr(),reply as *mut u8,response.len());}
+                Ok(0)
             }
             abi::TRIAL_READY=>{
                 if frame.rdx!=0||frame.r10!=0{return Err(Error::Invalid);}

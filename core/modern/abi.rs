@@ -16,6 +16,10 @@ pub const EXIT:u64=5;
 pub const TICKS:u64=6;
 pub const DEVICE:u64=7;
 pub const TRIAL_READY:u64=8;
+pub const STAGE_COPY:u64=9;
+pub const STAGE_CAP:usize=10;
+pub const STAGE_REQUEST_BYTES:usize=48;
+pub const STAGE_REPLY_BYTES:usize=16;
 pub const SELF_RECV:usize=0;
 pub const SHELL:usize=1;
 pub const COMPOSITOR:usize=2;
@@ -54,7 +58,7 @@ const _: [();BOOT_BYTES as usize]=[();core::mem::size_of::<Boot>()];
 const _: [();ENVELOPE_BYTES as usize]=[();core::mem::size_of::<Envelope>()];
 fn active_mask(role:u64)->Option<u16> {
     match role {0=>Some(0x75),1=>Some(0x851),2=>Some(0x82),3=>Some(0x101),
-        4|6=>Some(0x0d),5=>Some(7),8=>Some(0x401),9=>Some(0x801),15=>Some(0),_=>None}
+        4|6=>Some(0x0d),5=>Some(7),8=>Some(0x401),9=>Some(0xc01),15=>Some(0),_=>None}
 }
 fn text(value:&[u8])->bool {
     value.iter().all(|b|(0x20..=0x7e).contains(b))&&value.iter().any(|b|*b!=b' ')
@@ -120,6 +124,39 @@ pub fn device_op(operation:u64,value:u64,extra:u64)->Option<DeviceOp> {
         _=>None,
     }
 }
+
+/// STAGE_COPY arguments: capability, request pointer, exact48 bytes, zero.
+/// A request contains six little-endian u64 fields; no user slot/address-table
+/// choice. Reply is seal+accepted-byte-count, two LEu64 (never signed status).
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub enum StageRequest {
+    Begin{length:usize,reply:u64},
+    Append{seal:u64,offset:usize,pointer:u64,length:usize,reply:u64},
+}
+pub fn stage_request(raw:&[u8])->Option<StageRequest>{
+    if raw.len()!=STAGE_REQUEST_BYTES{return None;}
+    let mut words=[0u64;6];
+    for (i,w) in words.iter_mut().enumerate(){*w=u64::from_le_bytes(raw[i*8..i*8+8].try_into().ok()?);}
+    let [op,seal,offset,pointer,length,reply]=words;
+    if reply<4096{return None;}
+    let length=usize::try_from(length).ok()?;
+    match op{
+        0 if seal==0&&offset==0&&pointer==0&&(896..=2_097_536).contains(&length)=>
+            Some(StageRequest::Begin{length,reply}),
+        1 if seal!=0&&pointer>=4096&&(1..=512).contains(&length)=>{
+            let offset=usize::try_from(offset).ok()?;
+            if offset.checked_add(length)?>2_097_536{return None;}
+            Some(StageRequest::Append{seal,offset,pointer,length,reply})
+        },
+        _=>None,
+    }
+}
+pub fn stage_reply(seal:u64,accepted:usize)->[u8;STAGE_REPLY_BYTES]{
+    let mut out=[0;STAGE_REPLY_BYTES];
+    out[..8].copy_from_slice(&seal.to_le_bytes());
+    out[8..].copy_from_slice(&(accepted as u64).to_le_bytes());out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -128,11 +165,35 @@ mod tests {
             generation:(1<<40)|3,entry:0x401000,..Boot::EMPTY};
         b.peers=[1;10];b.peers[7]=0;if role!=15 {b.peers[role as usize]=b.generation;}
         let slots:&[usize]=match role {0=>&[0,2,4,5,6],1=>&[0,4,6,11],2=>&[1,7],
-            3=>&[0,8],4|6=>&[0,2,3],5=>&[0,1,2],8=>&[0,10],9=>&[0,11],15=>&[],_=>panic!()};
+            3=>&[0,8],4|6=>&[0,2,3],5=>&[0,1,2],8=>&[0,10],9=>&[0,10,11],15=>&[],_=>panic!()};
         for &slot in slots {b.caps[slot]=(1<<32)|(slot as u64+1);}
         if role==3 {b.framebuffer=0x800000;b.width=640;b.height=480;b.pitch=640;}
         if matches!(role,1|9) {b.device_sectors=14;b.device_serial=[b'S';20];b.device_model=[b'M';40];}
         b
+    }
+    fn stage_words(words:[u64;6])->[u8;48]{
+        let mut raw=[0;48];for (i,w) in words.into_iter().enumerate(){
+            raw[i*8..i*8+8].copy_from_slice(&w.to_le_bytes());
+        }raw
+    }
+    #[test] fn staging_copy_framing_is_exact_and_full_width(){
+        let begin=stage_words([0,0,0,0,896,0x600000]);
+        assert_eq!(stage_request(&begin),Some(StageRequest::Begin{length:896,reply:0x600000}));
+        for n in 0..48{assert_eq!(stage_request(&begin[..n]),None);}
+        assert_eq!(stage_request(&[0;49]),None);
+        for words in [[0,1,0,0,896,0x600000],[0,0,1,0,896,0x600000],
+            [0,0,0,1,896,0x600000],[0,0,0,0,895,0x600000],
+            [0,0,0,0,2_097_537,0x600000],[0,0,0,0,896,0],
+            [2,0,0,0,896,0x600000],[u64::MAX,0,0,0,896,0x600000],
+            [1,0,0,0x600000,1,0x600100],[1,1,0,0x600000,513,0x600100],
+            [1,1,u64::MAX,0x600000,1,0x600100],[1,1,0,0,1,0x600100]]{
+            assert_eq!(stage_request(&stage_words(words)),None);
+        }
+        assert_eq!(stage_request(&stage_words([1,u64::MAX,512,0x600000,384,0x600100])),
+            Some(StageRequest::Append{seal:u64::MAX,offset:512,pointer:0x600000,length:384,reply:0x600100}));
+        let reply=stage_reply(u64::MAX,896);
+        assert_eq!(&reply[..8],&u64::MAX.to_le_bytes());
+        assert_eq!(&reply[8..],&896u64.to_le_bytes());
     }
     #[test] fn exact_layout_without_implicit_padding() {
         assert_eq!(core::mem::size_of::<Boot>(),368);assert_eq!(core::mem::align_of::<Boot>(),8);

@@ -10,7 +10,14 @@ pub enum CpuState {Runnable,Blocked,Dead}
 pub struct UserRange {pub start:u64,pub end:u64,pub writable:bool,pub executable:bool}
 pub const EMPTY_RANGE:UserRange=UserRange{start:0,end:0,writable:false,executable:false};
 pub fn user_buffer(ranges:&[UserRange],pointer:u64,length:usize,write:bool)->Result<(),Error>{
-    if length==0||length>abi::ENVELOPE_BYTES as usize||pointer<4096{return Err(Error::Invalid);}
+    bounded_buffer(ranges,pointer,length,write,abi::ENVELOPE_BYTES as usize)
+}
+/// Separate fixed limit; the existing IPC envelope boundary remains152 bytes.
+pub fn staging_buffer(ranges:&[UserRange],pointer:u64,length:usize)->Result<(),Error>{
+    bounded_buffer(ranges,pointer,length,false,512)
+}
+fn bounded_buffer(ranges:&[UserRange],pointer:u64,length:usize,write:bool,limit:usize)->Result<(),Error>{
+    if length==0||length>limit||pointer<4096{return Err(Error::Invalid);}
     let end=pointer.checked_add(length as u64).ok_or(Error::Invalid)?;
     if end>0x0000_8000_0000_0000{return Err(Error::Denied);}
     if ranges.iter().any(|r|r.start<r.end&&r.start<=pointer&&end<=r.end&&
@@ -112,6 +119,17 @@ mod tests{
         // Adjacent distinct ranges cannot authorize a cross-boundary copy.
         assert!(user_buffer(&[UserRange{end:rw.start+144,..rw},
             UserRange{start:rw.start+144,..rw}],rw.start,152,true).is_err());
+    }
+    #[test]fn staging_read_bound_does_not_expand_ipc_or_cross_ranges(){
+        let r=UserRange{start:0x600000,end:0x601000,writable:false,executable:false};
+        assert!(staging_buffer(&[r],r.end-512,512).is_ok());
+        assert!(user_buffer(&[r],r.end-512,512,false).is_err());
+        for (p,n) in [(r.end-511,512),(r.start,513),(r.start,0),(u64::MAX,512),(0,1)]{
+            assert!(staging_buffer(&[r],p,n).is_err());
+        }
+        assert!(staging_buffer(&[UserRange{end:r.start+256,..r},
+            UserRange{start:r.start+256,..r}],r.start,512).is_err());
+        assert!(staging_buffer(&[UserRange{writable:true,executable:true,..r}],r.start,512).is_err());
     }
     #[test]fn bad_receive_cannot_consume_a_real_policy_message(){
         let mut p=model::Runtime::new();let tx=p.handle(1,4).unwrap();
