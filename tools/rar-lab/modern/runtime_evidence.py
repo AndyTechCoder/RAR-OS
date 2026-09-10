@@ -278,7 +278,7 @@ def validate(raw,expected_boot_digest,firmware_sizes):
             ready=records[0]
             summaries.append(persistence.audit(records,role,ready,index==2))
             current.append((ready["device"],ready["inode"],ready["capacity"]))
-        if summaries!=proof["audit"] or len(set(current))!=3:
+        if summaries!=proof["audit"] or len({(device,inode) for device,inode,_ in current})!=3:
             raise ValueError("independent role audit or disk separation mismatch")
         bindings.append(current)
     if pids[0]==pids[1] or bindings[0]!=bindings[1]:
@@ -511,7 +511,7 @@ def validate_unavailable(raw,expected_boot_digest,firmware_sizes):
                 any(r["length"]!=512 for r in requests) or
                 summary["counts"]!={"read":len(offsets),"write":0,"flush":0}):
                 raise ValueError("negative single bounded header mount, no retry")
-    if len(set(identities))!=3 or canonical(summaries)!=canonical(proof["audit"]):
+    if len({(device,inode) for device,inode,_ in identities})!=3 or canonical(summaries)!=canonical(proof["audit"]):
         raise ValueError("negative independent storage domains")
     return dict(schema="rar-modern-unavailable-result-v1",frames=9,fresh_vms=1,
         unchanged_data_sha256=sha(frozen),header_reads=summaries[0]["counts"]["read"],
