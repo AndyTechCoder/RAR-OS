@@ -120,6 +120,15 @@ class Tests(unittest.TestCase):
              patch.object(profile,"validate_preflight",return_value=dict(rtc_path="/machine/unattached/device[7]")):
             return evidence.validate(raw,case,"a"*64,(1966080,131072))
 
+    def test_same_inode_cannot_be_separate_roles_with_different_capacities(self):
+        doc=document()
+        for proof in doc["vm_proofs"]:
+            rows=proof["cut"]["backends"]
+            rows[1]["records"][0]["inode"]=rows[0]["records"][0]["inode"]
+        # Both boots report the same forged binding, so cross-boot equality
+        # cannot hide missing pairwise device/inode separation.
+        with self.assertRaises(ValueError):self.check(doc)
+
     def test_positive_inert_retained_capture(self):
         result=self.check(document())
         self.assertTrue(result["content_validated"])

@@ -1,3 +1,54 @@
+# Latest M4 checkpoint — M4.1 demonstrated, 2026-09-10
+
+Independent consolidated review: no concrete M4.1 acceptance-evidence gap remains
+in the bounded contract at the recorded revisions. Integration and final whole-M4
+release gates still apply. This is not full-M4, PR158 merge, production security
+or v0.4 approval.
+
+| Section | Outcome | Next |
+| --- | --- | --- |
+| M4.1 Persistent files | Demonstrated by actual cloud proofs below | Integrate exact reviewed controller blobs; preserve evidence for final regression |
+| M4.2 Signed live updates | Incomplete; source primitives only | Required System-only staging-copy approval, then real Settings replacement/health/fallback |
+| M4.3 Recovery/release | Incomplete | Immutable System-only repair, unchanged Data, interruptions and final release proofs |
+
+Runtime source633a9531f2731c69aeafcfd12a8789265a62f483 passed all four source checks.
+Actual persistence/corrupt-mount run34497590722/job102939893132 passed under
+controllerbab435bc8e973500aef37f54bae7f7072ef93083. Artifact10160495313:286406 bytes,
+SHA25610e4382f2be65a3436527904d76cf98f82eade58b3f46de4cc52d7c306a68f84.
+
+Actual mounted-write-error run34502568755/job102956693964 passed at the same
+runtime source under controllerd70067ffc156757b12487caad34ec2c3fd7a3fb0.
+Controller treea64aa05ca50c1b8281c79e8b7ebaca2a2da82fd2 passed independent review
+and full sourceCI34500426129 before PR189 merged. Artifact10162511761:248682 bytes,
+SHA2566fbab80ace5f135b89e2bf03c7df82c7fcc7bc468e30fc68f4fa123b60a5533a.
+Its independent checker requires198 ordered pre-error reads,11 causal GUI frames,
+first-Enter fault identity, same-VM LIST/locked WRITE/LIST/Files Unavailable,
+zero post-error backend requests/remounts, joined VM/backends and unchanged disks.
+
+The60-case fault campaign34359925328 is preserved. Complete Git-tree comparison
+from its source5b8555e86b54056efa2927e094b3f1746e66d668 to633a9531 confirms all
+services/modern/* and nucleus/modern/native_pio.rs blobs identical. Only two of
+the15 inspected storage/app files differ: the reviewed app DEVICE-denial checks,
+already exercised by current-source VM runs. Crypto324/972+9failure-probe run
+34492109713 and retained inspection34492745752 passed, as documented below.
+
+The guest DEVICE status checks prove common capability rejection before opcode
+handling; they are not a literal read/write-opcode matrix. This scoped evidence
+limit is not an outstanding M4.1 gap. No production secrecy or physical
+power-loss claim is made. Superseded PR189 CI34499791651 was cancelled after
+concrete review findings; both fixes and meaningful negatives passed before merge.
+
+Evidence: https://github.com/AndyTechCoder/RAR-OS/pull/158#issuecomment-5622079061
+
+This integration copies only19 exact reviewed PR188/189 controller blobs.
+No target code, capability or device authority changes. PR158 remains draft,
+v0.3 preserved; M4.2 permission denial is not overridden. No Mac/SSD file
+mutation, deletion, download, build or target/VM execution.
+
+---
+
+# Prior checkpoints (preserved; superseded by the status above)
+
 # Latest M4 checkpoint — 2026-09-10, crypto runtime evidence expanded
 
 M4.1, M4.2, M4.3 and M4 remain incomplete. This supersedes older status

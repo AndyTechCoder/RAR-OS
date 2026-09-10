@@ -9,7 +9,7 @@ def base():
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
     return module
 
-def validate(events,receipts,commands,drained,rtc_path,entry_event_count,fault_plan=None):
+def validate(events,receipts,commands,drained,rtc_path,entry_event_count,fault_plan=None,fault_command_id=None):
     if fault_plan is not None:
         if (type(fault_plan) is not dict or set(fault_plan)!={"operation","ordinal","effect","prefix"} or
             fault_plan["operation"] not in ("write","flush") or
@@ -18,6 +18,10 @@ def validate(events,receipts,commands,drained,rtc_path,entry_event_count,fault_p
             type(fault_plan["prefix"]) is not int or
             fault_plan["prefix"]!=(255 if fault_plan["effect"] in ("torn-cut","short-error") else 0)):
             raise ValueError("fixed mutation fault plan")
+    if fault_command_id is not None:
+        if (type(fault_command_id) is not int or not 1<=fault_command_id<=len(commands) or
+            commands[fault_command_id-1].get("id")!=fault_command_id):
+            raise ValueError("exact faulting command identity")
     rtc_count=0;io_count=0
     phases=base().receipt_phases(receipts,events,commands,drained)
     if (type(entry_event_count) is not int or not 1<=entry_event_count<=len(events) or
@@ -52,7 +56,7 @@ def validate(events,receipts,commands,drained,rtc_path,entry_event_count,fault_p
                 io_count+=1
                 # QEMU IDE flush and write faults both use QAPI operation=write.
                 # Receipt must follow the submitted save, before deliberate kill.
-                last=commands[-1]
+                last=commands[-1] if fault_command_id is None else commands[fault_command_id-1]
                 if (fault_plan is None or io_count!=1 or
                     last.get("execute")!="send-key" or
                     last.get("arguments")!={"keys":[{"type":"qcode","data":"ret"}],"hold-time":50} or
