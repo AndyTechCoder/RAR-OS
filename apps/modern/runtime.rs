@@ -109,7 +109,16 @@ fn files_view(boot:&Boot,io:&mut Io,selected:&mut usize)->View{
     }else{view.line(2,b"NO FILES");}
     view.line(5,io.label());io.decorate(&mut view);view
 }
+fn require_device_denial(boot:&Boot){
+    // No disk command, read-word, write or flush is attempted even if isolation
+    // regresses: operation0 is only the alternate-status read. Actual ring3
+    // traps must reject the absent device cap and both unrelated issued caps.
+    if !file_ui::device_access_denied(boot.role,
+        [boot.caps[DEVICE_CAP],boot.caps[SELF_RECV],boot.caps[STORAGE]],
+        |handle|crate::syscall(DEVICE,handle,0,0,0)){fail();}
+}
 pub fn files(boot:&Boot)->! {
+    require_device_denial(boot);
     let mut pending=Io::new(boot);let mut selected=0;let mut version=0;
     let view=files_view(boot,&mut pending,&mut selected);publish(boot,&mut version,&view);
     loop {
@@ -136,6 +145,7 @@ pub fn settings(boot:&Boot)->! {
     }
 }
 pub fn terminal(boot:&Boot)->! {
+    require_device_denial(boot);
     let mut editor=Editor::new();let mut version=0;let mut pending=Io::new(boot);
     let mut view=View::EMPTY;view.line(0,b"RAR TERMINAL");view.line(1,b"HELP LIST READ WRITE CRASH");
     view.line(2,b"CREATE + WRITE ARE SEPARATE COMMITS");

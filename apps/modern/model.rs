@@ -53,9 +53,38 @@ pub fn problem(result:Outcome)->&'static [u8]{
         },
     }
 }
+
+/// Boot-time negative check for the existing Files/Terminal device boundary.
+/// The caller supplies only the harmless DEVICE status syscall (operation0).
+/// Missing device authority and unrelated issued capabilities must all return
+/// the exact Denied result before the app publishes any view.
+pub fn device_access_denied<F:FnMut(u64)->i64>(role:u64,handles:[u64;3],mut status:F)->bool{
+    if !matches!(role,4|6)||handles[0]!=0||handles[1]==0||handles[2]==0{return false;}
+    handles.into_iter().all(|handle|status(handle)==-2)
+}
 #[cfg(test)]
 mod tests{
     use super::*;
+    #[test]fn device_denial_requires_real_calls_and_exact_denied(){
+        for role in [4,6]{
+            let mut seen=Vec::new();
+            assert!(device_access_denied(role,[0,17,29],|h|{seen.push(h);-2}));
+            assert_eq!(seen,[0,17,29]);
+            for at in 0..3{
+                for wrong in [-1,0,-3,-4,i64::MAX]{
+                    let mut calls=0;
+                    assert!(!device_access_denied(role,[0,17,29],|_|{
+                        let result=if calls==at{wrong}else{-2};calls+=1;result
+                    }));
+                    assert_eq!(calls,at+1);
+                }
+            }
+        }
+        for (role,handles) in [(1,[0,17,29]),(9,[0,17,29]),(4,[1,17,29]),
+            (6,[0,0,29]),(4,[0,17,0])]{
+            assert!(!device_access_denied(role,handles,|_|panic!("invalid shape called status")));
+        }
+    }
     #[test]fn only_complete_canonical_ack_can_show_saved(){
         assert!(saved(Outcome::Reply([0;128])));
         for outcome in [Outcome::ReadOnly,Outcome::Unavailable,Outcome::SaveUncertain]{

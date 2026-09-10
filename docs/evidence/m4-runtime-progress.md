@@ -1,3 +1,76 @@
+# Latest M4 checkpoint — 2026-09-10, crypto runtime evidence expanded
+
+M4.1, M4.2, M4.3 and M4 remain incomplete. This supersedes older status
+statements below without removing historical evidence. Supporting source tests
+and controller work are not counted as implemented OS features.
+
+| Section | Demonstrated behavior | Remaining outcome |
+| --- | --- | --- |
+| M4.1 Persistent files | Actual Terminal-to-Data persistence across full VM destruction and fresh firmware; all60 Data fault cases; fresh independent crypto comparison, nine actual process-failure probes and retained source/lifecycle inspection | Remaining storage authority acceptance; integrated-head confirmation |
+| M4.2 Signed live updates | Reviewed staging and lifecycle primitives, including physical retirement source | System staging copy authorization remains unresolved; connect package I/O, signature verification, executable loader, health/cutover/fallback and prove visible Settings replacement with peers alive |
+| M4.3 Recovery/release | Contracts and reusable cloud evidence machinery | Actual immutable recovery, System-only repair with exact unchanged Data, interrupted repair and final regression/reproducibility/release |
+
+## Fresh crypto evidence, not a production security claim
+
+Trusted-main comparison run34485256699 succeeded against target source
+3d8ec7fe12ba42097cd06305993a4217a69123ca using controller
+252684e2f194a54849d34dc6401f7b4d5d249a73. It performed324 comparisons and972
+adapter calls, including fresh public hash/AEAD challenges. All RAR outputs were
+retained before reference execution. Ed25519 coverage remains the fixed corpus.
+
+Artifact10155500584 is9,613,731 bytes, SHA256
+10128e9660bfc04d5fbe1df38329a5b722600f48815e31da2e5b513d5470f918.
+Inspection34485914267 validated7319 inventory members, exact Git/source closure,
+the frozen requests/results and three-way agreement. Inspection34487656249
+reused that artifact under controllerbf6527f33e7fb138353731f2435e9e3a21d8cb2f,
+checking all972 unique container lifecycles, confinement, stopped state and
+confirmed absence. Neither inspection executes retained target source.
+
+Evidence:
+https://github.com/AndyTechCoder/RAR-OS/pull/158#issuecomment-5619883909
+https://github.com/AndyTechCoder/RAR-OS/pull/158#issuecomment-5620117417
+
+PR187 merged as9f7e09bc64bc35a46e7d1dd7e9c1e0590188bfd3 after final reviewed
+head d602de8929e3c64b08ff022652c2262d7b0088d3 passed Specifications34489608594.
+It consolidates the nine actual timeout/crash/output-limit probes, outer
+controller integration, pure retained-evidence inspection and negative tests.
+Actual campaign34492109713 / job102921198587 and retained inspection34492745752 /
+job102923398054 succeeded. Artifact10158373977 is9,692,082 bytes, SHA256
+945e514ef718727d11280b1f4eae1e62ba756d9bd5937e52f12b03e95fc441be.
+The reader validated7392 inventory members,324 three-way comparisons/972
+normal adapter calls,972 confined/stopped/removed lifecycles and9 actual
+timeout/crash/output-limit probe records with unique identity and cleanup.
+Probe evidence SHA256:
+1b3046ea91f32b2e24d39aa1b90875d53fd440d62763255b7566f4b575e47259.
+This closes the specific process-failure evidence gap, not a general sandbox or
+production cryptographic-security assessment.
+https://github.com/AndyTechCoder/RAR-OS/pull/158#issuecomment-5620794855
+
+## Remaining M4.1 guest acceptance
+
+Exact Data capacity already has causal guest evidence through IDENTIFY and the
+successful mounted write/read path; wrong-capacity negatives remain source
+tested. Do not weaken host preflight to attach a wrong-sized image.
+
+A new Files/Terminal boot check invokes the existing DEVICE status operation
+with the absent device capability and two unrelated issued capabilities. All
+three calls must return exact Denied before the app can publish a view. This
+adds no authority, disk command or write even if the negative check regresses.
+Pure tests pin call order, exact errors and fail-closed boot shape. Actual
+guest evidence remains pending a new cloud boot, so source tests alone do not
+close the device-denial requirement.
+
+Still needed: a controller-owned corrupt/ambiguous-header negative boot with
+two same-incarnation file operations, sticky Unavailable output, no SAVED,
+mount reads but zero writes/flushes, and unchanged exact Data hash. System
+IDENTIFY success is currently discarded and is not guest-readiness evidence.
+
+The last runtime Desktop check failed during pinned Debian snapshot package
+acquisition before guest boot, not in the OS. This is not a passing regression,
+and the failure has not been concealed or relabeled.
+
+---
+
 # Latest M4 checkpoint — 2026-09-09, actual Data fault campaign passed
 
 M4 and all three sections remain incomplete. This checkpoint supersedes older

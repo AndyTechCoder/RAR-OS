@@ -29,7 +29,7 @@ CONSUMED=("consumed-musl.tree","consumed-musl.sha256")
 DOCKER=["/usr/bin/docker","--host=unix:///var/run/docker.sock"]
 MODULES=("construction_artifacts","source_snapshot","compiler_inventory",
     "reference_inventory","compiler_driver_layer","derived_compiler_image",
-    "adapter_image","compiler_runner","reference_runner","reference_comparison")
+    "adapter_image","compiler_runner","reference_runner","reference_comparison","crypto_failure_probes")
 class Invalid(RuntimeError):pass
 
 def sha(raw):return hashlib.sha256(raw).hexdigest()
@@ -559,22 +559,29 @@ def main():
         del raw,parent,drivers,adapters,notices
         reference_image=load_image(refs,refs_report)
         del refs
-        phase="independent-comparisons"
+        phase="fresh-independent-comparisons"
         invocation=0
         def execute(implementation,request):
             nonlocal invocation
             invocation+=1
-            if invocation>864:raise Invalid("fixed comparison invocation count")
+            if invocation>972:raise Invalid("challenge comparison invocation count")
             selected=target_image if implementation==3 else reference_image
             return transport.execute(selected,implementation,request,evidence.scoped("adapter-"+str(invocation)))
-        result=helpers["reference_comparison"].compare_all(execute,evidence.retain)
-        if invocation!=864:raise Invalid("complete fixed comparison count")
-        # Fixed corpus only; challenge-driven cases and injected confinement
-        # fault campaign remain separate acceptance requirements.
-        summary.update(status="fixed-corpus-compared",comparison=result,
+        result=helpers["reference_comparison"].compare_all(execute,evidence.retain,challenge=True)
+        if invocation!=972:raise Invalid("complete challenge comparison count")
+        phase="crypto-failure-probes"
+        summary.update(comparison=result,target_image=target_image,reference_image=reference_image,
+            source_binding=source_report)
+        summary["failure_probes"]=helpers["crypto_failure_probes"].run(
+            transport,target_image,reference_image,evidence.retain)
+
+        # Fixed corpus, fresh challenges and bounded process-failure probes.
+        # Retained replay and milestone acceptance remain separate; passing
+        # these probes is not a general sandbox or cryptographic-security proof.
+        summary.update(status="challenge-corpus-compared",comparison=result,
             target_image=target_image,reference_image=reference_image,
             source_binding=source_report,crypto_interoperability_accepted=False)
-        phase="complete-fixed-corpus"
+        phase="complete-challenge-corpus"
     except BaseException as error:
         summary.update(status="failed",error_type=type(error).__name__)
         if phase!="artifact-intake":

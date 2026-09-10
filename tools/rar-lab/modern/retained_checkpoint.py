@@ -61,14 +61,15 @@ def receipt(metadata,run,fixed):
         event="workflow_dispatch",head_branch="main",status="completed",conclusion="success",
         path=fixed["workflow"],repository=repo,head_repository=repo))
 
-def archive(raw,fixed):
+def archive(raw,fixed,*,challenge=False):
+    if type(challenge) is not bool:raise Invalid("exact archive mode")
     if (type(raw) is not bytes or len(raw)!=fixed["size"] or
         hashlib.sha256(raw).hexdigest()!=fixed["digest"]):
         raise Invalid("whole fixed ZIP identity before parsing")
     members={}
     with zipfile.ZipFile(io.BytesIO(raw)) as source:
         entries=source.infolist()
-        if not 1<=len(entries)<=7000:raise Invalid("bounded member count")
+        if not 1<=len(entries)<=(10000 if challenge else 7000):raise Invalid("bounded member count")
         total=0
         for entry in entries:
             name=entry.filename;mode=entry.external_attr>>16
@@ -163,12 +164,13 @@ def source_binding(members,fixed,claimed):
     snapshot.inspect(layer,fixed["source"],report["files"])
     return report
 
-def crypto(members,fixed):
+def crypto(members,fixed,*,challenge=False):
+    if type(challenge) is not bool:raise Invalid("exact retained crypto mode")
     manifest=unique(members["manifest.json"])
     helper("crypto_failure").fixed_fields(manifest,dict(
         schema="rar-modern-crypto-handoff-v0",controller=fixed["controller"],source=fixed["source"],
-        run=str(fixed["run"]),attempt="1",status="fixed-corpus-compared",
-        phase="complete-fixed-corpus",crypto_interoperability_accepted=False,
+        run=str(fixed["run"]),attempt="1",status="challenge-corpus-compared" if challenge else "fixed-corpus-compared",
+        phase="complete-challenge-corpus" if challenge else "complete-fixed-corpus",crypto_interoperability_accepted=False,
         milestone_complete=False,target_os_execution=False))
     inventory=manifest["evidence_files"]
     if type(inventory) is not dict or set(inventory)!=set(members)-{"manifest.json"}:
@@ -176,34 +178,10 @@ def crypto(members,fixed):
     for name,record in inventory.items():
         strict(record,dict(size=len(members[name]),sha256=hashlib.sha256(members[name]).hexdigest()))
     bound_source=source_binding(members,fixed,manifest["source_binding"])
-    frozen=unique(members["frozen-rar-results.json"])
-    results=unique(members["three-way-results.json"])
-    if (type(frozen.get("cases")) is not list or len(frozen["cases"])!=288 or
-        type(results.get("cases")) is not list or len(results["cases"])!=288):
-        raise Invalid("exact recorded comparison count")
-    comparison=helper("reference_comparison")
-    count=0
-    def recorded(implementation,request):
-        nonlocal count
-        if count<288:
-            wire=frozen["cases"][count]["rar"]
-            strict(frozen["cases"][count]["request"],request.hex())
-        else:
-            index,which=divmod(count-288,2)
-            wire=results["cases"][index]["runs"][which+1]
-        count+=1
-        if type(wire) is not dict or set(wire)!={"implementation","exit_code","stdout","stderr"}:
-            raise Invalid("exact recorded adapter tuple")
-        strict(wire["implementation"],implementation)
-        return wire["implementation"],wire["exit_code"],bytes.fromhex(wire["stdout"]),bytes.fromhex(wire["stderr"])
-    def retain(name,raw):
-        if name not in ("frozen-rar-results.json","three-way-results.json") or members[name]!=raw:
-            raise Invalid("recomputed comparison differs from retained bytes")
-        return hashlib.sha256(raw).hexdigest()
-    # Pure protocol/corpus replay with recorded bytes, not adapter execution.
-    report=comparison._compare(recorded,retain)
-    if count!=864:raise Invalid("exact recorded invocation count")
-    strict(manifest["comparison"],report)
+    # Historical main entry keeps the default v0; v1 requires explicit opt-in.
+    report=helper("reference_comparison").replay(
+        members["frozen-rar-results.json"],members["three-way-results.json"],
+        manifest["comparison"],challenge=challenge)
     return dict(role="crypto",comparison=report,source_binding=bound_source,
         source=fixed["source"],controller=fixed["controller"],inventory_members=len(inventory),
         execution_attempted=False,crypto_interoperability_accepted=False,milestone_complete=False)

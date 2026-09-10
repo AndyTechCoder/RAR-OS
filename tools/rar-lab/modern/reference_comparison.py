@@ -149,6 +149,77 @@ def _compare(execute,retain,challenge_seed=None):
             "frozen_sha256":frozen_hash,"results_sha256":results_hash,
             "three_way_agreement":True,"milestone_complete":False}
 
+def replay(frozen_raw,results_raw,claimed,*,challenge=False):
+    """Pure retained-byte regeneration; never executes an adapter or reads files.
+    The caller must separately bind archive receipt, controller/source and image
+    identity. Explicit mode prevents accepting v1 evidence as historical v0.
+    """
+    import re
+    if type(challenge) is not bool:raise Invalid("exact replay mode")
+    def parse(raw):
+        if type(raw) is not bytes or not 1<=len(raw)<=MAX_EVIDENCE:
+            raise Invalid("bounded replay envelope")
+        def pairs(items):
+            out={}
+            for key,value in items:
+                if key in out:raise Invalid("duplicate replay key")
+                out[key]=value
+            return out
+        def constant(value):raise Invalid("nonfinite replay JSON")
+        try:value=json.loads(raw,object_pairs_hook=pairs,parse_constant=constant)
+        except (ValueError,UnicodeError,RecursionError) as error:
+            raise Invalid("invalid replay JSON") from error
+        if type(value) is not dict or canonical(value)!=raw:
+            raise Invalid("canonical replay envelope")
+        return value
+    frozen=parse(frozen_raw);results=parse(results_raw)
+    version="v1" if challenge else "v0"
+    fields={"schema","cases"}|({"challenge_seed","challenge_base_cases"} if challenge else set())
+    if (set(frozen)!=fields or frozen["schema"]!="rar-modern-frozen-comparison-"+version or
+        set(results)!={"schema","cases","frozen_sha256"} or
+        results["schema"]!="rar-modern-three-way-comparison-"+version):
+        raise Invalid("explicit replay version")
+    seed=None;total=324 if challenge else 288
+    if challenge:
+        value=frozen["challenge_seed"]
+        if (type(value) is not str or re.fullmatch("[0-9a-f]{64}",value) is None or
+            type(frozen["challenge_base_cases"]) is not int or frozen["challenge_base_cases"]!=20):
+            raise Invalid("canonical retained challenge identity")
+        seed=bytes.fromhex(value)
+    if any(type(obj["cases"]) is not list or len(obj["cases"])!=total for obj in (frozen,results)):
+        raise Invalid("exact replay count")
+    count=0
+    def recorded(implementation,request):
+        nonlocal count
+        if count>=total*3:raise Invalid("replay invocation bound")
+        try:
+            if count<total:
+                row=frozen["cases"][count];wire=row["rar"]
+                if row["request"]!=request.hex():raise Invalid("regenerated request differs")
+            else:
+                index,which=divmod(count-total,2)
+                wire=results["cases"][index]["runs"][which+1]
+            if (type(wire) is not dict or set(wire)!={"implementation","exit_code","stdout","stderr"} or
+                type(wire["implementation"]) is not int or wire["implementation"]!=implementation or
+                type(wire["exit_code"]) is not int):
+                raise Invalid("exact replay wire")
+            for key in ("stdout","stderr"):
+                if (type(wire[key]) is not str or len(wire[key])>2*MAX_EVIDENCE or
+                    re.fullmatch("(?:[0-9a-f]{2})*",wire[key]) is None):
+                    raise Invalid("canonical replay wire bytes")
+            count+=1
+            return implementation,wire["exit_code"],bytes.fromhex(wire["stdout"]),bytes.fromhex(wire["stderr"])
+        except (KeyError,IndexError,TypeError) as error:
+            raise Invalid("malformed replay row") from error
+    expected={"frozen-rar-results.json":frozen_raw,"three-way-results.json":results_raw}
+    def retain(name,raw):
+        if expected.get(name)!=raw:raise Invalid("regenerated envelope differs")
+        return hashlib.sha256(raw).hexdigest()
+    report=_compare(recorded,retain,seed)
+    if count!=total*3 or canonical(claimed)!=canonical(report):
+        raise Invalid("complete replay report")
+    return report
+
 def self_test():
     import struct
     import unittest
@@ -181,6 +252,42 @@ def self_test():
             return hashlib.sha256(raw).hexdigest()
         return execute,retain,events,saved
     class Tests(unittest.TestCase):
+        def test_retained_replay_regenerates_both_versions_without_adapters(self):
+            for seed in (None,bytes(range(32))):
+                execute,retain,_,saved=fixture(seed)
+                report=_compare(execute,retain,seed)
+                args=(saved["frozen-rar-results.json"],saved["three-way-results.json"],report)
+                self.assertEqual(replay(*args,challenge=seed is not None),report)
+                with self.assertRaises(Invalid):replay(*args,challenge=seed is None)
+                with self.assertRaises(Invalid):replay(*args,challenge=1)
+                wrong=dict(report);wrong["adapter_invocations"]+=1
+                with self.assertRaises(Invalid):replay(args[0],args[1],wrong,challenge=seed is not None)
+                with self.assertRaises(Invalid):replay(args[0]+b" ",args[1],report,challenge=seed is not None)
+        def test_retained_challenge_tampering_is_rejected(self):
+            execute,retain,_,saved=fixture(bytes(range(32)))
+            report=_compare(execute,retain,bytes(range(32)))
+            f=saved["frozen-rar-results.json"];r=saved["three-way-results.json"]
+            for mutation in ("seed","bool-count","count","request","rar-identity","name","extra","schema"):
+                changed=json.loads(f)
+                if mutation=="seed":changed["challenge_seed"]="ff"*32
+                elif mutation=="bool-count":changed["challenge_base_cases"]=True
+                elif mutation=="count":changed["cases"].pop()
+                elif mutation=="request":changed["cases"][0]["request"]="00"
+                elif mutation=="rar-identity":changed["cases"][0]["rar"]["implementation"]=True
+                elif mutation=="name":changed["cases"][0]["name"]="different"
+                elif mutation=="extra":changed["extra"]=None
+                else:changed["schema"]="rar-modern-frozen-comparison-v0"
+                with self.assertRaises(ValueError):replay(canonical(changed),r,report,challenge=True)
+            for mutation in ("reference","hash","count","order"):
+                changed=json.loads(r)
+                if mutation=="reference":changed["cases"][0]["runs"][1]["implementation"]=2
+                elif mutation=="hash":changed["frozen_sha256"]="0"*64
+                elif mutation=="count":changed["cases"].pop()
+                else:changed["cases"][0],changed["cases"][1]=changed["cases"][1],changed["cases"][0]
+                with self.assertRaises(ValueError):replay(f,canonical(changed),report,challenge=True)
+            for raw in (b'{"schema":0,"schema":1}',b"[]",b"null",b"{",b"\xff"):
+                with self.assertRaises(Invalid):replay(raw,r,report,challenge=True)
+
         def test_public_challenge_entry_draws_seed_only_after_guard(self):
             seed=bytes(range(32));calls=[]
             keys={"GITHUB_ACTIONS":"true","GITHUB_REPOSITORY":"AndyTechCoder/RAR-OS",

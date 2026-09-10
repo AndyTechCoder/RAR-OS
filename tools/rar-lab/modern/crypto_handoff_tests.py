@@ -58,7 +58,7 @@ class Tests(unittest.TestCase):
         from types import SimpleNamespace as NS
         snapshot=h.module("source_snapshot")
         receipts=h.module("construction_artifacts").RECEIPTS
-        for failure in (None,"compiler","tag","sysroot","client","config-budget"):
+        for failure in (None,"compiler","tag","sysroot","client","config-budget","probes"):
             root=Path(tempfile.mkdtemp(prefix="rar-handoff-pipeline-"))
             here=root/"controller/tools/rar-lab/modern";here.mkdir(parents=True)
             for name,raw in (("compiler_driver.rs",b"fn main() {}\n"),
@@ -110,17 +110,32 @@ class Tests(unittest.TestCase):
                 nonlocal adapter_count
                 self.assertEqual(compile_count,2)
                 adapter_count+=1
-                if adapter_count in (1,288,289,864):retain("wire.bin",b"fixture")
+                if adapter_count in (1,324,325,972):retain("wire.bin",b"fixture")
                 return implementation,0,b"fixture",b""
-            def comparison(execute,retain):
+            def comparison(execute,retain,*,challenge):
+                self.assertIs(challenge,True)
                 # The real comparison component has separate full ordering and
                 # protocol fixtures. This tests the outer pipeline's invocation
                 # count, lifecycle sequencing, selected images and evidence path.
-                for _ in range(288):execute(3,b"fixed fixture")
+                for _ in range(324):execute(3,b"fixed fixture")
                 retain("frozen-rar-results.json",b"{}\n")
-                for _ in range(288):
+                for _ in range(324):
                     execute(1,b"fixed fixture");execute(2,b"fixed fixture")
                 return {"three_way_agreement":True,"milestone_complete":False}
+            probe_calls=[]
+            probe_report={"schema":"rar-modern-crypto-failure-probes-v1",
+                "expected_failures":9,"cleanup_confirmed":True,"milestone_complete":False}
+            def probe_run(transport,target_image,reference_image,retain):
+                self.assertEqual(compile_count,2)
+                self.assertEqual(adapter_count,972)
+                self.assertIs(transport,helpers["reference_runner"])
+                self.assertEqual(target_image,images["adapter"])
+                self.assertEqual(reference_image,images["reference"])
+                probe_calls.append(True)
+                raw=b"public probe fixture"
+                self.assertEqual(retain("probe-fixture.bin",raw),h.sha(raw))
+                if failure=="probes":raise RuntimeError("probe failure fixture")
+                return probe_report
             def inspect_image(key):
                 return {"Id":images[key],"Architecture":"amd64","Os":"linux",
                     "RootFS":{"Type":"layers","Layers":diffs[key]},
@@ -185,7 +200,8 @@ class Tests(unittest.TestCase):
                     build=lambda *a:(b"adapter",adapter_report),inspect=lambda *a:None,PROCESS=process),
                 "compiler_runner":NS(execute=compile_adapter),
                 "reference_runner":NS(exchange=exchange,execute=adapter_run),
-                "reference_comparison":NS(compare_all=comparison)}
+                "reference_comparison":NS(compare_all=comparison),
+                "crypto_failure_probes":NS(run=probe_run)}
             def checked_export(*args):
                 if failure=="sysroot":raise h.Invalid("consumed sysroot mismatch fixture")
                 return executable(),{}
@@ -206,9 +222,10 @@ class Tests(unittest.TestCase):
             self.assertEqual(len(api_calls),4)
             self.assertFalse(manifest["milestone_complete"])
             if failure is not None:
-                self.assertEqual(adapter_count,0)
-                self.assertEqual(loaded,[b"compiler"] if failure in ("tag","sysroot","client","config-budget") else [b"compiler",b"derived"])
-                self.assertEqual(manifest["phase"],"derived-compiler" if failure=="config-budget" else "driver-construction" if failure in ("tag","sysroot","client") else "adapter-compilation")
+                self.assertEqual(adapter_count,972 if failure=="probes" else 0)
+                self.assertEqual(probe_calls,[True] if failure=="probes" else [])
+                self.assertEqual(loaded,[b"compiler"] if failure in ("tag","sysroot","client","config-budget") else [b"compiler",b"derived",b"adapter",b"reference"] if failure=="probes" else [b"compiler",b"derived"])
+                self.assertEqual(manifest["phase"],"crypto-failure-probes" if failure=="probes" else "derived-compiler" if failure=="config-budget" else "driver-construction" if failure in ("tag","sysroot","client") else "adapter-compilation")
                 self.assertEqual(manifest["status"],"failed")
                 if failure=="client":
                     lines=diagnostics.getvalue().splitlines()
@@ -223,9 +240,12 @@ class Tests(unittest.TestCase):
                     self.assertTrue(command[0]["stderr_tail"].endswith("\n::error::inert public fixture\n"))
                     self.assertNotIn("RAR_ARTIFACT_TOKEN"," ".join(command[0]["argv"]))
             else:
-                self.assertEqual(adapter_count,864)
+                self.assertEqual(adapter_count,972)
+                self.assertEqual(probe_calls,[True])
+                self.assertEqual(manifest["failure_probes"],probe_report)
                 self.assertEqual(loaded,[b"compiler",b"derived",b"adapter",b"reference"])
-                self.assertEqual(manifest["status"],"fixed-corpus-compared")
+                self.assertEqual(manifest["status"],"challenge-corpus-compared")
+                self.assertEqual(manifest["phase"],"complete-challenge-corpus")
                 self.assertFalse(manifest["crypto_interoperability_accepted"])
 
     def test_private_docker_configuration_and_substitution_refusal(self):
