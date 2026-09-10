@@ -67,6 +67,30 @@ def cases():
                             aead(bytes([17]) * 32, nonce, aad, data), 0, None))
     return tuple(out)
 
+
+def challenge_cases(seed):
+    """Public fresh-input corpus. Caller supplies32 bytes before any RAR/oracle
+    invocation; deterministic expansion is input generation, not an oracle.
+    No randomness, process, file or network access occurs in this helper.
+    """
+    if type(seed) is not bytes or len(seed)!=32:
+        raise ValueError("exact32-byte public challenge seed")
+    def expand(label,n):
+        return hashlib.shake_256(b"RAR-M4-CRYPTO-CHALLENGE-V1"+bytes(1)+seed+label).digest(n)
+    out=[]
+    for op,digest in ((1,hashlib.sha256),(2,hashlib.sha512)):
+        for n in (1,63,64,65,1024,4096):
+            message=expand(("hash-%d-%d"%(op,n)).encode("ascii"),n)
+            out.append(Case("challenge-hash-%d-%d"%(op,n),op,message,0,digest(message).digest()))
+    # Distinct prefix guarantees separation from fixed corpus key0x11 and RFCkey0x80.
+    key=bytes([34])+expand(b"key",31)
+    for index,(dn,an) in enumerate(zip((0,1,15,16,17,63,64,4096),(0,1,15,16,17,128,255,256)),1):
+        nonce=b"CHAL"+index.to_bytes(8,"little")
+        aad=expand(("aad-%d"%index).encode("ascii"),an)
+        data=expand(("data-%d"%index).encode("ascii"),dn)
+        out.append(Case("challenge-aead-%d"%index,4,aead(key,nonce,aad,data),0,None))
+    return tuple(out)
+
 def open_cases(seal_case, frozen_cipher_and_tag):
     """Derive decrypt inputs solely from the frozen RAR seal result.
     Derivation is not acceptance: the controller must compare both the original
@@ -96,6 +120,21 @@ def check_expected(case, status, value):
 def self_test():
     import unittest
     class Tests(unittest.TestCase):
+        def test_challenge_inputs_are_bounded_reproducible_and_seed_bound(self):
+            seed=bytes(range(32));items=challenge_cases(seed)
+            self.assertEqual(len(items),20);self.assertEqual(items,challenge_cases(seed))
+            self.assertNotEqual(items,challenge_cases(bytes(reversed(seed))))
+            self.assertEqual(len({x.name for x in cases()+items}),166)
+            seals=[x for x in cases()+items if x.operation==4]
+            self.assertEqual(len({x.payload[:44] for x in seals}),len(seals))
+            self.assertEqual(sum(x.operation==4 for x in items),8)
+            for item in items:
+                self.assertLessEqual(len(item.payload),4416)
+                if item.operation in (1,2):
+                    digest=hashlib.sha256 if item.operation==1 else hashlib.sha512
+                    self.assertEqual(item.value,digest(item.payload).digest())
+            for bad in (None,True,"x"*32,bytearray(32),bytes(31),bytes(33)):
+                with self.assertRaises(ValueError):challenge_cases(bad)
         def test_rfc_vector_lengths(self):
             vectors = json.loads(ED25519)
             self.assertEqual([v[0] for v in vectors], ["1", "2", "3", "1024", "SHA(abc)"])

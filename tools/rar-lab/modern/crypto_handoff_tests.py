@@ -110,15 +110,16 @@ class Tests(unittest.TestCase):
                 nonlocal adapter_count
                 self.assertEqual(compile_count,2)
                 adapter_count+=1
-                if adapter_count in (1,288,289,864):retain("wire.bin",b"fixture")
+                if adapter_count in (1,324,325,972):retain("wire.bin",b"fixture")
                 return implementation,0,b"fixture",b""
-            def comparison(execute,retain):
+            def comparison(execute,retain,*,challenge):
+                self.assertIs(challenge,True)
                 # The real comparison component has separate full ordering and
                 # protocol fixtures. This tests the outer pipeline's invocation
                 # count, lifecycle sequencing, selected images and evidence path.
-                for _ in range(288):execute(3,b"fixed fixture")
+                for _ in range(324):execute(3,b"fixed fixture")
                 retain("frozen-rar-results.json",b"{}\n")
-                for _ in range(288):
+                for _ in range(324):
                     execute(1,b"fixed fixture");execute(2,b"fixed fixture")
                 return {"three_way_agreement":True,"milestone_complete":False}
             def inspect_image(key):
@@ -223,9 +224,10 @@ class Tests(unittest.TestCase):
                     self.assertTrue(command[0]["stderr_tail"].endswith("\n::error::inert public fixture\n"))
                     self.assertNotIn("RAR_ARTIFACT_TOKEN"," ".join(command[0]["argv"]))
             else:
-                self.assertEqual(adapter_count,864)
+                self.assertEqual(adapter_count,972)
                 self.assertEqual(loaded,[b"compiler",b"derived",b"adapter",b"reference"])
-                self.assertEqual(manifest["status"],"fixed-corpus-compared")
+                self.assertEqual(manifest["status"],"challenge-corpus-compared")
+                self.assertEqual(manifest["phase"],"complete-challenge-corpus")
                 self.assertFalse(manifest["crypto_interoperability_accepted"])
 
     def test_private_docker_configuration_and_substitution_refusal(self):
