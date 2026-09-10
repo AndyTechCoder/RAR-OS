@@ -24,12 +24,16 @@ def number(value):
 
 def receipt(metadata,run,run_id,artifact_id,source):
     handoff=helper("crypto_handoff")
-    handoff.revision(source)
+    try:handoff.revision(source)
+    except handoff.Invalid as error:
+        raise ValueError("exact source revision") from error
     if (type(run_id) is not int or not 1<=run_id<10**18 or
         type(artifact_id) is not int or not 1<=artifact_id<10**18 or
         type(run) is not dict or type(metadata) is not dict):
         raise ValueError("exact receipt inputs")
-    controller=handoff.revision(run.get("head_sha"))
+    try:controller=handoff.revision(run.get("head_sha"))
+    except handoff.Invalid as error:
+        raise ValueError("exact controller revision") from error
     check=helper("crypto_failure").fixed_fields
     repo=dict(id=1302587720,full_name="AndyTechCoder/RAR-OS")
     check(run,dict(id=run_id,head_sha=controller,run_attempt=1,event="workflow_dispatch",
