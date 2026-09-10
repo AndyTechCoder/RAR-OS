@@ -58,8 +58,11 @@ class Tests(unittest.TestCase):
 
     def test_actual_inert_archive_regenerates_v1_and_rejects_v0(self):
         for seed in (bytes(range(32)),None):
-            members,manifest=fixtures.fixture(seed)
-            members=fixtures.bind(members,manifest)
+            if seed is None:
+                members,manifest=fixtures.fixture(seed)
+                members=fixtures.bind(members,manifest)
+            else:
+                members,manifest,_,_=load("crypto_lifecycle_evidence_tests").fixture()
             stream=io.BytesIO()
             with zipfile.ZipFile(stream,"w",compression=zipfile.ZIP_DEFLATED) as archive:
                 for name,raw in members.items():archive.writestr(name,raw)
@@ -71,6 +74,8 @@ class Tests(unittest.TestCase):
                 report=fixtures.reader.unique(check.inspect(raw,binding))
                 self.assertEqual(report["comparison"]["compared"],324)
                 self.assertEqual(report["comparison"]["adapter_invocations"],972)
+                self.assertEqual(report["lifecycles"]["unique_containers"],972)
+                self.assertFalse(report["lifecycles"]["injected_failures_tested"])
                 self.assertFalse(report["execution_attempted"])
                 self.assertFalse(report["crypto_interoperability_accepted"])
                 with self.assertRaises(ValueError):check.inspect(raw+b"x",binding)
