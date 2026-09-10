@@ -154,3 +154,21 @@ bytes for staging. Focused cross-module tests pin the actual ABI version, magic
 and Boot/Envelope sizes and reject0,2 and other unknown values. This refinement
 requires independent code/contract review and cloud checks before publication;
 it grants no loader/cutover, runtime acceptance or production security claim.
+
+
+## M4.2 refinement: fixed package slots and exclusive preparation
+
+Use the existing manifest followed by payload, with no new wrapper, in the
+disjoint fixed geometry specified in modern-system-v0.md. Alternatives of an
+extra length header or scanning old slot tails are unnecessary and rejected.
+The System service stages raw bytes and retains an opaque transaction-bound
+readback identity; the manager separately authenticates the exact kernel-sealed
+copy. A manager-owned VerifiedLayer never crosses into System's address space.
+Selector publication is encapsulated with package preparation so a plain Record
+cannot bypass inactive-slot durability. Content rejection does not itself forbid
+an authorized prior fallback; transport/changed/indeterminate failures do.
+
+This same-change source refinement is under the owner's M4.2 direction and
+staging-copy approval. It creates no authorization-only PR, new dependency,
+Data authority, host operation or runtime acceptance. Exact native channel,
+sealing, loader and health/cutover integration remain to be completed/reviewed.

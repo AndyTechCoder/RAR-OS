@@ -215,3 +215,60 @@ silently upgraded. Existing zero-valued fixtures are not compatible layers.
 New real packages must be generated and signed with ABI1; changing this field
 after signing invalidates authentication. This corrects an unactivated candidate,
 not a stable format or an accepted on-disk deployment. See ADR0034 refinement.
+
+
+## M4.2 fixed System package adapter (source candidate)
+
+The sole fixed System device is exactly8MiB:16384 sectors of512 bytes. Selector
+sectors0/1 retain their existing bytes. Package A occupies sectors2..4098;
+package B occupies4099..8195;8196..16383 is reserved and never touched.
+Each slot has4097 sectors. Its logical bytes are the existing384-byte manifest
+immediately followed by its declared PE payload. There is no additional header.
+Total logical length is896..2097536. Read exactly ceil(length/512) sectors;
+unused bytes in the final sector must be zero. Remaining sectors in a slot may
+retain an older longer package but are unreachable and non-authoritative: boot,
+fallback and recovery must never scan them for another manifest.
+
+First parse the complete manifest framing before using its untrusted LEu32
+payload length to bound reads. This does not authenticate that length or package.
+Invalid content may permit reading the exact selector-authorized prior package;
+transport errors lock the volume. No malformed image permits autoformat.
+
+core/modern/system_volume.rs owns the sole transport and selector publication
+adapter. It accepts raw bounded package bytes, checks framing/generation as an
+input screen, writes only the opposite slot, flushes, and compares every written
+sector including padding. It observes exact selector record AND selected-sector
+identity before and after preparation. Any transport/changed-media/readback
+failure locks the instance without retries or selector publication.
+
+Successful preparation stores a private pending identity and returns a
+non-clonable Prepared value: monotonic full-width transaction, mounted selection,
+inactive slot, declared generation/manifest digest, exact logical length and
+SHA256 of ALL logical package bytes. Another preparation invalidates older
+tokens, including byte-identical restaging. Transaction exhaustion never wraps.
+The adapter exposes a one-sector-at-a-time readback callback for STAGE_COPY;
+no multi-megabyte service stack buffer is required for copy or publication.
+
+Prepared is not proof of signature, health or execution permission. System must
+copy the durable readback into the kernel reservation, finish sealing, and the
+separate manager must verify those exact immutable bytes. VerifiedLayer cannot
+cross the process boundary. The fixed lifecycle protocol must correlate the
+kernel-stamped sender/incarnation, transaction, seal and package identity and
+finish trial health plus all fallible handover preparation before requesting
+publication. This runtime protocol remains pending; the storage helper alone
+does not implement or authorize a live update.
+
+Publication consumes the adapter's matching pending state and Prepared value.
+The manager's proposed selector must match prepared slot/generation/digest.
+The adapter rereads the complete package, requires identical length/hash and
+zero padding, rereads exact selection, then delegates legal successor,
+alternate-sector write/flush/readback to Journal. A caller-provided Record alone
+cannot bypass preparation. Any publication failure locks the instance; from
+first attempted selector write onward failure is Indeterminate. Fresh boot must
+reconcile, never retry the uncertain commit. A final read also verifies selection.
+
+Focused cloud fixtures cover signed-package preparation/publication, all observed
+prepare/publication I/O call failures, stale token/record mismatch, changed
+package/selector, dishonest successful write ACK, malformed bounds/padding and
+content-versus-transport failure. These are source tests, not native System PIO,
+health, fallback, immutable-map or visible Settings replacement evidence.

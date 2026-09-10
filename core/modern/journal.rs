@@ -214,6 +214,7 @@ impl<I:SelectorIo> Journal<I> {
         Ok(Self {io,selected,readonly:false})
     }
     pub fn record(&self)->Record {self.selected.record()}
+    pub fn selection(&self)->Selection {self.selected}
     pub fn is_readonly(&self)->bool {self.readonly}
     pub fn into_io(self)->I {self.io}
 

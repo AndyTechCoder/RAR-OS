@@ -9,6 +9,7 @@ pub mod sha512;
 pub mod ed25519;
 pub mod manifest;
 pub mod journal;
+pub mod system_volume;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Error { Invalid, Denied }
 #[path = "../../nucleus/platform/pe.rs"]

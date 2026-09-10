@@ -1,3 +1,28 @@
+# Latest M4 checkpoint — M4.2 implementation started, 2026-09-10
+
+M4.1 remains COMPLETE at accepted snapshotfd1982665b81ba2e672e0044165d68e09daa47f0.
+M4.2 remains INCOMPLETE: no real signed Settings replacement is claimed yet.
+The owner approved System-only STAGE_COPY and explicitly directed full M4.2.
+That approval is recorded; it is no longer a blocker.
+
+Commitbea5875305665d873b12a96ab07726328812816a integrated the exact reviewed
+kernel staging-copy candidate without reverting M4.1. Foundation34509010224,
+Platform34509010356 and Desktop34509010328 passed. Specifications34509010239
+was still running when this checkpoint was composed.
+
+This source change adds the fixed System package adapter and transaction-bound
+preparation/publication, streaming readback, contract refinement and fault tests.
+It is not yet connected to the native System service or accepted runtime evidence.
+No source check or review is claimed for this new change until its exact head
+passes. Next: immutable kernel sealing/manager view, fixed manager/System
+correlation, actual trial construction, health/durable cutover/fallback, and
+cloud demonstrations with peer apps alive and unchanged Data. M4.3 is not started.
+
+All repository mutations are remote GitHub API operations. No local Mac/SSD
+file creation, edits, deletion, downloads, builds or OS/VM execution.
+
+---
+
 # Latest M4 checkpoint — M4.1 COMPLETE, 2026-09-10
 
 M4.1 is COMPLETE at accepted development snapshot
