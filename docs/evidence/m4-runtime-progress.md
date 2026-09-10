@@ -1,13 +1,17 @@
-# Latest M4 checkpoint — M4.1 demonstrated, 2026-09-10
+# Latest M4 checkpoint — M4.1 COMPLETE, 2026-09-10
 
-Independent consolidated review: no concrete M4.1 acceptance-evidence gap remains
-in the bounded contract at the recorded revisions. Integration and final whole-M4
-release gates still apply. This is not full-M4, PR158 merge, production security
-or v0.4 approval.
+M4.1 is COMPLETE at accepted development snapshot
+fd1982665b81ba2e672e0044165d68e09daa47f0. Independent consolidated review found no
+remaining M4.1 acceptance gap, the exact reviewed controllers are integrated,
+and all four exact-head checks passed: Specifications34503312824,
+Desktop34503312764, Platform34503312795 and Foundation34503312880.
+This is not full-M4, PR158 merge, production security or v0.4 approval.
+Final whole-M4 regression and release work belongs to M4.3, not an open M4.1
+completion condition. This documentation-only closure changes no target bytes.
 
 | Section | Outcome | Next |
 | --- | --- | --- |
-| M4.1 Persistent files | Demonstrated by actual cloud proofs below | Integrate exact reviewed controller blobs; preserve evidence for final regression |
+| M4.1 Persistent files | COMPLETE; demonstrated and integrated at the accepted snapshot | Preserve evidence for the later whole-M4 regression |
 | M4.2 Signed live updates | Incomplete; source primitives only | Required System-only staging-copy approval, then real Settings replacement/health/fallback |
 | M4.3 Recovery/release | Incomplete | Immutable System-only repair, unchanged Data, interruptions and final release proofs |
 

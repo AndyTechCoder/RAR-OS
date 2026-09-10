@@ -1,9 +1,10 @@
 # Fast-Track Alpha Milestone 4: Modern Architecture
 
-Status: M4.1 integration in progress. Actual cross-reboot guest persistence has
-passed cloud diagnostic34319265996 at its recorded source/controller revisions.
-Independent crypto comparisons, guest fault coverage, and Milestone4 completion
-remain unproved. See docs/evidence/m4-runtime-progress.md for exact evidence.
+Status: M4.1 COMPLETE at accepted development snapshot
+fd1982665b81ba2e672e0044165d68e09daa47f0 (2026-09-10).
+M4.2, M4.3 and full Milestone 4 remain incomplete. This is not main-release
+acceptance or production certification. See docs/evidence/m4-runtime-progress.md
+for exact runtime evidence, source identities, review and integration checks.
 Direction: 2026-09-05 UTC, "Perfect. So then let's continue with the next, milestone 4".
 
 ## Baseline and purpose
@@ -70,9 +71,16 @@ converted into a persistent format.
 
 The owner approved this organization on 2026-09-08. It replaces the delivery
 sequence, not the ten completion requirements above, ADR0034 review boundaries,
-or any host/data safety constraint. All three sections remain incomplete.
+or any host/data safety constraint. M4.1 is complete at the accepted development
+snapshot above; M4.2 and M4.3 remain incomplete.
 
 ### M4.1 — Persistent files
+
+Status: COMPLETE at fd1982665b81ba2e672e0044165d68e09daa47f0.
+Independent consolidated review found no remaining section acceptance gap.
+The completion basis is actual behavior and passing integrated-source checks,
+not documentation alone. Unfinished M4.2 work in draft PR158 is not approved
+for merge by this disposition.
 
 Deliver the actual Terminal -> storage service -> kernel-mediated Data device ->
 durable DataVault -> fresh-VM Files path. Reuse the working Desktop UI without
@@ -170,10 +178,10 @@ launcher to discover whether it is safe.
 
 ## Limits and progress
 
-This document records acceptance targets, not completion. Current missing work:
-the reviewed Modern cloud controller/profile, crypto reference handoff and
-interoperability, actual fresh-VM persistence, component replacement,
-update/recovery wiring and complete runtime evidence. Networking, SDK, additional hardware profiles, AI/agents,
+M4.1's acceptance targets are complete at the recorded development snapshot.
+Remaining Milestone 4 work is actual signed component replacement, update/fallback
+integration, immutable System-only recovery and the final whole-M4 runtime,
+regression/reproducibility/review/release gates. Networking, SDK, additional hardware profiles, AI/agents,
 production identity/hardware-backed secrets and an external cryptographic audit
 remain later work. A failure to finish any requirement is reported explicitly,
 not relabeled as successful Milestone 4.
