@@ -143,4 +143,34 @@ class RetainedMountedErrorTests(unittest.TestCase):
                 for i,r in enumerate(rows,1):r["id"]=i
             with self.subTest(mutation=mutation),self.assertRaises(ValueError):self.check(doc)
 
+    def test_actual_error_event_bound_to_first_enter(self):
+        for receipt in ("first",None,"later","capture"):
+            doc=retained_document();proof=doc["vm_proof"]
+            enters=[r["id"] for r in proof["commands"] if r.get("execute")=="send-key" and r["arguments"]["keys"][0]["data"]=="ret"]
+            rid=enters[0] if receipt=="first" else enters[1] if receipt=="later" else proof["commands"][-1]["id"] if receipt=="capture" else None
+            proof["events"].append(dict(event="BLOCK_IO_ERROR",timestamp=dict(seconds=1,microseconds=2),
+                data={"device":"","node-name":"rar-data","operation":"write","action":"report","reason":"Input/output error"}))
+            proof["event_receipts"].append(dict(event_index=1,request_id=rid))
+            proof["cut"]["entry"]["event_count"]=2
+            if receipt in ("first",None):self.assertTrue(self.check(doc)["content_validated"])
+            else:
+                with self.assertRaises(ValueError):self.check(doc)
+    def test_missing_or_reordered_mount_read_rejected(self):
+        for omitted in (True,False):
+            doc=retained_document();proof=doc["vm_proof"]
+            rows=proof["cut"]["backends"][0]["records"]
+            if omitted:
+                del rows[1:3]
+                for row in rows:
+                    if row.get("type")=="event" and row["event"]["operation"]=="read":row["event"]["ordinal"]-=1
+            else:
+                # Keep ordinal framing valid while altering sector order.
+                reads=[r for r in rows if r.get("type")=="request" and r["operation"]=="read"]
+                events=[r["event"] for r in rows if r.get("type")=="event" and r["event"]["operation"]=="read"]
+                for a in (reads,events):a[2]["offset"],a[3]["offset"]=a[3]["offset"],a[2]["offset"]
+            hit=fixture.audit.scan(rows,proof["fault"]["plan"],rows[0])
+            proof["audit"][0]=hit
+            for key in ("request_index","event_index","offset","length"):proof["fault"][key]=hit[key]
+            with self.assertRaises(ValueError):self.check(doc)
+
 if __name__=="__main__":unittest.main(argv=[sys.argv[0]],verbosity=2)

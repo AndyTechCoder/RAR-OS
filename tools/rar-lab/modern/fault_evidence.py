@@ -98,7 +98,8 @@ def vm_proof(proof,index,value,plan,firmware_sizes,command_checker=None):
         "RAR-MODERN:GUI-READY" not in serial or any(mark in serial for mark in
         ("RAR-PANIC","UNEXPECTED-USER-FAULT","INVALID-USER-RETURN"))):
         raise ValueError("actual bounded readiness without guest failure")
-    if index==1:(first_commands if command_checker is None else command_checker)(proof["commands"],value,profile)
+    fault_command_id=None
+    if index==1:fault_command_id=(first_commands if command_checker is None else command_checker)(proof["commands"],value,profile)
     else:base.commands(proof["commands"],index,value,profile)
     base.argv(proof["argv"],index,profile)
     fields(proof["preflight"],"raw verified")
@@ -107,7 +108,7 @@ def vm_proof(proof,index,value,plan,firmware_sizes,command_checker=None):
     if index==1:
         fields(cut["entry"],"vm_code backend_codes backend_problems event_count")
         helper("fault_events").validate(proof["events"],proof["event_receipts"],
-            proof["commands"],proof["qmp_drained"],verified["rtc_path"],cut["entry"].get("event_count"),plan)
+            proof["commands"],proof["qmp_drained"],verified["rtc_path"],cut["entry"].get("event_count"),plan,fault_command_id=fault_command_id)
     else:
         base.checked_event_stream(proof["events"],proof["event_receipts"],
             proof["commands"],proof["qmp_drained"],verified["rtc_path"])

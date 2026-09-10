@@ -28,9 +28,9 @@ def commands(rows,value,profile):
     start=[{"execute":"qmp_capabilities"}]+[command for _,command in profile.preflight_requests()]+[{"execute":"cont"}]
     if plain[:len(start)]!=start:raise ValueError("negative paused preflight first")
     keys,captures=input_plan();positions={item[0] for item in captures}
-    groups={position:0 for position in positions};at=0
+    groups={position:0 for position in positions};at=0;fault_id=None
     frame={"execute":"screendump","arguments":{"filename":profile.directory(1)+"/frame.ppm"}}
-    for row in plain[len(start):]:
+    for request_id,row in enumerate(plain[len(start):],len(start)+1):
         if row==frame:
             if at not in groups:raise ValueError("negative capture at wrong input boundary")
             groups[at]+=1
@@ -41,9 +41,11 @@ def commands(rows,value,profile):
             if row!=wanted:raise ValueError("unplanned negative command")
             # Observe the previous scene before advancing past its boundary.
             if at in groups and groups[at]==0:raise ValueError("missing causal prior frame")
+            if keys[at]=="ret" and fault_id is None:fault_id=request_id
             at+=1
     if at!=len(keys) or any(count==0 for count in groups.values()):
         raise ValueError("incomplete negative input/captures")
+    return fault_id
 
 
 def validate(raw,boot_digest,firmware_sizes):
@@ -89,10 +91,10 @@ def validate(raw,boot_digest,firmware_sizes):
     requests=[r for r in rows if r["type"]=="request"]
     reads=[r for r in requests if r["operation"]=="read"]
     # Mount scans every sector, then publication verifies three empty slot sectors.
-    # There may also be one initial firmware sector-zero probe.
-    if len(reads) not in (197,198) or [r["offset"] for r in reads[-197:]]!=list(range(0,99328,512))+[1024,1536,2048]:
+    # The runtime first probes the descriptor header, then mounts the vault.
+    if len(reads)!=198 or [r["offset"] for r in reads]!=[0]+list(range(0,99328,512))+[1024,1536,2048]:
         raise ValueError("one complete mounted Data scan")
-    if any(r["length"]!=512 for r in reads) or (len(reads)==198 and reads[0]["offset"]!=0):
+    if any(r["length"]!=512 for r in reads):
         raise ValueError("fixed mount read geometry")
     if len(requests)!=len(reads)+1:raise ValueError("one failed write and no retry/flush")
     for report in proof["cut"]["backends"][1:]:
