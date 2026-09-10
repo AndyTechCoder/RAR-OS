@@ -81,3 +81,14 @@ space; the workflow timeout is 12 minutes. This does not claim an actual receipt
 Activation requires source checks and independent review followed by a
 normal reviewed trusted-main merge before dispatch. Draft runtime helpers are
 not executable controller authority.
+
+## Successful process evidence
+
+The follow-on inspector checks all 972 seven-file adapter lifecycle sets after
+receipt, inventory, source closure and v1 replay. It binds request/output order,
+unique container identities, target/reference images, effective pre/post
+confinement, exact stopped state and confirmed removal records. Controller
+create/cleanup JSON must be canonical; raw Docker before/after JSON need not be.
+Supplied parsed objects are intrinsically bound to their exact archive members.
+This inspects recorded successful processes, not injected timeout/crash/cleanup
+failures, and does not grant crypto or milestone acceptance.
