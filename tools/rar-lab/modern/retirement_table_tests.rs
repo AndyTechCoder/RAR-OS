@@ -96,4 +96,66 @@ mod tests{
         assert_eq!(tables.used(),256);
         assert_eq!(unsafe{(base as *const u64).read()},0);
     }
+    fn leaf_pointer(pool:&Pool,tables:&paging::Tables,address:u64)->*mut u64{
+        let base=pool.address();let end=base+tables.used() as u64*4096;
+        let mut table=base;
+        for shift in [39,30,21]{
+            assert!(table>=base&&table+4096<=end&&table%4096==0);
+            let e=unsafe{(table as *const u64).add(((address>>shift)&511) as usize).read()};
+            assert_ne!(e&1,0);assert_eq!(e&0x80,0);table=e&0x000f_ffff_ffff_f000;
+        }
+        assert!(table>=base&&table+4096<=end&&table%4096==0);
+        unsafe{(table as *mut u64).add(((address>>12)&511) as usize)}
+    }
+    #[test]fn aperture_staging_seal_alias_and_view_transitions_are_exact(){
+        let region=staging::region(0x2000000,staging::ARENA_PAGES).unwrap();
+        let pool=Pool::new();let mut tables=unsafe{paging::Tables::new(pool.address())};
+        // Only test-owned tables are dereferenced; physical targets are numbers.
+        unsafe{
+            tables.map(model::Mapping{virtual_start:region.start,physical_start:region.start,
+                pages:513,writable:true,executable:false},region.start,region.end).unwrap();
+            tables.reserve_modern_verifier().unwrap();
+            tables.check_modern_verifier(region.start,false).unwrap();
+            tables.check_modern_staging(region.start,true).unwrap();
+        }
+        let used=tables.used();
+        let last=leaf_pointer(&pool,&tables,region.end-4096);
+        let original=unsafe{last.read()};
+        // Hardware A/D bits do not defeat validation; forbidden writable-user,
+        // executable, global/cache or wrong-physical aliases do.
+        unsafe{last.write(original|0x60);}
+        assert!(unsafe{tables.check_modern_staging(region.start,true)}.is_ok());
+        for bad in [original|4,original&!(1<<63),original|0x100,original|0x18,original^4096]{
+            unsafe{last.write(bad);}
+            assert!(unsafe{tables.set_modern_staging(region.start,true)}.is_err());
+            assert_eq!(entry(&pool,&tables,region.start).unwrap()&7,3);
+        }
+        unsafe{last.write(original);}
+        unsafe{
+            tables.set_modern_staging(region.start,true).unwrap();
+            tables.check_modern_staging(region.start,false).unwrap();
+            tables.publish_modern_verifier(region.start).unwrap();
+        }
+        for i in 0..513{
+            assert_eq!(entry(&pool,&tables,region.start+i*4096).unwrap()&7,1);
+            let e=entry(&pool,&tables,0x1400000+i*4096).unwrap();
+            assert_eq!(e&7,5);assert_ne!(e&(1<<63),0);
+            assert_eq!(e&0x000f_ffff_ffff_f000,region.start+i*4096);
+        }
+        assert_eq!(entry(&pool,&tables,0x13ff000),None);
+        assert_eq!(entry(&pool,&tables,0x1601000),None);
+        assert!(unsafe{tables.publish_modern_verifier(region.start)}.is_err());
+        let first=leaf_pointer(&pool,&tables,0x1400000);let ro=unsafe{first.read()};
+        unsafe{first.write(ro|2);}
+        assert!(unsafe{tables.retire_modern_verifier(region.start)}.is_err());
+        unsafe{
+            first.write(ro);tables.retire_modern_verifier(region.start).unwrap();
+            tables.check_modern_verifier(region.start,false).unwrap();
+            tables.set_modern_staging(region.start,false).unwrap();
+            tables.check_modern_staging(region.start,true).unwrap();
+        }
+        assert_eq!(tables.used(),used);
+        // No CR3 reload, INVLPG, OS code or VM runs in this source fixture.
+    }
+
 }

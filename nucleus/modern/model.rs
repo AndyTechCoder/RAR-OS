@@ -228,6 +228,15 @@ impl Runtime {
             p.caps.resolve(handle,MANAGE)?!=Object::Manager{return Err(Error::Denied);}
         Ok(())
     }
+    /// Fixed manager-only immutable staging inspection; no System/device grant.
+    pub fn stage_view(&self,caller:usize,handle:u64)->Result<(),Error>{
+        self.manager(caller,handle)?;
+        if self.recovery_required{return Err(Error::Denied);}Ok(())
+    }
+    pub fn stage_reject(&self,caller:usize,handle:u64)->Result<(),Error>{
+        self.stage_view(caller,handle)?;
+        if self.trial.is_some()||self.staged.is_some(){return Err(Error::Busy);}Ok(())
+    }
     fn endpoint_alive(&self,e:Endpoint)->bool{
         self.processes.get(e.slot as usize).is_some_and(|p|p.state==State::Active&&p.incarnation==e.incarnation)
     }
@@ -668,4 +677,18 @@ mod tests {
         let mut r=Runtime::new();let h=r.handle(0,5).unwrap();
         r.send(0,h,b"1").unwrap();r.send(0,h,b"2").unwrap();assert_eq!(r.send(0,h,b"3"),Err(Error::Full));
     }
+    #[test]fn immutable_stage_view_and_reject_are_manager_only(){
+        let mut r=Runtime::new();let handle=manager(&r);
+        assert_eq!(r.stage_view(8,handle),Ok(()));
+        assert_eq!(r.stage_reject(8,handle),Ok(()));
+        for caller in 0..TASKS{
+            if caller!=8{assert!(r.stage_view(caller,handle).is_err());assert!(r.stage_reject(caller,handle).is_err());}
+        }
+        assert!(r.stage_view(8,r.handle(8,SELF_CAP).unwrap()).is_err());
+        stage(&mut r,1,1);assert_eq!(r.stage_reject(8,handle),Err(Error::Busy));
+        r.begin_trial(8,handle,1).unwrap();assert_eq!(r.stage_reject(8,handle),Err(Error::Busy));
+        r.fault(Endpoint{slot:8,incarnation:1}).unwrap();
+        assert!(r.stage_view(8,handle).is_err());assert!(r.stage_reject(8,handle).is_err());
+    }
+
 }

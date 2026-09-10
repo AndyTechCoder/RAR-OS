@@ -17,6 +17,9 @@ pub const TICKS:u64=6;
 pub const DEVICE:u64=7;
 pub const TRIAL_READY:u64=8;
 pub const STAGE_COPY:u64=9;
+pub const STAGE_VIEW:u64=10;
+pub const STAGE_VIEW_ADDRESS:u64=0x1400000;
+pub const STAGE_VIEW_BYTES:usize=32;
 pub const STAGE_CAP:usize=10;
 pub const STAGE_REQUEST_BYTES:usize=48;
 pub const STAGE_REPLY_BYTES:usize=16;
@@ -131,6 +134,8 @@ pub fn device_op(operation:u64,value:u64,extra:u64)->Option<DeviceOp> {
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 pub enum StageRequest {
     Begin{length:usize,reply:u64},
+    Finish{seal:u64,reply:u64},
+    Abort{seal:u64,reply:u64},
     Append{seal:u64,offset:usize,pointer:u64,length:usize,reply:u64},
 }
 pub fn stage_request(raw:&[u8])->Option<StageRequest>{
@@ -143,6 +148,8 @@ pub fn stage_request(raw:&[u8])->Option<StageRequest>{
     match op{
         0 if seal==0&&offset==0&&pointer==0&&(896..=2_097_536).contains(&length)=>
             Some(StageRequest::Begin{length,reply}),
+        3 if seal!=0&&offset==0&&pointer==0&&length==0=>Some(StageRequest::Abort{seal,reply}),
+        2 if seal!=0&&offset==0&&pointer==0&&length==0=>Some(StageRequest::Finish{seal,reply}),
         1 if seal!=0&&pointer>=4096&&(1..=512).contains(&length)=>{
             let offset=usize::try_from(offset).ok()?;
             if offset.checked_add(length)?>2_097_536{return None;}
@@ -191,6 +198,10 @@ mod tests {
         }
         assert_eq!(stage_request(&stage_words([1,u64::MAX,512,0x600000,384,0x600100])),
             Some(StageRequest::Append{seal:u64::MAX,offset:512,pointer:0x600000,length:384,reply:0x600100}));
+        assert_eq!(stage_request(&stage_words([2,u64::MAX,0,0,0,0x600100])),
+            Some(StageRequest::Finish{seal:u64::MAX,reply:0x600100}));
+        for field in [2usize,3,4]{let mut words=[2,1,0,0,0,0x600100];words[field]=1;
+            assert_eq!(stage_request(&stage_words(words)),None);}
         let reply=stage_reply(u64::MAX,896);
         assert_eq!(&reply[..8],&u64::MAX.to_le_bytes());
         assert_eq!(&reply[8..],&896u64.to_le_bytes());

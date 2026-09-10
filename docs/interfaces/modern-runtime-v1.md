@@ -244,7 +244,56 @@ Syscall9 uses a48-byte canonical request and16-byte reply, full-u64 seals and
 a separate bounded512-byte readable-input helper. The original152-byte IPC
 bound is unchanged. The kernel alone chooses a logically Vacant, physically
 Clean, dead/root-zero Settings slot; copying is sequential and output pointers
-are checked before state mutation. No finish/seal/view/trial operation is yet
-available through this syscall. Exact encoding, error-atomicity and pending
-native protections are in modern-update-transaction.md, System-only staging
-copy syscall. This is an experimental source addition, not runtime acceptance.
+are checked before state mutation. FINISH/ABORT and the separate manager view
+are specified in the following immutable-verifier section; actual trial loading
+is still pending. The earlier copy-only checkpoint in modern-update-transaction.md
+is superseded for these operations by that section. This is experimental source
+integration, not runtime acceptance.
+
+
+## M4.2 immutable verifier window (source integration candidate)
+
+STAGE_COPY syscall9 retains its exact48-byte request and16-byte reply.
+Operation2 FINISH has nonzero seal, zero offset/pointer/length, and a checked
+reply pointer. It requires complete sequential copying and all-zero allocation
+padding. Before successful reply the kernel preflights every bootstrap/live
+root, removes supervisor write permission from all513 identity-mapped staging
+pages, reloads current CR3 under IF=0 with PGE/PCIDE off, then publishes only
+manager8's fixed RO/NX user window at0x1400000 (513 pages). Both adjacent pages
+remain absent. No byte becomes executable. Every future constructed root must
+inherit this read-only state while the sealed allocation exists.
+
+Operation3 ABORT has the same seal/zero-field framing, and is System-only before
+FINISH. It clears only a matching COPYING reservation; it cannot remove a sealed
+manager view or abort an accepted/running trial. Full non-elidable scrub and
+readback precede Empty; reply returns the old seal and accepted count0.
+Invalid reply spans are rejected before state mutation.
+
+STAGE_VIEW syscall10 uses manager8's existing caller-local Manager capability.
+Operation0: RDI cap, RSI0, RDX reply pointer, R10 exact32. Reply is four LEu64:
+seal, logical length, fixed window address0x1400000, kernel-reserved physical
+process slot5/7. Unknown op/extra bytes, stale or nonsealed state fail; System,
+apps and trial Settings cannot obtain this authority. The view's page padding
+is zero, but only the returned logical length is a signed-package input.
+
+Operation1: RDI cap, RSI1, RDX nonzero exact seal, R10 zero. Reject is allowed only
+before any staged executable/trial owns the reservation. Remove manager user
+PTEs and tracked readable range, flush current translations, restore supervisor
+writes across every root, flush again, and scrub/readback the full owned buffer.
+Only then publish Empty; seals are never reused. Raw scrub pointers derive from
+the Buffer owner's mutable slice, not an unrelated physical pointer.
+
+Native safety invariants: sole certified guest CPU; validated ring3 trap with
+IF=0; PGE and PCIDE off; exclusively kernel-owned table pools; all-root
+preflight before first alias change; no writable/executable/user staging alias
+outside the fixed manager view; no scheduling between mutation and TLB flush;
+no root reuse or candidate construction while stale aliases exist. Impossible
+internal map/context failures halt before exposure/reuse, rather than returning
+a misleading successful seal.
+
+Actual page-table-byte cloud tests cover guard absence, all513 exact aliases,
+A/D-bit tolerance, rejection of U/W/X/global/cache/wrong-physical entries,
+preflight nonmutation, RO/NX view publication/removal and no table allocation
+during transitions. Pure tests do not execute CR3/INVLPG or establish native
+guest evidence. System package IPC, manager verification, trial construction,
+cutover/fallback and cloud acceptance remain required before M4.2 completion.

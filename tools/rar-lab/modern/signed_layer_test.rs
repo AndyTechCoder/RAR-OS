@@ -108,10 +108,10 @@ mod system_media {
         for op in &before{if let Op::Write(s)=op{assert!((4099..4102).contains(s));}}
         for (sector,bytes) in &original{assert_eq!(media.0.borrow().blocks.get(sector),Some(bytes));}
         let mut copied=Vec::new();
-        assert_eq!(volume.copy_package(Slot::B,|length,offset,chunk|{
+        assert_eq!(volume.copy_prepared(&prepared,|length,offset,chunk|{
             assert_eq!(length,data.len());assert_eq!(offset,copied.len());
             assert!(chunk.len()<=512);copied.extend_from_slice(chunk);Ok(())
-        }).unwrap(),(data.len(),sha256::sha256(&data).unwrap()));
+        }).unwrap(),());
         assert_eq!(copied,data);
         assert_eq!(volume.record(),old);
         volume.publish(prepared,next).unwrap();
@@ -186,7 +186,7 @@ mod system_media {
         assert_eq!(volume.read_package(Slot::A,&mut out),Ok(package(0).len()));
         assert_eq!(&out[..package(0).len()],package(0));
         let count=media.0.borrow().ops.len();media.0.borrow_mut().fail=Some(count+1);
-        assert_eq!(volume.copy_package(Slot::A,|_,_,_|Ok(())),Err(Reject::Io));
+        assert_eq!(volume.read_stream(Slot::A,|_,_,_|Ok(())),Err(Reject::Io));
         assert!(volume.is_readonly());
     }
     #[test] fn system_length_padding_and_capacity_are_bounded_before_effects(){
@@ -207,7 +207,95 @@ mod system_media {
         let prepared=volume.prepare(&good).unwrap();
         assert_eq!(prepared.identity().length,1408);
         media.0.borrow_mut().blocks.get_mut(&4101).unwrap()[384]=1;
-        assert_eq!(volume.copy_package(Slot::B,|_,_,_|Ok(())),Err(Reject::Framing));
+        assert_eq!(volume.read_stream(Slot::B,|_,_,_|Ok(())),Err(Reject::Framing));
         assert!(!volume.is_readonly());
     }
+    #[test] fn system_prepared_copy_checks_selector_races_and_sink_prefix_failure(){
+        for position in [0usize,1,3]{
+            let (media,_,_)=seed();let mut volume=mount(media.clone());
+            let prepared=volume.prepare(&package(2)).unwrap();let mut calls=0;
+            if position==0{media.0.borrow_mut().blocks.insert(0,[0;512]);}
+            let result=volume.copy_prepared(&prepared,|_,_,_|{
+                calls+=1;
+                if calls==position{media.0.borrow_mut().blocks.insert(0,[0;512]);}
+                Ok(())
+            });
+            assert!(result.is_err());assert!(volume.is_readonly());
+            if position==0{assert_eq!(calls,0);}
+        }
+        let (media,_,next)=seed();let mut volume=mount(media.clone());
+        let stale=volume.prepare(&package(2)).unwrap();
+        let current=volume.prepare(&package(2)).unwrap();let mut called=false;
+        assert_eq!(volume.copy_prepared(&stale,|_,_,_|{called=true;Ok(())}),Err(Reject::Policy));
+        assert!(!called);assert!(!volume.is_readonly());
+        let mut prefix=0;
+        assert_eq!(volume.copy_prepared(&current,|_,_,bytes|{
+            prefix+=bytes.len();Err(())
+        }),Err(Reject::Sink));
+        assert_eq!(prefix,512);assert!(volume.is_readonly());
+        assert_eq!(volume.publish(current,next),Err(Reject::ReadOnly));
+        // The native caller must clear its partial reservation; no source test
+        // claims that a kernel abort or target execution occurred here.
+    }
+    fn installed_volume()->(Media,Volume<Media>,Record){
+        let (media,_,next)=seed();let mut volume=mount(media.clone());
+        let p=volume.prepare(&package(2)).unwrap();volume.publish(p,next).unwrap();
+        (media,volume,next)
+    }
+    #[test] fn system_authorized_fallback_preserves_payloads_and_high_water(){
+        let (media,mut volume,installed)=installed_volume();
+        // Content failure is not a transport fault; the committed exact prior
+        // remains available. Corrupt only the inactive-after-fallback B payload.
+        media.0.borrow_mut().blocks.get_mut(&4099).unwrap()[0]^=1;
+        assert_eq!(volume.read_stream(Slot::B,|_,_,_|Ok(())),Err(Reject::Framing));
+        assert!(!volume.is_readonly());let original=media.0.borrow().blocks.clone();
+        let p=volume.prepare_fallback().unwrap();
+        assert_eq!(p.identity().slot,Slot::A);assert_eq!(p.identity().generation,1);
+        let mut bytes=Vec::new();
+        volume.copy_prepared(&p,|_,_,part|{bytes.extend_from_slice(part);Ok(())}).unwrap();
+        let verified=manifest::verify(&bytes[..384],&bytes[384..],1).unwrap();
+        assert_eq!(verified.manifest().digest(),installed.previous().unwrap().digest());
+        let next=installed.fallback().unwrap();volume.publish(p,next).unwrap();
+        assert_eq!(volume.record(),next);assert_eq!(next.highest_committed_generation(),2);
+        assert_eq!(mount(media.clone()).record(),next);
+        for (sector,bytes) in original{if sector>=2{assert_eq!(media.0.borrow().blocks.get(&sector),Some(&bytes));}}
+        assert!(matches!(volume.prepare_fallback(),Err(Reject::Policy)));
+        assert!(matches!(volume.prepare(&package(2)),Err(Reject::Policy)));
+    }
+    #[test] fn system_fallback_prepare_and_publication_failures_never_rewrite_packages(){
+        let (media,mut volume,installed)=installed_volume();
+        media.0.borrow_mut().ops.clear();let p=volume.prepare_fallback().unwrap();
+        let preparation=media.0.borrow().ops.len();
+        media.0.borrow_mut().ops.clear();volume.publish(p,installed.fallback().unwrap()).unwrap();
+        let publication=media.0.borrow().ops.len();
+        for phase in 0..2{
+            for cut in 1..=if phase==0{preparation}else{publication}{
+                let (media,mut volume,installed)=installed_volume();
+                let p=if phase==1{Some(volume.prepare_fallback().unwrap())}else{None};
+                {let mut d=media.0.borrow_mut();d.ops.clear();d.fail=Some(cut);}
+                let failed=if let Some(p)=p{volume.publish(p,installed.fallback().unwrap()).is_err()}
+                    else{volume.prepare_fallback().is_err()};
+                assert!(failed);assert!(volume.is_readonly());
+                assert!(!media.0.borrow().ops.iter().any(|op|matches!(op,Op::Write(s) if *s>=2)));
+            }
+        }
+    }
+    #[test] fn system_maximum_package_io_stays_inside_its_slot(){
+        let (media,_,_)=seed();let mut volume=mount(media.clone());
+        let mut data=vec![0x5a;MAX_PACKAGE];data[..384].copy_from_slice(case(2).0);
+        data[56..60].copy_from_slice(&2_097_152u32.to_le_bytes());
+        media.0.borrow_mut().blocks.insert(system_volume::FIRST_RESERVED,[0xa5;512]);
+        let p=volume.prepare(&data).unwrap();assert_eq!(p.identity().length,MAX_PACKAGE);
+        let mut copied=0;
+        volume.copy_prepared(&p,|total,offset,chunk|{
+            assert_eq!(total,MAX_PACKAGE);assert_eq!(offset,copied);
+            assert_eq!(chunk,&data[offset..offset+chunk.len()]);copied+=chunk.len();Ok(())
+        }).unwrap();
+        assert_eq!(copied,MAX_PACKAGE);
+        assert_eq!(media.0.borrow().blocks.get(&system_volume::FIRST_RESERVED),Some(&[0xa5;512]));
+        assert!(media.0.borrow().ops.iter().all(|op|match op{
+            Op::Read(s)|Op::Write(s)=>*s<system_volume::FIRST_RESERVED,Op::Flush=>true
+        }));
+    }
+
 }

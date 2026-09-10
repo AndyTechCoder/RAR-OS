@@ -56,10 +56,10 @@ impl Process{
 struct Runtime{
     processes:[Process;TASKS],current:usize,arena:u64,proofs:u8,ready:bool,
     policy:Option<model::Runtime>,device:Option<native_pio::Adapter>,ticks:Option<u64>,
-    staging:Option<staging::Buffer<'static>>,
+    staging:Option<staging::Buffer<'static>>,bootstrap_tables:usize,stage_readonly:bool,stage_view:bool,
 }
 static mut RUNTIME:Runtime=Runtime{processes:[Process::EMPTY;TASKS],current:0,arena:0,proofs:0,ready:false,
-    policy:None,device:None,ticks:Some(0),staging:None};
+    policy:None,device:None,ticks:Some(0),staging:None,bootstrap_tables:0,stage_readonly:false,stage_view:false};
 fn private_region(arena:u64,index:usize)->u64{
     retirement::region(arena,boot::ARENA_PAGES,index)
         .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=PRIVATE-GEOMETRY"))
@@ -107,6 +107,7 @@ pub unsafe fn start(info:&boot::BootInfo)->!{
     let layout=pe::parse(SERVICE).unwrap_or_else(|_|fatal("RAR-PANIC:CODE=SERVICE-PE"));
     let runtime=unsafe{&mut *ptr::addr_of_mut!(RUNTIME)};
     runtime.arena=info.arena;
+    runtime.bootstrap_tables=info.table_used;
     let stage_region=staging::region(info.arena,boot::ARENA_PAGES)
         .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=STAGING-GEOMETRY"));
     if runtime.staging.is_some(){fatal("RAR-PANIC:CODE=STAGING-REINITIALIZE");}
@@ -164,6 +165,8 @@ pub unsafe fn start(info:&boot::BootInfo)->!{
         process.frame=frame;
         process.aperture=unsafe{tables.reserve_modern_aperture()}
             .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=RETIRE-APERTURE"));
+        if index==8{unsafe{tables.reserve_modern_verifier()}
+            .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=VERIFIER-RESERVE"));}
         process.table_used=tables.used();
         process.memory=retirement::Memory::Live;
     }
@@ -304,6 +307,20 @@ impl Runtime{
                             .begin(slot,length).map_err(stage_error)?;
                         (id.seal(),0,reply)
                     },
+                    abi::StageRequest::Abort{seal,reply}=>{
+                        self.buffer(reply,abi::STAGE_REPLY_BYTES,true)?;
+                        self.staging.as_ref().ok_or(Error::Denied)?.copying(seal).map_err(stage_error)?;
+                        if self.stage_readonly||self.stage_view{return Err(Error::Busy);}
+                        self.scrub_stage(seal);
+                        (seal,0,reply)
+                    },
+                    abi::StageRequest::Finish{seal,reply}=>{
+                        self.buffer(reply,abi::STAGE_REPLY_BYTES,true)?;
+                        let id=self.staging.as_mut().ok_or(Error::Denied)?
+                            .finish(seal).map_err(stage_error)?;
+                        self.seal_stage();
+                        (seal,id.length(),reply)
+                    },
                     abi::StageRequest::Append{seal,offset,pointer,length,reply}=>{
                         self.buffer(reply,abi::STAGE_REPLY_BYTES,true)?;
                         support::staging_buffer(&self.processes[current].ranges[..self.processes[current].range_count],
@@ -324,6 +341,35 @@ impl Runtime{
                 unsafe{ptr::copy_nonoverlapping(response.as_ptr(),reply as *mut u8,response.len());}
                 Ok(0)
             }
+            abi::STAGE_VIEW=>{
+                self.policy.as_ref().ok_or(Error::Denied)?.stage_view(current,frame.rdi)?;
+                match frame.rsi{
+                    0=>{
+                        if frame.r10!=abi::STAGE_VIEW_BYTES as u64{return Err(Error::Invalid);}
+                        self.buffer(frame.rdx,abi::STAGE_VIEW_BYTES,true)?;
+                        let stage=self.staging.as_ref().ok_or(Error::Denied)?;
+                        let id=stage.reserved().ok_or(Error::Stale)?;
+                        stage.view(id.seal()).map_err(stage_error)?;
+                        if !self.stage_readonly||!self.stage_view{return Err(Error::Busy);}
+                        let mut response=[0u8;abi::STAGE_VIEW_BYTES];
+                        for (i,value) in [id.seal(),id.length() as u64,abi::STAGE_VIEW_ADDRESS,id.slot() as u64].into_iter().enumerate(){
+                            response[i*8..i*8+8].copy_from_slice(&value.to_le_bytes());
+                        }
+                        // SAFETY: current manager owns the fully checked writable
+                        // reply; IF=0 prevents changes while copying initialized bytes.
+                        unsafe{ptr::copy_nonoverlapping(response.as_ptr(),frame.rdx as *mut u8,response.len());}
+                        Ok(0)
+                    },
+                    1=>{
+                        if frame.r10!=0{return Err(Error::Invalid);}
+                        self.policy.as_ref().unwrap().stage_reject(current,frame.rdi)?;
+                        let stage=self.staging.as_ref().ok_or(Error::Denied)?;
+                        stage.view(frame.rdx).map_err(stage_error)?;
+                        self.reject_stage(frame.rdx);Ok(0)
+                    },
+                    _=>Err(Error::Invalid),
+                }
+            }
             abi::TRIAL_READY=>{
                 if frame.rdx!=0||frame.r10!=0{return Err(Error::Invalid);}
                 self.policy.as_mut().ok_or(Error::Denied)?.ready(current,frame.rdi,frame.rsi)?;
@@ -333,6 +379,110 @@ impl Runtime{
             _=>Err(Error::Invalid),
         }
     }
+
+    /// Sole-CPU trap context shared with deferred physical retirement.
+    fn stage_context(&self)->u64{
+        let root:u64;let cr4:u64;let flags:u64;
+        // SAFETY: privileged reads only inside the certified guest trap.
+        unsafe{
+            core::arch::asm!("mov {},cr3",out(reg)root,options(nostack,preserves_flags));
+            core::arch::asm!("mov {},cr4",out(reg)cr4,options(nostack,preserves_flags));
+            core::arch::asm!("pushfq","pop {}",out(reg)flags);
+        }
+        retirement::context(root,private_region(self.arena,self.current),cr4,flags)
+            .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=STAGE-CONTEXT"));
+        root
+    }
+    /// Preflight all bootstrap/live roots before changing any alias. All roots
+    /// use the sole kernel-created identity mapping; no DMA/user writer exists.
+    /// IF=0 and PGE/PCIDE off make the final CR3 reload plus later root switches
+    /// sufficient to retire every cached writable translation on the sole CPU.
+    fn stage_permissions(&mut self,was_writable:bool){
+        let root=self.stage_context();
+        if self.stage_readonly==was_writable||self.stage_view{
+            fatal("RAR-PANIC:CODE=STAGE-ALIAS-ORDER");
+        }
+        let region=staging::region(self.arena,boot::ARENA_PAGES).unwrap();
+        let mut roots=[(0u64,0usize);TASKS+1];
+        roots[0]=(self.arena,self.bootstrap_tables);
+        for (i,p) in self.processes.iter().enumerate(){roots[i+1]=(p.root,p.table_used);}
+        for &(base,used) in &roots{
+            if base==0{continue;}
+            // SAFETY: exclusively owned arena page-table pools, IF=0. This
+            // first pass performs no allocation or mutation in any address space.
+            unsafe{Tables::resume(base,used).check_modern_staging(region.start,was_writable)}
+                .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=STAGE-ALIAS-PREFLIGHT"));
+        }
+        for &(base,used) in &roots{
+            if base==0{continue;}
+            // SAFETY: identical full-root preflight above, no scheduling or
+            // intervening writer. Any impossible failure halts before exposure.
+            unsafe{Tables::resume(base,used).set_modern_staging(region.start,was_writable)}
+                .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=STAGE-ALIAS-CHANGE"));
+        }
+        // SAFETY: same verified current root; invalidates nonglobal translations.
+        unsafe{core::arch::asm!("mov cr3,{}",in(reg)root,options(nostack,preserves_flags));}
+        self.stage_readonly=was_writable;
+    }
+    fn seal_stage(&mut self){
+        if self.current!=9||self.stage_readonly||self.stage_view||
+            self.policy.as_ref().unwrap().state(8)!=Ok(model::State::Active)||
+            self.processes[8].memory!=retirement::Memory::Live{
+            fatal("RAR-PANIC:CODE=STAGE-MANAGER");
+        }
+        let region=staging::region(self.arena,boot::ARENA_PAGES).unwrap();
+        let manager=self.processes[8];
+        if manager.range_count>=manager.ranges.len(){fatal("RAR-PANIC:CODE=STAGE-RANGE");}
+        // SAFETY: inactive manager's fixed paths were preallocated before boot.
+        unsafe{Tables::resume(manager.root,manager.table_used).check_modern_verifier(region.start,false)}
+            .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=STAGE-VIEW-PREFLIGHT"));
+        self.stage_permissions(true);
+        // SAFETY: ALL writable aliases have been removed, TLBs invalidated.
+        // Manager's only new mapping is fixed RO/NX with absent guards.
+        unsafe{Tables::resume(manager.root,manager.table_used).publish_modern_verifier(region.start)}
+            .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=STAGE-VIEW-PUBLISH"));
+        self.processes[8].range(abi::STAGE_VIEW_ADDRESS,
+            abi::STAGE_VIEW_ADDRESS+staging::BUFFER_BYTES as u64,false,false);
+        self.stage_view=true;
+    }
+    fn reject_stage(&mut self,seal:u64){
+        let root=self.stage_context();
+        if self.current!=8||!self.stage_readonly||!self.stage_view{
+            fatal("RAR-PANIC:CODE=STAGE-REJECT-ORDER");
+        }
+        let region=staging::region(self.arena,boot::ARENA_PAGES).unwrap();
+        let manager=self.processes[8];
+        // SAFETY: validated current manager root, sole reader, no trial/staged
+        // executable exists. Remove all user aliases before enabling any writer.
+        unsafe{Tables::resume(manager.root,manager.table_used).retire_modern_verifier(region.start)}
+            .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=STAGE-VIEW-RETIRE"));
+        unsafe{core::arch::asm!("mov cr3,{}",in(reg)root,options(nostack,preserves_flags));}
+        let p=&mut self.processes[8];
+        if p.range_count==0||p.ranges[p.range_count-1].start!=abi::STAGE_VIEW_ADDRESS{
+            fatal("RAR-PANIC:CODE=STAGE-RANGE-RETIRE");
+        }
+        p.range_count-=1;p.ranges[p.range_count]=EMPTY_RANGE;self.stage_view=false;
+        self.stage_permissions(false);
+        self.scrub_stage(seal);
+    }
+    fn scrub_stage(&mut self,seal:u64){
+        self.stage_context();
+        if self.stage_readonly||self.stage_view{fatal("RAR-PANIC:CODE=STAGE-SCRUB-ORDER");}
+        self.staging.as_mut().unwrap().clear_with(seal,|owned|{
+            // SAFETY: pointers derive from the exclusive buffer borrow. The
+            // caller removed every user view and restored supervisor writes,
+            // flushing translations first. Full non-elidable scrub/readback;
+            // no allocator, arbitrary address or owner data is involved.
+            unsafe{
+                let bytes=owned.as_mut_ptr().cast::<u64>();
+                for i in 0..owned.len()/8{bytes.add(i).write_volatile(0);}
+                for i in 0..owned.len()/8{
+                    if bytes.add(i).read_volatile()!=0{fatal("RAR-PANIC:CODE=STAGE-SCRUB");}
+                }
+            }
+        }).unwrap_or_else(|_|fatal("RAR-PANIC:CODE=STAGE-CLEAR"));
+    }
+
     fn kill(&mut self,index:usize){
         if self.processes[index].state==State::Dead{return;}
         if index!=15{

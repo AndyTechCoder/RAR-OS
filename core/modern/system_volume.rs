@@ -51,9 +51,9 @@ pub struct Identity {
     pub length:usize, pub package_hash:[u8;32],
 }
 /// Private fields and no Clone: only this volume can produce a prepared state.
-pub struct Prepared {before:Selection,identity:Identity}
+pub struct Prepared {before:Selection,identity:Identity,fallback:bool}
 impl Prepared {pub fn identity(&self)->Identity{self.identity}}
-pub struct Volume<I:Io>{io:I,selected:Selection,locked:bool,next:Option<u64>,pending:Option<Identity>}
+pub struct Volume<I:Io>{io:I,selected:Selection,locked:bool,next:Option<u64>,pending:Option<(Identity,bool)>}
 impl<I:Io> Volume<I> {
     pub fn mount(mut io:I,capacity:u32)->Result<Self,Reject> {
         if capacity!=SECTORS{return Err(Reject::Capacity);}
@@ -85,12 +85,64 @@ impl<I:Io> Volume<I> {
     /// Bounded streaming bridge to System STAGE_COPY: one sector on the stack.
     /// Sink receives total logical length, sequential offset and exact bytes.
     /// It must not activate or accept the partially copied package on failure.
-    pub fn copy_package<F>(&mut self,slot:Slot,mut sink:F)->Result<(usize,[u8;32]),Reject>
+    pub fn read_stream<F>(&mut self,slot:Slot,mut sink:F)->Result<(usize,[u8;32]),Reject>
         where F:FnMut(usize,usize,&[u8])->Result<(),()>
     {
         self.open()?;
         let result=self.stream_inner(slot,&mut sink);
         if matches!(result,Err(Reject::Io|Reject::Changed)){self.locked=true;}
+        result
+    }
+    /// Only this transaction-bound route may feed an install/fallback staging
+    /// sink. A generic read is never proof of pending transaction membership.
+    pub fn copy_prepared<F>(&mut self,prepared:&Prepared,mut sink:F)->Result<(),Reject>
+        where F:FnMut(usize,usize,&[u8])->Result<(),()>
+    {
+        self.open()?;
+        self.matches(prepared)?;
+        let result=(||{
+            self.observe()?;
+            let (length,hash)=self.stream_inner(prepared.identity.slot,&mut sink)?;
+            if length!=prepared.identity.length||hash!=prepared.identity.package_hash{return Err(Reject::Changed);}
+            self.observe()
+        })();
+        if result.is_err(){
+            self.pending=None;
+            // A sink prefix may already exist in the kernel. The caller must
+            // explicitly abort/clear it; it must never finish or trial that seal.
+            // Lock this transaction owner so no implicit retry can reuse it.
+            self.locked=true;
+        }
+        result
+    }
+    fn matches(&self,prepared:&Prepared)->Result<(),Reject>{
+        if prepared.before!=self.selected||self.pending!=Some((prepared.identity,prepared.fallback))||
+            prepared.identity.transaction.checked_add(1)!=self.next{return Err(Reject::Policy);}
+        Ok(())
+    }
+    /// Read the exact committed prior; never overwrite it or lower high-water.
+    /// Signature and health still belong to the sealed manager/native protocol.
+    pub fn prepare_fallback(&mut self)->Result<Prepared,Reject>{
+        self.open()?;
+        let prior=self.record().previous().ok_or(Reject::Policy)?;
+        let transaction=self.next.ok_or(Reject::Policy)?;
+        let result=(||{
+            self.observe()?;
+            let mut declared=None;
+            let (length,package_hash)=self.stream_inner(prior.slot(),&mut |_,offset,bytes|{
+                if offset==0 {
+                    let m=manifest::Manifest::parse(&bytes[..manifest::SIZE]).map_err(|_|())?;
+                    declared=Some((m.generation(),m.digest()));
+                }Ok(())
+            })?;
+            if declared!=Some((prior.generation(),prior.digest())){return Err(Reject::Policy);}
+            self.observe()?;
+            let identity=Identity{transaction,slot:prior.slot(),generation:prior.generation(),
+                digest:prior.digest(),length,package_hash};
+            self.next=transaction.checked_add(1);self.pending=Some((identity,true));
+            Ok(Prepared{before:self.selected,identity,fallback:true})
+        })();
+        if result.is_err(){self.pending=None;self.locked=true;}
         result
     }
     fn stream_inner<F>(&mut self,slot:Slot,sink:&mut F)->Result<(usize,[u8;32]),Reject>
@@ -144,8 +196,8 @@ impl<I:Io> Volume<I> {
             if actual!=block(package,index){return Err(Reject::Changed);}
         }
         self.observe()?;
-        self.pending=Some(identity);
-        Ok(Prepared{before:self.selected,identity})
+        self.pending=Some((identity,false));
+        Ok(Prepared{before:self.selected,identity,fallback:false})
     }
     /// Storage-only publication. The fixed System/Manager lifecycle protocol
     /// MUST bind transaction/seal identity, finish verified trial health and all
@@ -154,10 +206,10 @@ impl<I:Io> Volume<I> {
     /// This function grants no execution or lifecycle authority.
     pub fn publish(&mut self,prepared:Prepared,next:Record)->Result<(),Reject>{
         self.open()?;
-        if prepared.before!=self.selected||self.pending!=Some(prepared.identity){return Err(Reject::Policy);}
-        // A newer prepare invalidates every outstanding older token, even when
-        // it staged byte-identical content. Counter exhaustion does not wrap.
-        if prepared.identity.transaction.checked_add(1)!=self.next{return Err(Reject::Policy);}
+        self.matches(&prepared)?;
+        if prepared.fallback&&self.record().fallback().map_err(|_|Reject::Policy)?!=next{
+            return Err(Reject::Policy);
+        }
         let id=prepared.identity;
         if next.active().slot()!=id.slot||next.active().generation()!=id.generation||
             next.active().digest()!=id.digest{return Err(Reject::Policy);}
@@ -199,4 +251,33 @@ mod tests {
         assert_eq!(sectors(MAX_PACKAGE),SLOT_SECTORS as usize);
         assert_eq!(MAX_PACKAGE,2_097_536);
     }
+    #[test]fn transaction_full_width_exhaustion_cannot_wrap_or_restage(){
+        use std::collections::BTreeMap;
+        struct Media{blocks:BTreeMap<u32,[u8;512]>,calls:usize}
+        impl Io for Media{
+            fn read(&mut self,s:u32)->Result<[u8;512],()>{self.calls+=1;Ok(*self.blocks.get(&s).unwrap_or(&[0;512]))}
+            fn write(&mut self,s:u32,b:&[u8;512])->Result<(),()>{self.calls+=1;self.blocks.insert(s,*b);Ok(())}
+            fn flush(&mut self)->Result<(),()>{self.calls+=1;Ok(())}
+        }
+        // Structurally valid public fixture record; no signature/health claim.
+        let mut record=[0;512];record[..8].copy_from_slice(b"RARSYS00");
+        record[10..12].copy_from_slice(&512u16.to_le_bytes());record[14]=255;
+        for offset in [16usize,24,32,40]{record[offset..offset+8].copy_from_slice(&1u64.to_le_bytes());}
+        record[64..96].fill(1);let hash=sha256(&record[..480]).unwrap();record[480..].copy_from_slice(&hash);
+        let mut blocks=BTreeMap::new();blocks.insert(0,record);
+        let mut volume=Volume::mount(Media{blocks,calls:0},SECTORS).unwrap();
+        let mut package=vec![0;896];package[..8].copy_from_slice(b"RARMODL0");
+        package[10..12].copy_from_slice(&384u16.to_le_bytes());package[12]=1;
+        package[16..40].copy_from_slice(b"rar.alpha.ed25519.v0\0\0\0\0");
+        package[56..60].copy_from_slice(&512u32.to_le_bytes());package[72]=2;package[288..320].fill(2);
+        volume.next=Some(u64::MAX);
+        let last=volume.prepare(&package).unwrap();assert_eq!(last.identity().transaction,u64::MAX);
+        assert_eq!(volume.next,None);volume.copy_prepared(&last,|_,_,_|Ok(())).unwrap();
+        let calls=volume.io.calls;assert!(matches!(volume.prepare(&package),Err(Reject::Policy)));
+        assert_eq!(volume.io.calls,calls);assert_eq!(volume.next,None);
+        let stale=Prepared{before:last.before,identity:Identity{transaction:1,..last.identity},fallback:false};
+        assert_eq!(volume.copy_prepared(&stale,|_,_,_|panic!("stale sink")),Err(Reject::Policy));
+        assert_eq!(volume.io.calls,calls);
+    }
+
 }

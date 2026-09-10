@@ -1,25 +1,33 @@
-# Latest M4 checkpoint — M4.2 implementation started, 2026-09-10
+# Latest M4.2 source integration checkpoint — 2026-09-10
 
-M4.1 remains COMPLETE at accepted snapshotfd1982665b81ba2e672e0044165d68e09daa47f0.
-M4.2 remains INCOMPLETE: no real signed Settings replacement is claimed yet.
-The owner approved System-only STAGE_COPY and explicitly directed full M4.2.
-That approval is recorded; it is no longer a blocker.
+M4.1 remains complete; M4.2 is NOT complete and no updated Settings VM proof is
+claimed. The owner-approved staging syscall candidate is integrated. Its three
+historical regression checks passed; Specifications34509010239 was superseded/
+cancelled when the follow-up source head was pushed, not recorded as a pass.
 
-Commitbea5875305665d873b12a96ab07726328812816a integrated the exact reviewed
-kernel staging-copy candidate without reverting M4.1. Foundation34509010224,
-Platform34509010356 and Desktop34509010328 passed. Specifications34509010239
-was still running when this checkpoint was composed.
+System package adapter commitf912659711b9dd7679959212cbf246638f6c4da5 passed
+Foundation34510775679, Platform34510775671 and Desktop34510775680.
+Specifications34510775667 also completed successfully. All four exact-head
+source checks passed; this does not validate the later changes below.
+Independent review found two integration gaps: unbound generic readback and
+missing existing-prior fallback. This change binds copy_prepared to pending
+identity/selection with sticky sink failure and implements exact-prior,
+no-package-write fallback publication. Matching fault/race/max-size tests are
+included. Review of these fixes remains pending.
 
-This source change adds the fixed System package adapter and transaction-bound
-preparation/publication, streaming readback, contract refinement and fault tests.
-It is not yet connected to the native System service or accepted runtime evidence.
-No source check or review is claimed for this new change until its exact head
-passes. Next: immutable kernel sealing/manager view, fixed manager/System
-correlation, actual trial construction, health/durable cutover/fallback, and
-cloud demonstrations with peer apps alive and unchanged Data. M4.3 is not started.
+This change also implements native staging FINISH, System COPYING-only ABORT,
+the manager-only RO/NX view and pre-trial rejection, all-root writable-alias
+retirement/TLB ordering, and full non-elidable scrub before reuse. Exact
+page-table byte tests and syscall/model tests accompany the contract. These
+changes have not yet passed independent review, exact-head cloud checks or
+native guest validation; they do not constitute M4.2 acceptance.
 
-All repository mutations are remote GitHub API operations. No local Mac/SSD
-file creation, edits, deletion, downloads, builds or OS/VM execution.
+Remaining: fixed System/manager protocol and signed-byte verification; actual
+trial PE construction, health, durable cutover and fresh-incarnation fallback;
+visible changed Settings while peers remain alive; rejection/cut/rollback
+evidence and exact Data preservation. No merge or v0.4 release is authorized by
+this checkpoint. All work is GitHub API-only; no Mac/SSD file mutation, download,
+build, deletion or RAR target/VM execution.
 
 ---
 

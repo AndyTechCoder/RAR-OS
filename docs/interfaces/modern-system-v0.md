@@ -272,3 +272,31 @@ prepare/publication I/O call failures, stale token/record mismatch, changed
 package/selector, dishonest successful write ACK, malformed bounds/padding and
 content-versus-transport failure. These are source tests, not native System PIO,
 health, fallback, immutable-map or visible Settings replacement evidence.
+
+
+### Bound staging-copy and existing-prior fallback
+
+Only copy_prepared may feed the native STAGE_COPY transaction. It requires the
+same volume's pending identity and mounted selection, checks selection before
+and after streaming, and compares exact logical length/full-package hash.
+Any I/O, changed identity, invalid content or partial sink failure invalidates
+pending state and locks the transaction owner. After sink failure the caller
+must explicitly issue kernel ABORT for its COPYING reservation; it cannot
+FINISH or trial the partial copy. Generic read_stream/read_package is not a
+transaction-authorized staging path.
+
+prepare_fallback reads only the current selector's exact previous slot,
+generation and manifest digest, observes selection around that read, and creates
+a distinct pending identity without any package write or generation decrease.
+The manager must still reverify the sealed exact prior at floor1 plus committed
+identity, and health-test a fresh incarnation. Publication of that token accepts
+only the exact Record::fallback successor, retaining the high-water mark and
+removing the prior pointer. A second fallback without a new successful install
+fails. Corrupt prior, transport failure or selector change halts this operation;
+no factory scan, autoformat or resurrection of the retired process is allowed.
+
+Source fixtures now include selector changes before/during/after copy, stale
+copy identity, sink-prefix failure refusing publication, exact-prior fallback,
+all fallback preparation/publication I/O call failures, and maximum2097536-byte
+package preparation/readback with reserved-tail preservation. Actual native
+health, sink abort, process replacement and crash-cut tests remain pending.

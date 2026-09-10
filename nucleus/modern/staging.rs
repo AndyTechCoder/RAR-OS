@@ -99,6 +99,17 @@ impl<'a> Buffer<'a> {
         Ok(&self.bytes[..id.length])
     }
     pub fn reserved(&self)->Option<Identity>{self.identity}
+    pub fn copying(&self,seal:u64)->Result<Identity,Error>{
+        let id=self.identity(seal)?;if self.phase!=Phase::Copying{return Err(Error::State);}Ok(id)
+    }
+    /// Native caller removes all external aliases before supplying a non-elidable
+    /// eraser. The mutable byte borrow keeps raw scrub pointers derived from this
+    /// allocation owner; a failed scrub never publishes Empty or resets seals.
+    pub fn clear_with<F:FnOnce(&mut[u8])>(&mut self,seal:u64,erase:F)->Result<(),Error>{
+        self.identity(seal)?;erase(self.bytes);
+        if self.bytes.iter().any(|&b|b!=0){return Err(Error::State);}
+        self.phase=Phase::Empty;self.identity=None;self.copied=0;Ok(())
+    }
     /// Only after the native adapter has removed all external mappings.
     /// Clears the full buffer (not just the latest package). This is byte-level
     /// reuse hygiene; architectural TLB/alias retirement is a separate duty.
@@ -208,4 +219,18 @@ mod tests{
         assert_eq!(b.begin(7,MIN_PACKAGE),Err(Error::Exhausted));
         assert_eq!(b.reserved(),None);assert!(b.bytes.iter().all(|&x|x==0));
     }
+    #[test]fn native_eraser_must_clear_full_buffer_before_empty(){
+        let mut bytes=vec![0;BUFFER_BYTES];let mut b=Buffer::new(&mut bytes).unwrap();
+        let id=b.begin(7,MIN_PACKAGE).unwrap();b.append(id.seal(),0,&[7;512]).unwrap();
+        assert_eq!(b.copying(id.seal()),Ok(id));
+        assert_eq!(b.clear_with(id.seal(),|_|{}),Err(Error::State));
+        assert_eq!(b.reserved(),Some(id));
+        b.clear_with(id.seal(),|bytes|bytes.fill(0)).unwrap();
+        assert_eq!(b.reserved(),None);
+        let next=b.begin(7,MIN_PACKAGE).unwrap();assert!(next.seal()>id.seal());
+        fill(&mut b,next,1);b.finish(next.seal()).unwrap();
+        assert_eq!(b.copying(next.seal()),Err(Error::State));
+        assert_eq!(b.clear_with(id.seal(),|_|panic!("stale eraser called")),Err(Error::Stale));
+    }
+
 }
