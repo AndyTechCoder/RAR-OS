@@ -61,14 +61,15 @@ def receipt(metadata,run,fixed):
         event="workflow_dispatch",head_branch="main",status="completed",conclusion="success",
         path=fixed["workflow"],repository=repo,head_repository=repo))
 
-def archive(raw,fixed):
+def archive(raw,fixed,*,challenge=False):
+    if type(challenge) is not bool:raise Invalid("exact archive mode")
     if (type(raw) is not bytes or len(raw)!=fixed["size"] or
         hashlib.sha256(raw).hexdigest()!=fixed["digest"]):
         raise Invalid("whole fixed ZIP identity before parsing")
     members={}
     with zipfile.ZipFile(io.BytesIO(raw)) as source:
         entries=source.infolist()
-        if not 1<=len(entries)<=7000:raise Invalid("bounded member count")
+        if not 1<=len(entries)<=(10000 if challenge else 7000):raise Invalid("bounded member count")
         total=0
         for entry in entries:
             name=entry.filename;mode=entry.external_attr>>16

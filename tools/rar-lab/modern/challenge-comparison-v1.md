@@ -48,8 +48,8 @@ bounds/types, all324 RAR results before references, complete retention failure,
 972-call accounting and unchanged fixed-mode behavior. Synthetic callback
 results are not crypto evidence.
 
-Remaining activation work: focused review and source checks, trusted-main
-controller opt-in, actual fresh-challenge run, retained independent inspection,
+Remaining activation work: source checks, reviewed trusted-main merge,
+actual fresh-challenge run, retained independent inspection,
 and confinement/crash/timeout/cleanup tests. No full M4.1 or M4 completion is
 claimed. This change does not include or authorize the pending System-only
 kernel staging capability.
@@ -68,10 +68,15 @@ retained seed, reconstructs both complete envelopes, compares exact bytes and
 the claimed report, and never calls an adapter. Negative fixtures cover seed,
 version, ordering, identity, counts, noncanonical JSON and altered evidence.
 retained_checkpoint.crypto also requires explicit challenge mode; its historical
-fixed-artifact entry continues using v0 with unchanged receipts. A new cloud
-artifact acquisition/inspection invocation remains to be connected after the
-challenge run; the historical 7,000-member acquisition cap is not reused for
-the larger v1 artifact. This does not claim an independently acquired v1 receipt.
+fixed-artifact entry continues using v0 with unchanged receipts. The separate cloud crypto_inspection entry accepts exact run/artifact IDs and
+source SHA, validates successful first-attempt main workflow metadata from
+GitHub, verifies the full archive digest before parsing and opts into v1 replay.
+It uses an explicit 10,000-member cap matching the existing producer, while
+historical v0 keeps 7,000. Compressed input remains at most 32 MiB, expanded
+content 256 MiB and each member 32 MiB. Nothing is extracted or executed.
+The ephemeral token is cleared before parsing and errors are redacted. The
+entry has a 600-second process alarm, 180-second CPU limit and 1.5-GiB address
+space; the workflow timeout is 12 minutes. This does not claim an actual receipt.
 
 Activation requires source checks and independent review followed by a
 normal reviewed trusted-main merge before dispatch. Draft runtime helpers are
