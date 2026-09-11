@@ -280,3 +280,32 @@ map_user call promotes intermediate table permissions. It checks17 independently
 built test-owned roots and bounded table use. This executes actual table-building
 functions in cloud process memory, not privileged instructions or guest startup;
 certified-VM behavior remains required.
+
+
+## Owner approval and native loader bridge — 2026-09-11
+
+The owner explicitly approved continuing the M4.2 native loader/lifecycle bridge
+after the permission gate requested that decision ("I approve. Continue to
+finish M4.2 fully"). This covers GitHub-only implementation of the independently
+reviewed sealed-buffer/trial design above, with independent source review and
+certified-cloud-only validation still mandatory. It is not acceptance of all
+ADR0034, permission for local mutation/execution, a merge approval without
+evidence, or a production security claim.
+
+The native bridge reads resource geometry and image identity from the exact
+kernel-owned sealed bytes after manager authentication. It removes the manager
+view before constructing a fresh process in the reserved Clean Settings stride.
+The fixed supervisor RW/NX construction aperture is removed and invalidated
+before any user RX mapping. Trial Boot has only one-shot health authority;
+four stack pages, initialized SIMD/register/private state, and Runnable-last
+publication are mandatory. Failed construction remains logically revoked and
+physically Retiring until a surviving trap removes mappings and erases the
+whole stride. A caller cannot convert a dirty or partially mapped slot to Clean.
+
+Source support now exists for precomputing candidate ACTIVE capability grants
+before durable selector I/O. The prepared object contains only candidate state,
+not a snapshot of peers or their queues. Post-I/O application revalidates exact
+trial identity and does not resurrect a prior component that faulted meanwhile.
+The native durable ACK/cutover path and complete boot selection barrier still
+need integration; these methods alone do not authorize selector publication or
+establish runtime M4.2 acceptance.

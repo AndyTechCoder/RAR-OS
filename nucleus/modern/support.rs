@@ -83,9 +83,64 @@ pub fn bootstrap(policy:&model::Runtime,role:usize,entry:u64,pitch:u64,format:u6
     }
     if !abi::valid_boot(&b){return Err(Error::Invalid);}Ok(b)
 }
+/// Geometry only, NOT signature or generation-policy verification. The native
+/// caller reads this from its sealed buffer after manager authentication.
+pub struct StageMetadata{pub image_bytes:usize,pub generation:u64,pub digest:[u8;32],pub budget:u32}
+pub fn stage_metadata(bytes:&[u8])->Result<StageMetadata,Error>{
+    if !(896..=2_097_536).contains(&bytes.len()){return Err(Error::Invalid);}
+    let word=|p:usize|u32::from_le_bytes(bytes[p..p+4].try_into().unwrap());
+    let wide=|p:usize|u64::from_le_bytes(bytes[p..p+8].try_into().unwrap());
+    let image_bytes=word(60) as usize;let generation=wide(72);
+    let digest: [u8;32]=bytes[288..320].try_into().unwrap();let budget=word(232);
+    if word(56) as usize!=bytes.len()-384||image_bytes==0||image_bytes>128*1024||
+        image_bytes%4096!=0||wide(64)!=7||generation==0||digest==[0;32]||
+        !(1..=100).contains(&budget)||word(236)!=0||word(240)!=16384{
+        return Err(Error::Invalid);
+    }
+    Ok(StageMetadata{image_bytes,generation,digest,budget})
+}
+/// A trial has only its one-shot health capability, never production grants.
+pub fn trial_bootstrap(policy:&model::Runtime,trial:model::Trial,entry:u64)->Result<abi::Boot,Error>{
+    let endpoint=trial.endpoint();
+    if policy.trial()!=Some(trial)||policy.state(endpoint.slot as usize)?!=model::State::Trial{
+        return Err(Error::Stale);
+    }
+    let mut b=abi::Boot{magic:abi::MAGIC,version:abi::VERSION,bytes:abi::BOOT_BYTES,
+        role:5,phase:abi::TRIAL,generation:endpoint.incarnation,entry,
+        health_token:trial.token(),..abi::Boot::EMPTY};
+    b.caps[model::HEALTH_CAP]=policy.handle(endpoint.slot as usize,model::HEALTH_CAP)?;
+    for i in 0..model::PRINCIPALS{b.peers[i]=policy.binding(i)?.map_or(0,|e|e.incarnation);}
+    if !abi::valid_boot(&b){return Err(Error::Invalid);}Ok(b)
+}
 #[cfg(test)]
 mod tests{
     use super::*;
+    #[test] fn sealed_metadata_rejects_unbounded_or_mismatched_resources(){
+        let mut b=[0u8;896];b[56..60].copy_from_slice(&512u32.to_le_bytes());
+        b[60..64].copy_from_slice(&8192u32.to_le_bytes());b[64]=7;b[72]=2;
+        b[288..320].fill(1);b[232]=100;b[240..244].copy_from_slice(&16384u32.to_le_bytes());
+        assert_eq!(stage_metadata(&b).unwrap().budget,100);
+        for n in [0,383,895]{assert!(stage_metadata(&b[..n]).is_err());}
+        for (p,v) in [(56,513u32),(60,0),(60,4097),(60,131073),(64,8),
+            (232,0),(232,101),(236,1),(240,65536),(72,0)]{
+            let mut bad=b;bad[p..p+4].copy_from_slice(&v.to_le_bytes());
+            assert!(stage_metadata(&bad).is_err());
+        }
+        b[288..320].fill(0);assert!(stage_metadata(&b).is_err());
+    }
+    #[test] fn sealed_trial_bootstrap_has_only_health_authority(){
+        let mut r=model::Runtime::new();let h=r.handle(8,model::MANAGER_CAP).unwrap();
+        r.authenticated_stage(8,h,17,7,[1;32],2,50).unwrap();
+        let trial=r.begin_trial(8,h,17).unwrap();
+        let b=trial_bootstrap(&r,trial,0x401000).unwrap();
+        assert!(abi::valid_boot(&b));assert_eq!(b.phase,abi::TRIAL);
+        assert_eq!(b.health_token,trial.token());assert_eq!(b.generation,trial.endpoint().incarnation);
+        for i in 0..model::CAP_SLOTS{assert_eq!(b.caps[i]!=0,i==model::HEALTH_CAP);}
+        assert_eq!((b.framebuffer,b.device_sectors),(0,0));
+        assert!(trial_bootstrap(&r,trial,0x500000).is_err());
+        r.ready(trial.endpoint().slot as usize,b.caps[model::HEALTH_CAP],trial.token()).unwrap();
+        assert!(trial_bootstrap(&r,trial,0x401000).is_err());
+    }
     #[test]fn real_initial_bootstrap_graph_and_isolated_idle(){
         let r=model::Runtime::new();
         for role in INITIAL{

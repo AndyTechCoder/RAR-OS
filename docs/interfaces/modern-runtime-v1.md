@@ -297,3 +297,38 @@ preflight nonmutation, RO/NX view publication/removal and no table allocation
 during transitions. Pure tests do not execute CR3/INVLPG or establish native
 guest evidence. System package IPC, manager verification, trial construction,
 cutover/fallback and cloud acceptance remain required before M4.2 completion.
+
+
+## M4.2 manager-only trial bridge (source candidate)
+
+All additions use syscall10 STAGE_VIEW with the existing manager capability in
+RDI. No new capability is granted to System, Data or applications. The manager
+must first authenticate the exact immutable view using the intact selected
+generation policy. Accepting a seal is its verification decision; the kernel
+does not implement signature policy.
+
+- Operation2: RSI2, RDX exact seal, R10 writable32-byte response. The kernel
+  derives metadata and PE layout from the sealed reservation, independently
+  checks resource/W^X geometry, removes the manager view and constructs a
+  fresh health-only trial. Reply is four LEu64: seal, token, physical slot,
+  full incarnation. Validate the whole output before mutation. Failure returns
+  no reply, retains no runnable partial process and never activates the old
+  candidate. Any dirty partial stride is retired before reuse.
+- Operation3: RSI3, RDX exact seal, R10=0. Release after the trial/staged policy
+  state is gone and physical retirement is complete. The verifier view must
+  already be absent. Restore supervisor writes only after all-root checks and
+  TLB invalidation, then erase/read back the full allocation.
+- Operation4: RSI4, RDX exact trial token, R10=0. Abort exact current trial and
+  revoke it; physical destruction is deferred to a surviving trap.
+- Operation5: RSI5, RDX exact seal, R10 writable32-byte response. Return four
+  LEu64: seal, trial token, full incarnation, kernel phase1 Trial or2 Healthy.
+  Missing/stale trial returns an error, never an uncorrelated success flag.
+
+Trial construction uses a16KiB user stack instead of the initial64KiB service
+stack. Native user-return checks use the actual per-process upper bound.
+Guard pages are absent. A Healthy trial remains blocked; only the later
+durable-ACK cutover may give it production authority and resume it.
+
+These are source mechanisms, not full update integration or a VM demonstration.
+Boot barrier, System/manager protocol, signature-verifier loop, durable cutover,
+peer GUI rebinding and fallback cloud evidence remain required.

@@ -137,9 +137,16 @@ impl Trial {
 }
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 pub struct Cutover {pub previous:Option<Endpoint>,pub current:Endpoint}
-// No public constructor or insertion API. A future reviewed staging/verification
-// bridge must populate this kernel-owned object from the exact sealed verified
-// image. Only cfg(test) fixtures can create one at this unactivated checkpoint.
+/// Precomputed candidate grants only: never snapshot unrelated runtime state.
+/// The native owner retains this across durable System I/O, then revalidates.
+#[derive(Clone,Copy)]
+pub struct Handover {trial:Trial,caps:Caps}
+impl Handover {
+    pub fn endpoint(&self)->Endpoint{self.trial.endpoint}
+    pub fn token(&self)->u64{self.trial.token}
+    pub fn handle(&self,index:usize)->Result<u64,Error>{self.caps.handle(index)}
+}
+// Only the native sealed-buffer bridge inserts this manager-authenticated record.
 #[derive(Clone,Copy)]
 struct StagedImage {seal:u64,slot:u8,digest:[u8;32],generation:u64,signed_budget:u32}
 pub struct Runtime {
@@ -237,12 +244,29 @@ impl Runtime {
         self.stage_view(caller,handle)?;
         if self.trial.is_some()||self.staged.is_some(){return Err(Error::Busy);}Ok(())
     }
+    /// Kernel adapter only: metadata is read from the exact sealed reservation
+    /// after the trusted manager verifies it. No user register supplies a budget.
+    pub fn authenticated_stage(&mut self,caller:usize,handle:u64,seal:u64,slot:usize,
+        digest:[u8;32],generation:u64,signed_budget:u32)->Result<(),Error>{
+        self.stage_reject(caller,handle)?;
+        if seal==0||!matches!(slot,5|7)||digest==[0;32]||generation==0||
+            !(1..=100).contains(&signed_budget){return Err(Error::Invalid);}
+        if self.processes[slot].state!=State::Vacant{return Err(Error::Busy);}
+        self.staged=Some(StagedImage{seal,slot:slot as u8,digest,generation,signed_budget});
+        Ok(())
+    }
+    pub fn discard_staged(&mut self,caller:usize,handle:u64,seal:u64)->Result<(),Error>{
+        self.stage_view(caller,handle)?;
+        if self.trial.is_some(){return Err(Error::Busy);}
+        if self.staged.is_none_or(|s|s.seal!=seal){return Err(Error::Stale);}
+        self.staged=None;Ok(())
+    }
+    pub fn trial(&self)->Option<Trial>{self.trial}
     fn endpoint_alive(&self,e:Endpoint)->bool{
         self.processes.get(e.slot as usize).is_some_and(|p|p.state==State::Active&&p.incarnation==e.incarnation)
     }
     /// Requires a kernel-owned authenticated staged record. No caller budget is
     /// accepted: the trial derives its bound and image identity from that record.
-    /// The real staging/verification bridge is intentionally not implemented yet.
     pub fn begin_trial(&mut self,caller:usize,handle:u64,image_seal:u64)->Result<Trial,Error>{
         self.manager(caller,handle)?;
         if self.recovery_required{return Err(Error::Denied);}
@@ -318,10 +342,10 @@ impl Runtime {
         if t.token!=token{return Err(Error::Stale);}
         self.destroy(t.endpoint.slot as usize);self.trial=None;Ok(())
     }
-    /// Real caller must hold IF=0 and finish process sealing/construction first.
-    /// This atomically switches model bindings/caps/queues, NOT durable storage.
-    pub fn cutover(&mut self,caller:usize,handle:u64,token:u64)->Result<Cutover,Error>{
-        self.manager(caller,handle)?;
+    /// Precompute all fallible grants before asking System to publish a selector.
+    /// Does not freeze/snapshot peer queues, failures or other runtime state.
+    pub fn prepare_cutover(&self,caller:usize,handle:u64,token:u64)->Result<Handover,Error>{
+        self.stage_view(caller,handle)?;
         let t=self.trial.ok_or(Error::Stale)?;
         let index=t.endpoint.slot as usize;
         if token!=t.token||self.bindings[5]!=t.previous||self.processes[index].state!=State::Healthy||
@@ -331,12 +355,29 @@ impl Runtime {
         caps.grant(SELF_CAP,Object::Receive(t.endpoint),RECEIVE)?;
         caps.grant(SHELL_CAP,Object::NamedSend {principal:0},SEND)?;
         caps.grant(COMPOSITOR_CAP,Object::NamedSend {principal:3},SEND)?;
-        // All grant checks finished. Mutation below is bounded and infallible.
-        if let Some(old)=t.previous{self.destroy(old.slot as usize);}
+        Ok(Handover{trial:t,caps})
+    }
+    /// Native caller holds IF=0 and validates the durable, exact transaction ACK.
+    /// Candidate grants are already computed. All refusal precedes mutation.
+    pub fn cutover_prepared(&mut self,caller:usize,handle:u64,h:Handover)->Result<Cutover,Error>{
+        self.stage_view(caller,handle)?;
+        let t=h.trial;let index=t.endpoint.slot as usize;
+        if self.trial!=Some(t)||self.processes[index].state!=State::Healthy||
+            self.processes[index].incarnation!=t.endpoint.incarnation{return Err(Error::Stale);}
+        // The prior may fault while System performs I/O. Never resurrect it.
+        // Nor may a different binding be overwritten by an old handover.
+        let expected=t.previous.filter(|&e|self.endpoint_alive(e));
+        if self.bindings[5]!=expected{return Err(Error::Stale);}
+        if let Some(old)=expected{self.destroy(old.slot as usize);}
         let p=&mut self.processes[index];
-        p.queue=Queue::new();p.caps=caps;p.principal=Some(5);p.state=State::Active;
+        p.queue=Queue::new();p.caps=h.caps;p.principal=Some(5);p.state=State::Active;
         self.bindings[5]=Some(t.endpoint);self.trial=None;
-        Ok(Cutover {previous:t.previous,current:t.endpoint})
+        Ok(Cutover{previous:t.previous,current:t.endpoint})
+    }
+    /// Convenience for the mechanism tests; not durable runtime authority.
+    pub fn cutover(&mut self,caller:usize,handle:u64,token:u64)->Result<Cutover,Error>{
+        let h=self.prepare_cutover(caller,handle,token)?;
+        self.cutover_prepared(caller,handle,h)
     }
     /// Timer/fault hooks derive endpoint incarnation from the saved context.
     /// Delayed events cannot affect a reused physical slot.
@@ -381,6 +422,51 @@ impl Default for Runtime {fn default()->Self{Self::new()}}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test] fn authenticated_stage_is_manager_only_and_exactly_bounded(){
+        let mut r=Runtime::new();let h=manager(&r);
+        for caller in 0..=TASKS{if caller!=8{
+            assert!(r.authenticated_stage(caller,h,1,7,[1;32],2,10).is_err());
+        }}
+        for (seal,slot,digest,generation,budget) in [
+            (0,7,[1;32],2,10),(1,6,[1;32],2,10),(1,7,[0;32],2,10),
+            (1,7,[1;32],0,10),(1,7,[1;32],2,0),(1,7,[1;32],2,101)]{
+            assert!(r.authenticated_stage(8,h,seal,slot,digest,generation,budget).is_err());
+            assert!(r.staged.is_none());
+        }
+        assert_eq!(r.authenticated_stage(8,h,1,5,[1;32],2,10),Err(Error::Busy));
+        r.authenticated_stage(8,h,u64::MAX,7,[1;32],2,100).unwrap();
+        assert_eq!(r.discard_staged(8,h,1),Err(Error::Stale));
+        let t=r.begin_trial(8,h,u64::MAX).unwrap();
+        assert_eq!(t.image_seal(),u64::MAX);assert_eq!(t.endpoint().slot,7);
+        assert_eq!(t.signed_budget(),100);
+        assert_eq!(r.discard_staged(8,h,u64::MAX),Err(Error::Busy));
+        r.abort(8,h,t.token()).unwrap();
+        r.authenticated_stage(8,h,2,7,[2;32],3,1).unwrap();
+        r.discard_staged(8,h,2).unwrap();assert!(r.staged.is_none());
+    }
+    #[test] fn prepared_handover_preserves_intervening_peer_work_and_faults(){
+        let mut r=Runtime::new();let t=healthy(&mut r);let h=manager(&r);
+        let prepared=r.prepare_cutover(8,h,t.token()).unwrap();
+        let data=r.handle(1,4).unwrap();r.send(1,data,b"peer after prepare").unwrap();
+        let old=r.binding(5).unwrap().unwrap();r.fault(old).unwrap();
+        let cut=r.cutover_prepared(8,h,prepared).unwrap();
+        assert_eq!(cut.previous,Some(old));assert_eq!(r.state(old.slot as usize),Ok(State::Vacant));
+        let m=r.receive(4,r.handle(4,0).unwrap()).unwrap();
+        assert_eq!(&m.bytes[..m.length as usize],b"peer after prepare");
+        assert!(r.cutover_prepared(8,h,prepared).is_err());
+        assert_eq!(r.binding(5),Ok(Some(t.endpoint())));
+    }
+    #[test] fn prepared_handover_cannot_survive_candidate_or_manager_loss(){
+        for manager_loss in [false,true]{
+            let mut r=Runtime::new();let t=healthy(&mut r);let h=manager(&r);
+            let prepared=r.prepare_cutover(8,h,t.token()).unwrap();
+            let old=r.binding(5).unwrap();
+            r.fault(if manager_loss{Endpoint{slot:8,incarnation:1}}else{t.endpoint()}).unwrap();
+            assert!(r.cutover_prepared(8,h,prepared).is_err());assert_eq!(r.binding(5).unwrap(),old);
+        }
+    }
+
     fn manager(r:&Runtime)->u64{r.handle(8,MANAGER_CAP).unwrap()}
     fn stage(r:&mut Runtime,seal:u64,budget:u32){
         let slot=[5usize,7].into_iter().find(|&i|r.processes[i].state==State::Vacant).unwrap_or(7);

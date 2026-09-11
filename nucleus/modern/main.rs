@@ -3,6 +3,7 @@
 mod model;
 mod support;
 mod retirement;
+mod loader;
 pub(crate) mod staging;
 mod native_pio;
 #[path="../platform/arch.rs"] mod arch;
@@ -40,11 +41,11 @@ static SERVICE:&[u8]=&[];
 struct Process{
     memory:retirement::Memory,aperture:u64,table_used:usize,
     state:State,generation:u64,root:u64,kernel_bottom:u64,kernel_top:u64,frame:u64,
-    ranges:[UserRange;24],range_count:usize,preemptions:u64,entry:u64,
+    ranges:[UserRange;24],range_count:usize,preemptions:u64,entry:u64,stack_end:u64,
 }
 impl Process{
     const EMPTY:Self=Self{memory:retirement::Memory::Clean,aperture:0,table_used:0,state:State::Dead,generation:1,root:0,kernel_bottom:0,kernel_top:0,frame:0,
-        ranges:[EMPTY_RANGE;24],range_count:0,preemptions:0,entry:0};
+        ranges:[EMPTY_RANGE;24],range_count:0,preemptions:0,entry:0,stack_end:0};
     fn range(&mut self,start:u64,end:u64,writable:bool,executable:bool){
         if self.range_count>=self.ranges.len()||start>=end||writable&&executable{fatal("RAR-PANIC:CODE=USER-RANGE");}
         self.ranges[self.range_count]=UserRange{start,end,writable,executable};self.range_count+=1;
@@ -55,10 +56,11 @@ impl Process{
 }
 struct Runtime{
     processes:[Process;TASKS],current:usize,arena:u64,proofs:u8,ready:bool,
+    image_base:u64,image_size:u64,
     policy:Option<model::Runtime>,device:Option<native_pio::Adapter>,ticks:Option<u64>,
     staging:Option<staging::Buffer<'static>>,bootstrap_tables:usize,stage_readonly:bool,stage_view:bool,
 }
-static mut RUNTIME:Runtime=Runtime{processes:[Process::EMPTY;TASKS],current:0,arena:0,proofs:0,ready:false,
+static mut RUNTIME:Runtime=Runtime{processes:[Process::EMPTY;TASKS],current:0,arena:0,proofs:0,ready:false,image_base:0,image_size:0,
     policy:None,device:None,ticks:Some(0),staging:None,bootstrap_tables:0,stage_readonly:false,stage_view:false};
 fn private_region(arena:u64,index:usize)->u64{
     retirement::region(arena,boot::ARENA_PAGES,index)
@@ -107,6 +109,7 @@ pub unsafe fn start(info:&boot::BootInfo)->!{
     let layout=pe::parse(SERVICE).unwrap_or_else(|_|fatal("RAR-PANIC:CODE=SERVICE-PE"));
     let runtime=unsafe{&mut *ptr::addr_of_mut!(RUNTIME)};
     runtime.arena=info.arena;
+    runtime.image_base=info.platform.image_base;runtime.image_size=info.platform.image_size;
     runtime.bootstrap_tables=info.table_used;
     let stage_region=staging::region(info.arena,boot::ARENA_PAGES)
         .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=STAGING-GEOMETRY"));
@@ -126,7 +129,7 @@ pub unsafe fn start(info:&boot::BootInfo)->!{
             info.platform.pitch,info.platform.format).unwrap_or_else(|_|fatal("RAR-PANIC:CODE=MODERN-BOOT"));
         let physical=private_region(info.arena,index);
         let process=&mut runtime.processes[index];
-        process.state=State::Runnable;process.root=physical;process.entry=layout.entry;
+        process.state=State::Runnable;process.root=physical;process.entry=layout.entry;process.stack_end=STACK_END;
         process.generation=handoff.generation;
         process.kernel_bottom=physical+KERNEL_BOTTOM;process.kernel_top=physical+KERNEL_TOP;
         unsafe{ptr::copy_nonoverlapping(SERVICE.as_ptr(),(physical+IMAGE)as *mut u8,layout.header_size);}
@@ -367,6 +370,45 @@ impl Runtime{
                         stage.view(frame.rdx).map_err(stage_error)?;
                         self.reject_stage(frame.rdx);Ok(0)
                     },
+                    2=>{
+                        self.buffer(frame.r10,32,true)?;
+                        let t=self.accept_stage(frame.rdi,frame.rdx)?;
+                        let mut response=[0u8;32];
+                        for (i,value) in [t.image_seal(),t.token(),t.endpoint().slot as u64,
+                            t.endpoint().incarnation].into_iter().enumerate(){
+                            response[i*8..i*8+8].copy_from_slice(&value.to_le_bytes());
+                        }
+                        // SAFETY: prechecked current manager span; no yield or
+                        // change to these mappings during the IF=0 construction.
+                        unsafe{ptr::copy_nonoverlapping(response.as_ptr(),frame.r10 as *mut u8,32);}
+                        Ok(0)
+                    },
+                    3=>{
+                        if frame.r10!=0{return Err(Error::Invalid);}
+                        self.release_trial_stage(frame.rdi,frame.rdx)?;Ok(0)
+                    },
+                    4=>{
+                        if frame.r10!=0{return Err(Error::Invalid);}
+                        self.policy.as_mut().unwrap().abort(current,frame.rdi,frame.rdx)?;
+                        self.synchronize_revocations();Ok(0)
+                    },
+                    5=>{
+                        self.buffer(frame.r10,32,true)?;
+                        let policy=self.policy.as_ref().unwrap();
+                        let t=policy.trial().ok_or(Error::Stale)?;
+                        if t.image_seal()!=frame.rdx{return Err(Error::Stale);}
+                        let phase=match policy.state(t.endpoint().slot as usize)?{
+                            model::State::Trial=>1,model::State::Healthy=>2,_=>return Err(Error::Stale)
+                        };
+                        let mut response=[0u8;32];
+                        for (i,value) in [t.image_seal(),t.token(),t.endpoint().incarnation,phase]
+                            .into_iter().enumerate(){
+                            response[i*8..i*8+8].copy_from_slice(&value.to_le_bytes());
+                        }
+                        // SAFETY: full current manager output checked, IF=0.
+                        unsafe{ptr::copy_nonoverlapping(response.as_ptr(),frame.r10 as *mut u8,32);}
+                        Ok(0)
+                    },
                     _=>Err(Error::Invalid),
                 }
             }
@@ -445,7 +487,7 @@ impl Runtime{
             abi::STAGE_VIEW_ADDRESS+staging::BUFFER_BYTES as u64,false,false);
         self.stage_view=true;
     }
-    fn reject_stage(&mut self,seal:u64){
+    fn withdraw_stage_view(&mut self){
         let root=self.stage_context();
         if self.current!=8||!self.stage_readonly||!self.stage_view{
             fatal("RAR-PANIC:CODE=STAGE-REJECT-ORDER");
@@ -462,8 +504,51 @@ impl Runtime{
             fatal("RAR-PANIC:CODE=STAGE-RANGE-RETIRE");
         }
         p.range_count-=1;p.ranges[p.range_count]=EMPTY_RANGE;self.stage_view=false;
-        self.stage_permissions(false);
-        self.scrub_stage(seal);
+    }
+    fn reject_stage(&mut self,seal:u64){
+        self.withdraw_stage_view();self.stage_permissions(false);self.scrub_stage(seal);
+    }
+    fn release_trial_stage(&mut self,handle:u64,seal:u64)->Result<(),Error>{
+        self.policy.as_ref().ok_or(Error::Denied)?.stage_reject(self.current,handle)?;
+        let stage=self.staging.as_ref().ok_or(Error::Denied)?;
+        stage.view(seal).map_err(stage_error)?;
+        let id=stage.reserved().ok_or(Error::Stale)?;
+        if self.stage_view||!self.stage_readonly||
+            self.processes[id.slot()].memory==retirement::Memory::Retiring{return Err(Error::Busy);}
+        self.stage_permissions(false);self.scrub_stage(seal);Ok(())
+    }
+    fn accept_stage(&mut self,handle:u64,seal:u64)->Result<model::Trial,Error>{
+        self.policy.as_ref().ok_or(Error::Denied)?.stage_view(self.current,handle)?;
+        if self.current!=8||!self.stage_readonly||!self.stage_view{return Err(Error::Busy);}
+        let stage=self.staging.as_ref().ok_or(Error::Denied)?;
+        let bytes=stage.view(seal).map_err(stage_error)?;
+        let id=stage.reserved().ok_or(Error::Stale)?;
+        let metadata=support::stage_metadata(bytes)?;
+        let layout=pe::parse(&bytes[384..])?;
+        if layout.image_size>metadata.image_bytes{return Err(Error::Invalid);}
+        let p=self.processes[id.slot()];
+        if p.memory!=retirement::Memory::Clean||p.state!=State::Dead||p.root!=0{
+            return Err(Error::Busy);
+        }
+        let policy=self.policy.as_mut().unwrap();
+        policy.authenticated_stage(self.current,handle,seal,id.slot(),metadata.digest,
+            metadata.generation,metadata.budget)?;
+        let trial=match policy.begin_trial(self.current,handle,seal){
+            Ok(t)=>t,Err(e)=>{policy.discard_staged(self.current,handle,seal)?;return Err(e);}
+        };
+        self.withdraw_stage_view();
+        // Move the sole buffer owner out temporarily: the immutable payload and
+        // mutable Runtime construction borrow are disjoint. IF=0; no reentry.
+        let stage=self.staging.take().unwrap();
+        let bytes=stage.view(seal).unwrap_or_else(|_|fatal("RAR-PANIC:CODE=TRIAL-SEALED-BYTES"));
+        let result=self.construct_trial(&bytes[384..],trial);
+        self.staging=Some(stage);
+        if let Err(e)=result{
+            self.policy.as_mut().unwrap().abort(self.current,handle,trial.token())
+                .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=TRIAL-CONSTRUCT-ABORT"));
+            self.synchronize_revocations();return Err(e);
+        }
+        Ok(trial)
     }
     fn scrub_stage(&mut self,seal:u64){
         self.stage_context();
@@ -588,7 +673,7 @@ impl Runtime{
     }
 }
 fn user_return_valid(process:&Process,ret:&arch::Trap)->bool{
-    ret.cs==0x1b&&ret.ss==0x23&&(STACK_VA..=STACK_END).contains(&ret.rsp)&&
+    ret.cs==0x1b&&ret.ss==0x23&&(STACK_VA..=process.stack_end).contains(&ret.rsp)&&
         process.ranges[..process.range_count].iter().any(|r|r.executable&&r.start<=ret.rip&&ret.rip<r.end)&&
         [ret.ds,ret.es,ret.fs,ret.gs].iter().all(|s|[0,0x1b,0x23].contains(s))
 }
