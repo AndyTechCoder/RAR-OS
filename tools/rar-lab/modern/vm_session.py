@@ -227,6 +227,7 @@ class VM:
             codes=[backend.poll() for backend in self.backends]
             expected=getattr(self,"fault_plan",None)
             system_mode=getattr(self,"system_fault_audit",None) is not None
+            system_drain=False
             if system_mode and len(self.backends)==3 and self.backends[1].records:
                 self.system_fault_hit=self.system_fault_audit.scan(self.backends[1].records,
                     self.system_fault_candidate,self.system_fault_selector)
@@ -235,9 +236,12 @@ class VM:
                 if code is not None or backend.problem is not None:
                     # Exact selected System EIO closes this transport. No other
                     # role, exit, missing receipt or premature stop is excused.
-                    if (index==1 and system_mode and self.system_fault_hit is not None and
-                        self.system_fault_hit["terminal"] is True and type(code) is int and code==21 and
-                        backend.problem=="backend-failed"):continue
+                    if (index==1 and system_mode and type(code) is int and code==21 and
+                        backend.problem=="backend-failed"):
+                        # poll() can reap just after its nonblocking pipe drain.
+                        # Wait for evidence, never accept a missing terminal.
+                        system_drain=self.system_fault_hit is None or self.system_fault_hit["terminal"] is not True
+                        continue
                     raise ValueError("block backend stopped before deliberate whole-VM cut")
             if self.child is not None and self.child.poll() is not None:
                 raise ValueError("VM exited before deliberate cut")
@@ -260,7 +264,7 @@ class VM:
                 else:raise ValueError("unknown monitored descriptor")
             if getattr(self,"system_fault_audit",None) is not None:
                 state=self.system_fault_audit.serial_status(bytes(self.serial),self.system_fault_hit)
-                if state=="waiting":
+                if state=="waiting" or system_drain:
                     if self.system_fault_wait is None:self.system_fault_wait=min(self.deadline,time.monotonic()+1)
                     if time.monotonic()>=self.system_fault_wait:raise TimeoutError("bounded exact System receipt/serial drain")
                     continue
@@ -843,12 +847,25 @@ def self_test():
         return v
     good=system_vm();good.service()
     assert good.system_fault_hit["terminal"] is True
-    for rows,code,problem,other in ((records[:-1],21,"backend-failed",None),
-        (records[:1],21,"backend-failed",None),(records,0,"backend-failed",None),
+    for rows,code,problem,other in ((records,0,"backend-failed",None),
         (records,21,None,None),(records,21,"wrong",None),(records,True,"backend-failed",None),
         (records,21,"backend-failed",0),(records,21,"backend-failed",2)):
         reject(lambda rows=rows,code=code,problem=problem,other=other:
             system_vm(rows,code,problem,other).service())
+    # Exit may be visible one poll before the terminal audit pipe is drained.
+    delayed=system_vm(records[:-1]);polls=[0]
+    def delayed_poll():
+        polls[0]+=1
+        if polls[0]==2:delayed.backends[1].records.append(copy.deepcopy(records[-1]))
+        return 21
+    delayed.backends[1].poll=delayed_poll
+    delayed.service();assert polls[0]==2 and delayed.system_fault_hit["terminal"] is True
+    for missing in (records[:1],records[:-1]):
+        incomplete=system_vm(missing);ticks=iter(n/5 for n in range(50))
+        with patch.object(time,"monotonic",lambda:next(ticks)):
+            try:incomplete.service()
+            except TimeoutError:rejected+=1
+            else:raise AssertionError("missing terminal did not fail bounded drain")
     malformed=copy.deepcopy(records);malformed[-2]["event"]["payload_sha256"]="a"*64
     reject(lambda:system_vm(malformed).service())
     # No process/descriptor operation: verify exact service -> owned join path.
