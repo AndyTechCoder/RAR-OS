@@ -187,10 +187,20 @@ def self_test():
             if names:reject(lambda:transcript(serial.replace("RAR-MODERN:"+names[0],"missing",1),index,case))
     for index in (0,4,True,None):reject(lambda index=index:plan("update",index,value))
     reject(lambda:base.argv([],1,profile,readonly_data=1))
-    # Verify the third boot explicitly remains physically Data-read-only.
+    # IDE argv deliberately stays writable; the private host descriptor and
+    # backend refusal (not QEMU's IDE flag) enforce physical immutability.
     args=profile.argv(3,20,21,22,True)
     assert base.argv(args,3,profile,readonly_data=True)
-    reject(lambda:base.argv(args,3,profile,readonly_data=False))
+    assert args==profile.argv(3,20,21,22,False)
+    persist=helper("persistence")
+    ready=dict(type="ready",kind="data",readonly=True,export_readonly=False,
+        capacity=99328,device=1,inode=2)
+    assert persist.audit([ready],"data",ready,True)["counts"]["write"]==0
+    reject(lambda:persist.audit([ready],"data",ready,False))
+    writable=dict(ready,readonly=False)
+    reject(lambda:persist.audit([writable],"data",writable,True))
+    write=dict(type="request",operation="write",offset=0,length=512)
+    reject(lambda:persist.audit([ready,write],"data",ready,True))
     return rejected
 
 if __name__=="__main__":
