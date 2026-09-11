@@ -47,6 +47,28 @@ pub fn response(index:usize,address:u64,bytes:u64)->Result<usize,Invalid>{
         assert!(disjoint(&[Some(a),Some(Window{physical:0x1000,..b}),None,None,None]).is_err());
         assert!(disjoint(&[Some(Window{pages:2,..a}),Some(b),None,None,None]).is_err());
     }
+    #[test]fn all_five_maximum_windows_and_partial_overlap_orderings(){
+        let image=(0x1000_0000,0x1000000);let arena=(0x2000_0000,0x2800000);
+        let padded=MAX_BYTES.div_ceil(4096)*4096;
+        let windows=core::array::from_fn(|i|Some(window(i,MAX_BYTES,padded,
+            image.0+i as u64*padded as u64,image,arena).unwrap()));
+        assert_eq!(disjoint(&windows),Ok(()));
+        for i in 0..COUNT{for j in i+1..COUNT{
+            for reverse in [false,true]{
+                let mut changed=windows;
+                let a=windows[i].unwrap();let b=windows[j].unwrap();
+                let partial=Window{physical:a.physical+(a.pages-1)*4096,..b};
+                if reverse{changed[i]=Some(partial);changed[j]=Some(a);}
+                else{changed[j]=Some(partial);}
+                assert!(disjoint(&changed).is_err());
+            }
+        }}
+        let mut changed=windows;
+        changed[0]=Some(Window{physical:u64::MAX-4095,..windows[0].unwrap()});
+        assert!(disjoint(&changed).is_err());
+        changed[0]=Some(Window{pages:u64::MAX,..windows[0].unwrap()});
+        assert!(disjoint(&changed).is_err());
+    }
     #[test]fn immutable_windows_are_bounded_disjoint_and_not_kernel_aliases(){
         let image=(0x1000_0000,0x1000000);let arena=(0x2000_0000,0x2800000);
         for index in 0..COUNT{for bytes in [896,4096,4097,MAX_BYTES]{

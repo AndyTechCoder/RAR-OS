@@ -35,3 +35,20 @@ reproduction/provenance. The runtime additionally checks all input geometry,
 zero padding and pairwise physical disjointness before creating any System user
 input mapping. Effective page-table and actual signed-update behavior still
 require the certified disposable VM proof.
+
+## Cross-language conformance
+
+The existing isolated-cloud crypto check now streams five fixed synthetic
+packages and the complete generated System image directly into
+package_conformance.rs. No extra 8MiB scratch file is retained. The actual RAR
+manifest verifier checks factory/update acceptance, signature and ABI rejection,
+and rollback floors. RAR Record decoding/selection and Volume mount then
+prepare, copy and complete the selected factory boot read without any media
+write or flush; the test adapter panics on either. Every unused image byte is
+checked, and zero/corrupt selectors are rejected rather than formatted.
+
+This closes generator/target framing consistency, not executable behavior.
+The bad-health synthetic package is intentionally signature-valid: proving that
+its real compiled code fails health, binding actual build provenance, and
+certified-VM activation remain mandatory. No target artifact is executed by
+this conformance program.

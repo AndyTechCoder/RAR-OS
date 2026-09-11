@@ -1,5 +1,6 @@
 """Pure public-laboratory Settings package/System fixture construction.
-No I/O, CLI signing, production key, installation, VM launch or target execution.
+Construction APIs perform no I/O; self-tests read fixed sibling source helpers.
+No CLI signing, production key, installation, VM launch or target execution.
 The trusted cloud controller supplies already-built bytes and exact provenance.
 """
 from hashlib import sha256
@@ -71,6 +72,22 @@ def factory_system(factory,source_sha,build_digest,inspect,sign):
     result[1024:1024+len(factory)]=factory
     # Selector1, all unused A/B slot bytes and reserved tail remain explicit zero.
     return bytes(result)
+
+def conformance_fixture():
+    """Fixed synthetic codec bytes for the cloud Rust verifier, never an app."""
+    from pathlib import Path
+    import runpy
+    here=Path(__file__).resolve().parent
+    signer=runpy.run_path(str(here/"lab_signer.py"))
+    binary=runpy.run_path(str(here/"build_binary.py"))
+    raw=bytearray(signer["codec_test_fixture"]()[384:1408])
+    _put(raw,88+68,2,10)
+    payload=bytes(raw);source="a"*40;provenance=bytes([3])*32
+    inspect,sign=binary["inspect"],signer["sign_manifest_digest"]
+    variants=("factory","update","bad-health","bad-signature","bad-abi")
+    packages=[build(payload,source,provenance,v,inspect,sign) for v in variants]
+    image=factory_system(packages[0],source,provenance,inspect,sign)
+    return b"".join(packages)+image
 
 def self_test():
     # Isolated cloud source tests only. This imports reviewed sibling helpers,

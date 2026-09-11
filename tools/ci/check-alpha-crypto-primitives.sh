@@ -142,6 +142,13 @@ printf '%s\n' 'Modern trial entry: receiver consistency and pure Settings view c
 "$work/focused-tests" aperture_
 printf '%s\n' 'Modern retirement/staging: actual aperture and guard/permission table tests; no privileged operation or runtime acceptance'
 
+# Cross-language package/System bytes are streamed, not stored as an 8MiB file.
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 \
+    -C strip=symbols -C debuginfo=0 -C opt-level=1 -C debug-assertions=yes -C overflow-checks=yes \
+    tools/rar-lab/modern/package_conformance.rs -o "$work/focused-tests"
+/usr/bin/python3 -I -B -c 'import runpy,sys; sys.stdout.buffer.write(runpy.run_path(sys.argv[1])["conformance_fixture"]())' \
+    "$root/tools/rar-lab/modern/settings_packages.py" | "$work/focused-tests"
+
 # Bound the final stripped executable, no_std library and signed codec fixture in the
 # existing cloud-only tmpfs; no owner files or retained evidence are affected.
 set -- $(/usr/bin/du -sk "$work")
