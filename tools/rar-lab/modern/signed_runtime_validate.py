@@ -192,7 +192,7 @@ def self_test():
             elif index==3 and case=="update":names=["UPDATE-REQUEST","UPDATE-REJECTED"]
             serial="RAR-MODERN:GUI-READY\n"+"".join("RAR-MODERN:"+n+"\n" for n in names)
             if index==2 and case=="update":serial+="RAR-MODERN:PRIVATE-MEMORY-RETIRED\n"*2
-            if case=="selector-error" and index==2:serial+="RAR-PANIC:CODE=UPDATE-RECONCILE\n"
+            if case=="selector-error" and index==2:serial+=helper("system_selector_fault").PANIC.decode("ascii")
             receipt={} if case=="selector-error" and index==2 else None
             transcript(serial,index,case,receipt)
             reject(lambda:transcript(serial+"RAR-PANIC",index,case,receipt))

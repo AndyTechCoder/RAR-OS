@@ -842,7 +842,7 @@ def self_test():
         v.backends=[SimpleNamespace(poll=lambda:None,problem=None,records=[]) for _ in range(3)]
         v.backends[1]=SimpleNamespace(poll=lambda:code,problem=problem,records=copy.deepcopy(rows))
         if other is not None:v.backends[other].problem="backend-failed"
-        v.serial=bytearray(fixed.RECONCILE+b"\n")
+        v.serial=bytearray(fixed.PANIC)
         v.selector=SimpleNamespace(select=lambda timeout:[])
         return v
     good=system_vm();good.service()
