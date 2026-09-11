@@ -179,6 +179,16 @@ fn reconcile(boot:&Boot)->!{
     // Unreachable with the matching kernel ABI. Do not continue a transaction.
     crate::fail()
 }
+/// Signed composition entry. No ordinary application can request installation
+/// through this receive loop; live-update command routing is separate work.
+pub fn manager(boot:&Boot)->!{
+    if boot.role!=8{crate::fail();}
+    let mut requests=wire::Requests::new();
+    boot_selected(boot,&mut requests);
+    // Preserve this owner/incarnation after publication; never restart boot
+    // selection or reset its request sequence in response to an IPC message.
+    loop{let _=crate::receive(boot.caps[SELF_RECV]);}
+}
 pub fn boot_selected(boot:&Boot,requests:&mut wire::Requests){
     let first=transaction(boot,requests,Mode::Boot,0);
     let action=update_manager::boot_action(first,false);

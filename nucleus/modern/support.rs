@@ -4,6 +4,14 @@
 use super::{abi,model::{self,Error}};
 pub const TASKS:usize=16;
 pub const INITIAL:[usize;10]=[0,1,2,3,4,5,6,8,9,15];
+const SIGNED_INITIAL:[usize;3]=[8,9,15];
+/// One composition decision governs both native contexts and logical authority.
+pub fn initial_roles(signed:bool)->&'static[usize]{
+    if signed{&SIGNED_INITIAL}else{&INITIAL}
+}
+pub fn initial_policy(signed:bool)->model::Runtime{
+    if signed{model::Runtime::bootstrap()}else{model::Runtime::new()}
+}
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 pub enum CpuState {Runnable,Blocked,Dead}
 #[derive(Clone,Copy,Debug)]
@@ -149,6 +157,36 @@ pub fn trial_bootstrap(policy:&model::Runtime,trial:model::Trial,entry:u64)->Res
 #[cfg(test)]
 mod tests{
     use super::*;
+    #[test]fn signed_native_start_graph_has_no_desktop_authority(){
+        for signed in [false,true]{
+            let policy=initial_policy(signed);
+            let roles=initial_roles(signed);
+            assert_eq!(roles[0],if signed{8}else{0});
+            assert_eq!(policy.bootstrapping(),signed);
+            let mut states=[CpuState::Dead;TASKS];
+            for &role in roles{
+                states[role]=CpuState::Runnable;
+                let b=bootstrap(&policy,role,0x401000,640,0).unwrap();
+                assert!(abi::valid_boot(&b));
+                if signed{
+                    for peer in 0..8{assert_eq!(b.peers[peer],0);}
+                    assert_eq!(b.framebuffer,0);
+                    if role!=9{assert_eq!(b.device_sectors,0);}
+                }
+                if role==15{assert_eq!(b.caps,[0;12]);}
+            }
+            for role in 0..7{
+                assert_eq!(policy.binding(role).unwrap().is_some(),!signed);
+                assert_eq!(bootstrap(&policy,role,0x401000,640,0).is_ok(),!signed);
+                assert_eq!(states[role]==CpuState::Dead,signed);
+            }
+            let mut cursor=roles[0];
+            for _ in 0..TASKS*2{
+                cursor=next(&states,cursor).unwrap();
+                assert!(roles.contains(&cursor));
+            }
+        }
+    }
     #[test] fn actual_user_return_check_respects_initial_and_trial_stack_bounds(){
         let rx=UserRange{start:0x401000,end:0x402000,writable:false,executable:true};
         for end in [0x604000,0x610000]{

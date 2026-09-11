@@ -1,6 +1,8 @@
 #![no_std]
 #![no_main]
 #![deny(unsafe_op_in_unsafe_fn)]
+#[cfg(all(rar_signed_updates,rar_settings_only))]
+compile_error!("signed supervisor composition and standalone Settings are distinct builds");
 mod abi;
 #[path="../../apps/modern/settings.rs"] mod settings;
 #[path="../../apps/modern/model.rs"] mod file_ui;
@@ -110,7 +112,19 @@ fn boot_snapshot()->Boot {
     match boot.role {
         0=>apps::shell(&boot),1=>drivers::storage(&boot),2=>drivers::keyboard(&boot),
         3=>drivers::compositor(&boot),4=>apps::files(&boot),5=>apps::settings(&boot),
-        6=>apps::terminal(&boot),8=>drivers::manager(&boot),9=>drivers::system(&boot),
+        6=>apps::terminal(&boot),
+        8=>{
+            #[cfg(rar_signed_updates)]
+            {update_runtime::manager(&boot)}
+            #[cfg(not(rar_signed_updates))]
+            {drivers::manager(&boot)}
+        },
+        9=>{
+            #[cfg(rar_signed_updates)]
+            {drivers::update_system(&boot,update_runtime::laboratory_input)}
+            #[cfg(not(rar_signed_updates))]
+            {drivers::system(&boot)}
+        },
         15=>loop{yield_now();},_=>fail(),
     }
 }

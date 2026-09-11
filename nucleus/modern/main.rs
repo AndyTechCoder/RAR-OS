@@ -128,8 +128,16 @@ pub unsafe fn start(info:&boot::BootInfo)->!{
     runtime.staging=Some(staging::Buffer::new(unsafe{
         core::slice::from_raw_parts_mut(stage_region.start as *mut u8,staging::BUFFER_BYTES)
     }).unwrap_or_else(|_|fatal("RAR-PANIC:CODE=STAGING-BUFFER")));
-    runtime.policy=Some(model::Runtime::new());
-    for index in support::INITIAL{
+    let signed=cfg!(rar_signed_updates);
+    // A signed composition never silently falls back to the legacy desktop or
+    // empty inputs. The object-only check cannot execute this entry.
+    if signed&&lab_images::all().iter().any(Option::is_none){
+        fatal("RAR-PANIC:CODE=SIGNED-INPUTS-MISSING");
+    }
+    runtime.policy=Some(support::initial_policy(signed));
+    let initial=support::initial_roles(signed);
+    runtime.current=initial[0];
+    for &index in initial{
         let handoff=support::bootstrap(runtime.policy.as_ref().unwrap(),index,layout.entry,
             info.platform.pitch,info.platform.format).unwrap_or_else(|_|fatal("RAR-PANIC:CODE=MODERN-BOOT"));
         let physical=private_region(info.arena,index);
@@ -214,7 +222,7 @@ pub unsafe fn start(info:&boot::BootInfo)->!{
     runtime.device=Some(unsafe{native_pio::Adapter::initialize()}
         .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=MODERN-PIO-INIT")));
     record("RAR-MODERN:PROCESSES-READY");
-    let first=runtime.processes[0];
+    let first=runtime.processes[runtime.current];
     unsafe{arch::activate(first.root,first.kernel_top);arch::first(first.frame)}
 }
 fn number(error:Error)->u64{

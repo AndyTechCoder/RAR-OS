@@ -149,6 +149,17 @@ printf '%s\n' 'Modern retirement/staging: actual aperture and guard/permission t
 /usr/bin/python3 -I -B -c 'import runpy,sys; sys.stdout.buffer.write(runpy.run_path(sys.argv[1])["conformance_fixture"]())' \
     "$root/tools/rar-lab/modern/settings_packages.py" | "$work/focused-tests"
 
+# Type-check the signed native composition separately; no image/PE execution.
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 \
+    --crate-type lib --emit=obj -C panic=abort -C no-redzone=yes -C debuginfo=0 \
+    --cfg rar_platform --cfg rar_modern --cfg rar_modern_compile_only \
+    --cfg rar_signed_updates --cfg 'rar_profile="normal"' \
+    nucleus/foundation/main.rs -o "$work/focused.rlib"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 \
+    --crate-type lib --emit=obj -C panic=abort -C no-redzone=yes -C debuginfo=0 \
+    --cfg rar_signed_updates core/modern/main.rs -o "$work/focused.rlib"
+printf '%s\n' 'Modern signed bootstrap: actual kernel/service object compilation; UEFI and VM acceptance pending'
+
 # Bound the final stripped executable, no_std library and signed codec fixture in the
 # existing cloud-only tmpfs; no owner files or retained evidence are affected.
 set -- $(/usr/bin/du -sk "$work")

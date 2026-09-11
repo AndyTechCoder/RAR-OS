@@ -393,3 +393,28 @@ Only System9 receives the five read-only/NX user windows beginning at 0x40000000
 Private syscall12 LAB_INPUT requires the existing System-only StageCopy capability: RDI handle, RSI fixed index0..4, RDX writable 16-byte reply, R10 exactly16. It returns the fixed address and logical length; it accepts no path, physical address, LBA, writable source or device selector. Invalid/absent inputs are refused. The System adapter validates the exact response before borrowing that process-lifetime immutable span. The manager still verifies only the sealed readback from writable inactive System storage, not these original inputs.
 
 These source mechanisms do not activate the signed composition. Trusted cloud generation/signing/provisioning, target cfg builds and all VM evidence remain pending. In particular, a literal zero System image is not a valid factory image and must never be inferred as formatting authorization.
+
+
+### Signed-start source composition
+
+With `rar_signed_updates` on both kernel and supervisor service builds, native
+start now constructs only Manager8, System9 and no-authority idle15 and enters
+Manager8 first. The same tested composition selector creates bootstrap-only
+logical authority and chooses the CPU-context list; desktop roles are never
+activated and then revoked. Missing immutable package inputs halt before any
+user context runs, with no legacy-graph fallback.
+
+The service entry selects the mounted System transaction owner and Manager's
+one-shot selected-boot transaction. Existing verification, isolated health,
+complete desktop preparation, exact durable acknowledgement and native graph
+publication determine whether the desktop appears. Manager retains its
+incarnation and does not restart boot selection on messages. It currently
+discards subsequent messages: live install routing and active-fault monitoring
+remain required, not implied by this boot path.
+
+The ordinary composition stays unchanged. Standalone Settings cannot be built
+with the signed-supervisor flag. The trusted cloud build/controller still must
+produce matched supervisor/kernel cfgs and the actual signed input bank; no
+existing workflow selects this new composition. Additional cloud checks compile
+both actual signed entry modules to Linux objects only. That cannot execute the
+entry, certify UEFI linking or establish a successful VM boot.
