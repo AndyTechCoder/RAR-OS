@@ -35,6 +35,7 @@ pub const INPUT:usize=7;
 pub const FRAMEBUFFER:usize=8;
 pub const HEALTH:usize=9;
 pub const MANAGER:usize=10;
+pub const UPDATE_PEER:usize=1;
 pub const DEVICE_CAP:usize=11;
 #[repr(C)]
 #[derive(Clone,Copy)]
@@ -62,7 +63,7 @@ const _: [();BOOT_BYTES as usize]=[();core::mem::size_of::<Boot>()];
 const _: [();ENVELOPE_BYTES as usize]=[();core::mem::size_of::<Envelope>()];
 fn active_mask(role:u64)->Option<u16> {
     match role {0=>Some(0x75),1=>Some(0x851),2=>Some(0x82),3=>Some(0x101),
-        4|6=>Some(0x0d),5=>Some(7),8=>Some(0x401),9=>Some(0xc01),15=>Some(0),_=>None}
+        4|6=>Some(0x0d),5=>Some(7),8=>Some(0x403),9=>Some(0xc03),15=>Some(0),_=>None}
 }
 fn text(value:&[u8])->bool {
     value.iter().all(|b|(0x20..=0x7e).contains(b))&&value.iter().any(|b|*b!=b' ')
@@ -173,7 +174,7 @@ mod tests {
             generation:(1<<40)|3,entry:0x401000,..Boot::EMPTY};
         b.peers=[1;10];b.peers[7]=0;if role!=15 {b.peers[role as usize]=b.generation;}
         let slots:&[usize]=match role {0=>&[0,2,4,5,6],1=>&[0,4,6,11],2=>&[1,7],
-            3=>&[0,8],4|6=>&[0,2,3],5=>&[0,1,2],8=>&[0,10],9=>&[0,10,11],15=>&[],_=>panic!()};
+            3=>&[0,8],4|6=>&[0,2,3],5=>&[0,1,2],8=>&[0,1,10],9=>&[0,1,10,11],15=>&[],_=>panic!()};
         for &slot in slots {b.caps[slot]=(1<<32)|(slot as u64+1);}
         if role==3 {b.framebuffer=0x800000;b.width=640;b.height=480;b.pitch=640;}
         if matches!(role,1|9) {b.device_sectors=14;b.device_serial=[b'S';20];b.device_model=[b'M';40];}

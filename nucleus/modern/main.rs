@@ -62,7 +62,7 @@ struct Runtime{
     handover:Option<(model::Handover,abi::Boot,u64)>,
     staging:Option<staging::Buffer<'static>>,bootstrap_tables:usize,stage_readonly:bool,stage_view:bool,
 }
-static mut RUNTIME:Runtime=Runtime{processes:[Process::EMPTY;TASKS],current:0,arena:0,proofs:0,ready:false,image_base:0,image_size:0,
+static mut RUNTIME:Runtime=Runtime{processes:[Process::EMPTY;TASKS],current:0,arena:0,proofs:0,ready:false,image_base:0,image_size:0,hardware:BootHardware::EMPTY,desktop:None,
     policy:None,device:None,ticks:Some(0),handover:None,staging:None,bootstrap_tables:0,stage_readonly:false,stage_view:false};
 fn private_region(arena:u64,index:usize)->u64{
     retirement::region(arena,boot::ARENA_PAGES,index)

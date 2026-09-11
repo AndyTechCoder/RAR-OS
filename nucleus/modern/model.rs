@@ -183,6 +183,8 @@ impl Runtime {
             if i!=2 {r.processes[i].caps.grant(SELF_CAP,Object::Receive(e),RECEIVE).unwrap();}
         }
         r.processes[8].caps.grant(MANAGER_CAP,Object::Manager,MANAGE).unwrap();
+        r.processes[8].caps.grant(1,Object::NamedSend{principal:9},SEND).unwrap();
+        r.processes[9].caps.grant(1,Object::NamedSend{principal:8},SEND).unwrap();
         // Released desktop's least-authority IPC graph, with logical endpoints.
         for (caller,slot,principal) in [(0,2,3),(0,4,4),(0,5,5),(0,6,6),
             (1,4,4),(1,6,6),(2,1,0),(4,2,3),(4,3,1),
@@ -514,6 +516,21 @@ mod tests {
     use super::*;
 
 
+    #[test] fn update_channel_is_only_between_manager_and_system(){
+        for mut r in [Runtime::new(),Runtime::bootstrap()]{
+            let manager=r.handle(8,1).unwrap();let system=r.handle(9,1).unwrap();
+            r.send(8,manager,b"prepare").unwrap();
+            let m=r.receive(9,r.handle(9,0).unwrap()).unwrap();
+            assert_eq!((m.principal,m.incarnation),(8,1));
+            r.send(9,system,b"sealed").unwrap();
+            let m=r.receive(8,r.handle(8,0).unwrap()).unwrap();
+            assert_eq!((m.principal,m.incarnation),(9,1));
+            assert_eq!(r.device(8,manager),Err(Error::Denied));
+            assert_eq!(r.device(9,system),Err(Error::Denied));
+            assert_eq!(r.device(9,r.handle(9,DEVICE_CAP).unwrap()),Ok(Device::System));
+            assert!(r.stage_view(9,system).is_err());
+        }
+    }
     #[test] fn bootstrap_has_no_desktop_authority_until_whole_graph_publication(){
         assert!(core::mem::size_of::<DesktopHandover>()<=8192);
         let mut r=Runtime::bootstrap();let h=manager(&r);

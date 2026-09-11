@@ -348,3 +348,12 @@ whole-graph publication. Ordinary live cutover is denied during bootstrap.
 Native code must still construct every planned process unscheduled, publish
 the complete Boot/map graph under IF=0, and make runnable last. This mechanism
 is not yet selected by native start; no boot barrier runtime claim is made.
+
+
+### M4.2 private System/manager message framing
+
+The fixed 128-byte `RARUPD01` channel is private implementation framing, not a stable application API. Only Manager (8) and System (9) receive reciprocal named-send grants at slot 1. Receivers must authenticate the kernel-stamped role and full incarnation before parsing. Neither grant provides device or Manager authority to its peer.
+
+Each operation binds a monotonic full-width request, kernel seal, selector sequence, and exact System preparation identity (storage transaction, slot, generation, length, digest, full-package hash). Commit acknowledgements match all fields; they are not success booleans. A selected boot acknowledges the unchanged sequence; installation/fallback acknowledges exactly the checked successor sequence. No counters wrap.
+
+Selector records use six ordered fragments of at most 88 bytes. Offsets, operation, request, seal, padding and full canonical record encoding are checked. Malformed or replayed fragments cannot advance assembly. One pending operation is permitted. Install input indexes are bounded private laboratory identifiers, never paths or sector addresses; providing the immutable inputs and native service state machines remains separate implementation work. Codec/source validation alone does not establish a working update.
