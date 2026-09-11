@@ -42,3 +42,5 @@ cd "$root"
 
 /bin/sh -n tools/rar-lab/modern/build-signed.sh
 /usr/bin/python3 -I -B tools/rar-lab/modern/signed_composition_tests.py
+
+/usr/bin/python3 -I -B tools/rar-lab/modern/signed_runtime_evidence.py --self-test
