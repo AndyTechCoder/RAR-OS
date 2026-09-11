@@ -50,8 +50,7 @@ pub fn system<I:system_volume::Io>(boot:&Boot,volume:system_volume::Volume<I>,
         }
     }
 }
-#[derive(Clone,Copy,Debug,PartialEq,Eq)]
-pub enum Failure{Rejected,Verify,Trial,Channel,Native,Indeterminate}
+use update_manager::{Failure,BootAction,ReleaseAction};
 fn send(boot:&Boot,frame:&[u8;128])->Result<(),Failure>{
     crate::send(boot.caps[UPDATE_PEER],frame).map_err(|_|Failure::Channel)
 }
@@ -78,10 +77,11 @@ fn cancel(boot:&Boot,t:Transfer)->Result<(),Failure>{
     let reply=exchange(boot,&t.frame(Kind::Cancel).map_err(|_|Failure::Native)?)?;
     if t.matches(&reply,Kind::Cancelled){Ok(())}else{Err(Failure::Channel)}
 }
-/// Full one-shot transaction. Calls may continue only after an explicit clean
-/// rejection or successful release. Channel/native/indeterminate errors halt
+/// Full one-shot transaction. Rejected/Verify/Trial are cleanly closed and may
+/// authorize only the boot coordinator\'s single exact-prior attempt. They do not
+/// authorize generic retries. Channel/native/indeterminate errors halt
 /// the manager; no automatic retransmission or remount can hide an unknown ACK.
-pub fn transaction(boot:&Boot,requests:&mut wire::Requests,mode:Mode,index:u64)->Result<(),Failure>{
+fn transaction(boot:&Boot,requests:&mut wire::Requests,mode:Mode,index:u64)->Result<(),Failure>{
     let id=requests.next().map_err(|_|Failure::Native)?;
     requests.accept(id).map_err(|_|Failure::Native)?;
     let first=exchange(boot,&wire::request(Kind::Start,mode,id,index).map_err(|_|Failure::Native)?)?;
@@ -162,10 +162,36 @@ pub fn transaction(boot:&Boot,requests:&mut wire::Requests,mode:Mode,index:u64)-
     release(boot,t.seal).map_err(|_|Failure::Indeterminate)
 }
 fn release(boot:&Boot,seal:u64)->Result<(),Failure>{
-    for _ in 0..256{
-        match crate::syscall(STAGE_VIEW,boot.caps[MANAGER],3,seal,0){
-            0=>return Ok(()),-7=>crate::yield_now(),_=>return Err(Failure::Native),
+    for attempt in 0..256{
+        let status=crate::syscall(STAGE_VIEW,boot.caps[MANAGER],3,seal,0);
+        match update_manager::release_action(status,attempt){
+            ReleaseAction::Done=>return Ok(()),
+            ReleaseAction::Yield=>crate::yield_now(),
+            ReleaseAction::Stop=>return Err(Failure::Native),
         }
     }
     Err(Failure::Native)
+}
+/// Whole-guest stop, never a manager EXIT or a selector undo. The fixed kernel
+/// branch validates the Manager grant then disables interrupts and halts.
+fn reconcile(boot:&Boot)->!{
+    let _=crate::syscall(STAGE_VIEW,boot.caps[MANAGER],8,0,0);
+    // Unreachable with the matching kernel ABI. Do not continue a transaction.
+    crate::fail()
+}
+pub fn boot_selected(boot:&Boot,requests:&mut wire::Requests){
+    let first=transaction(boot,requests,Mode::Boot,0);
+    let action=update_manager::boot_action(first,false);
+    let action=if action==BootAction::PriorOnce{
+        update_manager::boot_action(transaction(boot,requests,Mode::Fallback,0),true)
+    }else{action};
+    match action{BootAction::Active=>{},_=>reconcile(boot)}
+}
+/// Future native callers must use this terminal wrapper, never handle an
+/// Indeterminate result as an ordinary process-level error.
+pub fn install(boot:&Boot,requests:&mut wire::Requests,index:u64)->Result<(),Failure>{
+    match transaction(boot,requests,Mode::Install,index){
+        Err(Failure::Indeterminate|Failure::Channel|Failure::Native)=>reconcile(boot),
+        result=>result,
+    }
 }

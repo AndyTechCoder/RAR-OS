@@ -103,6 +103,9 @@ fn boot_snapshot()->Boot {
         check(valid_trial_activation(&initial,&active));
         active
     }else{initial};
+    #[cfg(rar_settings_only)]
+    {check(boot.role==5);apps::settings(&boot)}
+    #[cfg(not(rar_settings_only))]
     match boot.role {
         0=>apps::shell(&boot),1=>drivers::storage(&boot),2=>drivers::keyboard(&boot),
         3=>drivers::compositor(&boot),4=>apps::files(&boot),5=>apps::settings(&boot),

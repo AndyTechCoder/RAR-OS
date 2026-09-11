@@ -373,3 +373,12 @@ The native update adapter links the System session and manager verifier to the e
 The legacy native service entries remain selected until immutable factory/input provisioning and the initial bootstrap composition are integrated. Merely linking these adapters does not claim active signed boot, live replacement or fallback. New transaction tests cover same-session cancel/begin rejection, exact-prior fallback, wrong/stale peers, malformed/substituted proposals, finish/abort failures, every observed media-operation error in all three modes, and lost/duplicate Commit acknowledgements. These are cloud source tests, not privileged VM fault evidence.
 
 The native desktop plan stores only seven precomputed capability tables and binding/incarnation metadata. Empty message queues are constructed infallibly on publication, not copied into the plan. The compile-time 8192-byte limit remains unchanged after cloud compilation caught the earlier larger Process-array representation.
+
+
+### Terminal routing and laboratory executable variants
+
+Only a cleanly closed Boot rejection (Rejected, Verify or Trial) permits one exact-prior attempt. Verify/Trial return only after matching native reject/abort, physical release where required, and System cancellation succeed. This is not a general retry policy. The second attempt either publishes the desktop or stops; channel, native and indeterminate outcomes cannot authorize fallback.
+
+Manager-only StageView operation 8 has zero additional arguments and invokes the existing whole-guest UPDATE-RECONCILE fatal stop. It performs no disk write, firmware change or host operation. The native coordinator routes unsuccessful initial boot and every indeterminate live-install result to this whole-system stop, never a manager-only EXIT. Release succeeds only on status 0, retries only exact Busy (-7), and fails by the 256th attempt. Pure tests pin this routing and status budget.
+
+The standalone Settings build selector `rar_settings_only` restricts entry to role 5; `rar_settings_v2` selects actual new view/interaction code (D toggles spacing). `rar_settings_fail_health` is an explicit negative-fixture variant. Ordinary builds retain the existing first Settings view. These flags do not themselves build, sign, provision or execute a package; trusted-cloud tooling and causal changed-code proof remain required.

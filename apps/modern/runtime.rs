@@ -135,15 +135,18 @@ pub fn files(boot:&Boot)->! {
     }
 }
 pub fn settings(boot:&Boot)->! {
-    let mut light=false;let mut version=0;
-    let mut view=crate::settings::initial_view();publish(boot,&mut version,&view);
+    let mut preferences=crate::settings::Preferences::new();let mut version=0;
+    let mut view=preferences.view();publish(boot,&mut version,&view);
     loop {
         let m=shell_event(boot);
-        if key_decode(&m)==Some(b' ') {
-            light=!light;view.line(1,if light{b"LIGHT"}else{b"DARK"});
-            publish(boot,&mut version,&view);
-            let mut theme=[0;128];theme[0]=0x12;theme[1]=light as u8;
-            deliver(boot.caps[SHELL],&theme);
+        if let Some(key)=key_decode(&m) {
+            if let Some(theme)=preferences.key(key){
+                view=preferences.view();publish(boot,&mut version,&view);
+                if let Some(light)=theme{
+                    let mut frame=[0;128];frame[0]=0x12;frame[1]=light as u8;
+                    deliver(boot.caps[SHELL],&frame);
+                }
+            }
         } else if activated(&m){publish(boot,&mut version,&view);}
     }
 }

@@ -188,7 +188,7 @@ impl Runtime {
         // Released desktop's least-authority IPC graph, with logical endpoints.
         for (caller,slot,principal) in [(0,2,3),(0,4,4),(0,5,5),(0,6,6),
             (1,4,4),(1,6,6),(2,1,0),(4,2,3),(4,3,1),
-            (5,1,0),(5,2,3),(6,2,3),(6,3,1)] {
+            (5,1,0),(5,2,3),(6,2,3),(6,3,1),(8,1,9),(9,1,8)] {
             if !bootstrapping{r.processes[caller].caps.grant(slot,Object::NamedSend {principal},SEND).unwrap();}
         }
         if !bootstrapping{r.processes[1].caps.grant(DEVICE_CAP,Object::Device(Device::Data),DEVICE).unwrap();}
@@ -777,7 +777,7 @@ mod tests {
         let r=Runtime::new();
         let edges=[(0,2,3),(0,4,4),(0,5,5),(0,6,6),
             (1,4,4),(1,6,6),(2,1,0),(4,2,3),(4,3,1),
-            (5,1,0),(5,2,3),(6,2,3),(6,3,1)];
+            (5,1,0),(5,2,3),(6,2,3),(6,3,1),(8,1,9),(9,1,8)];
         for caller in 0..TASKS {for slot in 0..CAP_SLOTS {
             let expected=edges.iter().find(|&&(c,s,_)|c==caller&&s==slot).map(|&(_,_,p)|p);
             let actual=r.handle(caller,slot).and_then(|h|r.processes[caller].caps.resolve(h,SEND));
@@ -791,7 +791,7 @@ mod tests {
         let mut r=Runtime::new();
         for (caller,slot,target) in [(0,2,3),(0,4,4),(0,5,5),(0,6,6),
             (1,4,4),(1,6,6),(2,1,0),(4,2,3),(4,3,1),
-            (5,1,0),(5,2,3),(6,2,3),(6,3,1)] {
+            (5,1,0),(5,2,3),(6,2,3),(6,3,1),(8,1,9),(9,1,8)] {
             r.send(caller,r.handle(caller,slot).unwrap(),b"route").unwrap();
             let m=r.receive(target,r.handle(target,SELF_CAP).unwrap()).unwrap();
             assert_eq!((m.principal,m.incarnation,m.length),(caller as u8,1,5));

@@ -435,6 +435,10 @@ impl Runtime{
                         }else{self.commit_handover(frame.rdi,frame.rdx,frame.r10);}
                         Ok(0)
                     },
+                    8=>{
+                        if frame.rdx!=0||frame.r10!=0{return Err(Error::Invalid);}
+                        fatal("RAR-PANIC:CODE=UPDATE-RECONCILE");
+                    },
                     _=>Err(Error::Invalid),
                 }
             }
