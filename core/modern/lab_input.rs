@@ -22,6 +22,15 @@ pub fn window(index:usize,bytes:usize,padded:usize,physical:u64,
         overlap(address,virtual_end,arena.0,arena_end){return Err(Invalid);}
     Ok(Window{address,physical,pages:(padded/4096)as u64,bytes})
 }
+pub fn disjoint(windows:&[Option<Window>;COUNT])->Result<(),Invalid>{
+    for i in 0..COUNT{for j in i+1..COUNT{
+        if let(Some(a),Some(b))=(windows[i],windows[j]){
+            let ae=a.physical.checked_add(a.pages.checked_mul(4096).ok_or(Invalid)?).ok_or(Invalid)?;
+            let be=b.physical.checked_add(b.pages.checked_mul(4096).ok_or(Invalid)?).ok_or(Invalid)?;
+            if overlap(a.physical,ae,b.physical,be){return Err(Invalid);}
+        }
+    }}Ok(())
+}
 pub fn response(index:usize,address:u64,bytes:u64)->Result<usize,Invalid>{
     let length=usize::try_from(bytes).map_err(|_|Invalid)?;
     if index>=COUNT||address!=BASE+index as u64*STRIDE||!(896..=MAX_BYTES).contains(&length){
@@ -31,6 +40,13 @@ pub fn response(index:usize,address:u64,bytes:u64)->Result<usize,Invalid>{
 }
 #[cfg(test)]mod tests{
     use super::*;
+    #[test]fn physical_windows_refuse_aliases_before_mapping(){
+        let a=Window{address:BASE,physical:0x1000,pages:1,bytes:896};
+        let b=Window{address:BASE+STRIDE,physical:0x2000,..a};
+        assert_eq!(disjoint(&[Some(a),Some(b),None,None,None]),Ok(()));
+        assert!(disjoint(&[Some(a),Some(Window{physical:0x1000,..b}),None,None,None]).is_err());
+        assert!(disjoint(&[Some(Window{pages:2,..a}),Some(b),None,None,None]).is_err());
+    }
     #[test]fn immutable_windows_are_bounded_disjoint_and_not_kernel_aliases(){
         let image=(0x1000_0000,0x1000000);let arena=(0x2000_0000,0x2800000);
         for index in 0..COUNT{for bytes in [896,4096,4097,MAX_BYTES]{

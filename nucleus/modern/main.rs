@@ -164,15 +164,21 @@ pub unsafe fn start(info:&boot::BootInfo)->!{
         if index==3{unsafe{add(&mut tables,process,0x800000,info.platform.framebuffer,
             info.platform.framebuffer_bytes/4096,true,false,true);}}
         if index==9{
+            let mut windows=[None;lab_input::COUNT];
             for (index,bank)in lab_images::all().into_iter().enumerate(){
                 let Some((bytes,length))=bank else{continue;};
                 let window=lab_input::window(index,length,bytes.len(),bytes.as_ptr()as u64,
                     (runtime.image_base,runtime.image_size),(runtime.arena,boot::ARENA_PAGES as u64*4096))
                     .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=LAB-INPUT-BOUNDS"));
                 if bytes[length..].iter().any(|&b|b!=0){fatal("RAR-PANIC:CODE=LAB-INPUT-PADDING");}
-                // SAFETY: page-aligned dedicated immutable static object, exact
-                // image-contained extent, disjoint from arena/other windows;
-                // padding is initialized. Sole System mapping, always RO/NX.
+                windows[index]=Some(window);
+            }
+            lab_input::disjoint(&windows).unwrap_or_else(|_|fatal("RAR-PANIC:CODE=LAB-INPUT-ALIAS"));
+            for window in windows.into_iter().flatten(){
+                // SAFETY: every dedicated page-aligned immutable static object
+                // was checked before mapping; image-contained extents are mutually
+                // disjoint and avoid arena/other virtual windows. Padding is zero.
+                // Sole System user mappings, always RO/NX, never replaced.
                 unsafe{add(&mut tables,process,window.address,window.physical,window.pages,false,false,false);}
             }
         }
