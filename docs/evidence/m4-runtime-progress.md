@@ -1,3 +1,32 @@
+# Current continuation status — 2026-09-11
+
+M4.2 is **not complete**. Independent review of the latest provisioning source
+83e0e743cad22d1bc0c5d011944e88c33a1b7eb7 was blocked before source access:
+Codex could not create its thread-store writer lock (ENOSPC). The tool rejection
+forbids retries/workarounds. No cleanup, deletion, replacement reviewer or
+independent-review bypass was attempted.
+
+Review of 6dd3e99589c2dbd1320d72de5c41d43711019aab found no source blocker.
+The later83e0e batch adds pairwise physical-window preflight and a pure existing-
+root signer/inspector-based package/virgin-System constructor with tests.
+These additions have not received independent clearance or cloud validation.
+All are saved as GitHub commits in the continuing PR158 ancestry; do not lose
+or recreate them, and do not call source construction a completed VM feature.
+
+Reviewed4c5bcc6fbd97cc06b4511e011ea6ae13998dcb20 has three passing regressions;
+Specifications34568197376 remains pending at this checkpoint. Read the actual
+run outcome before continuing. The PR checkpoint comment is
+https://github.com/AndyTechCoder/RAR-OS/pull/158#issuecomment-5630304226 .
+
+The safe continuation is to retain the current cloud result, restore the
+independent-review infrastructure, review the exact pending source, then finish
+the native bootstrap selection and trusted cloud target build/provisioning/
+causal VM evidence listed below. No new owner architecture permission is
+needed for the approved scope. No local Mac/SSD repository operation, deletion,
+download, build or RAR OS execution is authorized by this checkpoint.
+
+---
+
 # Latest M4.2 implementation checkpoint — 2026-09-11
 
 **M4.1 remains complete. M4.2 is NOT complete.** No live-update VM acceptance,
