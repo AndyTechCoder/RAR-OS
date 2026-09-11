@@ -46,6 +46,19 @@ pub fn receive(policy:&mut model::Runtime,caller:usize,handle:u64,ranges:&[UserR
     user_buffer(ranges,pointer,abi::ENVELOPE_BYTES as usize,true)?;
     policy.receive(caller,handle)
 }
+/// Complete checked fixed reply adapter. The sole native writer is invoked
+/// only after authority, framing and the entire destination have been validated.
+pub fn update_binding_copy(policy:&model::Runtime,caller:usize,handle:u64,
+    ranges:&[UserRange],pointer:u64,length:u64,write:impl FnOnce([u8;16]))->Result<(),Error>{
+    if length!=16{return Err(Error::Invalid);}
+    user_buffer(ranges,pointer,16,true)?;
+    let values=policy.update_bindings(caller,handle)?;
+    let mut response=[0u8;16];
+    for(i,value)in values.into_iter().enumerate(){
+        response[i*8..i*8+8].copy_from_slice(&value.to_le_bytes());
+    }
+    write(response);Ok(())
+}
 pub fn next(states:&[CpuState;TASKS],current:usize)->Result<usize,Error>{
     if current>=TASKS{return Err(Error::Invalid);}
     (1..=TASKS).map(|n|(current+n)%TASKS)
@@ -359,5 +372,31 @@ mod tests{
             (640,480,640,0,0xfffff000,2000000),(640,480,640,0,0x80000000,100)]{
             assert!(framebuffer_span(w,h,p,f,b,n).is_err());
         }
+    }
+
+    #[test]fn update_binding_native_adapter_checks_before_any_write(){
+        let policy=model::Runtime::new();let cap=policy.handle(8,10).unwrap();
+        let good=[UserRange{start:0x600000,end:0x601000,writable:true,executable:false}];
+        let mut bytes=[0xa5;16];
+        update_binding_copy(&policy,8,cap,&good,0x600000,16,|r|bytes=r).unwrap();
+        let mut expected=[0;16];expected[0]=1;expected[8]=1;assert_eq!(bytes,expected);
+        let deny=|p:&model::Runtime,caller,handle,ranges:&[UserRange],pointer,length|{
+            let mut writes=0;
+            assert!(update_binding_copy(p,caller,handle,ranges,pointer,length,|_|writes+=1).is_err());
+            assert_eq!(writes,0);
+        };
+        for caller in 0..TASKS{if caller!=8{deny(&policy,caller,cap,&good,0x600000,16);}}
+        for handle in [0,cap^1,policy.handle(8,0).unwrap()]{deny(&policy,8,handle,&good,0x600000,16);}
+        for length in [0,15,17,u64::MAX]{deny(&policy,8,cap,&good,0x600000,length);}
+        for pointer in [0,4095,0x5fffff,0x600ff1,0x601000,u64::MAX-7,0x800000000000]{
+            deny(&policy,8,cap,&good,pointer,16);
+        }
+        let readonly=[UserRange{writable:false,..good[0]}];
+        let wx=[UserRange{executable:true,..good[0]}];
+        deny(&policy,8,cap,&readonly,0x600000,16);
+        deny(&policy,8,cap,&wx,0x600000,16);
+        deny(&policy,8,cap,&[],0x600000,16);
+        let bootstrap=model::Runtime::bootstrap();
+        deny(&bootstrap,8,bootstrap.handle(8,10).unwrap(),&good,0x600000,16);
     }
 }

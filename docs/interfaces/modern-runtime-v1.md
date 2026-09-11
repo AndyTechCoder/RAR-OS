@@ -449,3 +449,14 @@ accepts X as an explicit laboratory user-fault key for causal fallback testing.
 This new Modern Terminal request capability changes the new ordinary graph;
 the released M3 tag and previously accepted M4.1 snapshot are not modified. Pure policy/model
 tests and source compilation do not replace actual cloud demonstration.
+
+
+The transaction now returns its exact authenticated, health-checked committed
+incarnation only after durable ACK, native cutover and physical release. Both
+post-install and post-fallback observations must equal that exact value; merely
+being newer is insufficient. The native operation9 copy uses the tested
+update_binding_copy adapter, which invokes its sole writer only after complete
+framing, writable-span and authority checks. Tests cover invalid/overflowing
+pointers, missing/read-only/WX spans, wrong lengths/callers/handles, bootstrap
+denial, exact bytes and zero writer calls on all refusals. This is focused
+source-adapter evidence; actual privileged VM execution remains required.

@@ -81,7 +81,7 @@ fn cancel(boot:&Boot,t:Transfer)->Result<(),Failure>{
 /// authorize only the boot coordinator\'s single exact-prior attempt. They do not
 /// authorize generic retries. Channel/native/indeterminate errors halt
 /// the manager; no automatic retransmission or remount can hide an unknown ACK.
-fn transaction(boot:&Boot,requests:&mut wire::Requests,mode:Mode,index:u64)->Result<(),Failure>{
+fn transaction(boot:&Boot,requests:&mut wire::Requests,mode:Mode,index:u64)->Result<u64,Failure>{
     let id=requests.next().map_err(|_|Failure::Native)?;
     requests.accept(id).map_err(|_|Failure::Native)?;
     let first=exchange(boot,&wire::request(Kind::Start,mode,id,index).map_err(|_|Failure::Native)?)?;
@@ -159,7 +159,8 @@ fn transaction(boot:&Boot,requests:&mut wire::Requests,mode:Mode,index:u64)->Res
     // Every fallible construction/grant was prepared before Commit. Native
     // invariants after this durable ACK reconcile-halt; they cannot undo disk.
     control(boot,7,token,t.seal).map_err(|_|Failure::Indeterminate)?;
-    release(boot,t.seal).map_err(|_|Failure::Indeterminate)
+    release(boot,t.seal).map_err(|_|Failure::Indeterminate)?;
+    Ok(incarnation)
 }
 fn release(boot:&Boot,seal:u64)->Result<(),Failure>{
     for attempt in 0..256{
@@ -202,14 +203,16 @@ pub fn manager(boot:&Boot)->!{
           crate::update_control::Action::Fallback=>{
             // One fresh, reverified exact-prior fallback, never an old process
             // resurrection or an oscillating automatic retry.
-            if transaction(boot,&mut requests,Mode::Fallback,0).is_err()||
-                !recovery.restored(bindings(boot)[1]){reconcile(boot);}
+            let Ok(committed)=transaction(boot,&mut requests,Mode::Fallback,0) else{reconcile(boot);};
+            if !recovery.restored(committed,bindings(boot)[1]){reconcile(boot);}
           },
           crate::update_control::Action::Observe=>{
             match crate::poll_checked(boot.caps[SELF_RECV]){
                 Ok(Some(m))=>{
                     if let Some(index)=commands.accept(m.sender,m.generation,current[0],m.length,&m.bytes){
-                        if install(boot,&mut requests,index).is_ok()&&!recovery.installed(bindings(boot)[1]){reconcile(boot);}
+                        if let Ok(committed)=install(boot,&mut requests,index){
+                            if !recovery.installed(committed,bindings(boot)[1]){reconcile(boot);}
+                        }
                     }
                 },
                 Ok(None)=>{},
@@ -221,16 +224,16 @@ pub fn manager(boot:&Boot)->!{
     }
 }
 pub fn boot_selected(boot:&Boot,requests:&mut wire::Requests){
-    let first=transaction(boot,requests,Mode::Boot,0);
+    let first=transaction(boot,requests,Mode::Boot,0).map(|_|());
     let action=update_manager::boot_action(first,false);
     let action=if action==BootAction::PriorOnce{
-        update_manager::boot_action(transaction(boot,requests,Mode::Fallback,0),true)
+        update_manager::boot_action(transaction(boot,requests,Mode::Fallback,0).map(|_|()),true)
     }else{action};
     match action{BootAction::Active=>{},_=>reconcile(boot)}
 }
 /// Future native callers must use this terminal wrapper, never handle an
 /// Indeterminate result as an ordinary process-level error.
-pub fn install(boot:&Boot,requests:&mut wire::Requests,index:u64)->Result<(),Failure>{
+pub fn install(boot:&Boot,requests:&mut wire::Requests,index:u64)->Result<u64,Failure>{
     match transaction(boot,requests,Mode::Install,index){
         Err(Failure::Indeterminate|Failure::Channel|Failure::Native)=>reconcile(boot),
         result=>result,

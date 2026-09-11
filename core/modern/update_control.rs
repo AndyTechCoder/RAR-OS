@@ -41,12 +41,12 @@ impl Recovery{
         if current!=0||!self.installed||self.used{return Action::Stop;}
         self.used=true;self.pending=true;Action::Fallback
     }
-    pub fn installed(&mut self,current:u64)->bool{
-        if self.installed||current<=self.expected{return false;}
+    pub fn installed(&mut self,committed:u64,current:u64)->bool{
+        if current!=committed||self.installed||committed<=self.expected{return false;}
         self.expected=current;self.installed=true;true
     }
-    pub fn restored(&mut self,current:u64)->bool{
-        if !self.pending||current<=self.expected{return false;}
+    pub fn restored(&mut self,committed:u64,current:u64)->bool{
+        if current!=committed||!self.pending||committed<=self.expected{return false;}
         self.expected=current;self.pending=false;true
     }
 }
@@ -58,13 +58,15 @@ impl Recovery{
         assert_eq!(r.observe(9),Action::Observe);
         assert_eq!(r.observe(0),Action::Stop);
         assert_eq!(r.observe(10),Action::Stop);
-        assert!(!r.installed(0));assert!(!r.installed(9));assert!(!r.restored(10));
-        assert!(r.installed(10));assert!(!r.installed(11));
+        assert!(!r.installed(0,0));assert!(!r.installed(9,9));assert!(!r.restored(10,10));
+        for current in [0,8,9,11,u64::MAX]{assert!(!r.installed(10,current));}
+        assert!(r.installed(10,10));assert!(!r.installed(11,11));
         assert_eq!(r.observe(10),Action::Observe);
         assert_eq!(r.observe(11),Action::Stop);
         assert_eq!(r.observe(0),Action::Fallback);
-        assert!(!r.restored(10));assert!(!r.restored(0));
-        assert!(r.restored(11));assert!(!r.restored(12));assert_eq!(r.observe(11),Action::Observe);
+        assert!(!r.restored(10,10));assert!(!r.restored(0,0));
+        for current in [0,9,10,12,u64::MAX]{assert!(!r.restored(11,current));}
+        assert!(r.restored(11,11));assert!(!r.restored(12,12));assert_eq!(r.observe(11),Action::Observe);
         assert_eq!(r.observe(0),Action::Stop);
     }
     #[test]fn fixed_commands_and_canonical_frames(){
@@ -89,6 +91,10 @@ impl Recovery{
                 assert_eq!(r.accept(6,n,n,128,&bad),None);
             }
         }
+        for at in 8..16{for bit in 0..8{
+            let mut bad=b;bad[at]^=1<<bit;
+            assert_eq!(r.accept(6,n,n,128,&bad),None);
+        }}
         assert_eq!(r.accept(6,n,n,128,&frame(u64::MAX,0).unwrap()),None);
         assert_eq!(r.accept(6,n,n,128,&frame(2,0).unwrap()),None);
         assert_eq!(r.accept(6,n,n,128,&b),Some(0));
