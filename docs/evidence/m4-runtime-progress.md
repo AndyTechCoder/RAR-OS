@@ -1,3 +1,30 @@
+# Verified M4.2 source result — 2026-09-11
+
+M4.2 remains incomplete; do not begin M4.3 or merge PR158.
+
+Source4c5bcc6fbd97cc06b4511e011ea6ae13998dcb20 now passed all four cloud checks:
+Specifications34568197376/job103164591601, Foundation34568197221,
+Platform34568197197 and Desktop34568197181. Completed sanitized logs confirm
+73 signed-fixture/core/session tests, including every media-operation error
+campaign, exact prior fallback, cancellation, stale identity, proposal
+substitution and lost/duplicate ACK tests. Native kernel/service Linux
+object-only composition compilation and Settings interaction tests passed.
+This is not UEFI build/link, stack-use, signed boot or live-update VM evidence.
+
+The later immutable-input/provisioning source and checkpoint
+927d84246f6b098422b268999db82508a7344c7e are being published to the same draft
+branch for ordinary cloud source validation. The pairwise-window/provisioner
+batch83e0e743 still has no independent review clearance: the reviewer remains
+blocked by its thread-store ENOSPC rejection. No retry, alternate reviewer,
+review bypass, local cleanup or deletion has been attempted.
+
+The owner renewed approval for safe continuation, not waiver of review or VM
+acceptance. Safe source validation may proceed; runtime activation and merge
+remain gated. Signed bootstrap composition, actual target package builds and
+causal VM acceptance remain unfinished as detailed below.
+
+---
+
 # Current continuation status — 2026-09-11
 
 M4.2 is **not complete**. Independent review of the latest provisioning source
