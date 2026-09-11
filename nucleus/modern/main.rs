@@ -4,6 +4,8 @@ mod model;
 mod support;
 mod retirement;
 mod loader;
+mod lab_images;
+#[path="../../core/modern/lab_input.rs"] mod lab_input;
 pub(crate) mod staging;
 mod native_pio;
 #[path="../platform/arch.rs"] mod arch;
@@ -161,6 +163,19 @@ pub unsafe fn start(info:&boot::BootInfo)->!{
         }
         if index==3{unsafe{add(&mut tables,process,0x800000,info.platform.framebuffer,
             info.platform.framebuffer_bytes/4096,true,false,true);}}
+        if index==9{
+            for (index,bank)in lab_images::all().into_iter().enumerate(){
+                let Some((bytes,length))=bank else{continue;};
+                let window=lab_input::window(index,length,bytes.len(),bytes.as_ptr()as u64,
+                    (runtime.image_base,runtime.image_size),(runtime.arena,boot::ARENA_PAGES as u64*4096))
+                    .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=LAB-INPUT-BOUNDS"));
+                if bytes[length..].iter().any(|&b|b!=0){fatal("RAR-PANIC:CODE=LAB-INPUT-PADDING");}
+                // SAFETY: page-aligned dedicated immutable static object, exact
+                // image-contained extent, disjoint from arena/other windows;
+                // padding is initialized. Sole System mapping, always RO/NX.
+                unsafe{add(&mut tables,process,window.address,window.physical,window.pages,false,false,false);}
+            }
+        }
         // Initial architectural state contains no kernel register/SIMD bytes.
         let frame=process.kernel_top-720;
         unsafe{
@@ -289,6 +304,21 @@ impl Runtime{
                 // Current is saved CPU ownership; policy and device borrow are
                 // serialized with revocation under the trap's IF=0 invariant.
                 unsafe{device.execute(policy,current,frame.rdi,frame.rsi,frame.rdx,frame.r10)}
+            }
+            abi::LAB_INPUT=>{
+                self.policy.as_ref().ok_or(Error::Denied)?.stage_copy(current,frame.rdi)?;
+                if frame.r10!=16{return Err(Error::Invalid);}
+                let index=usize::try_from(frame.rsi).map_err(|_|Error::Invalid)?;
+                let bank=lab_images::all().get(index).copied().flatten().ok_or(Error::Invalid)?;
+                let address=lab_input::BASE+index as u64*lab_input::STRIDE;
+                self.buffer(frame.rdx,16,true)?;
+                let mut reply=[0u8;16];
+                reply[..8].copy_from_slice(&address.to_le_bytes());
+                reply[8..].copy_from_slice(&(bank.1 as u64).to_le_bytes());
+                // SAFETY: System-owned exact output validated; immutable input
+                // windows were checked and installed once before user execution.
+                unsafe{ptr::copy_nonoverlapping(reply.as_ptr(),frame.rdx as *mut u8,16);}
+                Ok(0)
             }
             abi::STAGE_COPY=>{
                 self.policy.as_ref().ok_or(Error::Denied)?.stage_copy(current,frame.rdi)?;

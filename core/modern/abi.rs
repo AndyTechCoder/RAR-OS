@@ -19,6 +19,7 @@ pub const TRIAL_READY:u64=8;
 pub const STAGE_COPY:u64=9;
 pub const STAGE_VIEW:u64=10;
 pub const SETTINGS_BINDING:u64=11;
+pub const LAB_INPUT:u64=12;
 pub const STAGE_VIEW_ADDRESS:u64=0x1400000;
 pub const STAGE_VIEW_BYTES:usize=32;
 pub const STAGE_CAP:usize=10;

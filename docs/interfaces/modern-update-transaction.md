@@ -382,3 +382,14 @@ Only a cleanly closed Boot rejection (Rejected, Verify or Trial) permits one exa
 Manager-only StageView operation 8 has zero additional arguments and invokes the existing whole-guest UPDATE-RECONCILE fatal stop. It performs no disk write, firmware change or host operation. The native coordinator routes unsuccessful initial boot and every indeterminate live-install result to this whole-system stop, never a manager-only EXIT. Release succeeds only on status 0, retries only exact Busy (-7), and fails by the 256th attempt. Pure tests pin this routing and status budget.
 
 The standalone Settings build selector `rar_settings_only` restricts entry to role 5; `rar_settings_v2` selects actual new view/interaction code (D toggles spacing). `rar_settings_fail_health` is an explicit negative-fixture variant. Ordinary builds retain the existing first Settings view. These flags do not themselves build, sign, provision or execute a package; trusted-cloud tooling and causal changed-code proof remain required.
+
+
+### Immutable public laboratory package inputs
+
+The `rar_signed_updates` kernel composition embeds five independently page-aligned, zero-padded constant package objects in its read-only boot PE: update, failed-health, bad-signature, bad-ABI, and factory. The factory copy is therefore on the immutable boot attachment, not the writable System slots. These are public laboratory bytes, not production keys or trusted publisher enrollment. Existing compositions and object-only fixtures expose no inputs.
+
+Only System9 receives the five read-only/NX user windows beginning at 0x4000000000 with 0x400000-byte strides. Each maps only its exact page-rounded object, with initialized tail padding and an unmapped gap before the next window. Initialization checks image containment, page alignment, bounded logical length (896..2097536), and non-overlap with arena/kernel identity mappings. Maximum System user ranges remain within the existing 24-entry bound (header + 16 sections + stack + Boot + 5 windows). No window is replaced during a process incarnation.
+
+Private syscall12 LAB_INPUT requires the existing System-only StageCopy capability: RDI handle, RSI fixed index0..4, RDX writable 16-byte reply, R10 exactly16. It returns the fixed address and logical length; it accepts no path, physical address, LBA, writable source or device selector. Invalid/absent inputs are refused. The System adapter validates the exact response before borrowing that process-lifetime immutable span. The manager still verifies only the sealed readback from writable inactive System storage, not these original inputs.
+
+These source mechanisms do not activate the signed composition. Trusted cloud generation/signing/provisioning, target cfg builds and all VM evidence remain pending. In particular, a literal zero System image is not a valid factory image and must never be inferred as formatting authorization.

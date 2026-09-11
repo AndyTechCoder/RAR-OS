@@ -25,6 +25,7 @@ mod system_volume;
 mod update_wire;
 mod update_system;
 mod update_manager;
+mod lab_input;
 #[path="../../services/modern/update_runtime.rs"] mod update_runtime;
 #[derive(Clone,Copy,Debug,PartialEq,Eq)] pub enum Error{Invalid,Denied}
 use core::{arch::asm,panic::PanicInfo};

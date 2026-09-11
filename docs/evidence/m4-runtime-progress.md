@@ -1,3 +1,89 @@
+# Latest M4.2 implementation checkpoint — 2026-09-11
+
+**M4.1 remains complete. M4.2 is NOT complete.** No live-update VM acceptance,
+PR158 merge, v0.4 release or production security is claimed.
+
+The owner explicitly approved continuing M4.2, including the native loader/
+lifecycle bridge, on 2026-09-11. Routine safe work within that approved scope does
+not require another permission packet. All work below used canonical GitHub API
+source operations and existing cloud checks. No Mac/SSD repository files were
+read, changed, deleted, downloaded or built; no RAR OS ran locally.
+
+## Implemented in this continuation
+
+- Native exact-sealed-byte PE trial construction with minimal health authority,
+  private initialized mappings/stacks and writable-aperture retirement.
+- Prepared live ACTIVE handover and an all-or-nothing initial desktop plan.
+  The plan stores capabilities, not copied peer queues; its 8 KiB bound is
+  compile-time enforced. Initial desktop processes remain unscheduled until
+  publication. The selected-boot composition is not yet activated.
+- Kernel-authenticated Settings rebinding in shell/compositor, preserving peer
+  state and committed pixels while rejecting old incarnations.
+- System boot preparation, exact pending-token copy, cancellation and borrowed
+  one-shot publication tokens. Pre-I/O policy rejection cannot strand the owner.
+- Bounded authenticated System/manager wire/session implementation, exact
+  package/record/signature verification and full durable-ACK comparison.
+  Native syscall adapters and one-shot boot fallback routing are linked in
+  source; legacy service entries remain selected pending provisioning.
+- Manager-only whole-guest UPDATE-RECONCILE halt for uncertain publication,
+  plus exact bounded release-status routing.
+- Fixed immutable System-only laboratory package windows have been implemented
+  as an unactivated source candidate. Their compile/review and trusted package
+  provisioning remain pending; no host paths or arbitrary device selectors exist.
+- A genuinely different Settings source variant: D toggles spacing. Default
+  Settings behavior is preserved. Standalone role5 and failed-health variants
+  exist for later signed cloud fixtures; they have not been executed.
+
+## Review and cloud evidence
+
+Source22ca84eee5675244c53785195d45b0f4c1500a5b passed all four source checks,
+including Specifications34564109443/job103152583187. Source
+5841c117b2177bd9b3725dac27ddfd8061461ddb passed all four checks:
+Specifications34565615234/job103157012881, Foundation34565615263,
+Platform34565615254, Desktop34565615241. Completed logs verify actual model/
+support tests and Linux object-only native kernel/service composition compilation.
+These do not constitute UEFI link, stack-usage or VM runtime evidence.
+
+Consolidated current implementation:
+4c5bcc6fbd97cc06b4511e011ea6ae13998dcb20. Independent read-only review found
+no remaining source blocker after corrections. Foundation34568197221,
+Platform34568197197 and Desktop34568197181 passed. Specifications34568197376
+was still running when this checkpoint was prepared; do not infer its outcome.
+
+The review found and the source fixes addressed stale peer snapshots,
+consumed pending tokens after policy rejection, Stage Begin error atomicity,
+and terminal routing. Cloud validation caught a private-method visibility
+error, an oversized Process-based desktop plan, and an outdated exhaustive
+named-send matrix. A subsequent duplicate-grant edit was caught and corrected
+by review in4c5bcc6f. Failed or superseded runs are not counted as passes.
+
+New signed-fixture transaction tests cover Boot/Install/Fallback, clean
+cancellation, stale peers, malformed/substituted proposals, begin/finish/abort
+failure, every observed media-operation error in all three modes, and
+lost/duplicate ACK with zero reexecution. Their final cloud result remains
+bound to the current exact-head check, not to earlier passing snapshots.
+
+## Exact remaining work to finish M4.2
+
+1. Integrate bounded immutable laboratory package inputs and factory System
+   provisioning, preserving the separately immutable boot/recovery copy.
+   Select the bootstrap-only native composition and actual service entries.
+   Do not infer formatting permission from zero media.
+2. Build/sign the actual standalone Settings variants in the pinned reviewed
+   cloud tool. Validate every target cfg, final PE/image/stack bounds and
+   reproducibility; source/object compilation is insufficient.
+3. Demonstrate actual selected boot, changed-code live update with peers
+   continuing, health failure and fresh-incarnation fallback, rejection cases,
+   durable publication cuts, native mapping/revocation/zeroing and whole-guest
+   reconcile halt. Bind exact unchanged Data and retained causal GUI evidence.
+4. Close the final focused review and exact-head evidence. Keep PR158 draft
+   until the applicable M4 integration/release gate; preserve released v0.3.
+
+No new coordinator, repeated polling automation, permission-only PR or
+re-run of already accepted M4.1 campaigns is needed.
+
+---
+
 # Latest M4.2 source integration checkpoint — 2026-09-10
 
 M4.1 remains complete; M4.2 is NOT complete and no updated Settings VM proof is

@@ -195,3 +195,19 @@ pub fn install(boot:&Boot,requests:&mut wire::Requests,index:u64)->Result<(),Fai
         result=>result,
     }
 }
+
+/// Fixed immutable windows live for the entire System process incarnation.
+/// Querying another input never unmaps or changes an earlier window.
+pub fn laboratory_input(index:u64)->Option<&'static[u8]>{
+    let boot=crate::boot_snapshot();if boot.role!=9{return None;}
+    let mut reply=[0u8;16];
+    if crate::syscall(LAB_INPUT,boot.caps[STAGE_CAP],index,reply.as_mut_ptr()as u64,16)!=0{return None;}
+    let address=u64::from_le_bytes(reply[..8].try_into().ok()?);
+    let bytes=u64::from_le_bytes(reply[8..].try_into().ok()?);
+    let length=crate::lab_input::response(usize::try_from(index).ok()?,address,bytes).ok()?;
+    // SAFETY: successful System-capability query and exact fixed address/length
+    // validation. Kernel maps the full dedicated immutable object RO/NX before
+    // this process runs. It is never replaced/unmapped during this incarnation;
+    // adjacent padding is initialized and guards/other kernel bytes are excluded.
+    Some(unsafe{core::slice::from_raw_parts(address as *const u8,length)})
+}
