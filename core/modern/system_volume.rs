@@ -251,7 +251,8 @@ impl<I:Io> Volume<I> {
     pub fn publish(&mut self,prepared:Prepared,next:Record)->Result<(),Reject>{
         self.open()?;
         self.matches(&prepared)?;
-        if prepared.fallback&&self.record().fallback().map_err(|_|Reject::Policy)?!=next{
+        if prepared.purpose==Purpose::Boot{return Err(Reject::Policy);}
+        if prepared.purpose==Purpose::Fallback&&self.record().fallback().map_err(|_|Reject::Policy)?!=next{
             return Err(Reject::Policy);
         }
         let id=prepared.identity;
