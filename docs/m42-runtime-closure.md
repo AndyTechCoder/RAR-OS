@@ -22,17 +22,25 @@ No artifact was downloaded or target code executed on the owner's Mac/SSD.
    old send must return Denied, and the consumed lifecycle token must return
    Stale. Only then is STALE-AUTHORITY-REVOKED emitted. Failures after durable
    publication reconcile-fatal; fallback with no live prior injects nothing.
-   Model tests do not substitute for the actual guest marker.
+   Model tests do not substitute for the actual guest marker. This probe is
+   confined to the signed laboratory build; before a production build reuses
+   that cfg it needs a narrower lab-only switch (queue pressure intentionally
+   fail-stops here rather than weakening the proof).
 2. A second fixed five-window composition replaces the bad-signature fixture
    slot with an otherwise identical update signed by a non-enrolled publisher.
    Its all-zero seed is deliberately public laboratory data, never a production
    signing key. Separate RAR signature conformance verifies its signature under
-   its own key and exact Publisher policy refusal. No enrollment or sixth
+   its own key and exact Publisher policy refusal. The controller additionally
+   checks the exact real bank package, including signature/key/payload negatives,
+   in the confined compiler container before its alternate boot campaign. No enrollment or sixth
    mapping is added. A fresh three-VM actual campaign uses this alternate bank.
 3. One System-only selector write error follows exact staged candidate-sector
-   writes and their flush. It targets selector1 offset512 length512, never Data.
+   writes and their flush. Its selector payload hash must match the independent
+   installed-selector oracle, not merely a well-formed hex digest. It targets selector1 offset512 length512, never Data.
    Only the exact matching backend receipt plus UPDATE-RECONCILE stop is
-   accepted. No retry, unrelated panic, broadened panic permission, device
+   accepted. A stopped System backend is permitted only with the matching
+   terminal receipt, exit21 and backend-failed; no other stop is excused.
+   No retry, unrelated panic, broadened panic permission, device
    selector or arbitrary fault plan is allowed. Whole-VM/backend joins precede
    independent full System/Data comparison and a fresh factory-selected boot.
 

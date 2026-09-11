@@ -9,8 +9,9 @@ def plan(candidate):
         raise ValueError("bounded trusted candidate")
     count=(len(candidate)+511)//512
     return dict(operation="write",ordinal=count+1,effect="error",prefix=0)
-def scan(records,candidate):
+def scan(records,candidate,selector):
     wanted=plan(candidate);count=wanted["ordinal"]-1
+    if type(selector) is not bytes or len(selector)!=512:raise ValueError("exact trusted selector bytes")
     if type(records) is not list or not 1<=len(records)<=16390:raise ValueError("bounded System records")
     ready=records[0]
     if (type(ready) is not dict or set(ready)!={"type","kind","readonly","export_readonly","capacity","device","inode"} or
@@ -51,6 +52,7 @@ def scan(records,candidate):
                 digest=event["payload_sha256"]
                 if type(digest) is not str or len(digest)!=64 or any(c not in "0123456789abcdef" for c in digest):
                     raise ValueError("System write hash")
+                if selected and digest!=sha256(selector).hexdigest():raise ValueError("exact candidate selector publication bytes")
                 if not selected:
                     part=candidate[counts["write"]*512:(counts["write"]+1)*512]
                     if digest!=sha256(part+bytes(512-len(part))).hexdigest():raise ValueError("actual candidate write bytes")
@@ -89,7 +91,7 @@ def serial_status(serial,hit,final=False):
         return "reconciled"
     if final:raise ValueError("missing reconcile stop")
     return "running"
-def joined(vm,candidate,base):
+def joined(vm,candidate,selector,base):
     vm.service()
     if serial_status(bytes(vm.serial),vm.system_fault_hit,True)!="reconciled":raise ValueError("exact fault stop")
     stopped=vm.destroy()
@@ -99,7 +101,7 @@ def joined(vm,candidate,base):
     for index,(backend,report,role) in enumerate(zip(vm.backends,stopped["backends"],("data","system","boot"))):
         if report.get("joined") is not True or report["records"]!=backend.records:raise ValueError("actual joined records")
         if index==1:
-            summary=scan(report["records"],candidate)
+            summary=scan(report["records"],candidate,selector)
             if summary is None or any(summary[k]!=vm.system_fault_hit[k] for k in
                 ("plan","request_index","event_index","offset","length")):raise ValueError("retained fault changed")
         else:summary=base.audit(report["records"],role,report["records"][0],True)
@@ -113,7 +115,7 @@ def joined(vm,candidate,base):
         commands=vm.commands,events=vm.events,event_receipts=vm.event_receipts,qmp_drained=vm.qmp_drained,
         serial=bytes(vm.serial).decode("ascii"))
 def self_test():
-    candidate=b"x"*896;p=plan(candidate)
+    candidate=b"x"*896;selector=b"s"*512;p=plan(candidate)
     ready=dict(type="ready",kind="system",readonly=False,export_readonly=False,capacity=8388608,device=1,inode=2)
     rows=[ready];counts=dict(read=0,write=0,flush=0)
     def emit(op,offset,length,status="completed",**extra):
@@ -122,9 +124,9 @@ def self_test():
     for n in range(2):
         part=candidate[n*512:(n+1)*512];emit("write",B_START+n*512,512,payload_sha256=sha256(part+bytes(512-len(part))).hexdigest())
     emit("flush",0,0);emit("read",B_START,512)
-    assert scan(rows,candidate) is None
-    emit("write",512,512,"failed-no-success",payload_sha256="a"*64,injection=p)
-    hit=scan(rows,candidate);assert hit["offset"]==512 and hit["counts"]["write"]==3
+    assert scan(rows,candidate,selector) is None
+    emit("write",512,512,"failed-no-success",payload_sha256=sha256(selector).hexdigest(),injection=p)
+    hit=scan(rows,candidate,selector);assert hit["offset"]==512 and hit["counts"]["write"]==3
     assert serial_status(RECONCILE+b"\n",hit,True)=="reconciled"
     rejected=0
     def reject(fn):
@@ -135,11 +137,11 @@ def self_test():
     import copy
     for target,field,value in ((0,"kind","data"),(0,"readonly",True),(2,"status","failed-no-success"),
         (2,"offset",512),(2,"payload_sha256","b"*64),(len(rows)-1,"status","completed"),
-        (len(rows)-1,"injection",dict(p,ordinal=1))):
+        (len(rows)-1,"payload_sha256","a"*64),(len(rows)-1,"injection",dict(p,ordinal=1))):
         bad=copy.deepcopy(rows);entry=bad[target] if target==0 else bad[target]["event"];entry[field]=value
-        reject(lambda bad=bad:scan(bad,candidate))
-    reject(lambda:scan(rows+[dict(type="request",operation="read",offset=0,length=512)],candidate))
-    for serial in (RECONCILE+RECONCILE,b"RAR-PANIC:CODE=OTHER",b"UNEXPECTED-USER-FAULT",b""):
+        reject(lambda bad=bad:scan(bad,candidate,selector))
+    reject(lambda:scan(rows+[dict(type="request",operation="read",offset=0,length=512)],candidate,selector))
+    for serial in (RECONCILE+b"-OTHER",b"prefix"+RECONCILE,RECONCILE+RECONCILE,b"RAR-PANIC:CODE=OTHER",b"UNEXPECTED-USER-FAULT",b""):
         reject(lambda serial=serial:serial_status(serial,hit,True))
     reject(lambda:serial_status(RECONCILE,None,True))
     assert serial_status(RECONCILE,None)=="waiting"

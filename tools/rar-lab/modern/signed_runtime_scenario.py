@@ -39,6 +39,7 @@ def run(session,case):
     empty=session.load("data_provision").Provisioner().fresh(os.urandom(68))
     if oracle.inspect(empty)["revision"]!=0 or any(empty[1024:]):raise ValueError("virgin Data")
     boot=base.sha(read("/artifact/boot.img",16777216,exact=16777216))
+    selector=expected.expected_system(factory,candidate,"installed")[512:1024]
     data=system=live=None;vms=[];frames=[];proofs=[]
     try:
         data=base.Fixture(root,"data",empty);system=base.Fixture(root,"system",system_bytes)
@@ -58,7 +59,7 @@ def run(session,case):
             raise ValueError("actual pre-update Data differs")
         if system.freeze(vms)!=system_bytes:raise ValueError("signed boot changed factory System")
         live=session.VM(2,data.observer,system.fd,readonly_data=True,
-            system_selector_fault=candidate if case=="selector-error" else None)
+            system_selector_fault=(candidate,selector) if case=="selector-error" else None)
         vms.append(live);live.start();base.ready(live)
         frames.append(capture(live,"home-2",lambda f:visual.validate(f,0)))
         live.key("f3")
@@ -71,7 +72,7 @@ def run(session,case):
             while fault.serial_status(bytes(live.serial),live.system_fault_hit)!="reconciled":
                 live.service()
                 if time.monotonic()>=until:raise TimeoutError("exact selector fault reconcile deadline")
-            proofs.append(fault.joined(live,candidate,base));live=None
+            proofs.append(fault.joined(live,candidate,selector,base));live=None
         else:
             marker(live,"RAR-MODERN:UPDATE-INSTALLED" if case=="update" else "RAR-MODERN:UPDATE-REJECTED")
             live.key("esc");live.key("f2")
