@@ -146,6 +146,9 @@ def self_test():
     reject(lambda:serial_status(PANIC,None,True))
     assert serial_status(PANIC,None)=="waiting"
     assert serial_status(b"RAR-MODERN:GUI-READY\n"+PANIC,hit,True)=="reconciled"
+    for n in range(len(b"RAR-PANIC")):
+        assert serial_status(PANIC[:n],hit)=="running"
+        reject(lambda n=n:serial_status(PANIC[:n],hit,True))
     for n in range(len(b"RAR-PANIC"),len(PANIC)):
         assert serial_status(PANIC[:n],hit)=="waiting"
         reject(lambda n=n:serial_status(PANIC[:n],hit,True))

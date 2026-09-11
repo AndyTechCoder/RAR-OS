@@ -72,7 +72,8 @@ proof that no other guest issue exists.
 
 Accept only that complete contiguous terminal frame after the exact System fault
 receipt; truncated frames, another code, reordered/wrong envelope, repetition or
-trailing bytes remain failures. Every split position is a waiting-prefix test,
-never final acceptance. Unexpected panic diagnostics include at most256 bytes
+trailing bytes remain failures. Every recognizable panic prefix is waiting-only; shorter initial fragments
+remain nonfinal/running under the outer scenario deadline. Every truncated
+final frame is rejected. Unexpected panic diagnostics include at most256 bytes
 encoded as inert hex. No kernel behavior or generic panic policy changes.
 The exact-source cloud campaign must be rerun after review and tooling checks.
