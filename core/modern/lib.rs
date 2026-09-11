@@ -11,6 +11,8 @@ pub mod manifest;
 pub mod journal;
 pub mod system_volume;
 pub mod update_wire;
+pub mod update_system;
+pub mod update_manager;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Error { Invalid, Denied }
 #[path = "../../nucleus/platform/pe.rs"]

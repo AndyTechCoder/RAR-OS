@@ -6,6 +6,9 @@
 #[path = "../../../core/modern/manifest.rs"] mod manifest;
 #[path = "../../../core/modern/journal.rs"] mod journal;
 #[path = "../../../core/modern/system_volume.rs"] mod system_volume;
+#[path = "../../../core/modern/update_wire.rs"] mod update_wire;
+#[path = "../../../core/modern/update_system.rs"] mod update_system;
+#[path = "../../../core/modern/update_manager.rs"] mod update_manager;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)] pub enum Error { Invalid, Denied }
 #[path = "../../../nucleus/platform/pe.rs"] mod pe;
 
@@ -95,6 +98,116 @@ mod system_media {
         (Media(Rc::new(RefCell::new(d))),old,next)
     }
     fn mount(media:Media)->Volume<Media>{Volume::mount(media,SECTORS).unwrap()}
+
+
+    #[derive(Default)]struct CopyStage{bytes:Vec<u8>,seal:u64,finished:bool,aborted:bool,fail_append:bool}
+    impl update_system::Stage for CopyStage{
+        fn begin(&mut self,_:usize)->Result<u64,()>{self.seal=self.seal.checked_add(1).ok_or(())?;
+            self.bytes.clear();self.finished=false;self.aborted=false;Ok(self.seal)}
+        fn append(&mut self,seal:u64,offset:usize,bytes:&[u8])->Result<(),()>{
+            if self.fail_append||seal!=self.seal||offset!=self.bytes.len(){return Err(());}
+            self.bytes.extend_from_slice(bytes);Ok(())}
+        fn finish(&mut self,seal:u64,length:usize)->Result<(),()>{
+            if seal!=self.seal||length!=self.bytes.len(){return Err(());}self.finished=true;Ok(())}
+        fn abort(&mut self,seal:u64)->Result<(),()>{if seal!=self.seal{return Err(());}
+            self.aborted=true;self.bytes.clear();Ok(())}
+    }
+    fn lab_input(index:u64)->Option<&'static[u8]>{
+        if index==0{Some(&FIXTURE[2*1408..3*1408])}else{None}
+    }
+    fn frame(reply:update_system::Reply)->[u8;128]{match reply{
+        update_system::Reply::Frame(f)=>f,other=>panic!("expected frame: {other:?}")}}
+    fn handle(server:&mut update_system::Server<Media>,stage:&mut CopyStage,bytes:&[u8])->update_system::Reply{
+        server.handle(8,(1u64<<40)+1,bytes,stage,lab_input)
+    }
+    fn fetch(server:&mut update_system::Server<Media>,stage:&mut CopyStage,t:update_wire::Transfer)->Record{
+        use update_wire::{Kind,RecordReceiver,PART};
+        let mut rx=RecordReceiver::new(t,Kind::RecordPart).unwrap();
+        for offset in (0..512).step_by(PART){
+            let get=t.part(Kind::RecordGet,offset,&[]).unwrap();
+            let f=frame(handle(server,stage,&get));rx.push(&f).unwrap();
+            assert_eq!(handle(server,stage,&get),update_system::Reply::Ignore);
+        }
+        rx.finish().unwrap()
+    }
+    #[test]fn update_session_boot_authentication_replay_and_exact_readonly_ack(){
+        use update_wire::{self as w,Mode,Kind,Transfer};
+        use update_system::{Server,Reply};
+        let (media,old,_)=seed();let mut s=Server::new(mount(media.clone()),(1u64<<40)+1).unwrap();
+        let mut stage=CopyStage::default();let start=w::request(Kind::Start,Mode::Boot,1,0).unwrap();
+        let before=media.0.borrow().ops.len();
+        for (sender,inc) in [(9,(1u64<<40)+1),(8,1),(4,(1u64<<40)+1)]{
+            assert_eq!(s.handle(sender,inc,&start,&mut stage,|_|panic!("unauthorized lookup")),Reply::Ignore);
+        }
+        assert_eq!(media.0.borrow().ops.len(),before);assert_eq!(stage.seal,0);
+        let offer=frame(handle(&mut s,&mut stage,&start));let t=Transfer::parse(&offer,Kind::Offer).unwrap();
+        assert!(stage.finished);assert_eq!(stage.bytes,package(0));
+        let count=media.0.borrow().ops.len();
+        assert_eq!(handle(&mut s,&mut stage,&start),Reply::Ignore);
+        assert_eq!(handle(&mut s,&mut stage,&t.frame(Kind::Commit).unwrap()),Reply::Ignore);
+        assert_eq!(media.0.borrow().ops.len(),count);
+        let record=fetch(&mut s,&mut stage,t);assert_eq!(record,old);
+        let v=update_manager::verify(t,record,&stage.bytes).unwrap();
+        assert!(v.next().is_none());assert_eq!(v.layer().manifest().generation(),1);
+        let expected=v.expected_ack().unwrap();
+        let mut bad=t;bad.identity.transaction+=1;
+        assert_eq!(handle(&mut s,&mut stage,&bad.frame(Kind::Commit).unwrap()),Reply::Ignore);
+        let commit=t.frame(Kind::Commit).unwrap();
+        assert_eq!(frame(handle(&mut s,&mut stage,&commit)),expected);
+        let count=media.0.borrow().ops.len();
+        assert_eq!(handle(&mut s,&mut stage,&commit),Reply::Ignore);
+        assert_eq!(handle(&mut s,&mut stage,&start),Reply::Ignore);
+        assert_eq!(media.0.borrow().ops.len(),count);
+        assert!(!media.0.borrow().ops.iter().any(|o|matches!(o,Op::Write(_)|Op::Flush)));
+    }
+    #[test]fn update_session_install_requires_exact_verified_record_and_transaction(){
+        use update_wire::{self as w,Kind,Mode,Transfer,PART};
+        let (media,old,next)=seed();let mut s=update_system::Server::new(mount(media.clone()),(1u64<<40)+1).unwrap();
+        let mut stage=CopyStage::default();
+        let start=w::request(Kind::Start,Mode::Install,1,0).unwrap();
+        let t=Transfer::parse(&frame(handle(&mut s,&mut stage,&start)),Kind::Offer).unwrap();
+        let record=fetch(&mut s,&mut stage,t);assert_eq!(record,old);
+        let v=update_manager::verify(t,record,&stage.bytes).unwrap();
+        assert_eq!(v.next(),Some(next));let expected=v.expected_ack().unwrap();
+        let encoded=next.encode();
+        for offset in (0..512).step_by(PART){
+            let n=(512-offset).min(PART);let part=t.part(Kind::PublishPart,offset,&encoded[offset..offset+n]).unwrap();
+            let ack=frame(handle(&mut s,&mut stage,&part));
+            assert_eq!(ack,t.part(Kind::PartAck,offset,&[]).unwrap());
+            assert_eq!(handle(&mut s,&mut stage,&part),update_system::Reply::Ignore);
+        }
+        assert_eq!(frame(handle(&mut s,&mut stage,&t.frame(Kind::Commit).unwrap())),expected);
+        assert_eq!(mount(media).record(),next);
+    }
+    #[test]fn update_session_partial_copy_is_aborted_and_owner_never_retries(){
+        use update_wire::{self as w,Kind,Mode};
+        let (media,_,_)=seed();let mut s=update_system::Server::new(mount(media.clone()),(1u64<<40)+1).unwrap();
+        let mut stage=CopyStage{fail_append:true,..CopyStage::default()};
+        let start=w::request(Kind::Start,Mode::Boot,1,0).unwrap();
+        assert_eq!(handle(&mut s,&mut stage,&start),update_system::Reply::Halt);
+        assert!(stage.aborted);assert!(!stage.finished);assert!(stage.bytes.is_empty());
+        let count=media.0.borrow().ops.len();
+        stage.fail_append=false;
+        assert_eq!(handle(&mut s,&mut stage,&start),update_system::Reply::Halt);
+        assert_eq!(media.0.borrow().ops.len(),count);
+    }
+    #[test]fn update_manager_rejects_substituted_record_package_and_ack_identity(){
+        use update_wire::{Transfer,Mode,Kind};
+        let (media,old,next)=seed();let mut volume=mount(media);
+        let p=volume.prepare(&package(2)).unwrap();
+        let t=Transfer{mode:Mode::Install,request:1,seal:2,sequence:old.sequence(),identity:p.identity()};
+        let bytes=package(2);
+        assert!(update_manager::verify(t,next,&bytes).is_err());
+        assert!(update_manager::verify(t,old,&package(0)).is_err());
+        for change in 0..4{
+            let mut bad=t;
+            match change{0=>bad.identity.generation+=1,1=>bad.identity.digest[0]^=1,
+                2=>bad.identity.slot=bad.identity.slot.other(),_=>bad.identity.package_hash[0]^=1}
+            assert!(update_manager::verify(bad,old,&bytes).is_err());
+        }
+        let v=update_manager::verify(t,old,&bytes).unwrap();
+        assert_ne!(v.expected_ack().unwrap(),t.frame(Kind::Committed).unwrap());
+    }
 
     #[test] fn system_selected_boot_is_read_only_exact_and_not_publication_authority(){
         let (media,old,next)=seed();let mut volume=mount(media.clone());
