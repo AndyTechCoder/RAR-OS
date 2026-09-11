@@ -107,6 +107,20 @@ pub fn stage_metadata(bytes:&[u8])->Result<StageMetadata,Error>{
     }
     Ok(StageMetadata{image_bytes,generation,digest,budget})
 }
+/// All initial desktop descriptors derive from the unpublished complete plan.
+/// No native process may run until every descriptor/root is ready and published.
+pub fn desktop_bootstrap(plan:&model::DesktopHandover,role:usize,entry:u64,pitch:u64,format:u64)
+    ->Result<abi::Boot,Error>{
+    if role>6{return Err(Error::Invalid);}
+    let e=plan.binding(role).ok_or(Error::Stale)?;
+    let mut b=abi::Boot{magic:abi::MAGIC,version:abi::VERSION,bytes:abi::BOOT_BYTES,
+        role:role as u64,phase:abi::ACTIVE,generation:e.incarnation,entry,..abi::Boot::EMPTY};
+    for i in 0..model::PRINCIPALS{b.peers[i]=plan.binding(i).map_or(0,|e|e.incarnation);}
+    for i in 0..model::CAP_SLOTS{b.caps[i]=plan.handle(e.slot as usize,i).unwrap_or(0);}
+    if role==3{b.framebuffer=0x800000;b.width=640;b.height=480;b.pitch=pitch;b.format=format;}
+    if role==1{b.device_sectors=DATA.sectors;b.device_serial=DATA.serial;b.device_model=DATA.model;}
+    if !abi::valid_boot(&b){return Err(Error::Invalid);}Ok(b)
+}
 /// Prepare the future read-only ACTIVE descriptor without publishing authority.
 pub fn handover_bootstrap(policy:&model::Runtime,h:&model::Handover,entry:u64)->Result<abi::Boot,Error>{
     let t=policy.trial().ok_or(Error::Stale)?;
@@ -162,6 +176,22 @@ mod tests{
             assert!(stage_metadata(&bad).is_err());
         }
         b[288..320].fill(0);assert!(stage_metadata(&b).is_err());
+    }
+    #[test] fn unpublished_desktop_boots_agree_without_any_live_desktop_binding(){
+        for slot in [5usize,7]{
+            let mut r=model::Runtime::bootstrap();let h=r.handle(8,model::MANAGER_CAP).unwrap();
+            r.authenticated_stage(8,h,31,slot,[1;32],1,50).unwrap();let t=r.begin_trial(8,h,31).unwrap();
+            r.ready(slot,r.handle(slot,model::HEALTH_CAP).unwrap(),t.token()).unwrap();
+            let plan=r.prepare_desktop(8,h,t.token()).unwrap();
+            for role in 0..7{
+                let b=desktop_bootstrap(&plan,role,0x401000,640,0).unwrap();
+                assert!(abi::valid_boot(&b));assert_eq!(b.peers[5],t.endpoint().incarnation);
+                assert_eq!(b.peers[role],b.generation);assert_eq!(r.binding(role),Ok(None));
+                assert_eq!(b.device_sectors,if role==1{DATA.sectors}else{0});
+            }
+            assert!(desktop_bootstrap(&plan,3,0x401000,639,0).is_err());
+            assert!(desktop_bootstrap(&plan,8,0x401000,640,0).is_err());
+        }
     }
     #[test] fn handover_refreshes_intervening_peer_fault_without_losing_peer_queue(){
         let mut r=model::Runtime::new();let h=r.handle(8,model::MANAGER_CAP).unwrap();

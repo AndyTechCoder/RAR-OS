@@ -377,3 +377,32 @@ again and reconcile-halt on an impossible inconsistency. Tests fault Terminal
 and enqueue unrelated Files traffic between preparation and publication:
 the new Boot names Terminal unavailable, preserves live peers and the new
 Settings incarnation, retains the queued message and rejects the stale endpoint.
+
+
+### Native initial desktop preparation (not yet selected by start)
+
+The bootstrap-specific operation6 path prepares all six non-Settings desktop
+contexts from the immutable boot service image, using the unpublished complete
+authority plan and64KiB service stacks. The selected signed Settings trial keeps
+its16KiB stack. The shared private constructor leaves fully built contexts
+Blocked; only trial acceptance or complete graph publication schedules them.
+Every initial Boot derives from the same plan and contains matching full
+incarnations and exact role/device/display grants.
+
+The model plan stores only seven desktop roles and is statically bounded to
+8192 bytes. Native Runtime retains it, not an unrelated peer-state snapshot.
+The plan is not passed into the nested mapping/copy routines. Final UEFI
+stack-usage/runtime evidence remains required, not inferred from this size bound.
+
+While a valid plan exists, the kernel retains only those six unpublished
+contexts. Abort or manager/System/trial loss drops the plan and retires every
+unbound context. Failed construction never leaves a runnable partial desktop.
+Operation7's bootstrap branch validates every prepared root/frame/incarnation,
+publishes the complete logical graph under IF=0, replaces the selected trial's
+Boot through the one-page aperture, then marks all desktop contexts Runnable.
+An impossible post-ACK inconsistency halts BOOT-RECONCILE.
+
+Native start still selects the retained M4.1 graph until the System/manager
+verification protocol and reviewed factory provisioning are wired together.
+These unreachable-from-current-start helpers do not establish boot-barrier or
+live-update runtime acceptance.

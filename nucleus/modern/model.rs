@@ -143,13 +143,17 @@ pub struct Cutover {pub previous:Option<Endpoint>,pub current:Endpoint}
 pub struct Handover {trial:Trial,caps:Caps}
 /// Complete prepared desktop authority, still unpublished. Bootstrap services
 /// remain live in Runtime, never copied/restored from this plan.
-pub struct DesktopHandover{candidate:Handover,processes:[Process;TASKS],bindings:[Option<Endpoint>;PRINCIPALS],clock:u64}
+pub struct DesktopHandover{candidate:Handover,processes:[Process;7],bindings:[Option<Endpoint>;PRINCIPALS],clock:u64}
 impl DesktopHandover{
     pub fn binding(&self,role:usize)->Option<Endpoint>{self.bindings.get(role).copied().flatten()}
     pub fn handle(&self,slot:usize,index:usize)->Result<u64,Error>{
-        self.processes.get(slot).ok_or(Error::Invalid)?.caps.handle(index)
+        let role=if slot==self.candidate.endpoint().slot as usize{5}
+            else if [0,1,2,3,4,6].contains(&slot){slot}else{return Err(Error::Invalid);};
+        self.processes[role].caps.handle(index)
     }
 }
+pub const DESKTOP_PLAN_MAX:usize=8192;
+const _:()=assert!(core::mem::size_of::<DesktopHandover>()<=DESKTOP_PLAN_MAX);
 impl Handover {
     pub fn endpoint(&self)->Endpoint{self.trial.endpoint}
     pub fn token(&self)->u64{self.trial.token}
@@ -199,6 +203,7 @@ impl Runtime {
     pub fn binding_generations(&self)->[u64;PRINCIPALS]{
         self.bindings.map(|e|e.map_or(0,|e|e.incarnation))
     }
+    pub fn bootstrapping(&self)->bool{self.bootstrapping}
     pub fn recovery_required(&self)->bool {self.recovery_required}
     pub fn binding(&self,principal:usize)->Result<Option<Endpoint>,Error>{
         self.bindings.get(principal).copied().ok_or(Error::Invalid)
@@ -418,7 +423,7 @@ impl Runtime {
             self.bindings[5].is_some(){return Err(Error::Stale);}
         if !self.bindings[9].is_some_and(|e|self.endpoint_alive(e)){return Err(Error::Denied);}
         let clock=self.clock.checked_add(1).ok_or(Error::Exhausted)?;
-        let mut plan=DesktopHandover{candidate,processes:[Process::EMPTY;TASKS],
+        let mut plan=DesktopHandover{candidate,processes:[Process::EMPTY;7],
             bindings:self.bindings,clock};
         for i in [0usize,1,2,3,4,6]{
             let e=Endpoint{slot:i as u8,incarnation:clock};plan.bindings[i]=Some(e);
@@ -434,8 +439,8 @@ impl Runtime {
         plan.processes[1].caps.grant(DEVICE_CAP,Object::Device(Device::Data),DEVICE)?;
         plan.processes[2].caps.grant(INPUT_CAP,Object::Input,INPUT)?;
         plan.processes[3].caps.grant(FRAMEBUFFER_CAP,Object::Framebuffer,DRAW)?;
-        let e=candidate.endpoint();let index=e.slot as usize;
-        plan.processes[index]=Process{state:State::Active,principal:Some(5),
+        let e=candidate.endpoint();
+        plan.processes[5]=Process{state:State::Active,principal:Some(5),
             incarnation:e.incarnation,caps:candidate.caps,queue:Queue::new()};
         plan.bindings[5]=Some(e);Ok(plan)
     }
@@ -454,7 +459,8 @@ impl Runtime {
             if self.bindings[i]!=plan.bindings[i]||
                 !self.bindings[i].is_some_and(|e|self.endpoint_alive(e)){return Err(Error::Denied);}
         }
-        for i in [0usize,1,2,3,4,6,t.endpoint.slot as usize]{self.processes[i]=plan.processes[i];}
+        for i in [0usize,1,2,3,4,6]{self.processes[i]=plan.processes[i];}
+        self.processes[t.endpoint.slot as usize]=plan.processes[5];
         for i in 0..7{self.bindings[i]=plan.bindings[i];}
         self.clock=plan.clock;self.trial=None;self.bootstrapping=false;Ok(())
     }
@@ -509,6 +515,7 @@ mod tests {
 
 
     #[test] fn bootstrap_has_no_desktop_authority_until_whole_graph_publication(){
+        assert!(core::mem::size_of::<DesktopHandover>()<=8192);
         let mut r=Runtime::bootstrap();let h=manager(&r);
         for i in 0..7{assert_eq!(r.binding(i),Ok(None));assert_eq!(r.state(i),Ok(State::Vacant));}
         assert_eq!(r.binding(9),Ok(Some(Endpoint{slot:9,incarnation:1})));

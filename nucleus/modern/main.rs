@@ -54,9 +54,10 @@ impl Process{
         support::user_buffer(&self.ranges[..self.range_count],pointer,length,write)
     }
 }
+struct NativeDesktop{plan:model::DesktopHandover,boot:abi::Boot,seal:u64,token:u64}
 struct Runtime{
     processes:[Process;TASKS],current:usize,arena:u64,proofs:u8,ready:bool,
-    image_base:u64,image_size:u64,
+    image_base:u64,image_size:u64,hardware:BootHardware,desktop:Option<NativeDesktop>,
     policy:Option<model::Runtime>,device:Option<native_pio::Adapter>,ticks:Option<u64>,
     handover:Option<(model::Handover,abi::Boot,u64)>,
     staging:Option<staging::Buffer<'static>>,bootstrap_tables:usize,stage_readonly:bool,stage_view:bool,
@@ -110,6 +111,7 @@ pub unsafe fn start(info:&boot::BootInfo)->!{
     let layout=pe::parse(SERVICE).unwrap_or_else(|_|fatal("RAR-PANIC:CODE=SERVICE-PE"));
     let runtime=unsafe{&mut *ptr::addr_of_mut!(RUNTIME)};
     runtime.arena=info.arena;
+    runtime.hardware=info.platform;
     runtime.image_base=info.platform.image_base;runtime.image_size=info.platform.image_size;
     runtime.bootstrap_tables=info.table_used;
     let stage_region=staging::region(info.arena,boot::ARENA_PAGES)
@@ -400,7 +402,7 @@ impl Runtime{
                     4=>{
                         if frame.r10!=0{return Err(Error::Invalid);}
                         self.policy.as_mut().unwrap().abort(current,frame.rdi,frame.rdx)?;
-                        self.handover=None;self.synchronize_revocations();Ok(0)
+                        self.handover=None;self.desktop=None;self.synchronize_revocations();Ok(0)
                     },
                     5=>{
                         self.buffer(frame.r10,32,true)?;
@@ -421,11 +423,17 @@ impl Runtime{
                     },
                     6=>{
                         if frame.r10==0{return Err(Error::Invalid);}
-                        self.prepare_handover(frame.rdi,frame.rdx,frame.r10)?;Ok(0)
+                        if self.policy.as_ref().unwrap().bootstrapping(){
+                            self.prepare_boot_desktop(frame.rdi,frame.rdx,frame.r10)?;
+                        }else{self.prepare_handover(frame.rdi,frame.rdx,frame.r10)?;}
+                        Ok(0)
                     },
                     7=>{
                         if frame.r10==0{return Err(Error::Invalid);}
-                        self.commit_handover(frame.rdi,frame.rdx,frame.r10);Ok(0)
+                        if self.policy.as_ref().unwrap().bootstrapping(){
+                            self.commit_boot_desktop(frame.rdi,frame.rdx,frame.r10);
+                        }else{self.commit_handover(frame.rdi,frame.rdx,frame.r10);}
+                        Ok(0)
                     },
                     _=>Err(Error::Invalid),
                 }
@@ -682,9 +690,15 @@ impl Runtime{
         }
     }
     fn synchronize_revocations(&mut self){
+        if self.desktop.as_ref().is_some_and(|d|{
+            let policy=self.policy.as_ref().unwrap();
+            policy.trial().is_none_or(|t|t.token()!=d.token||t.image_seal()!=d.seal)||
+                policy.state(8)!=Ok(model::State::Active)||policy.state(9)!=Ok(model::State::Active)
+        }){self.desktop=None;}
         if self.handover.is_some_and(|(h,_,_)|self.policy.as_ref().unwrap().trial().is_none_or(|t|t.token()!=h.token())){self.handover=None;}
         for i in 0..TASKS{
-            if i!=15&&self.policy.as_ref().unwrap().state(i)==Ok(model::State::Vacant){
+            let prepared=self.desktop.is_some()&&[0usize,1,2,3,4,6].contains(&i);
+            if i!=15&&!prepared&&self.policy.as_ref().unwrap().state(i)==Ok(model::State::Vacant){
                 self.processes[i].state=State::Dead;
                 self.processes[i].memory=retirement::retire(self.processes[i].memory);
             }
