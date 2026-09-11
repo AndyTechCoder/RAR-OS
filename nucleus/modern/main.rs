@@ -483,6 +483,19 @@ impl Runtime{
                         if frame.rdx!=0||frame.r10!=0{return Err(Error::Invalid);}
                         fatal("RAR-PANIC:CODE=UPDATE-RECONCILE");
                     },
+                    9=>{
+                        if frame.r10!=16{return Err(Error::Invalid);}
+                        self.buffer(frame.rdx,16,true)?;
+                        let values=self.policy.as_ref().unwrap().update_bindings(current,frame.rdi)?;
+                        let mut response=[0u8;16];
+                        for(i,value)in values.into_iter().enumerate(){
+                            response[i*8..i*8+8].copy_from_slice(&value.to_le_bytes());
+                        }
+                        // SAFETY: exact Manager-owned writable output checked
+                        // before copy; IF=0 keeps these bindings coherent.
+                        unsafe{ptr::copy_nonoverlapping(response.as_ptr(),frame.rdx as *mut u8,16);}
+                        Ok(0)
+                    },
                     _=>Err(Error::Invalid),
                 }
             }

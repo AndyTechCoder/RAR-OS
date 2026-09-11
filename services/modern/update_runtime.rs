@@ -179,15 +179,44 @@ fn reconcile(boot:&Boot)->!{
     // Unreachable with the matching kernel ABI. Do not continue a transaction.
     crate::fail()
 }
-/// Signed composition entry. No ordinary application can request installation
-/// through this receive loop; live-update command routing is separate work.
+/// Read exactly Terminal and Settings bindings through the existing Manager
+/// grant. A zero Settings binding denotes revocation, not a restart instruction.
+fn bindings(boot:&Boot)->[u64;2]{
+    let mut bytes=[0u8;16];
+    if control(boot,9,bytes.as_mut_ptr()as u64,16).is_err(){reconcile(boot);}
+    [u64::from_le_bytes(bytes[..8].try_into().unwrap()),
+        u64::from_le_bytes(bytes[8..].try_into().unwrap())]
+}
+/// The single transaction owner serializes authenticated laboratory requests.
+/// No app can supply bytes, a disk selector or an executable address.
 pub fn manager(boot:&Boot)->!{
     if boot.role!=8{crate::fail();}
     let mut requests=wire::Requests::new();
+    let mut commands=crate::update_control::Requests::new();
     boot_selected(boot,&mut requests);
-    // Preserve this owner/incarnation after publication; never restart boot
-    // selection or reset its request sequence in response to an IPC message.
-    loop{let _=crate::receive(boot.caps[SELF_RECV]);}
+    if bindings(boot)[1]==0{reconcile(boot);}
+    let mut recovery=crate::update_control::Recovery::new();
+    loop{
+        let current=bindings(boot);
+        if current[1]==0{
+            // One fresh, reverified exact-prior fallback, never an old process
+            // resurrection or an oscillating automatic retry.
+            if !recovery.lost(){reconcile(boot);}
+            if transaction(boot,&mut requests,Mode::Fallback,0).is_err()||
+                bindings(boot)[1]==0{reconcile(boot);}
+        }else{
+            match crate::poll_checked(boot.caps[SELF_RECV]){
+                Ok(Some(m))=>{
+                    if let Some(index)=commands.accept(m.sender,m.generation,current[0],m.length,&m.bytes){
+                        if install(boot,&mut requests,index).is_ok(){recovery.installed();}
+                    }
+                },
+                Ok(None)=>{},
+                Err(())=>reconcile(boot),
+            }
+        }
+        crate::yield_now();
+    }
 }
 pub fn boot_selected(boot:&Boot,requests:&mut wire::Requests){
     let first=transaction(boot,requests,Mode::Boot,0);

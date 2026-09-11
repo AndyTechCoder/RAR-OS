@@ -153,6 +153,7 @@ pub fn settings(boot:&Boot)->! {
 pub fn terminal(boot:&Boot)->! {
     require_device_denial(boot);
     let mut editor=Editor::new();let mut version=0;let mut pending=Io::new(boot);
+    let mut update_request=0u64;
     let mut view=View::EMPTY;view.line(0,b"RAR TERMINAL");view.line(1,b"HELP LIST READ WRITE CRASH");
     view.line(2,b"CREATE + WRITE ARE SEPARATE COMMITS");
     editor.prompt(&mut view);publish(boot,&mut version,&view);
@@ -165,6 +166,16 @@ pub fn terminal(boot:&Boot)->! {
             Edit::Changed=>editor.prompt(&mut view),
             Edit::Submit=>{
                 view=View::EMPTY;view.line(0,b"RAR TERMINAL");
+                if cfg!(rar_signed_updates)&&crate::update_control::command(&editor.bytes[..editor.len]).is_some(){
+                    let index=crate::update_control::command(&editor.bytes[..editor.len]).unwrap();
+                    if let Some(id)=update_request.checked_add(1){
+                        update_request=id;
+                        let bytes=crate::update_control::frame(id,index).unwrap();
+                        if crate::send(boot.caps[crate::update_control::CAP],&bytes).is_ok(){
+                            view.line(1,b"UPDATE REQUESTED");view.line(2,b"OPEN SETTINGS TO CHECK RESULT");
+                        }else{view.line(1,b"UPDATE REQUEST UNAVAILABLE");}
+                    }else{view.line(1,b"UPDATE REQUEST LIMIT REACHED");}
+                }else{
                 match command(&editor.bytes[..editor.len]) {
                     Command::Help=>{view.line(1,b"HELP LIST READ WRITE CRASH");view.line(2,b"CREATE + WRITE MAY LEAVE EMPTY FILE");}
                     Command::List=>{
@@ -207,6 +218,7 @@ pub fn terminal(boot:&Boot)->! {
                         unsafe{core::arch::asm!("ud2",options(noreturn));}
                     }
                     Command::Invalid=>view.line(1,b"UNKNOWN COMMAND"),
+                }
                 }
                 if view.lines[5].len==0{view.line(5,pending.label());}
                 pending.decorate(&mut view);

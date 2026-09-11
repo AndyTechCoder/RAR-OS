@@ -188,7 +188,7 @@ impl Runtime {
         // Released desktop's least-authority IPC graph, with logical endpoints.
         for (caller,slot,principal) in [(0,2,3),(0,4,4),(0,5,5),(0,6,6),
             (1,4,4),(1,6,6),(2,1,0),(4,2,3),(4,3,1),
-            (5,1,0),(5,2,3),(6,2,3),(6,3,1)] {
+            (5,1,0),(5,2,3),(6,2,3),(6,3,1),(6,4,8)] {
             if !bootstrapping{r.processes[caller].caps.grant(slot,Object::NamedSend {principal},SEND).unwrap();}
         }
         if !bootstrapping{r.processes[1].caps.grant(DEVICE_CAP,Object::Device(Device::Data),DEVICE).unwrap();}
@@ -278,6 +278,13 @@ impl Runtime {
     pub fn stage_view(&self,caller:usize,handle:u64)->Result<(),Error>{
         self.manager(caller,handle)?;
         if self.recovery_required{return Err(Error::Denied);}Ok(())
+    }
+    /// Fixed status for the existing Manager grant, not arbitrary identity lookup.
+    pub fn update_bindings(&self,caller:usize,handle:u64)->Result<[u64;2],Error>{
+        self.stage_view(caller,handle)?;
+        if self.bootstrapping{return Err(Error::Busy);}
+        Ok([self.bindings[6].map_or(0,|e|e.incarnation),
+            self.bindings[5].map_or(0,|e|e.incarnation)])
     }
     pub fn stage_reject(&self,caller:usize,handle:u64)->Result<(),Error>{
         self.stage_view(caller,handle)?;
@@ -434,7 +441,7 @@ impl Runtime {
             plan.caps[i]=caps;
         }
         for (caller,slot,principal) in [(0,2,3),(0,4,4),(0,5,5),(0,6,6),
-            (1,4,4),(1,6,6),(2,1,0),(4,2,3),(4,3,1),(6,2,3),(6,3,1)]{
+            (1,4,4),(1,6,6),(2,1,0),(4,2,3),(4,3,1),(6,2,3),(6,3,1),(6,4,8)]{
             plan.caps[caller].grant(slot,Object::NamedSend{principal},SEND)?;
         }
         plan.caps[1].grant(DEVICE_CAP,Object::Device(Device::Data),DEVICE)?;
@@ -777,7 +784,7 @@ mod tests {
         let r=Runtime::new();
         let edges=[(0,2,3),(0,4,4),(0,5,5),(0,6,6),
             (1,4,4),(1,6,6),(2,1,0),(4,2,3),(4,3,1),
-            (5,1,0),(5,2,3),(6,2,3),(6,3,1),(8,1,9),(9,1,8)];
+            (5,1,0),(5,2,3),(6,2,3),(6,3,1),(6,4,8),(8,1,9),(9,1,8)];
         for caller in 0..TASKS {for slot in 0..CAP_SLOTS {
             let expected=edges.iter().find(|&&(c,s,_)|c==caller&&s==slot).map(|&(_,_,p)|p);
             let actual=r.handle(caller,slot).and_then(|h|r.processes[caller].caps.resolve(h,SEND));
@@ -791,7 +798,7 @@ mod tests {
         let mut r=Runtime::new();
         for (caller,slot,target) in [(0,2,3),(0,4,4),(0,5,5),(0,6,6),
             (1,4,4),(1,6,6),(2,1,0),(4,2,3),(4,3,1),
-            (5,1,0),(5,2,3),(6,2,3),(6,3,1),(8,1,9),(9,1,8)] {
+            (5,1,0),(5,2,3),(6,2,3),(6,3,1),(6,4,8),(8,1,9),(9,1,8)] {
             r.send(caller,r.handle(caller,slot).unwrap(),b"route").unwrap();
             let m=r.receive(target,r.handle(target,SELF_CAP).unwrap()).unwrap();
             assert_eq!((m.principal,m.incarnation,m.length),(caller as u8,1,5));
@@ -935,4 +942,22 @@ mod tests {
         assert!(r.stage_view(8,handle).is_err());assert!(r.stage_reject(8,handle).is_err());
     }
 
+
+    #[test]fn update_requests_do_not_grant_management_or_disk_authority(){
+        let mut r=Runtime::new();let h=r.handle(6,4).unwrap();
+        assert_eq!(r.update_bindings(8,manager(&r)),Ok([1,1]));
+        r.send(6,h,b"request").unwrap();
+        let msg=r.receive(8,r.handle(8,SELF_CAP).unwrap()).unwrap();
+        assert_eq!((msg.principal,msg.incarnation),(6,1));
+        for caller in 0..TASKS{if caller!=8{
+            assert!(r.update_bindings(caller,manager(&r)).is_err());
+        }}
+        assert!(r.update_bindings(8,r.handle(8,SELF_CAP).unwrap()).is_err());
+        let settings=r.binding(5).unwrap().unwrap();r.fault(settings).unwrap();
+        assert_eq!(r.update_bindings(8,manager(&r)),Ok([1,0]));
+        r.fault(Endpoint{slot:6,incarnation:1}).unwrap();
+        assert_eq!(r.update_bindings(8,manager(&r)),Ok([0,0]));
+        assert!(r.send(6,h,b"stale").is_err());
+        let b=Runtime::bootstrap();assert_eq!(b.update_bindings(8,manager(&b)),Err(Error::Busy));
+    }
 }

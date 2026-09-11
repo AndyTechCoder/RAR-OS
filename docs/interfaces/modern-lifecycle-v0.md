@@ -62,10 +62,13 @@ Normal-boot named-send edges are exactly:
 | Keyboard2 | 1 -> shell0 |
 | Files4 | 2 -> compositor3, 3 -> Data storage1 |
 | Settings5 | 1 -> shell0, 2 -> compositor3 |
-| Terminal6 | 2 -> compositor3, 3 -> Data storage1 |
+| Terminal6 | 2 -> compositor3, 3 -> Data storage1, 4 -> Manager8 (request only) |
+| Manager8 | 1 -> System9 |
+| System9 | 1 -> Manager8 |
 
-Compositor3, manager8 and System service9 have no named-send edges at this
-checkpoint. Their later update/System protocol remains to be integrated.
+Compositor3 has no named-send edges. The M4.2 Manager/System transaction
+channel and Terminal request route are specified in modern-runtime-v1.md.
+Terminal requests confer no lifecycle, staging or device authority.
 Keyboard2 has no receive grant. Other initial principals retain only their
 specified receive, lifecycle or device authority. Trial and replacement Settings
 never acquire a device, input or framebuffer capability.

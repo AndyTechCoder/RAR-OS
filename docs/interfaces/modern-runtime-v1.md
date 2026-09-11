@@ -406,3 +406,42 @@ Native start still selects the retained M4.1 graph until the System/manager
 verification protocol and reviewed factory provisioning are wired together.
 These unreachable-from-current-start helpers do not establish boot-barrier or
 live-update runtime acceptance.
+
+
+## M4.2 fixed laboratory request route and active-failure observation
+
+Terminal6 gains only NamedSend to Manager8 at its caller-local cap4 (active
+mask0x1d). This is a request edge, not Manager, staging, System or Data authority.
+It is present in both initial and prepared desktop graphs; no trial gains it.
+Existing Settings and other application masks remain unchanged.
+
+Manager-only StageView operation9 takes RDI its existing Manager handle,
+RSI9, RDX writable16-byte output, R10 exactly16. It returns two LEu64 current
+incarnations: Terminal6 and Settings5; an absent binding is zero. The kernel
+checks the full output and live Manager authority, rejects bootstrap state,
+and copies under IF=0. No caller-supplied principal or side effect exists.
+System/apps/trials are denied even with a numerically equal handle.
+This is a private matched-build extension, not a stable SDK or trust delegation.
+
+The fixed RARCTL01 128-byte request is magic8, nonzero monotonic LEu64 request,
+LEu64 immutable laboratory index0..3, then104 zero bytes. Manager authenticates
+kernel-stamped role6 and the full current Terminal incarnation before parsing.
+Replay state advances only for canonical authenticated requests; request and
+incarnation values never truncate or wrap. A newer kernel incarnation starts a
+new request sequence, never an older one. There is one serial transaction owner.
+Requests arriving during a transaction may be discarded; they are not retried.
+
+In the signed composition only, Terminal commands update, update badhealth,
+update badsig and update badabi select the four fixed laboratory inputs.
+The UI says UPDATE REQUESTED only for successful enqueue, never UPDATE SUCCEEDED.
+An unavailable request does not stop Terminal or affect its ordinary file UI.
+No arbitrary path, bytes, URL, key, sector, capability or signature override is
+accepted. The public RFC laboratory key remains non-production.
+
+After successful initial publication, Manager polls the narrow current binding.
+Loss of active Settings permits one fresh exact-prior verified transaction.
+Failure/uncertainty stops the whole guest; another active loss after fallback
+also stops, preventing automatic oscillation. Only a new successful install
+rearms this one-fallback allowance. Verification, durable ACK, fresh health,
+physical retirement and data separation remain unchanged. Pure policy/model
+tests and source compilation do not replace actual cloud demonstration.
