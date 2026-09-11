@@ -173,6 +173,9 @@ impl Runtime{
             h.endpoint()!=t.endpoint()||self.handover_context(t).is_err(){
             fatal("RAR-PANIC:CODE=UPDATE-RECONCILE");
         }
+        #[cfg(rar_signed_updates)]
+        let stale_probe=self.policy.as_mut().unwrap().lab_stale_begin(self.current,handle)
+            .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=UPDATE-RECONCILE"));
         let cut=self.policy.as_mut().unwrap().cutover_prepared(self.current,handle,h)
             .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=UPDATE-RECONCILE"));
         self.handover=None;
@@ -180,6 +183,12 @@ impl Runtime{
         // Old Settings is never this manager stack. Revoke its root and scrub
         // before exposing any new production context; peer state remains live.
         self.retire_pending();
+        #[cfg(rar_signed_updates)]
+        if let Some(probe)=stale_probe{
+            self.policy.as_mut().unwrap().lab_stale_finish(self.current,handle,probe,token)
+                .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=UPDATE-RECONCILE"));
+            record("RAR-MODERN:STALE-AUTHORITY-REVOKED");
+        }
         b.peers=self.policy.as_ref().unwrap().binding_generations();
         if !abi::valid_boot(&b){fatal("RAR-PANIC:CODE=UPDATE-RECONCILE");}
         self.write_active_boot(cut.current.slot as usize,b);

@@ -162,6 +162,14 @@ impl Handover {
 // Only the native sealed-buffer bridge inserts this manager-authenticated record.
 #[derive(Clone,Copy)]
 struct StagedImage {seal:u64,slot:u8,digest:[u8;32],generation:u64,signed_budget:u32}
+
+// Certified signed-lab probe only. No syscall, caller payload or new grant.
+#[cfg(any(test,rar_signed_updates))]
+const STALE_SENTINEL:&[u8]=b"RAR-STALE-PROBE";
+#[cfg(any(test,rar_signed_updates))]
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub struct StaleProbe {endpoint:Endpoint,handle:u64}
+
 pub struct Runtime {
     processes:[Process;TASKS],bindings:[Option<Endpoint>;PRINCIPALS],
     clock:u64,next_token:u64,trial:Option<Trial>,staged:Option<StagedImage>,recovery_required:bool,
@@ -364,6 +372,54 @@ impl Runtime {
         let m=Message::stamp(sender,p.incarnation,bytes)?;
         self.processes[e.slot as usize].queue.push(m)
     }
+
+    /// Called by the native IF=0 owner immediately before the unchanged cutover.
+    /// Never consume a queue or reserve across the durable transaction.
+    #[cfg(any(test,rar_signed_updates))]
+    pub fn lab_stale_begin(&mut self,caller:usize,handle:u64)->Result<Option<StaleProbe>,Error>{
+        self.stage_view(caller,handle)?;
+        if self.bootstrapping{return Err(Error::Busy);}
+        let Some(endpoint)=self.bindings[5] else{return Ok(None);};
+        if !self.endpoint_alive(endpoint){return Err(Error::Stale);}
+        let send_handle=self.handle(endpoint.slot as usize,SHELL_CAP)?;
+        if self.processes[endpoint.slot as usize].caps.resolve(send_handle,SEND)?
+            !=(Object::NamedSend{principal:0}){return Err(Error::Denied);}
+        // Refuse any preexisting identical bytes, even from another sender.
+        if self.processes.iter().any(|p|p.queue.messages[..p.queue.length].iter()
+            .any(|m|m.length as usize==STALE_SENTINEL.len()&&
+                &m.bytes[..STALE_SENTINEL.len()]==STALE_SENTINEL)){return Err(Error::Busy);}
+        let shell=self.bindings[0].ok_or(Error::Stale)?;
+        if !self.endpoint_alive(shell){return Err(Error::Stale);}
+        let q=&self.processes[shell.slot as usize].queue;
+        if q.length==QUEUE_DEPTH||q.messages[..q.length].iter()
+            .filter(|m|m.principal==5&&m.incarnation==endpoint.incarnation).count()>=2{
+            return Err(Error::Full);
+        }
+        self.send(endpoint.slot as usize,send_handle,STALE_SENTINEL)?;
+        if self.lab_stale_count(endpoint)!=1{return Err(Error::Invalid);}
+        Ok(Some(StaleProbe{endpoint,handle:send_handle}))
+    }
+    #[cfg(any(test,rar_signed_updates))]
+    fn lab_stale_count(&self,endpoint:Endpoint)->usize{
+        self.processes.iter().map(|p|p.queue.messages[..p.queue.length].iter()
+            .filter(|m|m.principal==5&&m.incarnation==endpoint.incarnation&&
+                m.length as usize==STALE_SENTINEL.len()&&
+                &m.bytes[..STALE_SENTINEL.len()]==STALE_SENTINEL).count()).sum()
+    }
+    /// Native caller runs this after physical retirement, still IF=0.
+    #[cfg(any(test,rar_signed_updates))]
+    pub fn lab_stale_finish(&mut self,caller:usize,handle:u64,probe:StaleProbe,
+        token:u64)->Result<(),Error>{
+        self.stage_view(caller,handle)?;
+        if self.endpoint_alive(probe.endpoint)||self.lab_stale_count(probe.endpoint)!=0||
+            self.bindings[5].is_none_or(|e|e==probe.endpoint||!self.endpoint_alive(e)){
+            return Err(Error::Invalid);
+        }
+        if self.send(probe.endpoint.slot as usize,probe.handle,STALE_SENTINEL)!=Err(Error::Denied)||
+            self.abort(caller,handle,token)!=Err(Error::Stale){return Err(Error::Invalid);}
+        Ok(())
+    }
+
     pub fn receive(&mut self,caller:usize,handle:u64)->Result<Message,Error>{
         let p=self.processes.get_mut(caller).ok_or(Error::Invalid)?;
         if p.state!=State::Active{return Err(Error::Denied);}
@@ -942,6 +998,47 @@ mod tests {
         assert!(r.stage_view(8,handle).is_err());assert!(r.stage_reject(8,handle).is_err());
     }
 
+
+
+    #[test]fn signed_lab_stale_probe_preserves_other_messages_and_proves_denials(){
+        let mut r=Runtime::new();let t=healthy(&mut r);let manager=manager(&r);
+        let prepared=r.prepare_cutover(8,manager,t.token()).unwrap();
+        r.send(2,r.handle(2,1).unwrap(),b"unrelated").unwrap();
+        let probe=r.lab_stale_begin(8,manager).unwrap().unwrap();
+        assert_eq!(r.lab_stale_count(probe.endpoint),1);
+        assert_eq!(r.lab_stale_finish(8,manager,probe,t.token()),Err(Error::Invalid));
+        r.cutover_prepared(8,manager,prepared).unwrap();
+        assert_eq!(r.lab_stale_finish(8,manager,probe,t.token()),Ok(()));
+        let msg=r.receive(0,r.handle(0,SELF_CAP).unwrap()).unwrap();
+        assert_eq!(msg.principal,2);assert_eq!(&msg.bytes[..msg.length as usize],b"unrelated");
+        assert_eq!(r.receive(0,r.handle(0,SELF_CAP).unwrap()),Err(Error::Empty));
+    }
+    #[test]fn signed_lab_stale_probe_refuses_capacity_collision_and_wrong_manager(){
+        let mut r=Runtime::new();let h=manager(&r);
+        assert_eq!(r.lab_stale_begin(6,h),Err(Error::Denied));
+        r.send(5,r.handle(5,1).unwrap(),b"a").unwrap();
+        r.send(5,r.handle(5,1).unwrap(),b"b").unwrap();
+        assert_eq!(r.lab_stale_begin(8,h),Err(Error::Full));
+        assert_eq!(r.processes[0].queue.length,2);
+        let mut r=Runtime::new();let h=manager(&r);
+        r.send(2,r.handle(2,1).unwrap(),STALE_SENTINEL).unwrap();
+        assert_eq!(r.lab_stale_begin(8,h),Err(Error::Busy));
+        assert_eq!(r.processes[0].queue.length,1);
+        let mut r=Runtime::new();let h=manager(&r);
+        for (slot,cap) in [(2,1),(2,1),(5,1),(5,1)]{
+            r.send(slot,r.handle(slot,cap).unwrap(),b"full").unwrap();
+        }
+        assert_eq!(r.lab_stale_begin(8,h),Err(Error::Full));
+        assert_eq!(r.processes[0].queue.length,4);
+    }
+    #[test]fn signed_lab_stale_probe_skips_dead_prior_fallback(){
+        let mut r=Runtime::new();let h=manager(&r);
+        r.fault(r.binding(5).unwrap().unwrap()).unwrap();
+        let t=healthy(&mut r);
+        assert_eq!(r.lab_stale_begin(8,h),Ok(None));
+        r.cutover(8,h,t.token()).unwrap();
+        assert_eq!(r.binding(5).unwrap(),Some(t.endpoint()));
+    }
 
     #[test]fn update_requests_do_not_grant_management_or_disk_authority(){
         let mut r=Runtime::new();let h=r.handle(6,4).unwrap();

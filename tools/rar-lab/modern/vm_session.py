@@ -84,12 +84,19 @@ class VM:
     path, disk selector or shell enters this API.
     """
     def __init__(self,index,data_fd,system_fd,readonly_data=False,data_fault=None,
-                 reverse_flush=False):
+                 reverse_flush=False,system_selector_fault=None):
         cloud_guard()
         self.profile,self.backend = load("vm_profile"),load("block_process")
         self.index = index
         self.work = Path(self.profile.directory(index))
         self.readonly_data = readonly_data
+        self.system_fault_candidate=system_selector_fault
+        self.system_fault_audit=None;self.system_fault_hit=None;self.system_fault_wait=None
+        if system_selector_fault is not None:
+            if index!=2 or readonly_data is not True or data_fault is not None or reverse_flush is not False:
+                raise ValueError("fixed VM2 System selector error with read-only Data only")
+            self.system_fault_audit=load("system_selector_fault")
+            self.system_fault_audit.plan(system_selector_fault)
         self.fault_audit=load("fault_audit") if data_fault is not None else None
         selected=self.fault_audit.plan(data_fault) if data_fault is not None else None
         self.fault_plan=None if selected is None else tuple(selected[k] for k in
@@ -145,7 +152,8 @@ class VM:
                 backend = self.backend.Backend(fd,server,role,
                     readonly=role=="boot" or (role=="data" and readonly_data),
                     write_refusing=role=="boot" or (role=="data" and readonly_data),
-                    fault=data_fault if role=="data" else None,
+                    fault=data_fault if role=="data" else (self.system_fault_audit.plan(system_selector_fault)
+                        if role=="system" and self.system_fault_audit is not None else None),
                     reverse_flush=reverse_flush if role=="data" else False,seconds=130)
                 self.backends.append(backend)
                 clients.append(client)
@@ -220,6 +228,8 @@ class VM:
                     raise ValueError("block backend stopped before deliberate whole-VM cut")
             if self.child is not None and self.child.poll() is not None:
                 raise ValueError("VM exited before deliberate cut")
+            if getattr(self,"system_fault_audit",None) is not None and len(self.backends)==3 and self.backends[1].records:
+                self.system_fault_hit=self.system_fault_audit.scan(self.backends[1].records,self.system_fault_candidate)
             # Drain/check VM channels before a planned signal can be delivered.
             for key,_ in self.selector.select(0.01):
                 try:raw=os.read(key.fileobj.fileno(),65536)
@@ -229,7 +239,7 @@ class VM:
                 if key.data=="serial":
                     self.serial.extend(raw)
                     if len(self.serial)>self.profile.SERIAL_LIMIT:raise ValueError("serial budget")
-                    if any(marker in self.serial for marker in
+                    if getattr(self,"system_fault_audit",None) is None and any(marker in self.serial for marker in
                         (b"RAR-PANIC",b"UNEXPECTED-USER-FAULT",b"INVALID-USER-RETURN")):
                         raise ValueError("guest panic/isolation failure")
                 elif key.data=="qmp":
@@ -237,6 +247,13 @@ class VM:
                     if self.qmp_total>2*1024*1024 or len(self.qmp_bytes)>262144:
                         raise ValueError("QMP output budget")
                 else:raise ValueError("unknown monitored descriptor")
+            if getattr(self,"system_fault_audit",None) is not None:
+                state=self.system_fault_audit.serial_status(bytes(self.serial),self.system_fault_hit)
+                if state=="waiting":
+                    if self.system_fault_wait is None:self.system_fault_wait=min(self.deadline,time.monotonic()+1)
+                    if time.monotonic()>=self.system_fault_wait:raise TimeoutError("bounded exact System receipt/serial drain")
+                    continue
+                self.system_fault_wait=None
             if expected is None:return
             if len(self.backends)!=3:raise ValueError("three fault campaign backends required")
             data=self.backends[0]
@@ -459,7 +476,9 @@ class VM:
                             failures.append("post-cut output failure")
                         else:
                             self.serial.extend(raw)
-                            if any(marker in self.serial for marker in
+                            if getattr(self,"system_fault_audit",None) is not None:
+                                self.system_fault_audit.serial_status(bytes(self.serial),self.system_fault_hit,True)
+                            elif any(marker in self.serial for marker in
                                 (b"RAR-PANIC",b"UNEXPECTED-USER-FAULT",b"INVALID-USER-RETURN")):
                                 failures.append("post-cut guest panic/isolation failure")
             except BaseException as error:

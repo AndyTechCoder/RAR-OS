@@ -257,6 +257,7 @@ def main(mode="persistence"):
         (evidence/"tool-identities.txt").write_bytes(identities)
         if mode=="signed-runtime":
             signed.observe(load,execute,launcher,inputs,digest(boot),sizes,evidence,report,save,bank)
+            signed.observe_unknown(load,build,execute,compiler,launcher,source,controller,work,evidence,report,save,builds[0],sizes)
         elif mode=="mounted-error":
             output=execute(launcher,["/usr/bin/python3","-I","-B","/opt/rar-modern/mounted_error_launch.py"],
                 [(inputs,"/artifact")],180,64*1024*1024)
