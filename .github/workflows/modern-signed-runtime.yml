@@ -34,7 +34,7 @@ jobs:
           ref: ${{ env.RAR_SOURCE_SHA }}
           persist-credentials: false
           path: source
-      - name: Build and observe four fixed signed update scenarios
+      - name: Build and observe fixed signed update acceptance scenarios
         run: /usr/bin/python3 -I -B controller/tools/rar-lab/modern/signed_runtime_dispatch.py
       - name: Retain actual evidence including failures
         if: always()

@@ -2,17 +2,42 @@
 Reuses the inspected existing cloud confinement; no direct VM process API.
 """
 import os
-CASES=("update","bad-health","bad-signature","bad-abi")
+CASES=("update","bad-health","bad-signature","bad-abi","selector-error")
 def public_file(path,data):
     with path.open("xb") as out:
         out.write(data);out.flush();os.fchmod(out.fileno(),0o444)
-def prepare(build,execute,compiler,source,work,evidence,report,save,preliminary):
+def prepare(build,execute,compiler,source,work,evidence,report,save,preliminary,unknown=False):
     bank,system,record=build.composition["compose"](preliminary,report["source"],
         report["controller"],compiler[0],build.binary,build.packages,build.signer["sign_manifest_digest"])
+    if type(unknown) is not bool:raise ValueError("fixed alternate fixture selection")
+    if unknown:
+        from pathlib import Path
+        import importlib.util
+        path=Path(__file__).resolve().with_name("unknown_publisher.py")
+        spec=importlib.util.spec_from_file_location("unknown_publisher",path)
+        alternate=importlib.util.module_from_spec(spec);spec.loader.exec_module(alternate)
+        public,value=alternate.package(bank["modern-settings-update.layer"])
+        name="modern-settings-bad-signature.layer"
+        bank[name]=value
+        record["packages"][name]={"sha256":build.digest(value),"bytes":len(value),
+            "padded_bytes":(len(value)+4095)//4096*4096}
+        record["unknown_publisher"]={"public_key":public.hex(),"slot":name,
+            "enrolled":False,"signature_conformance_required":True}
     inputs=work/"signed-inputs";inputs.mkdir(mode=0o700,exist_ok=False)
     for name,data in bank.items():public_file(inputs/name,data)
+    if unknown:public_file(inputs/"unknown-publisher.fixture",public+value)
     inputs.chmod(0o555)
     report["signed_packages"]=record;save();builds=[]
+    if unknown:
+        checked=execute(compiler,["/bin/sh","-c",
+            "rustc --edition 2024 -C opt-level=1 -C debug-assertions=yes -C overflow-checks=yes /source/tools/rar-lab/modern/unknown_publisher_conformance.rs -o /tmp/unknown-check 2>/tmp/check.log; result=$?; if [ \"$result\" -ne 0 ]; then tail -c 6000 /tmp/check.log; exit \"$result\"; fi; /tmp/unknown-check < /inputs/unknown-publisher.fixture"],
+            [(source,"/source"),(inputs,"/inputs")],120,8192)
+        if checked!=b"RAR-UNKNOWN-PUBLISHER:EXACT-PACKAGE-VERIFIED\n":
+            raise ValueError("exact unknown publisher package conformance")
+        record["unknown_publisher"]["exact_package_conformance"]={"sha256":build.digest(value),
+            "public_key":public.hex(),"signature_and_publisher_checked":True,
+            "negative_signature_key_payload_checked":True}
+        save()
     for index in (1,2):
         print("Signed runtime independent build",index,flush=True)
         raw=execute(compiler,["/bin/sh","-c",
@@ -38,7 +63,33 @@ def observe(load,execute,launcher,inputs,boot,sizes,evidence,report,save,bank):
             [(inputs,"/artifact")],600,64*1024*1024)
         public_file(evidence/("signed-"+case+".json"),raw)
         results[case]=validator.validate(raw,boot,sizes,case,
-            bank["modern-settings-factory.layer"],bank["modern-settings-"+case+".layer"])
+            bank["modern-settings-factory.layer"],bank["modern-settings-"+("update" if case=="selector-error" else case)+".layer"])
         report["signed_runtime_checks"]=results;save()
     report["status"]="observed";save()
-    print("Signed runtime: four fixed actual scenarios independently checked; milestone acceptance requires review.",flush=True)
+    print("Signed runtime: five fixed actual scenarios independently checked; alternate publisher and milestone review remain.",flush=True)
+
+def observe_unknown(load,build,execute,compiler,launcher,source,controller,work,evidence,report,save,preliminary,sizes):
+    # A second literal five-window composition, never a sixth native mapping.
+    child_work=work/"unknown-publisher";child_work.mkdir(mode=0o700,exist_ok=False)
+    child_evidence=evidence/"unknown-publisher";child_evidence.mkdir(mode=0o755,exist_ok=False)
+    child=dict(source=report["source"],controller=report["controller"],status="started")
+    report["unknown_publisher"]=child;save()
+    selected,bank,system=prepare(build,execute,compiler,source,child_work,child_evidence,child,save,preliminary,True)
+    inputs=child_work/"inputs";inputs.mkdir(mode=0o755,exist_ok=False)
+    public_file(inputs/"modern.efi",selected["modern.efi"])
+    for name,value in bank.items():public_file(inputs/name,value)
+    public_file(inputs/"modern-system.img",system)
+    raw=execute(compiler,["/bin/sh","/pack.sh"],
+        [(build.HERE/"pack.sh","/pack.sh"),(controller/"nucleus/foundation/image.rs","/packager.rs"),(inputs,"/artifact")],
+        120,24*1024*1024)
+    boot=load("boot_image").unpack(raw,selected["modern.efi"])
+    public_file(inputs/"boot.img",boot);public_file(child_evidence/"boot.img",boot)
+    child["boot_sha256"]=build.digest(boot);save()
+    print("Signed runtime fixed alternate unknown-publisher scenario",flush=True)
+    raw=execute(launcher,["/usr/bin/python3","-I","-B","/opt/rar-modern/signed_runtime_launch.py","bad-signature"],
+        [(inputs,"/artifact")],600,64*1024*1024)
+    public_file(child_evidence/"unknown-publisher.json",raw)
+    child["check"]=load("signed_runtime_validate").validate(raw,build.digest(boot),sizes,"bad-signature",
+        bank["modern-settings-factory.layer"],bank["modern-settings-bad-signature.layer"])
+    child["status"]="observed";save()
+    print("Signed runtime: correctly signed non-enrolled publisher rejected in the actual guest.",flush=True)
