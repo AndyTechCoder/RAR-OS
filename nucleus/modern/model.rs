@@ -143,13 +143,13 @@ pub struct Cutover {pub previous:Option<Endpoint>,pub current:Endpoint}
 pub struct Handover {trial:Trial,caps:Caps}
 /// Complete prepared desktop authority, still unpublished. Bootstrap services
 /// remain live in Runtime, never copied/restored from this plan.
-pub struct DesktopHandover{candidate:Handover,processes:[Process;7],bindings:[Option<Endpoint>;PRINCIPALS],clock:u64}
+pub struct DesktopHandover{candidate:Handover,caps:[Caps;7],bindings:[Option<Endpoint>;PRINCIPALS],clock:u64}
 impl DesktopHandover{
     pub fn binding(&self,role:usize)->Option<Endpoint>{self.bindings.get(role).copied().flatten()}
     pub fn handle(&self,slot:usize,index:usize)->Result<u64,Error>{
         let role=if slot==self.candidate.endpoint().slot as usize{5}
             else if [0,1,2,3,4,6].contains(&slot){slot}else{return Err(Error::Invalid);};
-        self.processes[role].caps.handle(index)
+        self.caps[role].handle(index)
     }
 }
 pub const DESKTOP_PLAN_MAX:usize=8192;
@@ -425,25 +425,23 @@ impl Runtime {
             self.bindings[5].is_some(){return Err(Error::Stale);}
         if !self.bindings[9].is_some_and(|e|self.endpoint_alive(e)){return Err(Error::Denied);}
         let clock=self.clock.checked_add(1).ok_or(Error::Exhausted)?;
-        let mut plan=DesktopHandover{candidate,processes:[Process::EMPTY;7],
+        let mut plan=DesktopHandover{candidate,caps:[Caps::new();7],
             bindings:self.bindings,clock};
         for i in [0usize,1,2,3,4,6]{
             let e=Endpoint{slot:i as u8,incarnation:clock};plan.bindings[i]=Some(e);
             let mut caps=self.processes[i].caps;
             if i!=2{caps.grant(SELF_CAP,Object::Receive(e),RECEIVE)?;}
-            plan.processes[i]=Process{state:State::Active,principal:Some(i as u8),
-                incarnation:clock,caps,queue:Queue::new()};
+            plan.caps[i]=caps;
         }
         for (caller,slot,principal) in [(0,2,3),(0,4,4),(0,5,5),(0,6,6),
             (1,4,4),(1,6,6),(2,1,0),(4,2,3),(4,3,1),(6,2,3),(6,3,1)]{
-            plan.processes[caller].caps.grant(slot,Object::NamedSend{principal},SEND)?;
+            plan.caps[caller].grant(slot,Object::NamedSend{principal},SEND)?;
         }
-        plan.processes[1].caps.grant(DEVICE_CAP,Object::Device(Device::Data),DEVICE)?;
-        plan.processes[2].caps.grant(INPUT_CAP,Object::Input,INPUT)?;
-        plan.processes[3].caps.grant(FRAMEBUFFER_CAP,Object::Framebuffer,DRAW)?;
+        plan.caps[1].grant(DEVICE_CAP,Object::Device(Device::Data),DEVICE)?;
+        plan.caps[2].grant(INPUT_CAP,Object::Input,INPUT)?;
+        plan.caps[3].grant(FRAMEBUFFER_CAP,Object::Framebuffer,DRAW)?;
         let e=candidate.endpoint();
-        plan.processes[5]=Process{state:State::Active,principal:Some(5),
-            incarnation:e.incarnation,caps:candidate.caps,queue:Queue::new()};
+        plan.caps[5]=candidate.caps;
         plan.bindings[5]=Some(e);Ok(plan)
     }
     /// Publish the already prepared complete graph under native IF=0. Every
@@ -461,8 +459,12 @@ impl Runtime {
             if self.bindings[i]!=plan.bindings[i]||
                 !self.bindings[i].is_some_and(|e|self.endpoint_alive(e)){return Err(Error::Denied);}
         }
-        for i in [0usize,1,2,3,4,6]{self.processes[i]=plan.processes[i];}
-        self.processes[t.endpoint.slot as usize]=plan.processes[5];
+        for i in [0usize,1,2,3,4,6]{
+            self.processes[i]=Process{state:State::Active,principal:Some(i as u8),
+                incarnation:plan.clock,caps:plan.caps[i],queue:Queue::new()};
+        }
+        self.processes[t.endpoint.slot as usize]=Process{state:State::Active,principal:Some(5),
+            incarnation:t.endpoint.incarnation,caps:plan.caps[5],queue:Queue::new()};
         for i in 0..7{self.bindings[i]=plan.bindings[i];}
         self.clock=plan.clock;self.trial=None;self.bootstrapping=false;Ok(())
     }

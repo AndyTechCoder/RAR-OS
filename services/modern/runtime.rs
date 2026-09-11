@@ -33,6 +33,21 @@ fn identify(boot:&Boot)->Result<pio::Device<Ports>,()>{
         serial:boot.device_serial,model:boot.device_model};
     pio::Device::identify(Ports{handle:boot.caps[DEVICE_CAP]},expected).map_err(|_|())
 }
+struct SystemIo(pio::Device<Ports>);
+impl crate::system_volume::Io for SystemIo{
+    fn read(&mut self,sector:u32)->Result<[u8;512],()>{self.0.read512(sector).map_err(|_|())}
+    fn write(&mut self,sector:u32,bytes:&[u8;512])->Result<(),()>{self.0.write512(sector,bytes).map_err(|_|())}
+    fn flush(&mut self)->Result<(),()>{self.0.flush().map_err(|_|())}
+}
+/// Selected only together with reviewed immutable System provisioning. The
+/// legacy entry below remains unchanged until that native boot composition lands.
+pub fn update_system(boot:&Boot,input:fn(u64)->Option<&'static[u8]>)->!{
+    if boot.role!=9{crate::fail();}
+    let device=identify(boot).unwrap_or_else(|_|crate::fail());
+    let volume=crate::system_volume::Volume::mount(SystemIo(device),boot.device_sectors as u32)
+        .unwrap_or_else(|_|crate::fail());
+    crate::update_runtime::system(boot,volume,input)
+}
 pub fn storage(boot:&Boot)->!{
     // One identify/mount only. Never seed, format, remount or retry on failure.
     let mut server=identify(boot).ok().and_then(|device|{

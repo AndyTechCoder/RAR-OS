@@ -16,6 +16,17 @@ mod abi;
 #[path="../../services/modern/desktop_wire.rs"] mod desktop_wire;
 #[path="../crypto/sha256.rs"] mod sha256;
 #[path="../crypto/chacha20poly1305.rs"] mod chacha20poly1305;
+#[path="../crypto/sha512.rs"] mod sha512;
+#[path="../crypto/ed25519.rs"] mod ed25519;
+#[path="../../nucleus/platform/pe.rs"] mod pe;
+mod manifest;
+mod journal;
+mod system_volume;
+mod update_wire;
+mod update_system;
+mod update_manager;
+#[path="../../services/modern/update_runtime.rs"] mod update_runtime;
+#[derive(Clone,Copy,Debug,PartialEq,Eq)] pub enum Error{Invalid,Denied}
 use core::{arch::asm,panic::PanicInfo};
 use abi::*;
 fn syscall(n:u64,a:u64,b:u64,c:u64,d:u64)->i64 {

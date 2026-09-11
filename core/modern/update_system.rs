@@ -4,6 +4,9 @@ use crate::{journal::Record,system_volume::{Io,Volume,Prepared},
     update_wire::{self as wire,Transfer,Mode,Kind,Requests,RecordReceiver,PART}};
 /// Native adapter implements the exclusive kernel STAGE_COPY grant. An error
 /// cannot mean successful Finish: native wrappers validate replies exactly.
+/// Begin Err MUST leave no live or partially reserved staging object (consuming
+/// a monotonic seal value is allowed). Without a returned seal there is no safe
+/// abort identity. A native adapter must fail-stop on an invalid successful reply.
 pub trait Stage {
     fn begin(&mut self,length:usize)->Result<u64,()>;
     fn append(&mut self,seal:u64,offset:usize,bytes:&[u8])->Result<(),()>;
