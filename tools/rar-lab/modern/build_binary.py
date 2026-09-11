@@ -2,7 +2,14 @@
 import base64
 import struct
 
-NAMES = ("modern.efi", "modern-service.efi")
+SETTINGS = ("modern-settings-factory.efi", "modern-settings-update.efi",
+            "modern-settings-bad-health.efi")
+NAMES = ("modern.efi", "modern-service.efi") + SETTINGS
+SETTINGS_CFG = {
+    SETTINGS[0]: ("rar_settings_only",),
+    SETTINGS[1]: ("rar_settings_only", "rar_settings_v2"),
+    SETTINGS[2]: ("rar_settings_only", "rar_settings_v2", "rar_settings_fail_health"),
+}
 LIMIT = 2 * 1024 * 1024
 
 def inspect(data, service):
@@ -68,7 +75,7 @@ def unpack(data):
     if not isinstance(data, bytes) or len(data) > 6*1024*1024:
         raise ValueError("build transfer outside bound")
     lines = data.split(b"\n")
-    if len(lines) != 6 or lines[-2:] != [b"RAR-BUILD:END", b""]:
+    if len(lines) != 2*len(NAMES)+2 or lines[-2:] != [b"RAR-BUILD:END", b""]:
         raise ValueError("malformed build transfer")
     result = {}
     for index, name in enumerate(NAMES):
@@ -77,8 +84,26 @@ def unpack(data):
         raw = base64.b64decode(lines[index*2+1], validate=True)
         if base64.b64encode(raw) != lines[index*2+1]:
             raise ValueError("noncanonical base64")
-        inspect(raw, name == "modern-service.efi")
+        inspect(raw, name != "modern.efi")
         result[name] = raw
+    return result
+
+def settings_identities(built):
+    """Bind inspected actual payload bytes to fixed trusted-recipe cfg names.
+
+    Different bytes alone do not prove behavior. Runtime health/UI evidence is
+    still required; cfg provenance comes from the reviewed build script.
+    """
+    from hashlib import sha256
+    if type(built) is not dict or set(built)!=set(NAMES):
+        raise ValueError("exact build inventory required")
+    result={}
+    for name in SETTINGS:
+        inspect(built[name],True)
+        result[name]={"sha256":sha256(built[name]).hexdigest(),
+                      "cfg":list(SETTINGS_CFG[name])}
+    if len({v["sha256"] for v in result.values()})!=len(SETTINGS):
+        raise ValueError("Settings code variants must have different bytes")
     return result
 
 def self_test():
@@ -131,7 +156,21 @@ def self_test():
         try: unpack(bad)
         except ValueError: rejected+=1
         else: raise AssertionError("transfer mutation accepted")
-    assert rejected==33, "Modern PE negative coverage changed"
+    variants=dict.fromkeys(NAMES,valid)
+    for index,name in enumerate(SETTINGS):
+        value=bytearray(valid);value[512]=index+1
+        variants[name]=bytes(value)
+    identities=settings_identities(variants)
+    assert len({v["sha256"] for v in identities.values()})==3
+    assert identities[SETTINGS[2]]["cfg"]==["rar_settings_only","rar_settings_v2","rar_settings_fail_health"]
+    for bad in (dict.fromkeys(NAMES,valid),{k:v for k,v in variants.items() if k!=SETTINGS[0]},
+                dict(variants,unexpected=valid),
+                dict(variants,**{SETTINGS[1]:variants[SETTINGS[0]]}),
+                dict(variants,**{SETTINGS[2]:b"invalid"})):
+        try: settings_identities(bad)
+        except (ValueError,struct.error): rejected+=1
+        else: raise AssertionError("invalid Settings artifact identity accepted")
+    assert rejected==38, "Modern PE negative coverage changed"
     return rejected
 
 if __name__ == "__main__":

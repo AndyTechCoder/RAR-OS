@@ -39,7 +39,7 @@ def self_test():
         try: identity(value)
         except ValueError: rejected+=1
         else: raise AssertionError("invalid revision accepted")
-    assert rejected==69, "Modern build negative coverage changed"
+    assert rejected==74, "Modern build negative coverage changed"
     return rejected
 
 def main():
@@ -110,9 +110,10 @@ def main():
             built=binary["unpack"](encoded)
             builds.append(built)
             summary["build_"+str(index)]={n:digest(b) for n,b in built.items()}
-            summary["layout_"+str(index)]={n:binary["inspect"](b,n=="modern-service.efi") for n,b in built.items()}
+            summary["layout_"+str(index)]={n:binary["inspect"](b,n!="modern.efi") for n,b in built.items()}
+            summary["settings_"+str(index)]=binary["settings_identities"](built)
             save()
-        if summary["build_1"]!=summary["build_2"]:
+        if summary["build_1"]!=summary["build_2"] or summary["settings_1"]!=summary["settings_2"]:
             raise ValueError("independent target builds differ")
         for name,data in builds[0].items():
             (evidence/name).write_bytes(data)
