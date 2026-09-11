@@ -39,3 +39,6 @@ cd "$root"
 /usr/bin/python3 -I -B tools/rar-lab/modern/mounted_error_tests.py
 
 /usr/bin/python3 -I -B tools/rar-lab/modern/settings_packages.py --self-test
+
+/bin/sh -n tools/rar-lab/modern/build-signed.sh
+/usr/bin/python3 -I -B tools/rar-lab/modern/signed_composition_tests.py
