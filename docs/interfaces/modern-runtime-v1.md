@@ -423,12 +423,12 @@ and copies under IF=0. No caller-supplied principal or side effect exists.
 System/apps/trials are denied even with a numerically equal handle.
 This is a private matched-build extension, not a stable SDK or trust delegation.
 
-The fixed RARCTL01 128-byte request is magic8, nonzero monotonic LEu64 request,
+The fixed RARCTL01 128-byte request is magic8, LEu64 request exactly1,
 LEu64 immutable laboratory index0..3, then104 zero bytes. Manager authenticates
 kernel-stamped role6 and the full current Terminal incarnation before parsing.
-Replay state advances only for canonical authenticated requests; request and
-incarnation values never truncate or wrap. A newer kernel incarnation starts a
-new request sequence, never an older one. There is one serial transaction owner.
+One canonical authenticated request consumes the boot-lifetime trigger; later
+requests and replays are refused even if Terminal changes incarnation. Full
+incarnations never truncate. Terminal attempts at most one request per boot. There is one serial transaction owner.
 Requests arriving during a transaction may be discarded; they are not retried.
 
 In the signed composition only, Terminal commands update, update badhealth,
@@ -439,9 +439,13 @@ No arbitrary path, bytes, URL, key, sector, capability or signature override is
 accepted. The public RFC laboratory key remains non-production.
 
 After successful initial publication, Manager polls the narrow current binding.
-Loss of active Settings permits one fresh exact-prior verified transaction.
+Only after a successful explicit install does loss of active Settings permit
+one fresh exact-prior verified transaction.
 Failure/uncertainty stops the whole guest; another active loss after fallback
-also stops, preventing automatic oscillation. Only a new successful install
-rearms this one-fallback allowance. Verification, durable ACK, fresh health,
-physical retirement and data separation remain unchanged. Pure policy/model
+also stops, preventing automatic oscillation. No request rearms the allowance in this boot. Unexpected nonzero Settings
+incarnation changes halt rather than silently rebinding. Verification, durable ACK, fresh health,
+physical retirement and data separation remain unchanged. Settings v2 alone
+accepts X as an explicit laboratory user-fault key for causal fallback testing.
+This new Modern Terminal request capability changes the new ordinary graph;
+the released M3 tag and previously accepted M4.1 snapshot are not modified. Pure policy/model
 tests and source compilation do not replace actual cloud demonstration.

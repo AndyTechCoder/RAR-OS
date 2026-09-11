@@ -10,7 +10,7 @@ impl Preferences{
         view.line(1,if self.light{b"LIGHT"}else{b"DARK"});
         view.line(2,b"SPACE TO CHANGE THEME");
         if updated{
-            view.line(3,b"D TO CHANGE SPACING");
+            view.line(3,b"D SPACING / X LAB FAULT");
             view.line(4,if self.compact{b"COMPACT"}else{b"COMFORTABLE"});
             view.line(5,b"UPDATED SETTINGS");
         }else{view.line(3,b"SESSION ONLY");}
@@ -26,6 +26,9 @@ impl Preferences{
     /// view plus the existing shell theme notification, no new authority.
     pub fn key(&mut self,key:u8)->Option<Option<bool>>{self.key_variant(key,cfg!(rar_settings_v2))}
 }
+fn fault_key(key:u8,updated:bool)->bool{updated&&key==b'x'}
+/// Deliberate laboratory active-process fault; never called by trial health.
+pub fn laboratory_fault_key(key:u8)->bool{fault_key(key,cfg!(rar_settings_v2))}
 pub fn initial_view()->View{Preferences::new().view()}
 pub fn health()->bool{
     if cfg!(rar_settings_fail_health){return false;}
@@ -35,6 +38,13 @@ pub fn health()->bool{
 }
 #[cfg(test)]mod tests{
     use super::*;
+    #[test]fn active_fault_key_is_updated_variant_only(){
+        for key in 0..=255{
+            assert!(!fault_key(key,false));
+            assert_eq!(fault_key(key,true),key==b'x');
+        }
+        assert_eq!(laboratory_fault_key(b'x'),cfg!(rar_settings_v2));
+    }
     #[test]fn exact_initial_view_and_trial_local_health(){
         let view=Preferences::new().view_variant(false);
         let expected:[&[u8];6]=[b"APPEARANCE",b"DARK",b"SPACE TO CHANGE THEME",b"SESSION ONLY",b"",b""];

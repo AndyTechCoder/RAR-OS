@@ -194,26 +194,28 @@ pub fn manager(boot:&Boot)->!{
     let mut requests=wire::Requests::new();
     let mut commands=crate::update_control::Requests::new();
     boot_selected(boot,&mut requests);
-    if bindings(boot)[1]==0{reconcile(boot);}
-    let mut recovery=crate::update_control::Recovery::new();
+    let Some(mut recovery)=crate::update_control::Recovery::new(bindings(boot)[1]) else{reconcile(boot);};
     loop{
         let current=bindings(boot);
-        if current[1]==0{
+        match recovery.observe(current[1]){
+          crate::update_control::Action::Stop=>reconcile(boot),
+          crate::update_control::Action::Fallback=>{
             // One fresh, reverified exact-prior fallback, never an old process
             // resurrection or an oscillating automatic retry.
-            if !recovery.lost(){reconcile(boot);}
             if transaction(boot,&mut requests,Mode::Fallback,0).is_err()||
-                bindings(boot)[1]==0{reconcile(boot);}
-        }else{
+                !recovery.restored(bindings(boot)[1]){reconcile(boot);}
+          },
+          crate::update_control::Action::Observe=>{
             match crate::poll_checked(boot.caps[SELF_RECV]){
                 Ok(Some(m))=>{
                     if let Some(index)=commands.accept(m.sender,m.generation,current[0],m.length,&m.bytes){
-                        if install(boot,&mut requests,index).is_ok(){recovery.installed();}
+                        if install(boot,&mut requests,index).is_ok()&&!recovery.installed(bindings(boot)[1]){reconcile(boot);}
                     }
                 },
                 Ok(None)=>{},
                 Err(())=>reconcile(boot),
             }
+        }
         }
         crate::yield_now();
     }

@@ -140,6 +140,11 @@ pub fn settings(boot:&Boot)->! {
     loop {
         let m=shell_event(boot);
         if let Some(key)=key_decode(&m) {
+            if crate::settings::laboratory_fault_key(key){
+                // SAFETY: deliberate v2-only laboratory user fault. No host
+                // instruction runs; the certified guest kernel revokes this task.
+                unsafe{core::arch::asm!("ud2",options(noreturn));}
+            }
             if let Some(theme)=preferences.key(key){
                 view=preferences.view();publish(boot,&mut version,&view);
                 if let Some(light)=theme{
@@ -168,13 +173,14 @@ pub fn terminal(boot:&Boot)->! {
                 view=View::EMPTY;view.line(0,b"RAR TERMINAL");
                 if cfg!(rar_signed_updates)&&crate::update_control::command(&editor.bytes[..editor.len]).is_some(){
                     let index=crate::update_control::command(&editor.bytes[..editor.len]).unwrap();
-                    if let Some(id)=update_request.checked_add(1){
-                        update_request=id;
+                    if update_request==0{
+                        update_request=1;
+                        let id=1;
                         let bytes=crate::update_control::frame(id,index).unwrap();
                         if crate::send(boot.caps[crate::update_control::CAP],&bytes).is_ok(){
                             view.line(1,b"UPDATE REQUESTED");view.line(2,b"OPEN SETTINGS TO CHECK RESULT");
                         }else{view.line(1,b"UPDATE REQUEST UNAVAILABLE");}
-                    }else{view.line(1,b"UPDATE REQUEST LIMIT REACHED");}
+                    }else{view.line(1,b"ONE UPDATE REQUEST PER BOOT");}
                 }else{
                 match command(&editor.bytes[..editor.len]) {
                     Command::Help=>{view.line(1,b"HELP LIST READ WRITE CRASH");view.line(2,b"CREATE + WRITE MAY LEAVE EMPTY FILE");}

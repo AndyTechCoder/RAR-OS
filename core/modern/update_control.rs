@@ -12,36 +12,60 @@ pub fn frame(id:u64,index:u64)->Option<[u8;128]>{
     bytes[8..16].copy_from_slice(&id.to_le_bytes());
     bytes[16..24].copy_from_slice(&index.to_le_bytes());Some(bytes)
 }
-pub struct Requests{incarnation:u64,last:u64}
+pub struct Requests{used:bool}
 impl Requests{
-    pub const fn new()->Self{Self{incarnation:0,last:0}}
+    pub const fn new()->Self{Self{used:false}}
     /// Identity must come from the kernel envelope and the current manager-only
     /// binding query. Rejected input never consumes replay state.
     pub fn accept(&mut self,sender:u64,incarnation:u64,current:u64,length:u64,
         bytes:&[u8;128])->Option<u64>{
-        if sender!=6||current==0||incarnation!=current||length!=128||
-            incarnation<self.incarnation||bytes[..8]!=MAGIC||
+        if self.used||sender!=6||current==0||incarnation!=current||length!=128||
+            bytes[..8]!=MAGIC||
             bytes[24..].iter().any(|&b|b!=0){return None;}
         let id=u64::from_le_bytes(bytes[8..16].try_into().ok()?);
         let index=u64::from_le_bytes(bytes[16..24].try_into().ok()?);
-        if frame(id,index)?!=*bytes||(incarnation==self.incarnation&&id<=self.last){return None;}
-        self.incarnation=incarnation;self.last=id;Some(index)
+        if id!=1||frame(id,index)?!=*bytes{return None;}
+        self.used=true;Some(index)
     }
 }
-/// Bound automatic recovery attempts between successful installations.
-pub struct Recovery{used:bool}
+/// One successful install may authorize one exact-prior automatic recovery.
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub enum Action{Observe,Fallback,Stop}
+pub struct Recovery{expected:u64,installed:bool,used:bool,pending:bool}
 impl Recovery{
-    pub const fn new()->Self{Self{used:false}}
-    pub fn lost(&mut self)->bool{
-        if self.used{return false;}self.used=true;true
+    pub fn new(expected:u64)->Option<Self>{
+        if expected==0{return None;}Some(Self{expected,installed:false,used:false,pending:false})
     }
-    pub fn installed(&mut self){self.used=false;}
+    pub fn observe(&mut self,current:u64)->Action{
+        if current==self.expected{return Action::Observe;}
+        if current!=0||!self.installed||self.used{return Action::Stop;}
+        self.used=true;self.pending=true;Action::Fallback
+    }
+    pub fn installed(&mut self,current:u64)->bool{
+        if self.installed||current<=self.expected{return false;}
+        self.expected=current;self.installed=true;true
+    }
+    pub fn restored(&mut self,current:u64)->bool{
+        if !self.pending||current<=self.expected{return false;}
+        self.expected=current;self.pending=false;true
+    }
 }
 #[cfg(test)]mod tests{
     use super::*;
-    #[test]fn fallback_is_once_until_an_explicit_successful_install(){
-        let mut r=Recovery::new();assert!(r.lost());assert!(!r.lost());assert!(!r.lost());
-        r.installed();assert!(r.lost());assert!(!r.lost());
+    #[test]fn fallback_requires_install_and_never_oscillates(){
+        assert!(Recovery::new(0).is_none());
+        let mut r=Recovery::new(9).unwrap();
+        assert_eq!(r.observe(9),Action::Observe);
+        assert_eq!(r.observe(0),Action::Stop);
+        assert_eq!(r.observe(10),Action::Stop);
+        assert!(!r.installed(0));assert!(!r.installed(9));assert!(!r.restored(10));
+        assert!(r.installed(10));assert!(!r.installed(11));
+        assert_eq!(r.observe(10),Action::Observe);
+        assert_eq!(r.observe(11),Action::Stop);
+        assert_eq!(r.observe(0),Action::Fallback);
+        assert!(!r.restored(10));assert!(!r.restored(0));
+        assert!(r.restored(11));assert!(!r.restored(12));assert_eq!(r.observe(11),Action::Observe);
+        assert_eq!(r.observe(0),Action::Stop);
     }
     #[test]fn fixed_commands_and_canonical_frames(){
         for (command,index)in [(b"update".as_slice(),0),(b"update badhealth",1),
@@ -54,7 +78,7 @@ impl Recovery{
         assert!(frame(0,0).is_none());assert!(frame(1,4).is_none());
     }
     #[test]fn authenticate_before_consuming_full_width_replay_state(){
-        let mut r=Requests::new();let n=(1u64<<40)+3;let b=frame(u64::MAX,0).unwrap();
+        let mut r=Requests::new();let n=(1u64<<40)+3;let b=frame(1,0).unwrap();
         for sender in 0..16{if sender!=6{assert_eq!(r.accept(sender,n,n,128,&b),None);}}
         for (inc,current,length)in [(n-1,n,128),(n,n-1,128),(0,0,128),(n,n,127),(n,n,129)]{
             assert_eq!(r.accept(6,inc,current,length,&b),None);
@@ -65,10 +89,12 @@ impl Recovery{
                 assert_eq!(r.accept(6,n,n,128,&bad),None);
             }
         }
+        assert_eq!(r.accept(6,n,n,128,&frame(u64::MAX,0).unwrap()),None);
+        assert_eq!(r.accept(6,n,n,128,&frame(2,0).unwrap()),None);
         assert_eq!(r.accept(6,n,n,128,&b),Some(0));
         assert_eq!(r.accept(6,n,n,128,&b),None);
         assert_eq!(r.accept(6,n,n,128,&frame(1,0).unwrap()),None);
-        assert_eq!(r.accept(6,n+1,n+1,128,&frame(1,3).unwrap()),Some(3));
+        assert_eq!(r.accept(6,n+1,n+1,128,&frame(1,3).unwrap()),None);
         assert_eq!(r.accept(6,n,n,128,&b),None);
     }
 }
