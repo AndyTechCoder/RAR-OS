@@ -29,3 +29,16 @@ sufficiency, live updates, fallback, recovery or M4 completion. Only the later
 certified VM controller may consume the signed outputs after its own review.
 Legacy modern.efi remains an explicitly separate preliminary artifact and must
 not be substituted for signed-modern.efi in a signed-runtime test.
+
+
+### Cloud input ownership correction
+
+Actual compile-only run34645307815 reproduced all five preliminary UEFI inputs
+but failed before signed compilation because the runner-owned0700 input
+directory was unreadable to compiler UID65532. Generated public laboratory
+package files now receive0444 through their exclusively created open
+descriptors; after all file writes finish, only their new containing directory
+receives0555. Parent paths, source, System image and unrelated files are not
+changed. The bind remains read-only and the compiler remains nonroot with no
+network or devices. This corrects data readability, not execution authority.
+A fresh exact-controller cloud build is still required to prove the fix.
