@@ -7,6 +7,7 @@ RUN set -eu; \
     /tmp/rust-std-1.95.0-x86_64-unknown-uefi/install.sh --prefix="$(rustc --print sysroot)" --disable-ldconfig; \
     cp -a "$(rustc --print sysroot)" /opt/rar-toolchain
 COPY build.sh /opt/rar-build.sh
+COPY build-signed.sh /opt/rar-build-signed.sh
 ENV PATH=/opt/rar-toolchain/bin:/usr/bin:/bin LC_ALL=C SOURCE_DATE_EPOCH=1785715200
 USER 65532:65532
 WORKDIR /source

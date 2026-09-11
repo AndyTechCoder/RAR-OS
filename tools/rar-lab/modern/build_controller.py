@@ -10,6 +10,11 @@ exec(compile((HERE.parent/"foundation/controller.py").read_text(),
              "trusted-foundation-controller.py","exec"),helpers)
 binary={"__name__":"trusted_modern_binary"}
 exec(compile((HERE/"build_binary.py").read_text(),"trusted-modern-binary.py","exec"),binary)
+composition={"__name__":"trusted_signed_composition"}
+packages={"__name__":"trusted_settings_packages"}
+signer={"__name__":"trusted_public_lab_signer"}
+for filename,scope in (("signed_composition.py",composition),("settings_packages.py",packages),("lab_signer.py",signer)):
+    exec(compile((HERE/filename).read_text(),filename,"exec"),scope)
 run,digest,sandbox=(helpers[n] for n in ("run","digest","sandbox"))
 POLICY=helpers["POLICY"]
 REQUIRED=("nucleus/foundation/main.rs","nucleus/modern/main.rs","nucleus/modern/native_pio.rs",
@@ -117,6 +122,43 @@ def main():
             raise ValueError("independent target builds differ")
         for name,data in builds[0].items():
             (evidence/name).write_bytes(data)
+        bank,system,package_record=composition["compose"](
+            builds[0],os.environ["RAR_SOURCE_SHA"],os.environ["RAR_CONTROLLER_SHA"],
+            image,binary,packages,signer["sign_manifest_digest"])
+        inputs=evidence/"signed-inputs"
+        inputs.mkdir(mode=0o700,exist_ok=False)
+        for name,data in bank.items():
+            with (inputs/name).open("xb") as output:
+                output.write(data)
+        with (evidence/"modern-system.img").open("xb") as output:
+            output.write(system)
+        summary["signed_packages"]=package_record
+        save()
+        signed_builds=[]
+        for index in (1,2):
+            name="rar-modern-signed-"+run_id+"-"+attempt+"-"+str(index)
+            containers.append(name)
+            argv=["docker","run","--name",name]+sandbox(POLICY)+[
+                "--mount","type=bind,src="+str(source)+",dst=/source,readonly",
+                "--mount","type=bind,src="+str(inputs)+",dst=/inputs,readonly",
+                "--entrypoint","/bin/sh",image,"-c",
+                '/bin/sh /opt/rar-build-signed.sh 2>/tmp/build.log; result=$?; '
+                'if [ "$result" -ne 0 ]; then tail -c 12000 /tmp/build.log; exit "$result"; fi']
+            print("Independent signed Modern UEFI build",index,flush=True)
+            _,encoded=run(argv,300,6*1024*1024)
+            built=composition["unpack_signed"](encoded,binary["inspect"])
+            placement=composition["inspect_bank"](built["modern.efi"],bank,binary["inspect"])
+            signed_builds.append(built)
+            summary["signed_build_"+str(index)]={n:digest(b) for n,b in built.items()}
+            summary["signed_bank_"+str(index)]=placement
+            summary["signed_layout_"+str(index)]={n:binary["inspect"](b,n!="modern.efi") for n,b in built.items()}
+            save()
+        if summary["signed_build_1"]!=summary["signed_build_2"] or summary["signed_bank_1"]!=summary["signed_bank_2"]:
+            raise ValueError("independent signed builds or bank placement differ")
+        for name,data in signed_builds[0].items():
+            with (evidence/("signed-"+name)).open("xb") as output:
+                output.write(data)
+        summary["signed_composition_reproducible"]=True
         summary.update(status="passed",reproducible=True)
         save()
         print("Modern: two identical UEFI builds and bounded PE/W^X layouts passed; no boot or M4 acceptance claim.",flush=True)
