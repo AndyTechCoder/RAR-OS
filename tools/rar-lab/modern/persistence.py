@@ -77,7 +77,7 @@ class Fixture:
                 setattr(self,name,None)
         if errors: raise OSError("fixture descriptor cleanup failed")
 
-def audit(records,role,ready,readonly_data=False):
+def audit(records,role,ready,readonly_data=False,system_updates=False):
     """Successful baseline only, not fault-injection/recovery acceptance.
     A deliberate whole-VM cut may interrupt one final READ; writes/flushes must
     have complete events. Raw audit records are retained alongside this summary.
@@ -86,6 +86,8 @@ def audit(records,role,ready,readonly_data=False):
         raise ValueError("exact backend readiness is required")
     if type(readonly_data) is not bool:
         raise ValueError("explicit Data authority mode")
+    if type(system_updates) is not bool or system_updates and role!="system":
+        raise ValueError("System-update mode is explicit and System-only")
     counts={"read":0,"write":0,"flush":0}
     dirty=False
     pending=None
@@ -111,7 +113,7 @@ def audit(records,role,ready,readonly_data=False):
             if (op=="flush" and (offset or length)) or (op!="flush" and
                 (offset<0 or offset%512 or not 512<=length<=65536 or length%512 or offset+length>size)):
                 raise ValueError("operation outside fixed device")
-            if op=="write" and (role!="data" or readonly_data):
+            if op=="write" and not (role=="system" and system_updates) and (role!="data" or readonly_data):
                 raise ValueError("baseline may not attempt System/boot or read-only Data writes")
             pending=row
         elif kind=="event":
@@ -148,7 +150,8 @@ def audit(records,role,ready,readonly_data=False):
         raise ValueError("completed volatile write lacks a completed durability flush")
     return dict(counts=counts,dirty=False,trailing_read=pending is not None,transport_closed=terminal)
 
-def joined(vm):
+def joined(vm,system_updates=False):
+    if type(system_updates) is not bool:raise ValueError("explicit System audit mode")
     vm.service()
     stopped=vm.destroy()
     if (stopped.get("joined") is not True or vm.cleanup_succeeded is not True or
@@ -158,7 +161,7 @@ def joined(vm):
     for backend,report,role in zip(vm.backends,stopped["backends"],("data","system","boot")):
         if report["joined"] is not True or report["records"]!=backend.records:
             raise ValueError("actual joined backend records required")
-        summaries.append(audit(report["records"],role,backend.records[0],vm.readonly_data))
+        summaries.append(audit(report["records"],role,backend.records[0],vm.readonly_data,system_updates and role=="system"))
     return dict(cut=stopped,audit=summaries,argv=vm.argv,preflight=vm.preflight,
                 commands=vm.commands,events=vm.events,event_receipts=vm.event_receipts,
                 qmp_drained=vm.qmp_drained,serial=bytes(vm.serial).decode("ascii"))
@@ -369,6 +372,11 @@ def self_test():
     assert audit([ro_ready],"data",ro_ready,True)["dirty"] is False
     reject(lambda:audit([ro_ready,req,event,flush,flushed],"data",ro_ready,True))
     reject(lambda:audit([ready_record],"data",ready_record,True))
+    system_ready=dict(ready_record,kind="system",capacity=8388608)
+    assert audit([system_ready]+good[1:],"system",system_ready,False,True)["counts"]["write"]==1
+    reject(lambda:audit(good,"data",ready_record,False,True))
+    reject(lambda:audit([system_ready,req,event],"system",system_ready,False,True))
+    reject(lambda:audit([system_ready]+good[1:],"system",system_ready,False,1))
     # Failed cleanup/drain never authorizes a frozen read, even after closure.
     from types import SimpleNamespace
     fixture=object.__new__(Fixture)

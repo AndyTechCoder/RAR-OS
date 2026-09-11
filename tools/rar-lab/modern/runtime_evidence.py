@@ -69,7 +69,10 @@ def commands(rows,index,value,profile):
             raise ValueError("Terminal capture must precede typed write; SAVED follows it")
     return len(rows)
 
-def argv(rows,index,profile):
+def argv(rows,index,profile,readonly_data=None):
+    if readonly_data is not None and type(readonly_data) is not bool:
+        raise ValueError("explicit physical Data authority")
+    readonly_data=index==2 if readonly_data is None else readonly_data
     if type(rows) is not list or not 1<=len(rows)<=128 or any(type(v) is not str or len(v)>2048 for v in rows):
         raise ValueError("bounded actual QEMU argument vector")
     sockets={}
@@ -89,7 +92,7 @@ def argv(rows,index,profile):
             sockets[role]=int(number)
     if set(sockets)!={"rar-data-nbd","rar-system-nbd","rar-boot-nbd"}:
         raise ValueError("exact three assigned socket roles")
-    expected=profile.argv(index,sockets["rar-data-nbd"],sockets["rar-system-nbd"],sockets["rar-boot-nbd"],index==2)
+    expected=profile.argv(index,sockets["rar-data-nbd"],sockets["rar-system-nbd"],sockets["rar-boot-nbd"],readonly_data)
     if rows!=expected: raise ValueError("actual QEMU arguments differ from the fixed reviewed profile")
     return True
 
