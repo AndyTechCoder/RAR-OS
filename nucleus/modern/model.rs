@@ -141,6 +141,15 @@ pub struct Cutover {pub previous:Option<Endpoint>,pub current:Endpoint}
 /// The native owner retains this across durable System I/O, then revalidates.
 #[derive(Clone,Copy)]
 pub struct Handover {trial:Trial,caps:Caps}
+/// Complete prepared desktop authority, still unpublished. Bootstrap services
+/// remain live in Runtime, never copied/restored from this plan.
+pub struct DesktopHandover{candidate:Handover,processes:[Process;TASKS],bindings:[Option<Endpoint>;PRINCIPALS],clock:u64}
+impl DesktopHandover{
+    pub fn binding(&self,role:usize)->Option<Endpoint>{self.bindings.get(role).copied().flatten()}
+    pub fn handle(&self,slot:usize,index:usize)->Result<u64,Error>{
+        self.processes.get(slot).ok_or(Error::Invalid)?.caps.handle(index)
+    }
+}
 impl Handover {
     pub fn endpoint(&self)->Endpoint{self.trial.endpoint}
     pub fn token(&self)->u64{self.trial.token}
@@ -152,13 +161,18 @@ struct StagedImage {seal:u64,slot:u8,digest:[u8;32],generation:u64,signed_budget
 pub struct Runtime {
     processes:[Process;TASKS],bindings:[Option<Endpoint>;PRINCIPALS],
     clock:u64,next_token:u64,trial:Option<Trial>,staged:Option<StagedImage>,recovery_required:bool,
+    bootstrapping:bool,
 }
 impl Runtime {
-    /// Initial model graph, before a real kernel connects process construction.
-    pub fn new()->Self{
+    /// Retained full graph for the accepted M4.1 composition and focused tests.
+    pub fn new()->Self{Self::initial(false)}
+    /// Construct only bootstrap services. Never grant then revoke desktop state.
+    pub fn bootstrap()->Self{Self::initial(true)}
+    fn initial(bootstrapping:bool)->Self{
         let mut r=Self {processes:[Process::EMPTY;TASKS],bindings:[None;PRINCIPALS],
-            clock:1,next_token:1,trial:None,staged:None,recovery_required:false};
+            clock:1,next_token:1,trial:None,staged:None,recovery_required:false,bootstrapping};
         for i in [0,1,2,3,4,5,6,8,9]{
+            if bootstrapping&&!matches!(i,8|9){continue;}
             let e=Endpoint {slot:i as u8,incarnation:1};
             r.processes[i].state=State::Active;r.processes[i].principal=Some(i as u8);r.processes[i].incarnation=1;
             r.bindings[i]=Some(e);
@@ -169,13 +183,15 @@ impl Runtime {
         for (caller,slot,principal) in [(0,2,3),(0,4,4),(0,5,5),(0,6,6),
             (1,4,4),(1,6,6),(2,1,0),(4,2,3),(4,3,1),
             (5,1,0),(5,2,3),(6,2,3),(6,3,1)] {
-            r.processes[caller].caps.grant(slot,Object::NamedSend {principal},SEND).unwrap();
+            if !bootstrapping{r.processes[caller].caps.grant(slot,Object::NamedSend {principal},SEND).unwrap();}
         }
-        r.processes[1].caps.grant(DEVICE_CAP,Object::Device(Device::Data),DEVICE).unwrap();
+        if !bootstrapping{r.processes[1].caps.grant(DEVICE_CAP,Object::Device(Device::Data),DEVICE).unwrap();}
         r.processes[9].caps.grant(DEVICE_CAP,Object::Device(Device::System),DEVICE).unwrap();
         r.processes[9].caps.grant(STAGE_CAP,Object::StageCopy,COPY_STAGE).unwrap();
-        r.processes[2].caps.grant(INPUT_CAP,Object::Input,INPUT).unwrap();
-        r.processes[3].caps.grant(FRAMEBUFFER_CAP,Object::Framebuffer,DRAW).unwrap();
+        if !bootstrapping{
+            r.processes[2].caps.grant(INPUT_CAP,Object::Input,INPUT).unwrap();
+            r.processes[3].caps.grant(FRAMEBUFFER_CAP,Object::Framebuffer,DRAW).unwrap();
+        }
         // Principal8 manages lifecycle; only System service9 receives System I/O.
         r
     }
@@ -377,6 +393,7 @@ impl Runtime {
     /// Candidate grants are already computed. All refusal precedes mutation.
     pub fn cutover_prepared(&mut self,caller:usize,handle:u64,h:Handover)->Result<Cutover,Error>{
         self.stage_view(caller,handle)?;
+        if self.bootstrapping{return Err(Error::Denied);}
         let t=h.trial;let index=t.endpoint.slot as usize;
         if self.trial!=Some(t)||self.processes[index].state!=State::Healthy||
             self.processes[index].incarnation!=t.endpoint.incarnation{return Err(Error::Stale);}
@@ -389,6 +406,57 @@ impl Runtime {
         p.queue=Queue::new();p.caps=h.caps;p.principal=Some(5);p.state=State::Active;
         self.bindings[5]=Some(t.endpoint);self.trial=None;
         Ok(Cutover{previous:t.previous,current:t.endpoint})
+    }
+    /// Prepare every desktop grant without publishing a single binding. The
+    /// native owner must construct all corresponding roots/Boots unscheduled.
+    pub fn prepare_desktop(&self,caller:usize,handle:u64,token:u64)->Result<DesktopHandover,Error>{
+        self.stage_view(caller,handle)?;
+        if !self.bootstrapping{return Err(Error::Denied);}
+        let candidate=self.prepare_cutover(caller,handle,token)?;
+        if candidate.trial.previous.is_some()||
+            [0usize,1,2,3,4,6].iter().any(|&i|self.bindings[i].is_some()||self.processes[i].state!=State::Vacant)||
+            self.bindings[5].is_some(){return Err(Error::Stale);}
+        if !self.bindings[9].is_some_and(|e|self.endpoint_alive(e)){return Err(Error::Denied);}
+        let clock=self.clock.checked_add(1).ok_or(Error::Exhausted)?;
+        let mut plan=DesktopHandover{candidate,processes:[Process::EMPTY;TASKS],
+            bindings:self.bindings,clock};
+        for i in [0usize,1,2,3,4,6]{
+            let e=Endpoint{slot:i as u8,incarnation:clock};plan.bindings[i]=Some(e);
+            let mut caps=self.processes[i].caps;
+            if i!=2{caps.grant(SELF_CAP,Object::Receive(e),RECEIVE)?;}
+            plan.processes[i]=Process{state:State::Active,principal:Some(i as u8),
+                incarnation:clock,caps,queue:Queue::new()};
+        }
+        for (caller,slot,principal) in [(0,2,3),(0,4,4),(0,5,5),(0,6,6),
+            (1,4,4),(1,6,6),(2,1,0),(4,2,3),(4,3,1),(6,2,3),(6,3,1)]{
+            plan.processes[caller].caps.grant(slot,Object::NamedSend{principal},SEND)?;
+        }
+        plan.processes[1].caps.grant(DEVICE_CAP,Object::Device(Device::Data),DEVICE)?;
+        plan.processes[2].caps.grant(INPUT_CAP,Object::Input,INPUT)?;
+        plan.processes[3].caps.grant(FRAMEBUFFER_CAP,Object::Framebuffer,DRAW)?;
+        let e=candidate.endpoint();let index=e.slot as usize;
+        plan.processes[index]=Process{state:State::Active,principal:Some(5),
+            incarnation:e.incarnation,caps:candidate.caps,queue:Queue::new()};
+        plan.bindings[5]=Some(e);Ok(plan)
+    }
+    /// Publish the already prepared complete graph under native IF=0. Every
+    /// refusal precedes mutation; no grant, allocation or counter increment below.
+    pub fn publish_desktop(&mut self,caller:usize,handle:u64,plan:DesktopHandover)->Result<(),Error>{
+        self.stage_view(caller,handle)?;
+        let t=plan.candidate.trial;
+        if !self.bootstrapping||self.trial!=Some(t)||self.clock.checked_add(1)!=Some(plan.clock)||
+            t.previous.is_some()||self.processes[t.endpoint.slot as usize].state!=State::Healthy||
+            self.bindings[5].is_some(){return Err(Error::Stale);}
+        for i in [0usize,1,2,3,4,6]{
+            if self.bindings[i].is_some()||self.processes[i].state!=State::Vacant{return Err(Error::Stale);}
+        }
+        for i in [8usize,9]{
+            if self.bindings[i]!=plan.bindings[i]||
+                !self.bindings[i].is_some_and(|e|self.endpoint_alive(e)){return Err(Error::Denied);}
+        }
+        for i in [0usize,1,2,3,4,6,t.endpoint.slot as usize]{self.processes[i]=plan.processes[i];}
+        for i in 0..7{self.bindings[i]=plan.bindings[i];}
+        self.clock=plan.clock;self.trial=None;self.bootstrapping=false;Ok(())
     }
     /// Convenience for the mechanism tests; not durable runtime authority.
     pub fn cutover(&mut self,caller:usize,handle:u64,token:u64)->Result<Cutover,Error>{
@@ -439,6 +507,42 @@ impl Default for Runtime {fn default()->Self{Self::new()}}
 mod tests {
     use super::*;
 
+
+    #[test] fn bootstrap_has_no_desktop_authority_until_whole_graph_publication(){
+        let mut r=Runtime::bootstrap();let h=manager(&r);
+        for i in 0..7{assert_eq!(r.binding(i),Ok(None));assert_eq!(r.state(i),Ok(State::Vacant));}
+        assert_eq!(r.binding(9),Ok(Some(Endpoint{slot:9,incarnation:1})));
+        r.authenticated_stage(8,h,20,5,[1;32],1,50).unwrap();
+        let t=r.begin_trial(8,h,20).unwrap();assert_eq!(t.previous,None);
+        assert!(r.prepare_desktop(8,h,t.token()).is_err());
+        r.ready(5,r.handle(5,HEALTH_CAP).unwrap(),t.token()).unwrap();
+        let plan=r.prepare_desktop(8,h,t.token()).unwrap();
+        for i in 0..7{assert_eq!(r.binding(i),Ok(None));}
+        assert_eq!(r.state(5),Ok(State::Healthy));
+        assert!(r.handle(1,DEVICE_CAP).is_err());assert!(plan.handle(1,DEVICE_CAP).is_ok());
+        r.publish_desktop(8,h,plan).unwrap();
+        for i in 0..7{assert!(r.binding(i).unwrap().is_some());}
+        assert_eq!(r.binding(5),Ok(Some(t.endpoint())));
+        assert_eq!(r.state(5),Ok(State::Active));assert!(!r.bootstrapping);
+    }
+    #[test] fn desktop_preparation_failure_or_bootstrap_loss_never_partially_publishes(){
+        for lost in [8usize,9]{
+            let mut r=Runtime::bootstrap();let h=manager(&r);
+            r.authenticated_stage(8,h,21,7,[1;32],1,50).unwrap();
+            let t=r.begin_trial(8,h,21).unwrap();
+            r.ready(7,r.handle(7,HEALTH_CAP).unwrap(),t.token()).unwrap();
+            let plan=r.prepare_desktop(8,h,t.token()).unwrap();
+            r.fault(Endpoint{slot:lost as u8,incarnation:1}).unwrap();
+            assert!(r.publish_desktop(8,h,plan).is_err());
+            for i in 0..7{assert_eq!(r.binding(i),Ok(None));}
+        }
+        let mut r=Runtime::bootstrap();let h=manager(&r);
+        r.authenticated_stage(8,h,22,5,[1;32],1,50).unwrap();let t=r.begin_trial(8,h,22).unwrap();
+        r.ready(5,r.handle(5,HEALTH_CAP).unwrap(),t.token()).unwrap();
+        r.clock=u64::MAX;
+        assert!(r.prepare_desktop(8,h,t.token()).is_err());
+        for i in 0..7{assert_eq!(r.binding(i),Ok(None));}
+    }
     #[test] fn fixed_settings_binding_is_kernel_authenticated_and_narrow(){
         let mut r=Runtime::new();let shell=r.handle(0,5).unwrap();let comp=r.handle(3,8).unwrap();
         let old=r.binding(5).unwrap();

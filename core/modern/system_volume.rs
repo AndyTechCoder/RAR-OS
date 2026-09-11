@@ -156,8 +156,8 @@ impl<I:Io> Volume<I> {
     }
     /// No selector write for successful boot of the already-selected package.
     /// The manager must still verify/health-check it before desktop publication.
-    pub fn complete_boot(&mut self,prepared:Prepared)->Result<(),Reject>{
-        self.open()?;self.matches(&prepared)?;
+    pub fn complete_boot(&mut self,prepared:&Prepared)->Result<(),Reject>{
+        self.open()?;self.matches(prepared)?;
         if prepared.purpose!=Purpose::Boot{return Err(Reject::Policy);}
         let result=self.observe();self.pending=None;
         if result.is_err(){self.locked=true;}result
@@ -246,11 +246,13 @@ impl<I:Io> Volume<I> {
     /// Storage-only publication. The fixed System/Manager lifecycle protocol
     /// MUST bind transaction/seal identity, finish verified trial health and all
     /// fallible handover preparation first. A caller-supplied record alone cannot
-    /// bypass package preparation: this consumes and checks the opaque token.
+    /// bypass package preparation: this checks the borrowed opaque token and consumes
+    /// its pending identity before publication I/O. Policy rejection preserves
+    /// the token for explicit cancellation; consumed tokens cannot be replayed.
     /// This function grants no execution or lifecycle authority.
-    pub fn publish(&mut self,prepared:Prepared,next:Record)->Result<(),Reject>{
+    pub fn publish(&mut self,prepared:&Prepared,next:Record)->Result<(),Reject>{
         self.open()?;
-        self.matches(&prepared)?;
+        self.matches(prepared)?;
         if prepared.purpose==Purpose::Boot{return Err(Reject::Policy);}
         if prepared.purpose==Purpose::Fallback&&self.record().fallback().map_err(|_|Reject::Policy)?!=next{
             return Err(Reject::Policy);
@@ -263,7 +265,7 @@ impl<I:Io> Volume<I> {
         if result.is_err(){self.locked=true;}
         result
     }
-    fn publish_inner(&mut self,prepared:Prepared,next:Record)->Result<(),Reject>{
+    fn publish_inner(&mut self,prepared:&Prepared,next:Record)->Result<(),Reject>{
         self.observe()?;
         let id=prepared.identity;
         let (length,hash)=self.stream_inner(id.slot,&mut |_,_,_|Ok(()))?;

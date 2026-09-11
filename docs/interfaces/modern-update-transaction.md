@@ -331,3 +331,20 @@ selectors, sink-prefix failure and ambiguous publication remain sticky failures,
 never permission to remount/retry. New focused tests cover boot no-write behavior,
 exact identities, stale cancellation, serialization, selector races and the
 content-versus-I/O fallback boundary. Full runtime protocol proof remains pending.
+
+
+Review correction: publish and complete_boot borrow Prepared for pre-I/O checks.
+A wrong purpose/record returns Policy with the original token still available
+for explicit cancellation/correct completion. Once real publication begins, the
+pending identity is consumed; its retained Rust value cannot replay it. Failure
+then locks the owner. Tests exercise same-session correction/cancellation,
+zero-I/O rejection and replay refusal; no remount is used to escape rejection.
+
+The lifecycle mechanism now provides a separate bootstrap constructor containing
+only manager8 and System9, not an activate-then-revoke graph. prepare_desktop
+builds every required desktop grant in an unpublished plan; publish_desktop
+validates all bootstrap/trial identities and all absences before an infallible
+whole-graph publication. Ordinary live cutover is denied during bootstrap.
+Native code must still construct every planned process unscheduled, publish
+the complete Boot/map graph under IF=0, and make runnable last. This mechanism
+is not yet selected by native start; no boot barrier runtime claim is made.

@@ -111,14 +111,28 @@ mod system_media {
             assert_eq!(total,package(0).len());assert_eq!(offset,copied.len());
             copied.extend_from_slice(part);Ok(())
         }).unwrap();assert_eq!(copied,package(0));
-        assert_eq!(volume.publish(p,old),Err(Reject::Policy));
-        // A consumed API value cannot authorize anything; use a fresh instance
-        // only to model a fresh boot, not a runtime retry/remount.
-        let mut volume=mount(media.clone());let p=volume.prepare_boot().unwrap();
-        volume.complete_boot(p).unwrap();
+        assert_eq!(volume.publish(&p,old),Err(Reject::Policy));
+        // Policy rejection preserves the same token/session for completion.
+        assert!(!volume.is_readonly());
+        volume.complete_boot(&p).unwrap();
+        assert_eq!(volume.complete_boot(&p),Err(Reject::Policy));
         assert_eq!(volume.record(),old);assert!(!volume.is_readonly());
         assert!(!media.0.borrow().ops.iter().any(|op|matches!(op,Op::Write(_)|Op::Flush)));
-        let p=volume.prepare(&package(2)).unwrap();volume.publish(p,next).unwrap();
+        let p=volume.prepare(&package(2)).unwrap();volume.publish(&p,next).unwrap();
+    }
+    #[test] fn system_wrong_completion_method_or_record_preserves_cancellable_token(){
+        let (media,old,next)=seed();let mut volume=mount(media.clone());
+        let p=volume.prepare(&package(2)).unwrap();let count=media.0.borrow().ops.len();
+        assert_eq!(volume.complete_boot(&p),Err(Reject::Policy));
+        assert_eq!(volume.publish(&p,old),Err(Reject::Policy));
+        assert_eq!(media.0.borrow().ops.len(),count);assert!(!volume.is_readonly());
+        volume.cancel(&p).unwrap();
+        let next_token=volume.prepare(&package(2)).unwrap();
+        assert_eq!(volume.publish(&p,next),Err(Reject::Policy));
+        volume.publish(&next_token,next).unwrap();
+        let count=media.0.borrow().ops.len();
+        assert_eq!(volume.publish(&next_token,next),Err(Reject::Policy));
+        assert_eq!(media.0.borrow().ops.len(),count);
     }
     #[test] fn system_cancel_is_explicit_and_stale_tokens_never_unlock_current(){
         let (media,_,_)=seed();let mut volume=mount(media.clone());
@@ -127,7 +141,7 @@ mod system_media {
         let new=volume.prepare_boot().unwrap();assert!(new.identity().transaction>old.identity().transaction);
         assert_eq!(volume.cancel(&old),Err(Reject::Policy));
         assert_eq!(volume.copy_prepared(&old,|_,_,_|panic!("stale boot")),Err(Reject::Policy));
-        volume.complete_boot(new).unwrap();
+        volume.complete_boot(&new).unwrap();
     }
     #[test] fn system_boot_content_failure_allows_exact_prior_but_io_is_terminal(){
         let (media,mut volume,installed)=installed_volume();
@@ -147,7 +161,7 @@ mod system_media {
             let (media,_,_)=seed();let mut volume=mount(media.clone());
             let p=volume.prepare_boot().unwrap();
             media.0.borrow_mut().blocks.insert(0,[0;512]);
-            if at_completion{assert!(volume.complete_boot(p).is_err());}
+            if at_completion{assert!(volume.complete_boot(&p).is_err());}
             else{assert!(volume.copy_prepared(&p,|_,_,_|panic!("changed selector")).is_err());}
             assert!(volume.is_readonly());
         }
@@ -171,7 +185,7 @@ mod system_media {
         }).unwrap(),());
         assert_eq!(copied,data);
         assert_eq!(volume.record(),old);
-        volume.publish(prepared,next).unwrap();
+        volume.publish(&prepared,next).unwrap();
         assert_eq!(volume.record(),next);
         assert_eq!(mount(media.clone()).record(),next);
         assert_eq!(media.0.borrow().blocks.get(&0),Some(&old.encode()));
@@ -196,13 +210,13 @@ mod system_media {
     #[test] fn system_every_publication_io_failure_is_sticky_and_preserves_old_selector(){
         let (media,_,next)=seed();let mut volume=mount(media.clone());
         let prepared=volume.prepare(&package(2)).unwrap();media.0.borrow_mut().ops.clear();
-        volume.publish(prepared,next).unwrap();let operations=media.0.borrow().ops.clone();
+        volume.publish(&prepared,next).unwrap();let operations=media.0.borrow().ops.clone();
         let write=operations.iter().position(|op|matches!(op,Op::Write(_))).unwrap()+1;
         for cut in 1..=operations.len(){
             let (media,old,next)=seed();let mut volume=mount(media.clone());
             let prepared=volume.prepare(&package(2)).unwrap();
             {let mut d=media.0.borrow_mut();d.ops.clear();d.fail=Some(cut);}
-            let result=volume.publish(prepared,next);
+            let result=volume.publish(&prepared,next);
             assert!(result.is_err(),"{cut}");
             if cut>=write{assert_eq!(result,Err(Reject::Indeterminate),"{cut}");}
             assert!(volume.is_readonly());
@@ -219,9 +233,9 @@ mod system_media {
         volume.cancel(&stale).unwrap();
         let current=volume.prepare(&package(2)).unwrap();
         let count=media.0.borrow().ops.len();
-        assert_eq!(volume.publish(stale,next),Err(Reject::Policy));
+        assert_eq!(volume.publish(&stale,next),Err(Reject::Policy));
         assert_eq!(media.0.borrow().ops.len(),count);
-        assert_eq!(volume.publish(current,old),Err(Reject::Policy));
+        assert_eq!(volume.publish(&current,old),Err(Reject::Policy));
         assert_eq!(media.0.borrow().ops.len(),count);
         assert_eq!(volume.record(),old);
     }
@@ -229,7 +243,7 @@ mod system_media {
         let (media,_,next)=seed();let mut volume=mount(media.clone());
         let prepared=volume.prepare(&package(2)).unwrap();
         media.0.borrow_mut().blocks.get_mut(&4100).unwrap()[7]^=1;
-        assert_eq!(volume.publish(prepared,next),Err(Reject::Changed));assert!(volume.is_readonly());
+        assert_eq!(volume.publish(&prepared,next),Err(Reject::Changed));assert!(volume.is_readonly());
         let (media,_,_)=seed();let mut volume=mount(media.clone());
         media.0.borrow_mut().lie=true;
         assert!(matches!(volume.prepare(&package(2)),Err(Reject::Changed)));assert!(volume.is_readonly());
@@ -294,13 +308,13 @@ mod system_media {
             prefix+=bytes.len();Err(())
         }),Err(Reject::Sink));
         assert_eq!(prefix,512);assert!(volume.is_readonly());
-        assert_eq!(volume.publish(current,next),Err(Reject::ReadOnly));
+        assert_eq!(volume.publish(&current,next),Err(Reject::ReadOnly));
         // The native caller must clear its partial reservation; no source test
         // claims that a kernel abort or target execution occurred here.
     }
     fn installed_volume()->(Media,Volume<Media>,Record){
         let (media,_,next)=seed();let mut volume=mount(media.clone());
-        let p=volume.prepare(&package(2)).unwrap();volume.publish(p,next).unwrap();
+        let p=volume.prepare(&package(2)).unwrap();volume.publish(&p,next).unwrap();
         (media,volume,next)
     }
     #[test] fn system_authorized_fallback_preserves_payloads_and_high_water(){
@@ -316,7 +330,7 @@ mod system_media {
         volume.copy_prepared(&p,|_,_,part|{bytes.extend_from_slice(part);Ok(())}).unwrap();
         let verified=manifest::verify(&bytes[..384],&bytes[384..],1).unwrap();
         assert_eq!(verified.manifest().digest(),installed.previous().unwrap().digest());
-        let next=installed.fallback().unwrap();volume.publish(p,next).unwrap();
+        let next=installed.fallback().unwrap();volume.publish(&p,next).unwrap();
         assert_eq!(volume.record(),next);assert_eq!(next.highest_committed_generation(),2);
         assert_eq!(mount(media.clone()).record(),next);
         for (sector,bytes) in original{if sector>=2{assert_eq!(media.0.borrow().blocks.get(&sector),Some(&bytes));}}
@@ -327,14 +341,14 @@ mod system_media {
         let (media,mut volume,installed)=installed_volume();
         media.0.borrow_mut().ops.clear();let p=volume.prepare_fallback().unwrap();
         let preparation=media.0.borrow().ops.len();
-        media.0.borrow_mut().ops.clear();volume.publish(p,installed.fallback().unwrap()).unwrap();
+        media.0.borrow_mut().ops.clear();volume.publish(&p,installed.fallback().unwrap()).unwrap();
         let publication=media.0.borrow().ops.len();
         for phase in 0..2{
             for cut in 1..=if phase==0{preparation}else{publication}{
                 let (media,mut volume,installed)=installed_volume();
                 let p=if phase==1{Some(volume.prepare_fallback().unwrap())}else{None};
                 {let mut d=media.0.borrow_mut();d.ops.clear();d.fail=Some(cut);}
-                let failed=if let Some(p)=p{volume.publish(p,installed.fallback().unwrap()).is_err()}
+                let failed=if let Some(p)=p{volume.publish(&p,installed.fallback().unwrap()).is_err()}
                     else{volume.prepare_fallback().is_err()};
                 assert!(failed);assert!(volume.is_readonly());
                 assert!(!media.0.borrow().ops.iter().any(|op|matches!(op,Op::Write(s) if *s>=2)));
