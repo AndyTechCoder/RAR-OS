@@ -4,7 +4,7 @@ No owner paths, raw disks, arbitrary command, reset, network or retry API.
 import base64,json,os,time
 from pathlib import Path
 CASES={"update":"update","bad-health":"update badhealth",
-       "bad-signature":"update badsig","bad-abi":"update badabi"}
+       "bad-signature":"update badsig","bad-abi":"update badabi","selector-error":"update"}
 def marker(vm,text):
     until=min(vm.deadline,time.monotonic()+25)
     while text.encode() not in vm.serial:
@@ -30,7 +30,7 @@ def run(session,case):
     read=session.read_regular
     system_bytes=read("/artifact/modern-system.img",8388608,exact=8388608)
     factory=read("/artifact/modern-settings-factory.layer",2097536)
-    candidate=read("/artifact/modern-settings-"+case+".layer",2097536)
+    candidate=read("/artifact/modern-settings-"+("update" if case=="selector-error" else case)+".layer",2097536)
     # Initial System is supplied by the trusted matched-build controller, never
     # formatted from an existing image. Reconstruct its exact factory-only form.
     initial=bytearray(expected.expected_system(factory,candidate,"rejected"))
@@ -57,25 +57,34 @@ def run(session,case):
             state["committed_slots"]!=[0,1] or state["burned_slots"]!=[]):
             raise ValueError("actual pre-update Data differs")
         if system.freeze(vms)!=system_bytes:raise ValueError("signed boot changed factory System")
-        live=session.VM(2,data.observer,system.fd,readonly_data=True)
+        live=session.VM(2,data.observer,system.fd,readonly_data=True,
+            system_selector_fault=candidate if case=="selector-error" else None)
         vms.append(live);live.start();base.ready(live)
         frames.append(capture(live,"home-2",lambda f:visual.validate(f,0)))
         live.key("f3")
         frames.append(capture(live,"terminal-2",lambda f:visual.validate(f,1)))
         for ch in CASES[case]:live.key("spc" if ch==" " else ch)
         live.key("ret")
-        marker(live,"RAR-MODERN:UPDATE-INSTALLED" if case=="update" else "RAR-MODERN:UPDATE-REJECTED")
-        live.key("esc");live.key("f2")
-        frames.append(capture(live,"candidate",lambda f:expected.settings_validate(f,visual,case=="update")))
-        if case=="update":
-            live.key("d")
-            frames.append(capture(live,"compact",lambda f:expected.settings_validate(f,visual,True,True)))
-            live.key("x");marker(live,"RAR-MODERN:UPDATE-FALLBACK")
-            live.key("f2")
-            frames.append(capture(live,"fallback",lambda f:expected.settings_validate(f,visual,False)))
-        live.key("esc");live.key("f1")
-        frames.append(capture(live,"files-2",lambda f:visual.validate(f,3,value)))
-        proofs.append(base.joined(live,system_updates=True));live=None
+        if case=="selector-error":
+            fault=session.load("system_selector_fault")
+            until=min(live.deadline,time.monotonic()+25)
+            while fault.serial_status(bytes(live.serial),live.system_fault_hit)!="reconciled":
+                live.service()
+                if time.monotonic()>=until:raise TimeoutError("exact selector fault reconcile deadline")
+            proofs.append(fault.joined(live,candidate,base));live=None
+        else:
+            marker(live,"RAR-MODERN:UPDATE-INSTALLED" if case=="update" else "RAR-MODERN:UPDATE-REJECTED")
+            live.key("esc");live.key("f2")
+            frames.append(capture(live,"candidate",lambda f:expected.settings_validate(f,visual,case=="update")))
+            if case=="update":
+                live.key("d")
+                frames.append(capture(live,"compact",lambda f:expected.settings_validate(f,visual,True,True)))
+                live.key("x");marker(live,"RAR-MODERN:UPDATE-FALLBACK")
+                live.key("f2")
+                frames.append(capture(live,"fallback",lambda f:expected.settings_validate(f,visual,False)))
+            live.key("esc");live.key("f1")
+            frames.append(capture(live,"files-2",lambda f:visual.validate(f,3,value)))
+            proofs.append(base.joined(live,system_updates=True));live=None
         observed_system=system.freeze(vms)
         outcome="fallback" if case=="update" else "rejected"
         system_check=expected.validate_system(observed_system,factory,candidate,outcome)

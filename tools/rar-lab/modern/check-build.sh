@@ -46,3 +46,7 @@ cd "$root"
 /usr/bin/python3 -I -B tools/rar-lab/modern/signed_runtime_evidence.py --self-test
 
 /usr/bin/python3 -I -B tools/rar-lab/modern/signed_runtime_validate.py --self-test
+
+/usr/bin/python3 -I -B tools/rar-lab/modern/system_selector_fault.py --self-test
+/usr/bin/python3 -I -B tools/rar-lab/modern/unknown_publisher.py --self-test
+/usr/bin/python3 -I -B -c 'import ast; from pathlib import Path; root=Path("tools/rar-lab/modern"); [ast.parse((root/n).read_text(),filename=n) for n in ("signed_runtime_scenario.py","signed_runtime_controller.py","signed_runtime_launch.py","vm_session.py")]'

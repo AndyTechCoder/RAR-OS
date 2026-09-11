@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 import importlib.util
-CASES={"update":"update","bad-health":"update badhealth","bad-signature":"update badsig","bad-abi":"update badabi"}
+CASES={"update":"update","bad-health":"update badhealth","bad-signature":"update badsig","bad-abi":"update badabi","selector-error":"update"}
 def helper(name):
     path=Path(__file__).resolve().with_name(name+".py")
     spec=importlib.util.spec_from_file_location(name,path);m=importlib.util.module_from_spec(spec)
@@ -18,6 +18,9 @@ def plan(case,index,value):
             keys+=["esc","f3"];scenes[len(keys)]="terminal-3"
             keys+=list("update")+["ret","esc","f2"];scenes[len(keys)]="stale-rejected"
         return keys,scenes
+    if case=="selector-error":
+        keys=["f3"]+list("update")+["ret"]
+        return keys,{0:"home-2",1:"terminal-2"}
     keys=["f3"]+["spc" if c==" " else c for c in CASES[case]]+["ret","esc","f2"]
     scenes={0:"home-2",1:"terminal-2",len(keys):"candidate"}
     if case=="update":
@@ -47,19 +50,21 @@ def commands(rows,index,case,value,profile):
             at+=1
     if at!=len(keys) or any(groups[n]<1 for n in scenes):raise ValueError("missing input/capture")
     return list(scenes.values())
-def transcript(serial,index,case):
+def transcript(serial,index,case,system_fault=None):
     if type(serial) is not str or not serial.isascii() or len(serial)>65536:
         raise ValueError("bounded ASCII transcript")
-    if serial.count("RAR-MODERN:GUI-READY")!=1 or any(x in serial for x in
-        ("RAR-PANIC","UNEXPECTED-USER-FAULT","INVALID-USER-RETURN","APP-FAULT=6")):
+    selector=case=="selector-error" and index==2
+    if selector:helper("system_selector_fault").serial_status(serial.encode("ascii"),system_fault,True)
+    forbidden=("UNEXPECTED-USER-FAULT","INVALID-USER-RETURN","APP-FAULT=6")+(tuple() if selector else ("RAR-PANIC",))
+    if serial.count("RAR-MODERN:GUI-READY")!=1 or any(x in serial for x in forbidden):
         raise ValueError("guest readiness/fault failure")
     markers=["UPDATE-REQUEST","UPDATE-REJECTED","UPDATE-INSTALLED","UPDATE-FALLBACK",
-             "UPDATE-ACTIVE-LOST","SETTINGS-ACTIVE-FAULT"]
+             "UPDATE-ACTIVE-LOST","SETTINGS-ACTIVE-FAULT","STALE-AUTHORITY-REVOKED"]
     expected=[]
     if index==2:
-        expected=(["UPDATE-REQUEST","UPDATE-INSTALLED","SETTINGS-ACTIVE-FAULT",
+        expected=(["UPDATE-REQUEST","STALE-AUTHORITY-REVOKED","UPDATE-INSTALLED","SETTINGS-ACTIVE-FAULT",
                    "UPDATE-ACTIVE-LOST","UPDATE-FALLBACK"] if case=="update" else
-                  ["UPDATE-REQUEST","UPDATE-REJECTED"])
+                  ["UPDATE-REQUEST"] if selector else ["UPDATE-REQUEST","UPDATE-REJECTED"])
     elif index==3 and case=="update":expected=["UPDATE-REQUEST","UPDATE-REJECTED"]
     positions=[]
     for name in markers:
@@ -103,14 +108,16 @@ def validate(raw,boot,firmware_sizes,case,factory,candidate):
     if type(proofs) is not list or len(proofs)!=3:raise ValueError("exact three VM proofs")
     names=[];bindings=[];pids=[]
     for index,proof in enumerate(proofs,1):
-        if type(proof) is not dict or set(proof)!={"cut","audit","argv","preflight","commands",
-            "events","event_receipts","qmp_drained","serial"}:raise ValueError("VM proof fields")
+        selector=case=="selector-error" and index==2
+        wanted={"cut","audit","argv","preflight","commands","events","event_receipts","qmp_drained","serial"}
+        if selector:wanted.add("system_fault")
+        if type(proof) is not dict or set(proof)!=wanted:raise ValueError("VM proof fields")
         cut=proof["cut"]
         if (type(cut) is not dict or set(cut)!={"vm_pid","vm_returncode","backends","joined"} or
             cut["joined"] is not True or type(cut["vm_pid"]) is not int or cut["vm_pid"]<=0 or
             not base.qemu_killed(cut["vm_returncode"]) or type(cut["backends"]) is not list or len(cut["backends"])!=3):
             raise ValueError("whole VM plus three backend joins")
-        pids.append(cut["vm_pid"]);transcript(proof["serial"],index,case)
+        pids.append(cut["vm_pid"]);transcript(proof["serial"],index,case,proof.get("system_fault"))
         names+=commands(proof["commands"],index,case,challenge,profile)
         base.argv(proof["argv"],index,profile,readonly_data=index>1)
         preflight=proof["preflight"]
@@ -127,9 +134,13 @@ def validate(raw,boot,firmware_sizes,case,factory,candidate):
             records=report["records"]
             if type(records) is not list or not records:raise ValueError("actual backend records")
             ready=records[0]
-            audits.append(persist.audit(records,role,ready,index>1,index==2 and role=="system"))
+            if selector and role=="system":
+                fault=helper("system_selector_fault").scan(records,candidate)
+                if fault is None or base.canonical(fault)!=base.canonical(proof["system_fault"]):raise ValueError("independent exact selector fault")
+                audits.append(fault)
+            else:audits.append(persist.audit(records,role,ready,index>1,index==2 and role=="system"))
             current.append((ready["device"],ready["inode"],ready["capacity"]))
-        if audits!=proof["audit"] or len({(d,i) for d,i,_ in current})!=3:raise ValueError("audit or disk separation")
+        if base.canonical(audits)!=base.canonical(proof["audit"]) or len({(d,i) for d,i,_ in current})!=3:raise ValueError("audit or disk separation")
         bindings.append(current)
     if len(set(pids))!=3 or bindings[1:]!=[bindings[0],bindings[0]]:
         raise ValueError("fresh processes must retain the same three separate inodes")
@@ -174,17 +185,19 @@ def self_test():
                 reject(lambda changed=changed:commands(changed,index,case,value,profile))
             names=[]
             if index==2:
-                names=(["UPDATE-REQUEST","UPDATE-INSTALLED","SETTINGS-ACTIVE-FAULT",
+                names=(["UPDATE-REQUEST","STALE-AUTHORITY-REVOKED","UPDATE-INSTALLED","SETTINGS-ACTIVE-FAULT",
                     "UPDATE-ACTIVE-LOST","UPDATE-FALLBACK"] if case=="update" else
-                    ["UPDATE-REQUEST","UPDATE-REJECTED"])
+                    ["UPDATE-REQUEST"] if case=="selector-error" else ["UPDATE-REQUEST","UPDATE-REJECTED"])
             elif index==3 and case=="update":names=["UPDATE-REQUEST","UPDATE-REJECTED"]
             serial="RAR-MODERN:GUI-READY\n"+"".join("RAR-MODERN:"+n+"\n" for n in names)
             if index==2 and case=="update":serial+="RAR-MODERN:PRIVATE-MEMORY-RETIRED\n"*2
-            transcript(serial,index,case)
-            reject(lambda:transcript(serial+"RAR-PANIC",index,case))
-            reject(lambda:transcript(serial+"RAR-MODERN:UPDATE-INSTALLED",index,case))
-            reject(lambda:transcript(serial.replace("GUI-READY","NOT-READY"),index,case))
-            if names:reject(lambda:transcript(serial.replace("RAR-MODERN:"+names[0],"missing",1),index,case))
+            if case=="selector-error" and index==2:serial+="RAR-PANIC:CODE=UPDATE-RECONCILE\n"
+            receipt={} if case=="selector-error" and index==2 else None
+            transcript(serial,index,case,receipt)
+            reject(lambda:transcript(serial+"RAR-PANIC",index,case,receipt))
+            reject(lambda:transcript(serial+"RAR-MODERN:UPDATE-INSTALLED",index,case,receipt))
+            reject(lambda:transcript(serial.replace("GUI-READY","NOT-READY"),index,case,receipt))
+            if names:reject(lambda:transcript(serial.replace("RAR-MODERN:"+names[0],"missing",1),index,case,receipt))
     for index in (0,4,True,None):reject(lambda index=index:plan("update",index,value))
     reject(lambda:base.argv([],1,profile,readonly_data=1))
     # IDE argv deliberately stays writable; the private host descriptor and
