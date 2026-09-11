@@ -25,8 +25,19 @@ def prepare(build,execute,compiler,source,work,evidence,report,save,preliminary,
             "enrolled":False,"signature_conformance_required":True}
     inputs=work/"signed-inputs";inputs.mkdir(mode=0o700,exist_ok=False)
     for name,data in bank.items():public_file(inputs/name,data)
+    if unknown:public_file(inputs/"unknown-publisher.fixture",public+value)
     inputs.chmod(0o555)
     report["signed_packages"]=record;save();builds=[]
+    if unknown:
+        checked=execute(compiler,["/bin/sh","-c",
+            "rustc --edition 2024 -C opt-level=1 -C debug-assertions=yes -C overflow-checks=yes /source/tools/rar-lab/modern/unknown_publisher_conformance.rs -o /tmp/unknown-check 2>/tmp/check.log; result=$?; if [ \"$result\" -ne 0 ]; then tail -c 6000 /tmp/check.log; exit \"$result\"; fi; /tmp/unknown-check < /inputs/unknown-publisher.fixture"],
+            [(source,"/source"),(inputs,"/inputs")],120,8192)
+        if checked!=b"RAR-UNKNOWN-PUBLISHER:EXACT-PACKAGE-VERIFIED\n":
+            raise ValueError("exact unknown publisher package conformance")
+        record["unknown_publisher"]["exact_package_conformance"]={"sha256":build.digest(value),
+            "public_key":public.hex(),"signature_and_publisher_checked":True,
+            "negative_signature_key_payload_checked":True}
+        save()
     for index in (1,2):
         print("Signed runtime independent build",index,flush=True)
         raw=execute(compiler,["/bin/sh","-c",

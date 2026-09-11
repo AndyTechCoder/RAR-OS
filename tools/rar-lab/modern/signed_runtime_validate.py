@@ -135,7 +135,8 @@ def validate(raw,boot,firmware_sizes,case,factory,candidate):
             if type(records) is not list or not records:raise ValueError("actual backend records")
             ready=records[0]
             if selector and role=="system":
-                fault=helper("system_selector_fault").scan(records,candidate)
+                fault=helper("system_selector_fault").scan(records,candidate,
+                    expected.expected_system(factory,candidate,"installed")[512:1024])
                 if fault is None or base.canonical(fault)!=base.canonical(proof["system_fault"]):raise ValueError("independent exact selector fault")
                 audits.append(fault)
             else:audits.append(persist.audit(records,role,ready,index>1,index==2 and role=="system"))

@@ -90,13 +90,17 @@ class VM:
         self.index = index
         self.work = Path(self.profile.directory(index))
         self.readonly_data = readonly_data
-        self.system_fault_candidate=system_selector_fault
+        self.system_fault_candidate=None;self.system_fault_selector=None
         self.system_fault_audit=None;self.system_fault_hit=None;self.system_fault_wait=None
         if system_selector_fault is not None:
             if index!=2 or readonly_data is not True or data_fault is not None or reverse_flush is not False:
                 raise ValueError("fixed VM2 System selector error with read-only Data only")
+            if (type(system_selector_fault) is not tuple or len(system_selector_fault)!=2 or
+                type(system_selector_fault[1]) is not bytes or len(system_selector_fault[1])!=512):
+                raise ValueError("exact candidate and expected selector")
+            self.system_fault_candidate,self.system_fault_selector=system_selector_fault
             self.system_fault_audit=load("system_selector_fault")
-            self.system_fault_audit.plan(system_selector_fault)
+            self.system_fault_audit.plan(self.system_fault_candidate)
         self.fault_audit=load("fault_audit") if data_fault is not None else None
         selected=self.fault_audit.plan(data_fault) if data_fault is not None else None
         self.fault_plan=None if selected is None else tuple(selected[k] for k in
@@ -152,7 +156,7 @@ class VM:
                 backend = self.backend.Backend(fd,server,role,
                     readonly=role=="boot" or (role=="data" and readonly_data),
                     write_refusing=role=="boot" or (role=="data" and readonly_data),
-                    fault=data_fault if role=="data" else (self.system_fault_audit.plan(system_selector_fault)
+                    fault=data_fault if role=="data" else (self.system_fault_audit.plan(self.system_fault_candidate)
                         if role=="system" and self.system_fault_audit is not None else None),
                     reverse_flush=reverse_flush if role=="data" else False,seconds=130)
                 self.backends.append(backend)
@@ -222,14 +226,21 @@ class VM:
             if time.monotonic()>=self.deadline:raise TimeoutError("whole VM proof deadline")
             codes=[backend.poll() for backend in self.backends]
             expected=getattr(self,"fault_plan",None)
+            system_mode=getattr(self,"system_fault_audit",None) is not None
+            if system_mode and len(self.backends)==3 and self.backends[1].records:
+                self.system_fault_hit=self.system_fault_audit.scan(self.backends[1].records,
+                    self.system_fault_candidate,self.system_fault_selector)
             for index,(backend,code) in enumerate(zip(self.backends,codes)):
                 if index==0 and expected is not None:continue
                 if code is not None or backend.problem is not None:
+                    # Exact selected System EIO closes this transport. No other
+                    # role, exit, missing receipt or premature stop is excused.
+                    if (index==1 and system_mode and self.system_fault_hit is not None and
+                        self.system_fault_hit["terminal"] is True and type(code) is int and code==21 and
+                        backend.problem=="backend-failed"):continue
                     raise ValueError("block backend stopped before deliberate whole-VM cut")
             if self.child is not None and self.child.poll() is not None:
                 raise ValueError("VM exited before deliberate cut")
-            if getattr(self,"system_fault_audit",None) is not None and len(self.backends)==3 and self.backends[1].records:
-                self.system_fault_hit=self.system_fault_audit.scan(self.backends[1].records,self.system_fault_candidate)
             # Drain/check VM channels before a planned signal can be delivered.
             for key,_ in self.selector.select(0.01):
                 try:raw=os.read(key.fileobj.fileno(),65536)
@@ -798,6 +809,62 @@ def self_test():
             else:raise AssertionError("post-reap panic granted frozen-image authority")
         assert broken.closed and not broken.cleanup_succeeded
         assert broken.child.stdout.closed and broken.child.stderr.closed
+
+
+    # Real service control flow over inert backends: exact System EIO only.
+    fixed=load("system_selector_fault")
+    from hashlib import sha256
+    import copy
+    candidate=b"x"*896;selector_bytes=b"s"*512
+    records=[dict(type="ready",kind="system",readonly=False,export_readonly=False,
+        capacity=8388608,device=1,inode=2)]
+    def system_pair(op,ordinal,offset,length,status="completed",**extra):
+        records.append(dict(type="request",operation=op,offset=offset,length=length))
+        records.append(dict(type="event",event=dict(operation=op,ordinal=ordinal,
+            offset=offset,length=length,status=status,**extra)))
+    for n in range(2):
+        part=candidate[n*512:(n+1)*512]
+        system_pair("write",n+1,fixed.B_START+n*512,512,
+            payload_sha256=sha256(part+bytes(512-len(part))).hexdigest())
+    system_pair("flush",1,0,0)
+    system_pair("write",3,512,512,"failed-no-success",
+        payload_sha256=sha256(selector_bytes).hexdigest(),injection=fixed.plan(candidate))
+    records.append(dict(type="terminal",outcome="failed",fault_hit=True,failed=True))
+    def system_vm(rows=records,code=21,problem="backend-failed",other=None):
+        v=object.__new__(VM);v.closed=False;v.deadline=time.monotonic()+10
+        v.system_fault_audit=fixed;v.system_fault_candidate=candidate
+        v.system_fault_selector=selector_bytes;v.system_fault_hit=None;v.system_fault_wait=None
+        v.child=SimpleNamespace(poll=lambda:None)
+        v.backends=[SimpleNamespace(poll=lambda:None,problem=None,records=[]) for _ in range(3)]
+        v.backends[1]=SimpleNamespace(poll=lambda:code,problem=problem,records=copy.deepcopy(rows))
+        if other is not None:v.backends[other].problem="backend-failed"
+        v.serial=bytearray(fixed.RECONCILE+b"\n")
+        v.selector=SimpleNamespace(select=lambda timeout:[])
+        return v
+    good=system_vm();good.service()
+    assert good.system_fault_hit["terminal"] is True
+    for rows,code,problem,other in ((records[:-1],21,"backend-failed",None),
+        (records[:1],21,"backend-failed",None),(records,0,"backend-failed",None),
+        (records,21,None,None),(records,21,"wrong",None),(records,True,"backend-failed",None),
+        (records,21,"backend-failed",0),(records,21,"backend-failed",2)):
+        reject(lambda rows=rows,code=code,problem=problem,other=other:
+            system_vm(rows,code,problem,other).service())
+    malformed=copy.deepcopy(records);malformed[-2]["event"]["payload_sha256"]="a"*64
+    reject(lambda:system_vm(malformed).service())
+    # No process/descriptor operation: verify exact service -> owned join path.
+    good=system_vm();good.argv=[];good.preflight={};good.commands=[]
+    good.events=[];good.event_receipts=[]
+    peers=[dict(type="ready",kind=k,readonly=True,export_readonly=False,
+        capacity=n,device=1,inode=i) for k,n,i in (("data",99328,3),("boot",16777216,4))]
+    good.backends[0].records=[peers[0]];good.backends[2].records=[peers[1]]
+    def joined_fake():
+        good.cleanup_succeeded=True;good.qmp_drained=True
+        return dict(vm_pid=123,vm_returncode=-9,joined=True,backends=[
+            dict(returncode=21 if n==1 else -9,problem="backend-failed",
+                joined=True,records=b.records) for n,b in enumerate(good.backends)])
+    good.destroy=joined_fake
+    proof=fixed.joined(good,candidate,selector_bytes,SimpleNamespace(audit=lambda *args:{}))
+    assert proof["system_fault"]["terminal"] is True and proof["cut"]["joined"] is True
 
     return rejected
 
