@@ -133,7 +133,7 @@ impl Runtime{
         }
         Ok(())
     }
-    fn prepare_handover(&mut self,handle:u64,token:u64,seal:u64)->Result<(),Error>{
+    pub(super) fn prepare_handover(&mut self,handle:u64,token:u64,seal:u64)->Result<(),Error>{
         if self.handover.is_some(){return Err(Error::Busy);}
         let policy=self.policy.as_ref().ok_or(Error::Denied)?;
         let t=policy.trial().ok_or(Error::Stale)?;
@@ -147,7 +147,7 @@ impl Runtime{
     /// Failure here is reconcile-required, not permission to undo the selector.
     /// No allocation/capability grant or recoverable operation remains after
     /// logical publication. Never allow caller retries to resurrect a process.
-    fn commit_handover(&mut self,handle:u64,token:u64,seal:u64){
+    pub(super) fn commit_handover(&mut self,handle:u64,token:u64,seal:u64){
         let (h,mut b,saved_seal)=self.handover.unwrap_or_else(||fatal("RAR-PANIC:CODE=UPDATE-RECONCILE"));
         let t=self.policy.as_ref().unwrap().trial()
             .unwrap_or_else(||fatal("RAR-PANIC:CODE=UPDATE-RECONCILE"));
