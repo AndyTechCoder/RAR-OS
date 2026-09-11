@@ -132,7 +132,7 @@ def cleanup(command,owned):
     return failures
 
 def main(mode="persistence"):
-    if mode not in ("persistence","fault-campaign","mounted-error"):
+    if mode not in ("persistence","fault-campaign","mounted-error","signed-runtime"):
         raise ValueError("fixed Modern controller mode")
     import sys
     if (sys.argv!=[sys.argv[0]] or sys.platform!="linux" or not sys.flags.isolated or not sys.dont_write_bytecode or
@@ -159,7 +159,7 @@ def main(mode="persistence"):
     run_id,attempt=os.environ["GITHUB_RUN_ID"],os.environ["GITHUB_RUN_ATTEMPT"]
     if any(re.fullmatch("[0-9]+",x) is None for x in (run_id,attempt)):
         raise ValueError("fixed run identity")
-    prefix={"persistence":"modern-runtime","fault-campaign":"modern-fault","mounted-error":"modern-mounted-error"}[mode]
+    prefix={"persistence":"modern-runtime","fault-campaign":"modern-fault","mounted-error":"modern-mounted-error","signed-runtime":"modern-signed-runtime"}[mode]
     evidence=workspace/(prefix+"-evidence");evidence.mkdir(exist_ok=False)
     work=workspace/(prefix+"-work");work.mkdir(mode=0o700,exist_ok=False)
     config=work/"docker-config";config.mkdir(mode=0o700,exist_ok=False)
@@ -219,17 +219,25 @@ def main(mode="persistence"):
                 '/bin/sh /opt/rar-build.sh 2>/tmp/build.log; result=$?; if [ "$result" -ne 0 ]; then tail -c 12000 /tmp/build.log; exit "$result"; fi'],
                 [(source,"/source")],300,6*1024*1024)
             binary=build.binary["unpack"](raw)
-            for name,data in binary.items(): build.binary["inspect"](data,name=="modern-service.efi")
+            for name,data in binary.items(): build.binary["inspect"](data,name!="modern.efi")
             builds.append(binary)
         if builds[0]!=builds[1]: raise ValueError("two independent actual UEFI builds differ")
+        signed=None
+        if mode=="signed-runtime":
+            signed=load("signed_runtime_controller")
+            selected,bank,system=signed.prepare(build,execute,compiler,source,work,evidence,report,save,builds[0])
+        else: selected=builds[0]
         inputs=work/"inputs";inputs.mkdir(mode=0o755,exist_ok=False)
-        (inputs/"modern.efi").write_bytes(builds[0]["modern.efi"])
+        if signed is not None:
+            for name,data in bank.items():signed.public_file(inputs/name,data)
+            signed.public_file(inputs/"modern-system.img",system)
+        (inputs/"modern.efi").write_bytes(selected["modern.efi"])
         for name,data in builds[0].items(): (evidence/name).write_bytes(data)
         report["binaries"]={name:digest(data) for name,data in builds[0].items()}
         packaged=execute(compiler,["/bin/sh","/pack.sh"],
             [(HERE/"pack.sh","/pack.sh"),(controller/"nucleus/foundation/image.rs","/packager.rs"),(inputs,"/artifact")],
             120,24*1024*1024)
-        boot=bootcheck.unpack(packaged,builds[0]["modern.efi"])
+        boot=bootcheck.unpack(packaged,selected["modern.efi"])
         (inputs/"boot.img").write_bytes(boot)
         (evidence/"boot.img").write_bytes(boot)
         report["boot_sha256"]=digest(boot);save()
@@ -247,7 +255,9 @@ def main(mode="persistence"):
                 raise ValueError("exact tool hash inventory")
         sizes=tuple(int(line) for line in lines[4:])
         (evidence/"tool-identities.txt").write_bytes(identities)
-        if mode=="mounted-error":
+        if mode=="signed-runtime":
+            signed.observe(load,execute,launcher,inputs,digest(boot),sizes,evidence,report,save,bank)
+        elif mode=="mounted-error":
             output=execute(launcher,["/usr/bin/python3","-I","-B","/opt/rar-modern/mounted_error_launch.py"],
                 [(inputs,"/artifact")],180,64*1024*1024)
             (evidence/"mounted-error.json").write_bytes(output)

@@ -300,6 +300,11 @@ impl Runtime{
                 Ok(value as u64)
             }
             abi::REPORT=>{
+                if (16..=20).contains(&frame.rdi){
+                    let message=support::update_report(self.policy.as_ref().ok_or(Error::Denied)?,
+                        current,frame.rsi,frame.rdi,frame.rdx,frame.r10)?;
+                    record(message);return Ok(0);
+                }
                 if !matches!((current,frame.rdi),(2,1)|(3,2)){return Err(Error::Denied);}
                 let bit=1u8<<frame.rdi;
                 if self.proofs&bit!=0{return Err(Error::Denied);}
@@ -812,6 +817,9 @@ pub extern "sysv64" fn trap(frame:*mut arch::Trap,saved:u64)->u64{
         0..=31=>{
             if current==6&&f.vector==6&&f.error==0{
                 record("RAR-MODERN:APP-FAULT=6");
+            }else if f.vector==6&&f.error==0&&
+                state.policy.as_ref().is_some_and(|p|support::active_settings_fault(p,current)){
+                record("RAR-MODERN:SETTINGS-ACTIVE-FAULT");
             }else{record("RAR-MODERN:UNEXPECTED-USER-FAULT");}
             state.kill(current);
         }

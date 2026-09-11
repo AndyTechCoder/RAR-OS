@@ -59,6 +59,24 @@ pub fn update_binding_copy(policy:&model::Runtime,caller:usize,handle:u64,
     }
     write(response);Ok(())
 }
+/// Fixed Manager progress markers are correlation hints, not success evidence.
+pub fn update_report(policy:&model::Runtime,caller:usize,handle:u64,code:u64,
+    extra:u64,last:u64)->Result<&'static str,Error>{
+    if extra!=0||last!=0{return Err(Error::Invalid);}
+    policy.stage_view(caller,handle)?;
+    match code{
+        16=>Ok("RAR-MODERN:UPDATE-REQUEST"),
+        17=>Ok("RAR-MODERN:UPDATE-REJECTED"),
+        18=>Ok("RAR-MODERN:UPDATE-INSTALLED"),
+        19=>Ok("RAR-MODERN:UPDATE-FALLBACK"),
+        20=>Ok("RAR-MODERN:UPDATE-ACTIVE-LOST"),
+        _=>Err(Error::Invalid),
+    }
+}
+pub fn active_settings_fault(policy:&model::Runtime,caller:usize)->bool{
+    policy.binding(5).ok().flatten().is_some_and(|e|e.slot as usize==caller)&&
+        policy.state(caller)==Ok(model::State::Active)
+}
 pub fn next(states:&[CpuState;TASKS],current:usize)->Result<usize,Error>{
     if current>=TASKS{return Err(Error::Invalid);}
     (1..=TASKS).map(|n|(current+n)%TASKS)
@@ -398,5 +416,18 @@ mod tests{
         deny(&policy,8,cap,&[],0x600000,16);
         let bootstrap=model::Runtime::bootstrap();
         deny(&bootstrap,8,bootstrap.handle(8,10).unwrap(),&good,0x600000,16);
+    }
+
+    #[test]fn update_progress_has_fixed_manager_only_markers(){
+        let mut p=model::Runtime::new();let h=p.handle(8,10).unwrap();
+        for code in 16..=20{assert!(update_report(&p,8,h,code,0,0).is_ok());}
+        for code in [0,15,21,u64::MAX]{assert!(update_report(&p,8,h,code,0,0).is_err());}
+        for caller in 0..TASKS{if caller!=8{assert!(update_report(&p,caller,h,16,0,0).is_err());}}
+        assert!(update_report(&p,8,p.handle(8,0).unwrap(),16,0,0).is_err());
+        assert!(update_report(&p,8,h,16,1,0).is_err());
+        assert!(update_report(&p,8,h,16,0,1).is_err());
+        for caller in 0..TASKS{assert_eq!(active_settings_fault(&p,caller),caller==5);}
+        p.fault(p.binding(5).unwrap().unwrap()).unwrap();
+        assert!(!active_settings_fault(&p,5));
     }
 }

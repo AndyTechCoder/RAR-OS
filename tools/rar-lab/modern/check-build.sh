@@ -44,3 +44,5 @@ cd "$root"
 /usr/bin/python3 -I -B tools/rar-lab/modern/signed_composition_tests.py
 
 /usr/bin/python3 -I -B tools/rar-lab/modern/signed_runtime_evidence.py --self-test
+
+/usr/bin/python3 -I -B tools/rar-lab/modern/signed_runtime_validate.py --self-test

@@ -188,6 +188,9 @@ fn bindings(boot:&Boot)->[u64;2]{
     [u64::from_le_bytes(bytes[..8].try_into().unwrap()),
         u64::from_le_bytes(bytes[8..].try_into().unwrap())]
 }
+fn progress(boot:&Boot,code:u64){
+    if crate::syscall(REPORT,code,boot.caps[MANAGER],0,0)!=0{reconcile(boot);}
+}
 /// The single transaction owner serializes authenticated laboratory requests.
 /// No app can supply bytes, a disk selector or an executable address.
 pub fn manager(boot:&Boot)->!{
@@ -203,16 +206,20 @@ pub fn manager(boot:&Boot)->!{
           crate::update_control::Action::Fallback=>{
             // One fresh, reverified exact-prior fallback, never an old process
             // resurrection or an oscillating automatic retry.
+            progress(boot,20);
             let Ok(committed)=transaction(boot,&mut requests,Mode::Fallback,0) else{reconcile(boot);};
             if !recovery.restored(committed,bindings(boot)[1]){reconcile(boot);}
+            progress(boot,19);
           },
           crate::update_control::Action::Observe=>{
             match crate::poll_checked(boot.caps[SELF_RECV]){
                 Ok(Some(m))=>{
                     if let Some(index)=commands.accept(m.sender,m.generation,current[0],m.length,&m.bytes){
+                        progress(boot,16);
                         if let Ok(committed)=install(boot,&mut requests,index){
                             if !recovery.installed(committed,bindings(boot)[1]){reconcile(boot);}
-                        }
+                            progress(boot,18);
+                        }else{progress(boot,17);}
                     }
                 },
                 Ok(None)=>{},
