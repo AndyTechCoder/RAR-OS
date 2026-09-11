@@ -55,6 +55,7 @@ fn route(boot:&Boot,w:&mut Windows,role:u8,m:&[u8;128])->bool {
     match send(boot.caps[slot],m) {
         Ok(())=>true,
         Err(-3) if role==6=>{w.terminal_stale();false},
+        Err(-3) if role==5=>false,
         _=>fail(),
     }
 }
@@ -63,7 +64,9 @@ pub fn shell(boot:&Boot)->! {
     deliver(boot.caps[COMPOSITOR],&w.wire());
     loop {
         let e=receive(boot.caps[SELF_RECV]);
-        if !matches!(e.sender,2|5)||e.generation!=boot.peers[e.sender as usize]{continue;}
+        if !matches!(e.sender,2|5){continue;}
+        let expected=if e.sender==5{crate::settings_binding(boot)}else{boot.peers[2]};
+        if expected==0||e.generation!=expected{continue;}
         if e.sender==5&&e.bytes[0]==0x12&&e.bytes[1]<=1&&e.bytes[2..].iter().all(|&b|b==0) {
             w.light=e.bytes[1]!=0;deliver(boot.caps[COMPOSITOR],&w.wire());continue;
         }

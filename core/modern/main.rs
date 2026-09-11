@@ -59,6 +59,13 @@ fn poll_checked(handle:u64)->Result<Option<Envelope>,()> {
     if status==-5{return Ok(None);}
     Err(())
 }
+/// The complete full-width identity comes from the kernel, never an app frame.
+fn settings_binding(boot:&Boot)->u64{
+    let handle=match boot.role{0=>boot.caps[SETTINGS],3=>boot.caps[FRAMEBUFFER],_=>fail()};
+    let mut bytes=[0u8;8];
+    check(syscall(SETTINGS_BINDING,handle,bytes.as_mut_ptr()as u64,8,0)==0);
+    u64::from_le_bytes(bytes)
+}
 fn publish(boot:&Boot,version:&mut u32,view:&services::apps::View) {
     *version=version.checked_add(1).unwrap_or_else(||fail());
     deliver(boot.caps[COMPOSITOR],&services::begin(*version));

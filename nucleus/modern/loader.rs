@@ -106,3 +106,75 @@ impl Runtime{
         Ok(())
     }
 }
+
+impl Runtime{
+    fn handover_context(&self,trial:model::Trial)->Result<(),Error>{
+        self.stage_context();
+        let index=trial.endpoint().slot as usize;let p=self.processes[index];
+        if self.current!=8||self.stage_view||!self.stage_readonly||
+            p.memory!=retirement::Memory::Live||p.state!=State::Blocked||
+            p.root!=private_region(self.arena,index)||p.generation!=trial.endpoint().incarnation||
+            p.stack_end!=STACK_VA+16384||p.kernel_bottom!=p.root+KERNEL_BOTTOM||
+            p.kernel_top!=p.root+KERNEL_TOP||p.frame%16!=0||p.frame<p.kernel_bottom||
+            p.frame.checked_add(720).is_none_or(|end|end>p.kernel_top){return Err(Error::Stale);}
+        let stage=self.staging.as_ref().ok_or(Error::Stale)?;
+        stage.view(trial.image_seal()).map_err(stage_error)?;
+        if stage.reserved().is_none_or(|id|id.slot()!=index){return Err(Error::Stale);}
+        let owner=self.processes[8];
+        let mut tables=unsafe{Tables::resume(owner.root,owner.table_used)};
+        if unsafe{tables.modern_aperture()}!=Ok(owner.aperture){return Err(Error::Denied);}
+        // SAFETY: owned manager leaf and candidate saved frame, sole CPU/IF=0.
+        unsafe{
+            for i in 0..retirement::APERTURE_PAGES{
+                if (owner.aperture as *const u64).add(i).read_volatile()!=0{return Err(Error::Busy);}
+            }
+            let frame=&*((p.frame+512)as *const arch::Trap);
+            if !user_return_valid(&p,frame){return Err(Error::Invalid);}
+        }
+        Ok(())
+    }
+    fn prepare_handover(&mut self,handle:u64,token:u64,seal:u64)->Result<(),Error>{
+        if self.handover.is_some(){return Err(Error::Busy);}
+        let policy=self.policy.as_ref().ok_or(Error::Denied)?;
+        let t=policy.trial().ok_or(Error::Stale)?;
+        if t.token()!=token||t.image_seal()!=seal{return Err(Error::Stale);}
+        self.handover_context(t)?;
+        let h=policy.prepare_cutover(self.current,handle,token)?;
+        let b=support::handover_bootstrap(policy,&h,self.processes[t.endpoint().slot as usize].entry)?;
+        self.handover=Some((h,b,seal));Ok(())
+    }
+    /// Manager calls only after the exact System transaction's durable ACK.
+    /// Failure here is reconcile-required, not permission to undo the selector.
+    /// No allocation/capability grant or recoverable operation remains after
+    /// logical publication. Never allow caller retries to resurrect a process.
+    fn commit_handover(&mut self,handle:u64,token:u64,seal:u64){
+        let (h,b,saved_seal)=self.handover.unwrap_or_else(||fatal("RAR-PANIC:CODE=UPDATE-RECONCILE"));
+        let t=self.policy.as_ref().unwrap().trial()
+            .unwrap_or_else(||fatal("RAR-PANIC:CODE=UPDATE-RECONCILE"));
+        if h.token()!=token||saved_seal!=seal||t.token()!=token||t.image_seal()!=seal||
+            h.endpoint()!=t.endpoint()||self.handover_context(t).is_err(){
+            fatal("RAR-PANIC:CODE=UPDATE-RECONCILE");
+        }
+        let cut=self.policy.as_mut().unwrap().cutover_prepared(self.current,handle,h)
+            .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=UPDATE-RECONCILE"));
+        self.handover=None;
+        self.synchronize_revocations();
+        // Old Settings is never this manager stack. Revoke its root and scrub
+        // before exposing any new production context; peer state remains live.
+        self.retire_pending();
+        let owner=self.processes[8];let target=self.processes[cut.current.slot as usize];
+        // Only the Boot PAGE is writable here, never a live executable stride.
+        // All512 aperture entries were preflighted absent. IF=0/no other writer.
+        unsafe{
+            let leaf=owner.aperture as *mut u64;
+            leaf.write_volatile((target.root+BOOT)|3|(1<<63));
+            core::arch::asm!("invlpg [{}]",in(reg)retirement::APERTURE,options(nostack,preserves_flags));
+            (retirement::APERTURE as *mut abi::Boot).write_volatile(b);
+            leaf.write_volatile(0);
+            core::arch::asm!("invlpg [{}]",in(reg)retirement::APERTURE,options(nostack,preserves_flags));
+            if leaf.read_volatile()!=0{fatal("RAR-PANIC:CODE=UPDATE-RECONCILE");}
+        }
+        self.processes[cut.current.slot as usize].state=State::Runnable;
+        record("RAR-MODERN:SETTINGS-CUTOVER");
+    }
+}

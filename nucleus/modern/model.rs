@@ -229,6 +229,18 @@ impl Runtime {
             .find(|&(n,i)|clean[n]&&self.processes[i].state==State::Vacant)
             .map(|(_,i)|i).ok_or(Error::Busy)
     }
+    /// Only live shell's named Settings send or compositor's framebuffer grant
+    /// permits the fixed Settings binding query. It grants no new send rights.
+    pub fn settings_binding(&self,caller:usize,handle:u64)->Result<Option<Endpoint>,Error>{
+        let p=self.processes.get(caller).ok_or(Error::Invalid)?;
+        if p.state!=State::Active{return Err(Error::Denied);}
+        match p.principal{
+            Some(0) if p.caps.resolve(handle,SEND)?==(Object::NamedSend{principal:5})=>{},
+            Some(3) if p.caps.resolve(handle,DRAW)?==Object::Framebuffer=>{},
+            _=>return Err(Error::Denied),
+        }
+        Ok(self.bindings[5])
+    }
     fn manager(&self,caller:usize,handle:u64)->Result<(),Error>{
         let p=self.processes.get(caller).ok_or(Error::Invalid)?;
         if p.state!=State::Active||p.principal!=Some(8)||
@@ -423,6 +435,18 @@ impl Default for Runtime {fn default()->Self{Self::new()}}
 mod tests {
     use super::*;
 
+    #[test] fn fixed_settings_binding_is_kernel_authenticated_and_narrow(){
+        let mut r=Runtime::new();let shell=r.handle(0,5).unwrap();let comp=r.handle(3,8).unwrap();
+        let old=r.binding(5).unwrap();
+        assert_eq!(r.settings_binding(0,shell),Ok(old));assert_eq!(r.settings_binding(3,comp),Ok(old));
+        for caller in 0..=TASKS{if caller!=0{assert!(r.settings_binding(caller,shell).is_err());}}
+        assert!(r.settings_binding(0,r.handle(0,4).unwrap()).is_err());
+        assert!(r.settings_binding(3,r.handle(3,0).unwrap()).is_err());
+        let t=healthy(&mut r);r.cutover(8,manager(&r),t.token()).unwrap();
+        assert_eq!(r.settings_binding(0,shell),Ok(Some(t.endpoint())));
+        r.fault(t.endpoint()).unwrap();assert_eq!(r.settings_binding(3,comp),Ok(None));
+        r.fault(Endpoint{slot:0,incarnation:1}).unwrap();assert!(r.settings_binding(0,shell).is_err());
+    }
     #[test] fn authenticated_stage_is_manager_only_and_exactly_bounded(){
         let mut r=Runtime::new();let h=manager(&r);
         for caller in 0..=TASKS{if caller!=8{

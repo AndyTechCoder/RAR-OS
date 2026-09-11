@@ -23,6 +23,14 @@ fn bounded_buffer(ranges:&[UserRange],pointer:u64,length:usize,write:bool,limit:
     if ranges.iter().any(|r|r.start<r.end&&r.start<=pointer&&end<=r.end&&
         !(r.writable&&r.executable)&&(!write||r.writable)){Ok(())}else{Err(Error::Denied)}
 }
+/// Saved user return bounds shared with the real trap adapter. Only the native
+/// owner chooses stack_end; trials use four pages, initial services sixteen.
+pub fn user_return(ranges:&[UserRange],stack_end:u64,rsp:u64,rip:u64,cs:u64,ss:u64,segments:[u64;4])->bool{
+    matches!(stack_end,0x604000|0x610000)&&cs==0x1b&&ss==0x23&&
+        (0x600000..=stack_end).contains(&rsp)&&
+        ranges.iter().any(|r|r.executable&&!r.writable&&r.start<=rip&&rip<r.end)&&
+        segments.iter().all(|s|[0,0x1b,0x23].contains(s))
+}
 /// Validate the complete destination before mutating the caller's queue.
 pub fn receive(policy:&mut model::Runtime,caller:usize,handle:u64,ranges:&[UserRange],
     pointer:u64,length:u64,mode:u64)->Result<model::Message,Error>{
@@ -99,6 +107,18 @@ pub fn stage_metadata(bytes:&[u8])->Result<StageMetadata,Error>{
     }
     Ok(StageMetadata{image_bytes,generation,digest,budget})
 }
+/// Prepare the future read-only ACTIVE descriptor without publishing authority.
+pub fn handover_bootstrap(policy:&model::Runtime,h:&model::Handover,entry:u64)->Result<abi::Boot,Error>{
+    let t=policy.trial().ok_or(Error::Stale)?;
+    if t.endpoint()!=h.endpoint()||t.token()!=h.token()||
+        policy.state(h.endpoint().slot as usize)?!=model::State::Healthy{return Err(Error::Stale);}
+    let mut b=abi::Boot{magic:abi::MAGIC,version:abi::VERSION,bytes:abi::BOOT_BYTES,
+        role:5,phase:abi::ACTIVE,generation:h.endpoint().incarnation,entry,..abi::Boot::EMPTY};
+    for i in 0..model::PRINCIPALS{b.peers[i]=policy.binding(i)?.map_or(0,|e|e.incarnation);}
+    b.peers[5]=h.endpoint().incarnation;
+    for i in 0..model::CAP_SLOTS{b.caps[i]=h.handle(i).unwrap_or(0);}
+    if !abi::valid_boot(&b){return Err(Error::Invalid);}Ok(b)
+}
 /// A trial has only its one-shot health capability, never production grants.
 pub fn trial_bootstrap(policy:&model::Runtime,trial:model::Trial,entry:u64)->Result<abi::Boot,Error>{
     let endpoint=trial.endpoint();
@@ -115,6 +135,21 @@ pub fn trial_bootstrap(policy:&model::Runtime,trial:model::Trial,entry:u64)->Res
 #[cfg(test)]
 mod tests{
     use super::*;
+    #[test] fn actual_user_return_check_respects_initial_and_trial_stack_bounds(){
+        let rx=UserRange{start:0x401000,end:0x402000,writable:false,executable:true};
+        for end in [0x604000,0x610000]{
+            for rsp in [0x600000,end]{assert!(user_return(&[rx],end,rsp,rx.start,0x1b,0x23,[0;4]));}
+            for rsp in [0x5fffff,end+1,u64::MAX]{assert!(!user_return(&[rx],end,rsp,rx.start,0x1b,0x23,[0;4]));}
+        }
+        assert!(!user_return(&[rx],0x604000,0x608000,rx.start,0x1b,0x23,[0;4]));
+        assert!(user_return(&[rx],0x610000,0x608000,rx.start,0x1b,0x23,[0;4]));
+        for (end,rip,cs,ss,segments) in [(0x604001,rx.start,0x1b,0x23,[0;4]),
+            (0x604000,rx.end,0x1b,0x23,[0;4]),(0x604000,rx.start,8,0x23,[0;4]),
+            (0x604000,rx.start,0x1b,16,[0;4]),(0x604000,rx.start,0x1b,0x23,[16;4])]{
+            assert!(!user_return(&[rx],end,0x600000,rip,cs,ss,segments));
+        }
+        assert!(!user_return(&[UserRange{writable:true,..rx}],0x604000,0x600000,rx.start,0x1b,0x23,[0;4]));
+    }
     #[test] fn sealed_metadata_rejects_unbounded_or_mismatched_resources(){
         let mut b=[0u8;896];b[56..60].copy_from_slice(&512u32.to_le_bytes());
         b[60..64].copy_from_slice(&8192u32.to_le_bytes());b[64]=7;b[72]=2;
@@ -127,6 +162,20 @@ mod tests{
             assert!(stage_metadata(&bad).is_err());
         }
         b[288..320].fill(0);assert!(stage_metadata(&b).is_err());
+    }
+    #[test] fn prepared_active_boot_is_exact_but_does_not_publish_authority(){
+        let mut r=model::Runtime::new();let h=r.handle(8,model::MANAGER_CAP).unwrap();
+        r.authenticated_stage(8,h,18,7,[1;32],2,50).unwrap();
+        let t=r.begin_trial(8,h,18).unwrap();let trial=trial_bootstrap(&r,t,0x401000).unwrap();
+        r.ready(t.endpoint().slot as usize,trial.caps[model::HEALTH_CAP],t.token()).unwrap();
+        let handover=r.prepare_cutover(8,h,t.token()).unwrap();
+        let b=handover_bootstrap(&r,&handover,0x401000).unwrap();
+        assert!(abi::valid_trial_activation(&trial,&b));assert_eq!(b.health_token,0);
+        assert_eq!(r.state(7),Ok(model::State::Healthy));
+        assert_eq!(r.binding(5).unwrap().unwrap().slot,5);
+        for i in 0..model::CAP_SLOTS{assert_eq!(b.caps[i]!=0,i<3);}
+        r.abort(8,h,t.token()).unwrap();
+        assert!(handover_bootstrap(&r,&handover,0x401000).is_err());
     }
     #[test] fn sealed_trial_bootstrap_has_only_health_authority(){
         let mut r=model::Runtime::new();let h=r.handle(8,model::MANAGER_CAP).unwrap();

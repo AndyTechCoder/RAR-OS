@@ -72,6 +72,7 @@ pub fn compositor(boot:&Boot)->!{
     render::draw(boot,&state);report(2);
     loop{
         let e=receive(boot.caps[SELF_RECV]);
+        if state.settings_binding(crate::settings_binding(boot)).is_err(){crate::fail();}
         if state.apply(e.sender,e.generation,&e.bytes)==Ok(true){render::draw(boot,&state);}
     }
 }

@@ -332,3 +332,39 @@ durable-ACK cutover may give it production authority and resume it.
 These are source mechanisms, not full update integration or a VM demonstration.
 Boot barrier, System/manager protocol, signature-verifier loop, durable cutover,
 peer GUI rebinding and fallback cloud evidence remain required.
+
+
+### Prepared ACTIVE handover and fixed Settings query
+
+Operation6 of syscall10 takes RDX exact trial token and R10 exact seal. It
+preflights the Healthy/blocked private context, saved return, immutable buffer,
+and empty manager aperture, then precomputes all candidate capabilities and its
+ACTIVE Boot. A second preparation is Busy. Abort or candidate/manager loss
+invalidates the retained preparation. No production authority is published.
+
+Operation7 takes the same token/seal and is invoked by the manager only after
+the correlated System durable ACK. It revalidates the exact preparation under
+IF=0, applies the precomputed logical handover, removes/erases the old private
+context, writes only the candidate Boot page through the preallocated
+supervisor RW/NX aperture, removes that alias and invalidates its translation,
+then marks the candidate Runnable last. It never maps a live executable stride
+writable. A post-ACK invariant failure enters UPDATE-RECONCILE halt; no undo,
+retry, grant allocation or old-process resurrection is permitted.
+
+Syscall11 SETTINGS_BINDING takes RDI caller capability, RSI writable8-byte
+output, RDX8 and R10=0. Only shell's existing named Settings send grant or
+compositor's existing framebuffer grant authorizes this fixed query. Reply is
+the full LEu64 current Settings incarnation, or0 if unavailable; it never uses
+a signed return for the identity and cannot query another principal.
+
+Before interpreting a Settings message, the shell checks its generation against
+this kernel result. The compositor refreshes it before each message: an identity
+change retains Settings committed pixels while discarding only Settings staged
+content and version state. It keeps an incarnation high-water across temporary
+unavailability. Files/Terminal surfaces and windows remain intact. Sending to a
+temporarily absent Settings endpoint does not kill the shell.
+
+Source tests exercise the same saved-return bounds used by the native trap,
+prepared ACTIVE Boot shape without authority publication, narrow fixed-query
+authority, and retained GUI pixels/fresh version1/stale-generation refusal.
+Privileged cutover and end-to-end durable ACK correlation still require VM proof.

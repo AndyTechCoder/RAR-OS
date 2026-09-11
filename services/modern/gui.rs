@@ -35,11 +35,20 @@ impl Surface {
         }
     }
 }
-pub struct Compositor { pub windows:Windows,surfaces:[Surface;3],peers:[u64;10] }
+pub struct Compositor { pub windows:Windows,surfaces:[Surface;3],peers:[u64;10],settings_highest:u64 }
 impl Compositor {
     pub fn new(peers:[u64;10])->Result<Self,()> {
         if [0usize,4,5,6].iter().any(|&i|peers[i]==0){return Err(());}
-        Ok(Self{windows:Windows::new(),surfaces:[Surface::EMPTY;3],peers})
+        Ok(Self{windows:Windows::new(),surfaces:[Surface::EMPTY;3],peers,settings_highest:peers[5]})
+    }
+    /// Caller must supply the fixed kernel query result, NOT a message field.
+    /// Retain last committed pixels but revoke all unfinished/version state.
+    pub fn settings_binding(&mut self,incarnation:u64)->Result<(),()>{
+        if incarnation==self.peers[5]{return Ok(());}
+        if incarnation!=0&&incarnation<=self.settings_highest{return Err(());}
+        let committed=self.surfaces[1].committed;
+        self.surfaces[1]=Surface{committed,..Surface::EMPTY};
+        self.peers[5]=incarnation;if incarnation!=0{self.settings_highest=incarnation;}Ok(())
     }
     pub fn view(&self,role:u8)->Option<&View> {self.surfaces.get(role.checked_sub(4)? as usize).map(|s|&s.committed)}
     pub fn apply(&mut self,sender:u64,generation:u64,m:&[u8;128])->Result<bool,()> {
@@ -116,6 +125,25 @@ impl Keyboard {
         c.apply(role,1,&begin(version)).unwrap();
         for i in 0..6 {c.apply(role,1,&line(version,i,&Text::new(if i==0{text}else{b""})).unwrap()).unwrap();}
         assert_eq!(c.apply(role,1,&commit(version)),Ok(true));
+    }
+    #[test] fn authenticated_settings_handover_retains_pixels_not_staged_namespace(){
+        let mut c=Compositor::new([1;10]).unwrap();
+        put(&mut c,4,4,b"FILES");put(&mut c,5,100,b"OLD SETTINGS");put(&mut c,6,8,b"TERM");
+        c.apply(5,1,&begin(101)).unwrap();
+        c.apply(5,1,&line(101,0,&Text::new(b"UNCOMMITTED")).unwrap()).unwrap();
+        c.settings_binding((1u64<<40)+1).unwrap();
+        assert_eq!(c.view(5).unwrap().lines[0].as_bytes(),b"OLD SETTINGS");
+        assert_eq!(c.view(4).unwrap().lines[0].as_bytes(),b"FILES");
+        assert_eq!(c.view(6).unwrap().lines[0].as_bytes(),b"TERM");
+        assert!(c.apply(5,1,&commit(101)).is_err());
+        assert!(c.apply(5,(1u64<<40)+1,&commit(101)).is_err());
+        assert_eq!(c.apply(5,(1u64<<40)+1,&begin(1)),Ok(false));
+        for i in 0..6{c.apply(5,(1u64<<40)+1,&line(1,i,&Text::new(if i==0{b"NEW"}else{b""})).unwrap()).unwrap();}
+        assert_eq!(c.apply(5,(1u64<<40)+1,&commit(1)),Ok(true));
+        assert!(c.settings_binding(1).is_err());c.settings_binding(0).unwrap();
+        assert!(c.apply(5,(1u64<<40)+1,&begin(2)).is_err());
+        assert_eq!(c.view(5).unwrap().lines[0].as_bytes(),b"NEW");
+        assert!(c.settings_binding(1).is_err());assert!(c.settings_binding((1u64<<40)+1).is_err());
     }
     #[test] fn high_incarnations_do_not_alias_legacy_low_bits(){
         let mut peers=[1;10];peers[0]=(1u64<<40)|3;peers[5]=u64::MAX;

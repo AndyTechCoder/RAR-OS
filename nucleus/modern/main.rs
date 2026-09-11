@@ -58,10 +58,11 @@ struct Runtime{
     processes:[Process;TASKS],current:usize,arena:u64,proofs:u8,ready:bool,
     image_base:u64,image_size:u64,
     policy:Option<model::Runtime>,device:Option<native_pio::Adapter>,ticks:Option<u64>,
+    handover:Option<(model::Handover,abi::Boot,u64)>,
     staging:Option<staging::Buffer<'static>>,bootstrap_tables:usize,stage_readonly:bool,stage_view:bool,
 }
 static mut RUNTIME:Runtime=Runtime{processes:[Process::EMPTY;TASKS],current:0,arena:0,proofs:0,ready:false,image_base:0,image_size:0,
-    policy:None,device:None,ticks:Some(0),staging:None,bootstrap_tables:0,stage_readonly:false,stage_view:false};
+    policy:None,device:None,ticks:Some(0),handover:None,staging:None,bootstrap_tables:0,stage_readonly:false,stage_view:false};
 fn private_region(arena:u64,index:usize)->u64{
     retirement::region(arena,boot::ARENA_PAGES,index)
         .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=PRIVATE-GEOMETRY"))
@@ -344,6 +345,15 @@ impl Runtime{
                 unsafe{ptr::copy_nonoverlapping(response.as_ptr(),reply as *mut u8,response.len());}
                 Ok(0)
             }
+            abi::SETTINGS_BINDING=>{
+                let e=self.policy.as_ref().ok_or(Error::Denied)?.settings_binding(current,frame.rdi)?;
+                if frame.rdx!=8||frame.r10!=0{return Err(Error::Invalid);}
+                self.buffer(frame.rsi,8,true)?;
+                let bytes=e.map_or(0,|e|e.incarnation).to_le_bytes();
+                // SAFETY: current-owned checked output, fixed binding only.
+                unsafe{ptr::copy_nonoverlapping(bytes.as_ptr(),frame.rsi as *mut u8,8);}
+                Ok(0)
+            }
             abi::STAGE_VIEW=>{
                 self.policy.as_ref().ok_or(Error::Denied)?.stage_view(current,frame.rdi)?;
                 match frame.rsi{
@@ -390,7 +400,7 @@ impl Runtime{
                     4=>{
                         if frame.r10!=0{return Err(Error::Invalid);}
                         self.policy.as_mut().unwrap().abort(current,frame.rdi,frame.rdx)?;
-                        self.synchronize_revocations();Ok(0)
+                        self.handover=None;self.synchronize_revocations();Ok(0)
                     },
                     5=>{
                         self.buffer(frame.r10,32,true)?;
@@ -408,6 +418,14 @@ impl Runtime{
                         // SAFETY: full current manager output checked, IF=0.
                         unsafe{ptr::copy_nonoverlapping(response.as_ptr(),frame.r10 as *mut u8,32);}
                         Ok(0)
+                    },
+                    6=>{
+                        if frame.r10==0{return Err(Error::Invalid);}
+                        self.prepare_handover(frame.rdi,frame.rdx,frame.r10)?;Ok(0)
+                    },
+                    7=>{
+                        if frame.r10==0{return Err(Error::Invalid);}
+                        self.commit_handover(frame.rdi,frame.rdx,frame.r10);Ok(0)
                     },
                     _=>Err(Error::Invalid),
                 }
@@ -664,6 +682,7 @@ impl Runtime{
         }
     }
     fn synchronize_revocations(&mut self){
+        if self.handover.is_some_and(|(h,_,_)|self.policy.as_ref().unwrap().trial().is_none_or(|t|t.token()!=h.token())){self.handover=None;}
         for i in 0..TASKS{
             if i!=15&&self.policy.as_ref().unwrap().state(i)==Ok(model::State::Vacant){
                 self.processes[i].state=State::Dead;
@@ -673,9 +692,8 @@ impl Runtime{
     }
 }
 fn user_return_valid(process:&Process,ret:&arch::Trap)->bool{
-    ret.cs==0x1b&&ret.ss==0x23&&(STACK_VA..=process.stack_end).contains(&ret.rsp)&&
-        process.ranges[..process.range_count].iter().any(|r|r.executable&&r.start<=ret.rip&&ret.rip<r.end)&&
-        [ret.ds,ret.es,ret.fs,ret.gs].iter().all(|s|[0,0x1b,0x23].contains(s))
+    support::user_return(&process.ranges[..process.range_count],process.stack_end,
+        ret.rsp,ret.rip,ret.cs,ret.ss,[ret.ds,ret.es,ret.fs,ret.gs])
 }
 
 /// Called only by the assembly trap gate. Kernel faults are fatal. User faults
