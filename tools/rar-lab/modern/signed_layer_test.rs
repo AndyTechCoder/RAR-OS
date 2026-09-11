@@ -95,6 +95,63 @@ mod system_media {
         (Media(Rc::new(RefCell::new(d))),old,next)
     }
     fn mount(media:Media)->Volume<Media>{Volume::mount(media,SECTORS).unwrap()}
+
+    #[test] fn system_selected_boot_is_read_only_exact_and_not_publication_authority(){
+        let (media,old,next)=seed();let mut volume=mount(media.clone());
+        let p=volume.prepare_boot().unwrap();let id=p.identity();
+        assert_eq!((id.slot,id.generation,id.digest),(old.active().slot(),old.active().generation(),old.active().digest()));
+        assert_eq!(id.package_hash,sha256::sha256(&package(0)).unwrap());
+        let count=media.0.borrow().ops.len();
+        assert!(matches!(volume.prepare_boot(),Err(Reject::Policy)));
+        assert!(matches!(volume.prepare_fallback(),Err(Reject::Policy)));
+        assert!(matches!(volume.prepare(&package(2)),Err(Reject::Policy)));
+        assert_eq!(media.0.borrow().ops.len(),count);
+        let mut copied=Vec::new();
+        volume.copy_prepared(&p,|total,offset,part|{
+            assert_eq!(total,package(0).len());assert_eq!(offset,copied.len());
+            copied.extend_from_slice(part);Ok(())
+        }).unwrap();assert_eq!(copied,package(0));
+        assert_eq!(volume.publish(p,old),Err(Reject::Policy));
+        // A consumed API value cannot authorize anything; use a fresh instance
+        // only to model a fresh boot, not a runtime retry/remount.
+        let mut volume=mount(media.clone());let p=volume.prepare_boot().unwrap();
+        volume.complete_boot(p).unwrap();
+        assert_eq!(volume.record(),old);assert!(!volume.is_readonly());
+        assert!(!media.0.borrow().ops.iter().any(|op|matches!(op,Op::Write(_)|Op::Flush)));
+        let p=volume.prepare(&package(2)).unwrap();volume.publish(p,next).unwrap();
+    }
+    #[test] fn system_cancel_is_explicit_and_stale_tokens_never_unlock_current(){
+        let (media,_,_)=seed();let mut volume=mount(media.clone());
+        let old=volume.prepare_boot().unwrap();let count=media.0.borrow().ops.len();
+        volume.cancel(&old).unwrap();assert_eq!(media.0.borrow().ops.len(),count);
+        let new=volume.prepare_boot().unwrap();assert!(new.identity().transaction>old.identity().transaction);
+        assert_eq!(volume.cancel(&old),Err(Reject::Policy));
+        assert_eq!(volume.copy_prepared(&old,|_,_,_|panic!("stale boot")),Err(Reject::Policy));
+        volume.complete_boot(new).unwrap();
+    }
+    #[test] fn system_boot_content_failure_allows_exact_prior_but_io_is_terminal(){
+        let (media,mut volume,installed)=installed_volume();
+        media.0.borrow_mut().blocks.get_mut(&4099).unwrap()[0]^=1;
+        assert!(matches!(volume.prepare_boot(),Err(Reject::Framing)));
+        assert!(!volume.is_readonly());
+        let prior=volume.prepare_fallback().unwrap();
+        assert_eq!(prior.identity().digest,installed.previous().unwrap().digest());
+        let (media,_,_)=seed();let mut volume=mount(media.clone());
+        let count=media.0.borrow().ops.len();media.0.borrow_mut().fail=Some(count+1);
+        assert!(matches!(volume.prepare_boot(),Err(Reject::Io)));
+        assert!(volume.is_readonly());
+        assert!(matches!(volume.prepare_fallback(),Err(Reject::ReadOnly)));
+    }
+    #[test] fn system_boot_copy_and_completion_detect_intervening_selector_change(){
+        for at_completion in [false,true]{
+            let (media,_,_)=seed();let mut volume=mount(media.clone());
+            let p=volume.prepare_boot().unwrap();
+            media.0.borrow_mut().blocks.insert(0,[0;512]);
+            if at_completion{assert!(volume.complete_boot(p).is_err());}
+            else{assert!(volume.copy_prepared(&p,|_,_,_|panic!("changed selector")).is_err());}
+            assert!(volume.is_readonly());
+        }
+    }
     #[test] fn system_preparation_is_inactive_durable_and_publication_is_bound(){
         let (media,old,next)=seed();let original=media.0.borrow().blocks.clone();
         let mut volume=mount(media.clone());let data=package(2);
@@ -158,6 +215,8 @@ mod system_media {
     #[test] fn system_stale_token_and_record_mismatch_cannot_publish(){
         let (media,old,next)=seed();let mut volume=mount(media.clone());
         let stale=volume.prepare(&package(2)).unwrap();
+        assert!(matches!(volume.prepare(&package(2)),Err(Reject::Policy)));
+        volume.cancel(&stale).unwrap();
         let current=volume.prepare(&package(2)).unwrap();
         let count=media.0.borrow().ops.len();
         assert_eq!(volume.publish(stale,next),Err(Reject::Policy));
@@ -225,6 +284,8 @@ mod system_media {
         }
         let (media,_,next)=seed();let mut volume=mount(media.clone());
         let stale=volume.prepare(&package(2)).unwrap();
+        assert!(matches!(volume.prepare(&package(2)),Err(Reject::Policy)));
+        volume.cancel(&stale).unwrap();
         let current=volume.prepare(&package(2)).unwrap();let mut called=false;
         assert_eq!(volume.copy_prepared(&stale,|_,_,_|{called=true;Ok(())}),Err(Reject::Policy));
         assert!(!called);assert!(!volume.is_readonly());

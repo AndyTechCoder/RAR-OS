@@ -148,7 +148,7 @@ impl Runtime{
     /// No allocation/capability grant or recoverable operation remains after
     /// logical publication. Never allow caller retries to resurrect a process.
     fn commit_handover(&mut self,handle:u64,token:u64,seal:u64){
-        let (h,b,saved_seal)=self.handover.unwrap_or_else(||fatal("RAR-PANIC:CODE=UPDATE-RECONCILE"));
+        let (h,mut b,saved_seal)=self.handover.unwrap_or_else(||fatal("RAR-PANIC:CODE=UPDATE-RECONCILE"));
         let t=self.policy.as_ref().unwrap().trial()
             .unwrap_or_else(||fatal("RAR-PANIC:CODE=UPDATE-RECONCILE"));
         if h.token()!=token||saved_seal!=seal||t.token()!=token||t.image_seal()!=seal||
@@ -163,6 +163,10 @@ impl Runtime{
         // before exposing any new production context; peer state remains live.
         self.retire_pending();
         let owner=self.processes[8];let target=self.processes[cut.current.slot as usize];
+        // Peers may fault while System commits. Keep precomputed candidate
+        // grants, but publish CURRENT identities, never the preparation snapshot.
+        b.peers=self.policy.as_ref().unwrap().binding_generations();
+        if !abi::valid_boot(&b){fatal("RAR-PANIC:CODE=UPDATE-RECONCILE");}
         // Only the Boot PAGE is writable here, never a live executable stride.
         // All512 aperture entries were preflighted absent. IF=0/no other writer.
         unsafe{

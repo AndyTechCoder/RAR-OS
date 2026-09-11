@@ -309,3 +309,25 @@ trial identity and does not resurrect a prior component that faulted meanwhile.
 The native durable ACK/cutover path and complete boot selection barrier still
 need integration; these methods alone do not authorize selector publication or
 establish runtime M4.2 acceptance.
+
+## Serialized System ownership and boot readback
+
+System Volume now admits exactly one pending preparation. A second install,
+fallback or selected-boot preparation is rejected without I/O until the first
+is explicitly cancelled or consumed; no implicit supersession. Cancellation
+does not reset transaction counters or mutate disk bytes and must follow
+native removal of matching staging/trial state.
+
+prepare_boot reads the intact selected package identity and exact full-package
+hash, observing the selector before/after. Only copy_prepared may transfer that
+bound input into kernel staging. complete_boot consumes a selected-boot token
+after reobserving the selector, with no selector write; boot tokens cannot be
+used for install publication. Manager verification, isolated health and the
+atomic initial desktop publication remain separate mandatory steps.
+
+Content rejection of selected bytes leaves an intact transport/journal available
+for its one authorized prior fallback. Transport failure, changed/corrupt
+selectors, sink-prefix failure and ambiguous publication remain sticky failures,
+never permission to remount/retry. New focused tests cover boot no-write behavior,
+exact identities, stale cancellation, serialization, selector races and the
+content-versus-I/O fallback boundary. Full runtime protocol proof remains pending.

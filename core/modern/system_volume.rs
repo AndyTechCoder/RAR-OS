@@ -51,9 +51,11 @@ pub struct Identity {
     pub length:usize, pub package_hash:[u8;32],
 }
 /// Private fields and no Clone: only this volume can produce a prepared state.
-pub struct Prepared {before:Selection,identity:Identity,fallback:bool}
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+enum Purpose{Install,Fallback,Boot}
+pub struct Prepared {before:Selection,identity:Identity,purpose:Purpose}
 impl Prepared {pub fn identity(&self)->Identity{self.identity}}
-pub struct Volume<I:Io>{io:I,selected:Selection,locked:bool,next:Option<u64>,pending:Option<(Identity,bool)>}
+pub struct Volume<I:Io>{io:I,selected:Selection,locked:bool,next:Option<u64>,pending:Option<(Identity,Purpose)>}
 impl<I:Io> Volume<I> {
     pub fn mount(mut io:I,capacity:u32)->Result<Self,Reject> {
         if capacity!=SECTORS{return Err(Reject::Capacity);}
@@ -64,7 +66,7 @@ impl<I:Io> Volume<I> {
     pub fn is_readonly(&self)->bool{self.locked}
     fn open(&self)->Result<(),Reject>{if self.locked{Err(Reject::ReadOnly)}else{Ok(())}}
     fn observe(&mut self)->Result<(),Reject>{
-        let current=selection(&mut self.io)?;
+        let current=selection(&mut self.io).map_err(|e|if e==Reject::Framing{Reject::Changed}else{e})?;
         if current!=self.selected{return Err(Reject::Changed);}
         Ok(())
     }
@@ -116,14 +118,55 @@ impl<I:Io> Volume<I> {
         result
     }
     fn matches(&self,prepared:&Prepared)->Result<(),Reject>{
-        if prepared.before!=self.selected||self.pending!=Some((prepared.identity,prepared.fallback))||
+        if prepared.before!=self.selected||self.pending!=Some((prepared.identity,prepared.purpose))||
             prepared.identity.transaction.checked_add(1)!=self.next{return Err(Reject::Policy);}
         Ok(())
+    }
+    /// Explicit cancellation only after the native owner removed any matching
+    /// staging/trial state. No disk write, counter reset, retry or formatting.
+    pub fn cancel(&mut self,prepared:&Prepared)->Result<(),Reject>{
+        self.open()?;self.matches(prepared)?;self.pending=None;Ok(())
+    }
+    /// Bind a boot read to the intact selected record and exact package bytes.
+    /// No inactive write or signature decision occurs; content rejection leaves
+    /// an intact journal available for its one exact authorized prior fallback.
+    pub fn prepare_boot(&mut self)->Result<Prepared,Reject>{
+        self.open()?;
+        if self.pending.is_some(){return Err(Reject::Policy);}
+        let transaction=self.next.ok_or(Reject::Policy)?;
+        let active=self.record().active();
+        let result=(||{
+            self.observe()?;
+            let mut declared=None;
+            let (length,package_hash)=self.stream_inner(active.slot(),&mut |_,offset,bytes|{
+                if offset==0{
+                    let m=manifest::Manifest::parse(&bytes[..manifest::SIZE]).map_err(|_|())?;
+                    declared=Some((m.generation(),m.digest()));
+                }Ok(())
+            })?;
+            if declared!=Some((active.generation(),active.digest())){return Err(Reject::Policy);}
+            self.observe()?;
+            let identity=Identity{transaction,slot:active.slot(),generation:active.generation(),
+                digest:active.digest(),length,package_hash};
+            self.next=transaction.checked_add(1);self.pending=Some((identity,Purpose::Boot));
+            Ok(Prepared{before:self.selected,identity,purpose:Purpose::Boot})
+        })();
+        if matches!(result,Err(Reject::Io|Reject::Changed)){self.locked=true;}
+        result
+    }
+    /// No selector write for successful boot of the already-selected package.
+    /// The manager must still verify/health-check it before desktop publication.
+    pub fn complete_boot(&mut self,prepared:Prepared)->Result<(),Reject>{
+        self.open()?;self.matches(&prepared)?;
+        if prepared.purpose!=Purpose::Boot{return Err(Reject::Policy);}
+        let result=self.observe();self.pending=None;
+        if result.is_err(){self.locked=true;}result
     }
     /// Read the exact committed prior; never overwrite it or lower high-water.
     /// Signature and health still belong to the sealed manager/native protocol.
     pub fn prepare_fallback(&mut self)->Result<Prepared,Reject>{
         self.open()?;
+        if self.pending.is_some(){return Err(Reject::Policy);}
         let prior=self.record().previous().ok_or(Reject::Policy)?;
         let transaction=self.next.ok_or(Reject::Policy)?;
         let result=(||{
@@ -139,8 +182,8 @@ impl<I:Io> Volume<I> {
             self.observe()?;
             let identity=Identity{transaction,slot:prior.slot(),generation:prior.generation(),
                 digest:prior.digest(),length,package_hash};
-            self.next=transaction.checked_add(1);self.pending=Some((identity,true));
-            Ok(Prepared{before:self.selected,identity,fallback:true})
+            self.next=transaction.checked_add(1);self.pending=Some((identity,Purpose::Fallback));
+            Ok(Prepared{before:self.selected,identity,purpose:Purpose::Fallback})
         })();
         if result.is_err(){self.pending=None;self.locked=true;}
         result
@@ -167,6 +210,7 @@ impl<I:Io> Volume<I> {
     /// the kernel-sealed readback, never the original mutable source bytes.
     pub fn prepare(&mut self,package:&[u8])->Result<Prepared,Reject>{
         self.open()?;
+        if self.pending.is_some(){return Err(Reject::Policy);}
         if !(896..=MAX_PACKAGE).contains(&package.len()){return Err(Reject::Framing);}
         let first:[u8;512]=package[..512].try_into().unwrap();
         if package_length(&first)?!=package.len(){return Err(Reject::Framing);}
@@ -196,8 +240,8 @@ impl<I:Io> Volume<I> {
             if actual!=block(package,index){return Err(Reject::Changed);}
         }
         self.observe()?;
-        self.pending=Some((identity,false));
-        Ok(Prepared{before:self.selected,identity,fallback:false})
+        self.pending=Some((identity,Purpose::Install));
+        Ok(Prepared{before:self.selected,identity,purpose:Purpose::Install})
     }
     /// Storage-only publication. The fixed System/Manager lifecycle protocol
     /// MUST bind transaction/seal identity, finish verified trial health and all
@@ -275,7 +319,7 @@ mod tests {
         assert_eq!(volume.next,None);volume.copy_prepared(&last,|_,_,_|Ok(())).unwrap();
         let calls=volume.io.calls;assert!(matches!(volume.prepare(&package),Err(Reject::Policy)));
         assert_eq!(volume.io.calls,calls);assert_eq!(volume.next,None);
-        let stale=Prepared{before:last.before,identity:Identity{transaction:1,..last.identity},fallback:false};
+        let stale=Prepared{before:last.before,identity:Identity{transaction:1,..last.identity},purpose:Purpose::Install};
         assert_eq!(volume.copy_prepared(&stale,|_,_,_|panic!("stale sink")),Err(Reject::Policy));
         assert_eq!(volume.io.calls,calls);
     }

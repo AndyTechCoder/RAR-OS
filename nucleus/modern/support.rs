@@ -163,6 +163,25 @@ mod tests{
         }
         b[288..320].fill(0);assert!(stage_metadata(&b).is_err());
     }
+    #[test] fn handover_refreshes_intervening_peer_fault_without_losing_peer_queue(){
+        let mut r=model::Runtime::new();let h=r.handle(8,model::MANAGER_CAP).unwrap();
+        r.authenticated_stage(8,h,19,7,[1;32],2,50).unwrap();
+        let t=r.begin_trial(8,h,19).unwrap();
+        r.ready(7,r.handle(7,model::HEALTH_CAP).unwrap(),t.token()).unwrap();
+        let handover=r.prepare_cutover(8,h,t.token()).unwrap();
+        let mut b=handover_bootstrap(&r,&handover,0x401000).unwrap();
+        assert_eq!(b.peers[6],1);
+        r.send(1,r.handle(1,4).unwrap(),b"peer queued").unwrap();
+        r.fault(model::Endpoint{slot:6,incarnation:1}).unwrap();
+        r.cutover_prepared(8,h,handover).unwrap();
+        b.peers=r.binding_generations();assert!(abi::valid_boot(&b));
+        assert_eq!(b.peers[6],0);assert_eq!(b.peers[5],t.endpoint().incarnation);
+        assert_eq!(b.peers[1],1);
+        assert_eq!(r.state(6),Ok(model::State::Vacant));
+        let m=r.receive(4,r.handle(4,0).unwrap()).unwrap();
+        assert_eq!(&m.bytes[..m.length as usize],b"peer queued");
+        assert_eq!(r.delivered_preemption(model::Endpoint{slot:6,incarnation:1}),Err(Error::Stale));
+    }
     #[test] fn prepared_active_boot_is_exact_but_does_not_publish_authority(){
         let mut r=model::Runtime::new();let h=r.handle(8,model::MANAGER_CAP).unwrap();
         r.authenticated_stage(8,h,18,7,[1;32],2,50).unwrap();

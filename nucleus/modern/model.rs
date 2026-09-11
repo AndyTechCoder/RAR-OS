@@ -179,6 +179,10 @@ impl Runtime {
         // Principal8 manages lifecycle; only System service9 receives System I/O.
         r
     }
+    /// Bounded current snapshot; no allocation, grants, counters or fallible lookup.
+    pub fn binding_generations(&self)->[u64;PRINCIPALS]{
+        self.bindings.map(|e|e.map_or(0,|e|e.incarnation))
+    }
     pub fn recovery_required(&self)->bool {self.recovery_required}
     pub fn binding(&self,principal:usize)->Result<Option<Endpoint>,Error>{
         self.bindings.get(principal).copied().ok_or(Error::Invalid)

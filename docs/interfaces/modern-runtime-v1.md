@@ -368,3 +368,12 @@ Source tests exercise the same saved-return bounds used by the native trap,
 prepared ACTIVE Boot shape without authority publication, narrow fixed-query
 authority, and retained GUI pixels/fresh version1/stale-generation refusal.
 Privileged cutover and end-to-end durable ACK correlation still require VM proof.
+
+Review refinement: prepared Boot peer identities are not authoritative across
+System I/O. After logical cutover and before the Boot-page write, the kernel
+refreshes the entire peer array from current bindings using an allocation-free
+bounded snapshot. Precomputed candidate grants stay unchanged. Validate Boot
+again and reconcile-halt on an impossible inconsistency. Tests fault Terminal
+and enqueue unrelated Files traffic between preparation and publication:
+the new Boot names Terminal unavailable, preserves live peers and the new
+Settings incarnation, retains the queued message and rejects the stale endpoint.
