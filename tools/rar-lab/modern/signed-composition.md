@@ -42,3 +42,15 @@ receives0555. Parent paths, source, System image and unrelated files are not
 changed. The bind remains read-only and the compiler remains nonroot with no
 network or devices. This corrects data readability, not execution authority.
 A fresh exact-controller cloud build is still required to prove the fix.
+
+
+### Signed composition size optimization
+
+Run34647701939 passed input access and compiled the first actual signed pair,
+but strict PE inspection rejected its mapped-image budget. No target ran, and
+the budget is not raised. The signed recipe now requests size optimization and
+one code-generation unit for the signed supervisor; kernel optimization and all Settings package
+variants retain their existing independent recipe. Pinned compiler, fixed base,
+W^X rules, layout limits and all confinement stay unchanged. Budget failures now
+report the measured mapping and fixed limit to make the next result actionable.
+Actual signed reproduction and later runtime timing/health remain gates.

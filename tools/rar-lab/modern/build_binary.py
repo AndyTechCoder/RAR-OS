@@ -32,8 +32,9 @@ def inspect(data, service):
     base, entry, image, header = u64(o+24), u32(o+16), u32(o+56), u32(o+60)
     if u16(o+68) != 10 or u32(o+32) != 4096 or u32(o+108) != 16:
         raise ValueError("unexpected UEFI layout")
-    if not 0 < image <= (128*1024 if service else 64*1024*1024) or image % 4096:
-        raise ValueError("image exceeds runtime budget")
+    limit=128*1024 if service else 64*1024*1024
+    if not 0 < image <= limit or image % 4096:
+        raise ValueError(f"image exceeds runtime budget: service={service}, mapped={image}, limit={limit}")
     if not o+optional+40*count <= header <= min(4096, len(data)):
         raise ValueError("invalid header span")
     if base % 4096 or base+image >= 1 << 47 or service and base != 0x400000:
