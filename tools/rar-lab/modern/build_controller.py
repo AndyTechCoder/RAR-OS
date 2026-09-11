@@ -130,6 +130,13 @@ def main():
         for name,data in bank.items():
             with (inputs/name).open("xb") as output:
                 output.write(data)
+                output.flush()
+                # Only this newly/exclusively created public laboratory file.
+                # Descriptor-based chmod cannot follow a substituted symlink.
+                os.fchmod(output.fileno(),0o444)
+        # The compiler is UID65532, not the hosted runner. Expose only these
+        # public signed fixtures read-only; do not widen any parent directory.
+        inputs.chmod(0o555)
         with (evidence/"modern-system.img").open("xb") as output:
             output.write(system)
         summary["signed_packages"]=package_record
