@@ -3,6 +3,7 @@ No role/path selector, arbitrary fault operation, VM, file or process API.
 """
 from hashlib import sha256
 RECONCILE=b"RAR-PANIC:CODE=UPDATE-RECONCILE"
+PANIC=b"RAR-PANIC:BEGIN\n"+RECONCILE+b"\nRAR-PANIC:HALT\n"
 B_START=4099*512
 def plan(candidate):
     if type(candidate) is not bytes or not 896<=len(candidate)<=2097536:
@@ -73,24 +74,21 @@ def scan(records,candidate,selector):
 def serial_status(serial,hit,final=False):
     if type(serial) is not bytes or len(serial)>65536 or not serial.isascii():raise ValueError("bounded guest serial")
     if any(s in serial for s in (b"UNEXPECTED-USER-FAULT",b"INVALID-USER-RETURN")):raise ValueError("guest isolation fault")
-    count=serial.count(RECONCILE)
-    remaining=serial.replace(RECONCILE,b"")
-    if b"RAR-PANIC" in remaining:
-        # A split final line may be drained, never accepted as evidence.
-        tail=serial.split(b"\n")[-1].rstrip(b"\r")
-        if not final and count==0 and RECONCILE.startswith(tail) and tail.startswith(b"RAR-PANIC"):
-            return "waiting"
-        raise ValueError("unplanned guest panic")
-    if count>1:raise ValueError("repeated reconcile stop")
-    if count==1:
-        if any(RECONCILE in line and line.rstrip(b"\r")!=RECONCILE for line in serial.split(b"\n")):
-            raise ValueError("exact reconcile line only")
-        if hit is None:
-            if final:raise ValueError("reconcile without exact System receipt")
-            return "waiting"
-        return "reconciled"
-    if final:raise ValueError("missing reconcile stop")
-    return "running"
+    at=serial.find(b"RAR-PANIC")
+    if at<0:
+        if final:raise ValueError("missing exact reconcile panic frame")
+        return "running"
+    tail=serial[at:]
+    if (at!=0 and serial[at-1]!=10) or not PANIC.startswith(tail):
+        # Bounded inert hex aids diagnosis without emitting guest control bytes.
+        raise ValueError("unplanned guest panic frame: "+tail[:256].hex())
+    if tail!=PANIC:
+        if final:raise ValueError("incomplete reconcile panic frame")
+        return "waiting"
+    if hit is None:
+        if final:raise ValueError("reconcile without exact System receipt")
+        return "waiting"
+    return "reconciled"
 def joined(vm,candidate,selector,base):
     vm.service()
     if serial_status(bytes(vm.serial),vm.system_fault_hit,True)!="reconciled":raise ValueError("exact fault stop")
@@ -127,7 +125,7 @@ def self_test():
     assert scan(rows,candidate,selector) is None
     emit("write",512,512,"failed-no-success",payload_sha256=sha256(selector).hexdigest(),injection=p)
     hit=scan(rows,candidate,selector);assert hit["offset"]==512 and hit["counts"]["write"]==3
-    assert serial_status(RECONCILE+b"\n",hit,True)=="reconciled"
+    assert serial_status(PANIC,hit,True)=="reconciled"
     rejected=0
     def reject(fn):
         nonlocal rejected
@@ -141,11 +139,19 @@ def self_test():
         bad=copy.deepcopy(rows);entry=bad[target] if target==0 else bad[target]["event"];entry[field]=value
         reject(lambda bad=bad:scan(bad,candidate,selector))
     reject(lambda:scan(rows+[dict(type="request",operation="read",offset=0,length=512)],candidate,selector))
-    for serial in (RECONCILE+b"-OTHER",b"prefix"+RECONCILE,RECONCILE+RECONCILE,b"RAR-PANIC:CODE=OTHER",b"UNEXPECTED-USER-FAULT",b""):
+    for serial in (RECONCILE+b"\n",PANIC+b"extra",b"prefix"+PANIC,PANIC+PANIC,
+        PANIC.replace(b"UPDATE-RECONCILE",b"OTHER"),PANIC.replace(b"BEGIN",b"WRONG"),
+        PANIC.replace(b"HALT",b"WRONG"),b"UNEXPECTED-USER-FAULT",b""):
         reject(lambda serial=serial:serial_status(serial,hit,True))
-    reject(lambda:serial_status(RECONCILE,None,True))
-    assert serial_status(RECONCILE,None)=="waiting"
-    assert serial_status(RECONCILE[:15],None)=="waiting"
+    reject(lambda:serial_status(PANIC,None,True))
+    assert serial_status(PANIC,None)=="waiting"
+    assert serial_status(b"RAR-MODERN:GUI-READY\n"+PANIC,hit,True)=="reconciled"
+    for n in range(len(b"RAR-PANIC")):
+        assert serial_status(PANIC[:n],hit)=="running"
+        reject(lambda n=n:serial_status(PANIC[:n],hit,True))
+    for n in range(len(b"RAR-PANIC"),len(PANIC)):
+        assert serial_status(PANIC[:n],hit)=="waiting"
+        reject(lambda n=n:serial_status(PANIC[:n],hit,True))
     return rejected
 if __name__=="__main__":
     import sys

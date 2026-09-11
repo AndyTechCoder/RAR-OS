@@ -59,3 +59,21 @@ and final M4.2 acceptance against the task contract. M4.3 remains separate.
 The source branch lacks the later main signed-size build-tool fix; approved
 cloud runs use trusted-main tooling explicitly. An optional main-to-draft
 tooling sync was denied by auto-review and was not retried or bypassed.
+
+## Exact fatal framing correction
+
+Actual campaign34657349650 (controller366669d3, source93ac75b) passed the first
+four scenarios, including the native stale-authority probe, then failed in the
+selector-error parser. The checker expected one code line, but the unchanged
+foundation fatal() emits three LF-terminated lines: RAR-PANIC:BEGIN,
+RAR-PANIC:CODE=UPDATE-RECONCILE, RAR-PANIC:HALT. The original failed run did not
+retain the complete failed VM transcript, so this definite framing bug is not
+proof that no other guest issue exists.
+
+Accept only that complete contiguous terminal frame after the exact System fault
+receipt; truncated frames, another code, reordered/wrong envelope, repetition or
+trailing bytes remain failures. Every recognizable panic prefix is waiting-only; shorter initial fragments
+remain nonfinal/running under the outer scenario deadline. Every truncated
+final frame is rejected. Unexpected panic diagnostics include at most256 bytes
+encoded as inert hex. No kernel behavior or generic panic policy changes.
+The exact-source cloud campaign must be rerun after review and tooling checks.
