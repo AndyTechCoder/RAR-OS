@@ -620,6 +620,88 @@ mod system_media {
         }));
     }
 
+    #[test]fn damaged_prior_content_leaves_inspection_but_not_an_implicit_retry(){
+        for offset in [0usize,72]{
+            let (media,mut volume,before)=installed_volume();
+            media.0.borrow_mut().blocks.get_mut(&2).unwrap()[offset]^=2;
+            media.0.borrow_mut().ops.clear();
+            assert!(matches!(volume.prepare_fallback(),Err(Reject::Framing|Reject::Policy)));
+            assert!(!volume.is_readonly());assert_eq!(volume.record(),before);
+            assert!(volume.inspect_stored(system_volume::InspectionRole::Prior,|_,_,_|Ok(())).is_ok());
+            assert!(!media.0.borrow().ops.iter().any(|op|matches!(op,Op::Write(_)|Op::Flush)));
+            // Native bootstrap still owns one-shot fallback/repair decisions.
+        }
+    }
+    #[test]fn repair_storage_binds_exact_successor_and_preserves_high_water(){
+        let (media,mut volume,before)=installed_volume();
+        for sector in [2,4099]{media.0.borrow_mut().blocks.get_mut(&sector).unwrap()[0]^=1;}
+        let original=media.0.borrow().blocks.clone();let factory=package(0);
+        let verified=manifest::verify(case(0).0,case(0).1,1).unwrap();
+        let next=before.repair_factory(&verified).unwrap();
+        assert!(next.is_repair_successor_of(&before));
+        assert!(!before.fallback().unwrap().is_repair_successor_of(&before));
+        let hash=sha256::sha256(&factory).unwrap();
+        let prepared=volume.prepare_repair(&factory,hash,next).unwrap();
+        assert_eq!(volume.record(),before);assert_eq!(prepared.identity().slot,Slot::A);
+        let mut copied=Vec::new();
+        volume.copy_prepared(&prepared,|_,_,bytes|{copied.extend_from_slice(bytes);Ok(())}).unwrap();
+        assert_eq!(copied,factory);
+        // Same target identity but wrong transition kind cannot publish.
+        let count=media.0.borrow().ops.len();
+        assert_eq!(volume.publish(&prepared,before.fallback().unwrap()),Err(Reject::Policy));
+        assert_eq!(media.0.borrow().ops.len(),count);assert!(!volume.is_readonly());
+        volume.publish(&prepared,next).unwrap();assert_eq!(volume.record(),next);
+        assert_eq!(next.highest_committed_generation(),2);
+        assert_eq!(next.minimum_install_generation(),Ok(3));
+        assert_eq!(mount(media.clone()).record(),next);
+        assert!(matches!(volume.prepare(&package(2)),Err(Reject::Policy)));
+        for (sector,bytes)in original{
+            if sector>=4099||sector==1{assert_eq!(media.0.borrow().blocks.get(&sector),Some(&bytes));}
+        }
+    }
+    #[test]fn repair_storage_rejects_unbound_inputs_before_io(){
+        let (media,mut volume,before)=installed_volume();let factory=package(0);
+        let next=before.repair_factory(&manifest::verify(case(0).0,case(0).1,1).unwrap()).unwrap();
+        let hash=sha256::sha256(&factory).unwrap();let count=media.0.borrow().ops.len();
+        assert!(matches!(volume.prepare_repair(&factory,[0;32],next),Err(Reject::Policy)));
+        assert!(matches!(volume.prepare_repair(&factory,hash,before.fallback().unwrap()),Err(Reject::Policy)));
+        assert!(matches!(volume.prepare_repair(&factory,hash,before),Err(Reject::Policy)));
+        let update=package(2);
+        assert!(matches!(volume.prepare_repair(&update,sha256::sha256(&update).unwrap(),next),Err(Reject::Policy)));
+        let mut changed=factory.clone();changed[512]^=1;
+        assert!(matches!(volume.prepare_repair(&changed,hash,next),Err(Reject::Policy)));
+        assert_eq!(media.0.borrow().ops.len(),count);assert!(!volume.is_readonly());
+    }
+    #[test]fn every_repair_prepare_and_publication_io_failure_locks(){
+        let factory=package(0);let hash=sha256::sha256(&factory).unwrap();
+        let (media,mut volume,before)=installed_volume();
+        let next=before.repair_factory(&manifest::verify(case(0).0,case(0).1,1).unwrap()).unwrap();
+        media.0.borrow_mut().ops.clear();
+        let prepared=volume.prepare_repair(&factory,hash,next).unwrap();
+        let prep_calls=media.0.borrow().ops.len();
+        media.0.borrow_mut().ops.clear();volume.publish(&prepared,next).unwrap();
+        let publication_calls=media.0.borrow().ops.len();
+        for phase in 0..2{
+            for cut in 1..=if phase==0{prep_calls}else{publication_calls}{
+                let (media,mut volume,before)=installed_volume();
+                let original=media.0.borrow().blocks.clone();
+                let prepared=if phase==1{Some(volume.prepare_repair(&factory,hash,next).unwrap())}else{None};
+                {let mut d=media.0.borrow_mut();d.ops.clear();d.fail=Some(cut);}
+                let failed=if let Some(p)=prepared{volume.publish(&p,next).is_err()}
+                    else{volume.prepare_repair(&factory,hash,next).is_err()};
+                assert!(failed,"phase {phase} cut {cut}");assert!(volume.is_readonly());
+                let calls=media.0.borrow().ops.len();
+                assert!(matches!(volume.prepare_repair(&factory,hash,next),Err(Reject::ReadOnly)));
+                assert_eq!(media.0.borrow().ops.len(),calls);
+                // The previously selected record/active payload are protected.
+                assert_eq!(media.0.borrow().blocks.get(&1),Some(&before.encode()));
+                for (sector,bytes)in &original{
+                    if *sector>=4099{assert_eq!(media.0.borrow().blocks.get(sector),Some(bytes));}
+                }
+            }
+        }
+    }
+
 }
 
 mod repair_decisions {

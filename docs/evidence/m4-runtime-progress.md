@@ -820,3 +820,13 @@ CompleteRead issuer is wired, and no new native scenario has executed.
 The earlier f0143aad claim that no syscall can mint Inspection described that
 earlier snapshot only; the new mechanisms require focused native-boundary review
 and exact-head cloud validation before any activation or acceptance.
+
+
+Prepared repair storage integration now retains the exact authorized Repair
+record in Purpose::Repair, writes only the opposite slot, binds factory hash/
+generation/digest and rejects kind substitution at publication. Source tests
+cover all observed preparation/publication I/O failures, old selected bytes,
+high-water/stale installs and invalid inputs without I/O. Prior content rejection
+leaves read-only inspection possible, but transport/uncertainty remains sticky.
+The native one-shot protocol and actual repair cloud scenarios are still absent;
+no M4.3 completion or repaired-guest result is claimed.

@@ -342,3 +342,32 @@ matches_observations compares values only, not freshness; copied observations
 cannot establish fresh I/O. Native one-shot receipt/seal/incarnation and exclusive
 ownership remain required before any repair write. No claim of enforced fresh
 native reads or guest repair is made by these source APIs.
+
+
+### M4.3 repair storage mechanism
+
+The crate-private prepare_repair mechanism accepts the immutable factory bytes,
+their expected complete logical hash and the exact Manager-authorized Repair
+successor. It first requires no pending operation, canonical repair succession,
+opposite slot, generation1, matching manifest digest and exact nonzero package
+hash. The caller remains responsible for the independently bound immutable root,
+both complete fresh damage inspections and one-shot bootstrap authorization;
+this storage method alone grants none of those decisions. No native caller is
+wired at this checkpoint.
+
+Preparation reuses the bounded opposite-slot write/flush/full-readback/selector
+observation path, retaining Purpose::Repair(exact_record) in the opaque pending
+token. Publish accepts only that exact record, not a structurally different
+Fallback naming the same package. Copying, health verification, native desktop
+preparation and correlated durable ACK remain separate required gates.
+Every preparation or publication I/O failure locks the owner. The previous
+selected record/payload and all Data remain outside the allowed write set.
+
+Prior preparation now distinguishes content Framing/Policy rejection from all
+other failures: content rejection leaves inspection possible with no pending
+token; transport, sink, uncertainty and future error classes lock. This does
+not create a retry loop: the native coordinator still permits only one exact
+prior attempt, then must stop or use the separately reviewed Repair protocol.
+Tests cover exact record/kind/hash/generation binding, protected old bytes,
+stale-generation refusal and every observed preparation/publication I/O failure.
+These fake-media tests are not native interrupted-repair evidence.

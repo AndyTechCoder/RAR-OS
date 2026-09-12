@@ -98,6 +98,10 @@ impl Record {
     pub(crate) fn repair_factory(&self, factory:&VerifiedLayer<'_>)->Result<Self,Reject> {
         self.repair_id(LayerId::from_verified(self.active.slot.other(),factory))
     }
+    /// Structural binding only; not factory provenance, damage or health proof.
+    pub(crate) fn is_repair_successor_of(&self,older:&Self)->bool{
+        self.kind==Kind::Repair&&self.valid()&&older.valid()&&self.follows(older)
+    }
     fn repair_id(&self,factory:LayerId)->Result<Self,Reject> {
         if !factory.valid()||factory.generation!=1||factory.slot!=self.active.slot.other(){
             return Err(Reject::State);

@@ -54,7 +54,7 @@ pub struct Identity {
 }
 /// Private fields and no Clone: only this volume can produce a prepared state.
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
-enum Purpose{Install,Fallback,Boot}
+enum Purpose{Install,Fallback,Boot,Repair(Record)}
 pub struct Prepared {before:Selection,identity:Identity,purpose:Purpose}
 impl Prepared {pub fn identity(&self)->Identity{self.identity}}
 pub struct Volume<I:Io>{io:I,selected:Selection,locked:bool,next:Option<u64>,pending:Option<(Identity,Purpose)>}
@@ -224,7 +224,12 @@ impl<I:Io> Volume<I> {
             self.next=transaction.checked_add(1);self.pending=Some((identity,Purpose::Fallback));
             Ok(Prepared{before:self.selected,identity,purpose:Purpose::Fallback})
         })();
-        if result.is_err(){self.pending=None;self.locked=true;}
+        if result.is_err(){
+            self.pending=None;
+            // Only proved content/framing mismatch leaves inspection possible.
+            // All transport, sink, uncertainty and future error classes lock.
+            if !matches!(result,Err(Reject::Framing|Reject::Policy)){self.locked=true;}
+        }
         result
     }
     fn stream_inner<F>(&mut self,slot:Slot,sink:&mut F)->Result<(usize,[u8;32]),Reject>
@@ -262,11 +267,39 @@ impl<I:Io> Volume<I> {
             package_hash:sha256(package).map_err(|_|Reject::Framing)?};
         self.next=transaction.checked_add(1);
         self.pending=None;
-        let result=self.prepare_inner(package,identity);
+        let result=self.prepare_inner(package,identity,Purpose::Install);
         if result.is_err(){self.locked=true;}
         result
     }
-    fn prepare_inner(&mut self,package:&[u8],identity:Identity)->Result<Prepared,Reject>{
+    /// Storage mechanism for the future one-shot bootstrap Repair protocol.
+    /// Its caller must first complete both authenticated damage inspections,
+    /// independently bind the immutable factory root and authorize exact next.
+    /// This method alone is NOT damage, signing, health or execution authority.
+    /// No native caller exists until that reviewed protocol is integrated.
+    pub(crate) fn prepare_repair(&mut self,package:&[u8],expected_hash:[u8;32],next:Record)
+        ->Result<Prepared,Reject>
+    {
+        self.open()?;
+        if self.pending.is_some()||!next.is_repair_successor_of(&self.record()){
+            return Err(Reject::Policy);
+        }
+        if !(896..=MAX_PACKAGE).contains(&package.len()){return Err(Reject::Framing);}
+        let first:[u8;512]=package[..512].try_into().unwrap();
+        if package_length(&first)?!=package.len(){return Err(Reject::Framing);}
+        let parsed=manifest::Manifest::parse(&package[..manifest::SIZE]).map_err(|_|Reject::Framing)?;
+        if parsed.generation()!=1||parsed.digest()!=next.active().digest()||
+            expected_hash==[0;32]||sha256(package).map_err(|_|Reject::Framing)?!=expected_hash{
+            return Err(Reject::Policy);
+        }
+        let transaction=self.next.ok_or(Reject::Policy)?;
+        let identity=Identity{transaction,slot:next.active().slot(),generation:1,
+            digest:next.active().digest(),length:package.len(),package_hash:expected_hash};
+        self.next=transaction.checked_add(1);
+        let result=self.prepare_inner(package,identity,Purpose::Repair(next));
+        if result.is_err(){self.locked=true;}
+        result
+    }
+    fn prepare_inner(&mut self,package:&[u8],identity:Identity,purpose:Purpose)->Result<Prepared,Reject>{
         self.observe()?;
         let start=slot_start(identity.slot);
         let count=sectors(package.len());
@@ -279,8 +312,8 @@ impl<I:Io> Volume<I> {
             if actual!=block(package,index){return Err(Reject::Changed);}
         }
         self.observe()?;
-        self.pending=Some((identity,Purpose::Install));
-        Ok(Prepared{before:self.selected,identity,purpose:Purpose::Install})
+        self.pending=Some((identity,purpose));
+        Ok(Prepared{before:self.selected,identity,purpose})
     }
     /// Storage-only publication. The fixed System/Manager lifecycle protocol
     /// MUST bind transaction/seal identity, finish verified trial health and all
@@ -293,6 +326,7 @@ impl<I:Io> Volume<I> {
         self.open()?;
         self.matches(prepared)?;
         if prepared.purpose==Purpose::Boot{return Err(Reject::Policy);}
+        if let Purpose::Repair(authorized)=prepared.purpose{if next!=authorized{return Err(Reject::Policy);}}
         if prepared.purpose==Purpose::Fallback&&self.record().fallback().map_err(|_|Reject::Policy)?!=next{
             return Err(Reject::Policy);
         }
