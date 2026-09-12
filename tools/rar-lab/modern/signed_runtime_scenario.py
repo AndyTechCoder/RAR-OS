@@ -4,7 +4,7 @@ No owner paths, raw disks, arbitrary command, reset, network or retry API.
 import base64,json,os,time
 from pathlib import Path
 CASES={"update":"update","bad-health":"update badhealth",
-       "bad-signature":"update badsig","bad-abi":"update badabi","selector-error":"update"}
+       "bad-signature":"update badsig","bad-abi":"update badabi","selector-error":"update","repair-both":"update"}
 def marker(vm,text):
     until=min(vm.deadline,time.monotonic()+25)
     while text.encode() not in vm.serial:
@@ -30,7 +30,7 @@ def run(session,case):
     read=session.read_regular
     system_bytes=read("/artifact/modern-system.img",8388608,exact=8388608)
     factory=read("/artifact/modern-settings-factory.layer",2097536)
-    candidate=read("/artifact/modern-settings-"+("update" if case=="selector-error" else case)+".layer",2097536)
+    candidate=read("/artifact/modern-settings-"+("update" if case in ("selector-error","repair-both") else case)+".layer",2097536)
     # Initial System is supplied by the trusted matched-build controller, never
     # formatted from an existing image. Reconstruct its exact factory-only form.
     initial=bytearray(expected.expected_system(factory,candidate,"rejected"))
@@ -40,7 +40,7 @@ def run(session,case):
     if oracle.inspect(empty)["revision"]!=0 or any(empty[1024:]):raise ValueError("virgin Data")
     boot=base.sha(read("/artifact/boot.img",16777216,exact=16777216))
     selector=expected.expected_system(factory,candidate,"installed")[512:1024]
-    data=system=live=None;vms=[];frames=[];proofs=[]
+    data=system=live=None;vms=[];frames=[];proofs=[];repair_evidence=None
     try:
         data=base.Fixture(root,"data",empty);system=base.Fixture(root,"system",system_bytes)
         live=session.VM(1,data.fd,system.fd);vms.append(live);live.start();base.ready(live)
@@ -50,45 +50,68 @@ def run(session,case):
         frames.append(capture(live,"terminal-1",lambda f:visual.validate(f,1)))
         for key in keys[1:]:live.key(key)
         frames.append(capture(live,"saved",lambda f:visual.validate(f,2,value)))
-        proofs.append(base.joined(live));live=None
+        if case=="repair-both":
+            # Terminal remains focused after WRITE; no host-seeded file contents.
+            for ch in "update":live.key(ch)
+            live.key("ret");marker(live,"RAR-MODERN:UPDATE-INSTALLED")
+            live.key("esc");live.key("f2")
+            frames.append(capture(live,"installed-1",lambda f:expected.settings_validate(f,visual,True)))
+        proofs.append(base.joined(live,system_updates=case=="repair-both"));live=None
         frozen=data.freeze(vms)
         if frozen[:1024]!=empty[:1024]:raise ValueError("Data headers changed")
         state=oracle.inspect(frozen)
         if (state["files"]!={b"note":value.encode()} or state["revision"]!=2 or
             state["committed_slots"]!=[0,1] or state["burned_slots"]!=[]):
             raise ValueError("actual pre-update Data differs")
-        if system.freeze(vms)!=system_bytes:raise ValueError("signed boot changed factory System")
+        if case=="repair-both":
+            installed,damaged,_=expected.repair_images(factory,candidate)
+            if system.freeze(vms)!=installed:raise ValueError("guest must install generation2 before corruption")
+            receipt=system.damage_system_headers(vms,installed,damaged)
+            repair_evidence=dict(installed_system_sha256=base.sha(installed),
+                damaged_system_sha256=base.sha(damaged),damaged_system_base64=base64.b64encode(damaged).decode(),
+                system_corruption=receipt)
+            if data.freeze(vms)!=frozen:raise ValueError("System corruption changed Data")
+        elif system.freeze(vms)!=system_bytes:raise ValueError("signed boot changed factory System")
         live=session.VM(2,data.observer,system.fd,readonly_data=True,
             system_selector_fault=(candidate,selector) if case=="selector-error" else None)
         vms.append(live);live.start();base.ready(live)
         frames.append(capture(live,"home-2",lambda f:visual.validate(f,0)))
-        live.key("f3")
-        frames.append(capture(live,"terminal-2",lambda f:visual.validate(f,1)))
-        for ch in CASES[case]:live.key("spc" if ch==" " else ch)
-        live.key("ret")
-        if case=="selector-error":
-            fault=session.load("system_selector_fault")
-            until=min(live.deadline,time.monotonic()+25)
-            while fault.serial_status(bytes(live.serial),live.system_fault_hit)!="reconciled":
-                live.service()
-                if time.monotonic()>=until:raise TimeoutError("exact selector fault reconcile deadline")
-            proofs.append(fault.joined(live,candidate,selector,base));live=None
-        else:
-            marker(live,"RAR-MODERN:UPDATE-INSTALLED" if case=="update" else "RAR-MODERN:UPDATE-REJECTED")
-            live.key("esc");live.key("f2")
-            frames.append(capture(live,"candidate",lambda f:expected.settings_validate(f,visual,case=="update")))
-            if case=="update":
-                live.key("d")
-                frames.append(capture(live,"compact",lambda f:expected.settings_validate(f,visual,True,True)))
-                live.key("x");marker(live,"RAR-MODERN:UPDATE-FALLBACK")
-                live.key("f2")
-                frames.append(capture(live,"fallback",lambda f:expected.settings_validate(f,visual,False)))
+        if case=="repair-both":
+            # No repair/update input: this desktop must result from automatic boot repair.
+            live.key("f2")
+            frames.append(capture(live,"repaired-2",lambda f:expected.settings_validate(f,visual,False)))
             live.key("esc");live.key("f1")
             frames.append(capture(live,"files-2",lambda f:visual.validate(f,3,value)))
             proofs.append(base.joined(live,system_updates=True));live=None
+        else:
+            live.key("f3")
+            frames.append(capture(live,"terminal-2",lambda f:visual.validate(f,1)))
+            for ch in CASES[case]:live.key("spc" if ch==" " else ch)
+            live.key("ret")
+            if case=="selector-error":
+                fault=session.load("system_selector_fault")
+                until=min(live.deadline,time.monotonic()+25)
+                while fault.serial_status(bytes(live.serial),live.system_fault_hit)!="reconciled":
+                    live.service()
+                    if time.monotonic()>=until:raise TimeoutError("exact selector fault reconcile deadline")
+                proofs.append(fault.joined(live,candidate,selector,base));live=None
+            else:
+                marker(live,"RAR-MODERN:UPDATE-INSTALLED" if case=="update" else "RAR-MODERN:UPDATE-REJECTED")
+                live.key("esc");live.key("f2")
+                frames.append(capture(live,"candidate",lambda f:expected.settings_validate(f,visual,case=="update")))
+                if case=="update":
+                    live.key("d")
+                    frames.append(capture(live,"compact",lambda f:expected.settings_validate(f,visual,True,True)))
+                    live.key("x");marker(live,"RAR-MODERN:UPDATE-FALLBACK")
+                    live.key("f2")
+                    frames.append(capture(live,"fallback",lambda f:expected.settings_validate(f,visual,False)))
+                live.key("esc");live.key("f1")
+                frames.append(capture(live,"files-2",lambda f:visual.validate(f,3,value)))
+                proofs.append(base.joined(live,system_updates=True));live=None
         observed_system=system.freeze(vms)
         outcome="fallback" if case=="update" else "rejected"
-        system_check=expected.validate_system(observed_system,factory,candidate,outcome)
+        system_check=(expected.validate_repair_system(observed_system,factory,candidate) if case=="repair-both"
+            else expected.validate_system(observed_system,factory,candidate,outcome))
         if data.freeze(vms)!=frozen:raise ValueError("update changed retained Data")
         live=session.VM(3,data.observer,system.fd,readonly_data=True)
         vms.append(live);live.start();base.ready(live)
@@ -97,7 +120,7 @@ def run(session,case):
         frames.append(capture(live,"selected-3",lambda f:expected.settings_validate(f,visual,False)))
         live.key("esc");live.key("f1")
         frames.append(capture(live,"files-3",lambda f:visual.validate(f,3,value)))
-        if case=="update":
+        if case in ("update","repair-both"):
             live.key("esc");live.key("f3")
             frames.append(capture(live,"terminal-3",lambda f:visual.validate(f,1)))
             for ch in "update":live.key(ch)
@@ -115,6 +138,7 @@ def run(session,case):
             frozen_data_base64=base64.b64encode(frozen).decode(),
             system_base64=base64.b64encode(observed_system).decode(),system_check=system_check,
             milestone_complete=False)
+        if repair_evidence is not None:result.update(repair_evidence)
         if len(json.dumps(result,separators=(",",":")).encode())>64*1024*1024:
             raise ValueError("bounded signed evidence")
         return result
