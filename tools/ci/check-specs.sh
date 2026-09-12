@@ -676,7 +676,52 @@ duplicates=$(printf '%s\n' "$index_targets" | sort | uniq -d)
 
 adr_files=$(sed -n 's/^- \[ADR [^]]*\](\(adr\/[^)]*\.md\))$/docs\/\1/p' docs/README.md)
 adr_count=$(printf '%s\n' "$adr_files" | awk 'NF { count++ } END { print count + 0 }')
-[ "$adr_count" -eq 34 ] || fail "expected exactly 34 indexed ADRs"
+# ADR 0036 is optional on pre-repair revisions, but exact and proposed when present.
+# Registration is not native execution, format acceptance or release authority.
+modern_repair_registration() {
+    case "$1" in
+        absent) [ -z "$2" ] && [ -z "$3" ] ;;
+        present)
+            [ "$2" = '- [ADR 0036: Proposed System-only Factory Repair](adr/0036-system-only-factory-repair.md)' ] &&
+            [ "$3" = 'Status: Proposed — independent native integration review pending' ] ;;
+        *) return 1 ;;
+    esac
+}
+modern_repair_index='- [ADR 0036: Proposed System-only Factory Repair](adr/0036-system-only-factory-repair.md)'
+modern_repair_status='Status: Proposed — independent native integration review pending'
+modern_repair_registration absent "" "" || fail "absent repair proposal refused"
+modern_repair_registration present "$modern_repair_index" "$modern_repair_status" || fail "valid repair proposal refused"
+if modern_repair_registration absent "$modern_repair_index" ""; then fail "dangling repair index accepted"; fi
+if modern_repair_registration present "" "$modern_repair_status"; then fail "unindexed repair proposal accepted"; fi
+if modern_repair_registration present "$modern_repair_index
+$modern_repair_index" "$modern_repair_status"; then fail "duplicate repair index accepted"; fi
+if modern_repair_registration present "$modern_repair_index" 'Status: Accepted'; then fail "accepted repair authority inferred"; fi
+if modern_repair_registration present "$modern_repair_index" ""; then fail "missing repair status accepted"; fi
+if modern_repair_registration present "$modern_repair_index" "$modern_repair_status
+$modern_repair_status"; then fail "duplicate repair status accepted"; fi
+if modern_repair_registration unknown "" ""; then fail "unknown repair presence accepted"; fi
+modern_repair_file=docs/adr/0036-system-only-factory-repair.md
+modern_repair_actual_index=$(sed -n '/^- \[ADR 0036:/p' docs/README.md)
+modern_repair_presence=absent
+[ ! -L "$modern_repair_file" ] || fail "repair proposal must not be a symlink"
+if [ -f "$modern_repair_file" ]; then
+    [ -s "$modern_repair_file" ] || fail "repair proposal is empty"
+    [ "$(sed -n '/^# /p' "$modern_repair_file")" = '# ADR 0036: Bounded immutable-factory System repair' ] || fail "repair proposal title drift"
+    modern_repair_registration present "$modern_repair_actual_index" \
+        "$(sed -n '/^Status:/p' "$modern_repair_file")" || fail "repair proposal registration/status drift"
+    modern_repair_presence=present
+else
+    [ ! -e "$modern_repair_file" ] || fail "repair proposal must be a regular file"
+    modern_repair_registration absent "$modern_repair_actual_index" "" || fail "repair index without canonical proposal"
+fi
+modern_repair_count() {
+    case "$1:$2" in absent:34|present:35) return 0 ;; *) return 1 ;; esac
+}
+modern_repair_count absent 34 || fail "base ADR count refused"
+modern_repair_count present 35 || fail "repair ADR count refused"
+if modern_repair_count present 34; then fail "repair replacing an existing ADR accepted"; fi
+if modern_repair_count absent 35; then fail "extra ADR without repair accepted"; fi
+modern_repair_count "$modern_repair_presence" "$adr_count" || fail "unexpected indexed ADR count"
 
 # Pure registration/status drift fixtures; no files, launches or approval grants.
 modern_ide_registration() {
@@ -766,6 +811,9 @@ printf '%s\n' "$adr_files" | while IFS= read -r adr; do
     elif [ "$adr" = docs/adr/0035-immutable-ide-inputs.md ]; then
         [ "$(grep -c '^Status:' "$adr")" -eq 1 ] || fail "Immutable IDE proposal status is ambiguous"
         grep -qx 'Status: Proposed — concrete cloud profile validation pending' "$adr" || fail "Immutable IDE proposal must not claim accepted authority"
+    elif [ "$adr" = docs/adr/0036-system-only-factory-repair.md ]; then
+        [ "$(grep -c '^Status:' "$adr")" -eq 1 ] || fail "Repair proposal status is ambiguous"
+        grep -qx 'Status: Proposed — independent native integration review pending' "$adr" || fail "Repair proposal must not claim native authority"
     else
     case "$adr" in
         docs/adr/0013-* | docs/adr/0014-* | docs/adr/0015-* | docs/adr/0016-*) adr_approval_date=2026-07-17 ;;
