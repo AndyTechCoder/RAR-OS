@@ -77,6 +77,12 @@ class PlannedDataFault(RuntimeError):
         self.receipt=tuple(receipt)
         super().__init__("controller-observed planned Data fault")
 
+class PlannedSystemFault(RuntimeError):
+    """Exact fixed System transaction observation; never a generic VM failure."""
+    def __init__(self,receipt):
+        self.receipt=tuple(receipt)
+        super().__init__("controller-observed planned System fault")
+
 class VM:
     """One fresh firmware instance and one non-reconnectable backend per role.
     All public operations are synchronous but continuously service the backend
@@ -84,7 +90,7 @@ class VM:
     path, disk selector or shell enters this API.
     """
     def __init__(self,index,data_fd,system_fd,readonly_data=False,data_fault=None,
-                 reverse_flush=False,system_selector_fault=None):
+                 reverse_flush=False,system_selector_fault=None,system_transaction_fault=None):
         cloud_guard()
         self.profile,self.backend = load("vm_profile"),load("block_process")
         self.index = index
@@ -101,8 +107,22 @@ class VM:
             self.system_fault_candidate,self.system_fault_selector=system_selector_fault
             self.system_fault_audit=load("system_selector_fault")
             self.system_fault_audit.plan(self.system_fault_candidate)
-        self.fault_audit=load("fault_audit") if data_fault is not None else None
-        selected=self.fault_audit.plan(data_fault) if data_fault is not None else None
+        self.fault_role="data";self.transaction_serial=None;self.transaction_fault_hit=None
+        transaction_plan=None
+        if system_transaction_fault is not None:
+            if (index!=2 or readonly_data is not True or data_fault is not None or
+                reverse_flush is not False or system_selector_fault is not None):
+                raise ValueError("fixed VM2 System transaction fault with read-only Data")
+            if type(system_transaction_fault) is not tuple or len(system_transaction_fault)!=4:
+                raise ValueError("fixed mode/index/matched package tuple")
+            mode,case,factory,candidate=system_transaction_fault
+            plans=load("signed_runtime_evidence").system_fault_cases(factory,candidate,mode)
+            if type(case) is not int or not 0<=case<len(plans):
+                raise ValueError("fixed System fault index")
+            transaction_plan=plans[case];self.fault_role="system"
+            self.transaction_serial=load("system_selector_fault")
+        self.fault_audit=load("fault_audit") if data_fault is not None or transaction_plan is not None else None
+        selected=self.fault_audit.plan(transaction_plan if transaction_plan is not None else data_fault) if self.fault_audit is not None else None
         self.fault_plan=None if selected is None else tuple(selected[k] for k in
             ("operation","ordinal","effect","prefix"))
         self.fault_notice=None;self.fault_delivered=False;self.fault_deadline=None
@@ -156,7 +176,7 @@ class VM:
                 backend = self.backend.Backend(fd,server,role,
                     readonly=role=="boot" or (role=="data" and readonly_data),
                     write_refusing=role=="boot" or (role=="data" and readonly_data),
-                    fault=data_fault if role=="data" else (self.system_fault_audit.plan(self.system_fault_candidate)
+                    fault=selected if self.fault_plan is not None and role==self.fault_role else (self.system_fault_audit.plan(self.system_fault_candidate)
                         if role=="system" and self.system_fault_audit is not None else None),
                     reverse_flush=reverse_flush if role=="data" else False,seconds=130)
                 self.backends.append(backend)
@@ -226,13 +246,16 @@ class VM:
             if time.monotonic()>=self.deadline:raise TimeoutError("whole VM proof deadline")
             codes=[backend.poll() for backend in self.backends]
             expected=getattr(self,"fault_plan",None)
+            fault_role=getattr(self,"fault_role","data");fault_index=1 if fault_role=="system" else 0
+            transaction_system=getattr(self,"transaction_serial",None) is not None
+            panic_wait=False
             system_mode=getattr(self,"system_fault_audit",None) is not None
             system_drain=False
             if system_mode and len(self.backends)==3 and self.backends[1].records:
                 self.system_fault_hit=self.system_fault_audit.scan(self.backends[1].records,
                     self.system_fault_candidate,self.system_fault_selector)
             for index,(backend,code) in enumerate(zip(self.backends,codes)):
-                if index==0 and expected is not None:continue
+                if index==fault_index and expected is not None:continue
                 if code is not None or backend.problem is not None:
                     # Exact selected System EIO closes this transport. No other
                     # role, exit, missing receipt or premature stop is excused.
@@ -245,6 +268,10 @@ class VM:
                     raise ValueError("block backend stopped before deliberate whole-VM cut")
             if self.child is not None and self.child.poll() is not None:
                 raise ValueError("VM exited before deliberate cut")
+            if transaction_system and len(self.backends)==3 and self.backends[1].records:
+                selected=dict(zip(("operation","ordinal","effect","prefix"),expected))
+                self.transaction_fault_hit=self.fault_audit.scan(self.backends[1].records,
+                    selected,self.backends[1].records[0],role="system")
             # Drain/check VM channels before a planned signal can be delivered.
             for key,_ in self.selector.select(0.01):
                 try:raw=os.read(key.fileobj.fileno(),65536)
@@ -254,7 +281,7 @@ class VM:
                 if key.data=="serial":
                     self.serial.extend(raw)
                     if len(self.serial)>self.profile.SERIAL_LIMIT:raise ValueError("serial budget")
-                    if getattr(self,"system_fault_audit",None) is None and any(marker in self.serial for marker in
+                    if not transaction_system and getattr(self,"system_fault_audit",None) is None and any(marker in self.serial for marker in
                         (b"RAR-PANIC",b"UNEXPECTED-USER-FAULT",b"INVALID-USER-RETURN")):
                         raise ValueError("guest panic/isolation failure")
                 elif key.data=="qmp":
@@ -269,12 +296,16 @@ class VM:
                     if time.monotonic()>=self.system_fault_wait:raise TimeoutError("bounded exact System receipt/serial drain")
                     continue
                 self.system_fault_wait=None
+            if transaction_system:
+                state=self.transaction_serial.serial_status(bytes(self.serial),self.transaction_fault_hit)
+                panic_wait=state=="waiting" and self.transaction_fault_hit is None
             if expected is None:return
             if len(self.backends)!=3:raise ValueError("three fault campaign backends required")
-            data=self.backends[0]
+            data=self.backends[fault_index]
             selected=dict(zip(("operation","ordinal","effect","prefix"),expected))
-            observed=self.fault_audit.observe(data.records,selected,codes[0],data.problem,data.eof)
-            if observed=="waiting":
+            observed=(self.fault_audit.observe(data.records,selected,codes[fault_index],data.problem,data.eof,role="system")
+                if transaction_system else self.fault_audit.observe(data.records,selected,codes[0],data.problem,data.eof))
+            if observed=="waiting" or panic_wait:
                 if self.fault_deadline is None:self.fault_deadline=min(self.deadline,time.monotonic()+1)
                 if time.monotonic()>=self.fault_deadline:
                     raise TimeoutError("bounded planned-cut audit drain")
@@ -302,8 +333,9 @@ class VM:
                         raise TimeoutError("planned-fault partial QMP record")
                     continue
                 self.fault_qmp_deadline=None
-                self.fault_delivery=dict(code=codes[0],problem=data.problem,eof=data.eof)
+                self.fault_delivery=dict(code=codes[fault_index],problem=data.problem,eof=data.eof)
                 self.fault_delivered=True
+                if transaction_system:raise PlannedSystemFault(self.fault_notice)
                 raise PlannedDataFault(self.fault_notice)
             return
 
@@ -416,6 +448,10 @@ class VM:
             if command.get("execute") in ("cont","send-key","screendump") and answer["return"]!={}:
                 raise ValueError("QMP action did not succeed")
             self.qmp_pending=None
+            # A boot-time System fault may arrive immediately after CONT ACK.
+            # Mark the acknowledged running state before delivering that signal,
+            # so teardown still requires the full post-reap QMP drain.
+            if command=={"execute":"cont"}:self.started=True
             # Consume and validate the exact reply before delivering its fault;
             # callers must not observe a successful capture/action first.
             if getattr(self,"fault_plan",None) is not None:self.service()
@@ -453,7 +489,8 @@ class VM:
 
     def fault_receipt(self,error):
         """Only the exact one-shot signal owns a fault scenario's stop receipt."""
-        if (type(error) is not PlannedDataFault or self.fault_delivered is not True or
+        wanted=PlannedSystemFault if getattr(self,"fault_role","data")=="system" else PlannedDataFault
+        if (type(error) is not wanted or self.fault_delivered is not True or
             error.receipt!=self.fault_notice or self.fault_notice is None or
             self.fault_notice[:4]!=self.fault_plan or self.fault_delivery is None):
             raise ValueError("exact delivered planned-fault identity")
@@ -499,7 +536,11 @@ class VM:
                             failures.append("post-cut output failure")
                         else:
                             self.serial.extend(raw)
-                            if getattr(self,"system_fault_audit",None) is not None:
+                            if getattr(self,"transaction_serial",None) is not None:
+                                self.transaction_serial.serial_status(bytes(self.serial),self.transaction_fault_hit)
+                                if b"RAR-PANIC" in self.serial and self.transaction_fault_hit is None:
+                                    raise ValueError("panic without exact planned System fault")
+                            elif getattr(self,"system_fault_audit",None) is not None:
                                 self.system_fault_audit.serial_status(bytes(self.serial),self.system_fault_hit,True)
                             elif any(marker in self.serial for marker in
                                 (b"RAR-PANIC",b"UNEXPECTED-USER-FAULT",b"INVALID-USER-RETURN")):
@@ -921,6 +962,38 @@ def self_test():
     good.system_fault_audit=None
     assert not good.allowed({"execute":"query-status"})
 
+    # A System cut can occur at boot: acknowledged CONT must be marked running
+    # before delivering its signal, so teardown cannot skip the QMP EOF proof.
+    class Control:
+        def settimeout(self,value):pass
+        def setblocking(self,value):pass
+        def sendall(self,raw):assert b'"cont"' in raw
+    boot_cut=object.__new__(VM)
+    boot_cut.connection=Control();boot_cut.identity=0;boot_cut.qmp_pending=None
+    boot_cut.commands=[];boot_cut.started=False;boot_cut.fault_plan=("write",1,"before-cut",0)
+    boot_cut.allowed=lambda command:command=={"execute":"cont"}
+    boot_cut.receive=lambda:{"return":{},"id":1}
+    calls=[]
+    def service_cut():
+        calls.append(1)
+        if len(calls)==2:
+            assert boot_cut.started
+            raise PlannedSystemFault((1,))
+    boot_cut.service=service_cut
+    try:boot_cut.start()
+    except PlannedSystemFault:pass
+    else:raise AssertionError("boot System cut not delivered")
+    assert boot_cut.started and boot_cut.qmp_pending is None and len(calls)==2
+    receipt_vm=object.__new__(VM);receipt_vm.fault_role="system"
+    receipt_vm.fault_plan=("write",1,"before-cut",0)
+    receipt_vm.fault_notice=receipt_vm.fault_plan+(1,2,1024,512)
+    receipt_vm.fault_delivered=True
+    receipt_vm.fault_delivery={"code":20,"problem":"cut","eof":True}
+    assert receipt_vm.fault_receipt(PlannedSystemFault(receipt_vm.fault_notice))["offset"]==1024
+    reject(lambda:receipt_vm.fault_receipt(PlannedDataFault(receipt_vm.fault_notice)))
+    reject(lambda:receipt_vm.fault_receipt(PlannedSystemFault((1,))))
+    receipt_vm.fault_role="data"
+    reject(lambda:receipt_vm.fault_receipt(PlannedSystemFault(receipt_vm.fault_notice)))
     return rejected
 
 if __name__ == "__main__":

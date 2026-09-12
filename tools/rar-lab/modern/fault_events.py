@@ -9,11 +9,14 @@ def base():
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
     return module
 
-def validate(events,receipts,commands,drained,rtc_path,entry_event_count,fault_plan=None,fault_command_id=None):
+def validate(events,receipts,commands,drained,rtc_path,entry_event_count,fault_plan=None,fault_command_id=None,*,fault_role="data"):
+    if fault_role not in ("data","system-install","system-repair"):raise ValueError("fixed fault event role")
+    system=fault_role!="data";boot=fault_role=="system-repair"
+    if system and fault_plan is None:raise ValueError("System events require an exact observed fault")
     if fault_plan is not None:
         if (type(fault_plan) is not dict or set(fault_plan)!={"operation","ordinal","effect","prefix"} or
             fault_plan["operation"] not in ("write","flush") or
-            type(fault_plan["ordinal"]) is not int or not 1<=fault_plan["ordinal"]<=6 or
+            type(fault_plan["ordinal"]) is not int or not 1<=fault_plan["ordinal"]<=(8192 if system else 6) or
             fault_plan["effect"] not in ("before-cut","after-cut","error","torn-cut","short-error") or
             type(fault_plan["prefix"]) is not int or
             fault_plan["prefix"]!=(255 if fault_plan["effect"] in ("torn-cut","short-error") else 0)):
@@ -33,8 +36,15 @@ def validate(events,receipts,commands,drained,rtc_path,entry_event_count,fault_p
         if phase=="post-reap-stream" and index<entry_event_count:
             phase="fault-running-drain"
         allowed=("continue-reply","running-reply") if index==0 else ("running-reply","fault-running-drain")
-        if phase not in allowed or index>=entry_event_count:
-            raise ValueError("event not observed before owned VM kill")
+        if system:
+            # Receipt after reap is explicitly not an occurrence-time assertion.
+            # Exact System fault audit, source command plan and complete process
+            # joins are checked separately; only its single write-error event
+            # and the fixed boot RTC/RESUME records can cross this stream drain.
+            allowed=allowed+("fault-running-drain","post-reap-stream")
+            if boot:allowed=allowed+("continue-reply",)
+        if phase not in allowed or (not system and index>=entry_event_count):
+            raise ValueError("unplanned fault event receipt phase")
         fields={"event","timestamp"} if index==0 else {"event","timestamp","data"}
         if (type(event) is not dict or set(event)!=fields or
             (event["event"]!="RESUME" if index==0 else event["event"] not in ("RTC_CHANGE","BLOCK_IO_ERROR"))):
@@ -57,13 +67,14 @@ def validate(events,receipts,commands,drained,rtc_path,entry_event_count,fault_p
                 # QEMU IDE flush and write faults both use QAPI operation=write.
                 # Receipt must follow the submitted save, before deliberate kill.
                 last=commands[-1] if fault_command_id is None else commands[fault_command_id-1]
-                if (fault_plan is None or io_count!=1 or
-                    last.get("execute")!="send-key" or
-                    last.get("arguments")!={"keys":[{"type":"qcode","data":"ret"}],"hold-time":50} or
+                action=({k:v for k,v in last.items() if k!="id"}=={"execute":"cont"} if boot else
+                    last.get("execute")=="send-key" and
+                    last.get("arguments")=={"keys":[{"type":"qcode","data":"ret"}],"hold-time":50})
+                if (fault_plan is None or io_count!=1 or not action or
                     receipts[index]["request_id"] not in (None,last["id"]) or
                     type(data) is not dict or
                     set(data)!={"device","node-name","operation","action","reason"} or
-                    data["device"]!="" or data["node-name"]!="rar-data" or
+                    data["device"]!="" or data["node-name"]!=("rar-system" if system else "rar-data") or
                     data["operation"]!="write" or data["action"]!="report" or
                     type(data["reason"]) is not str or not 1<=len(data["reason"])<=256 or
                     not data["reason"].isascii() or any(ord(c)<32 or ord(c)==127 for c in data["reason"])):

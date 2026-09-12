@@ -37,20 +37,22 @@ def plan(value):
         raise Invalid("fixed bounded Data fault plan")
     return dict(value)
 
-def scan(records,expected,ready):
+def scan(records,expected,ready,*,role="data"):
     """Validate a live or final Data audit prefix and return one matched hit.
     None means no hit YET, never success or permission to ignore a stopped child.
     Once a sticky error is observed, further requests may have no events because
     the device rejects them before starting operations. No later event is valid.
     """
     expected=plan(expected)
+    if role not in ("data","system"):raise Invalid("fixed writable fault role")
+    capacity={"data":99328,"system":8388608}[role]
     if type(records) is not list or not 1<=len(records)<=16390:
         raise Invalid("bounded audit prefix")
     wanted={"type","kind","readonly","export_readonly","capacity","device","inode"}
     if (type(ready) is not dict or set(ready)!=wanted or ready["type"]!="ready" or
-        ready["kind"]!="data" or ready["readonly"] is not False or
+        ready["kind"]!=role or ready["readonly"] is not False or
         ready["export_readonly"] is not False or type(ready["capacity"]) is not int or
-        ready["capacity"]!=99328 or type(ready["device"]) is not int or ready["device"]<0 or
+        ready["capacity"]!=capacity or type(ready["device"]) is not int or ready["device"]<0 or
         type(ready["inode"]) is not int or ready["inode"]<=0 or
         canonical(records[0])!=canonical(ready)):
         raise Invalid("exact Data descriptor readiness")
@@ -68,7 +70,7 @@ def scan(records,expected,ready):
             if (op not in counts or type(offset) is not int or type(length) is not int or
                 (op=="flush" and (offset!=0 or length!=0)) or
                 (op!="flush" and (offset<0 or offset%512 or not 512<=length<=65536 or
-                    length%512 or offset+length>99328))):
+                    length%512 or offset+length>capacity))):
                 raise Invalid("request geometry")
             if hit is not None:
                 if cut:raise Invalid("request after cut")
@@ -126,19 +128,20 @@ def scan(records,expected,ready):
     if hit is None:return None
     return dict(hit,counts=dict(counts),terminal=terminal)
 
-def observe(records,expected,code,problem,eof):
+def observe(records,expected,code,problem,eof,*,role="data"):
     """Combine strict receipts with observed child status, not VM acceptance.
     'waiting' asks the VM controller to boundedly drain an already-cut child.
     None means no fault observed yet. Unexpected failures always raise.
     """
     expected=plan(expected)
+    if role not in ("data","system"):raise Invalid("fixed writable fault role")
     if (code is not None and type(code) is not int) or type(eof) is not bool:
         raise Invalid("typed child observation")
     cut=expected["effect"] in ("before-cut","after-cut","torn-cut")
     if not records:
         if code is not None or problem is not None or eof:raise Invalid("child ended without readiness")
         return None
-    hit=scan(records,expected,records[0])
+    hit=scan(records,expected,records[0],role=role)
     if cut:
         if code not in (None,20) or problem not in (None,"cut"):
             raise Invalid("unexpected Data child failure")
@@ -149,6 +152,19 @@ def observe(records,expected,code,problem,eof):
         if hit is not None or code==20:return "waiting"
         if problem is not None or eof:raise Invalid("unexpected Data stream closure")
         return None
+    if role=="system":
+        # A selected System EIO may close its NBD transport. Only the exact
+        # recorded fault + matching terminal/exit/EOF can explain that closure.
+        if code not in (None,21) or problem not in (None,"backend-failed"):
+            raise Invalid("unexpected System child failure")
+        if code==21 and problem!="backend-failed":
+            raise Invalid("System exit classification required")
+        if hit is not None and hit["terminal"] and code==21 and eof:
+            return hit
+        if code==21 and eof:raise Invalid("closed System stream lacks exact fault")
+        if code is not None or problem is not None or eof or (hit is not None and hit["terminal"]):
+            return "waiting"
+        return hit
     if code is not None or problem is not None or eof or (hit is not None and hit["terminal"]):
         raise Invalid("error observation requires a live healthy transport")
     return hit
@@ -213,6 +229,33 @@ def self_test():
     for value in (True,511,513):
         reject(lambda value=value:scan(prefix+[flush,dict(type="event",
             event=dict(e,persisted_prefix_bytes=value))],p,ready))
+    # Role stays explicit: System geometry is never accepted as a Data receipt.
+    system=dict(ready,kind="system",capacity=8388608)
+    p=dict(operation="write",ordinal=1,effect="before-cut",prefix=0)
+    req=dict(type="request",operation="write",offset=2098688,length=512)
+    event=dict(type="event",event=dict(operation="write",ordinal=1,offset=2098688,
+        length=512,payload_sha256="b"*64,status="cut-no-reply",injection=p))
+    terminal=dict(type="terminal",outcome="cut",fault_hit=True,failed=False)
+    rows=[system,req,event,terminal]
+    assert scan(rows,p,system,role="system")["terminal"]
+    assert observe(rows,p,20,"cut",True,role="system")["offset"]==2098688
+    reject(lambda:scan(rows,p,system))
+    reject(lambda:observe(rows,p,20,"cut",True))
+    for bad in ("boot","",None,True):
+        reject(lambda bad=bad:scan(rows,p,system,role=bad))
+        reject(lambda bad=bad:observe(rows,p,20,"cut",True,role=bad))
+    for offset in (-512,8388608,2098689):
+        wrong=[system,dict(req,offset=offset),event,terminal]
+        reject(lambda wrong=wrong:scan(wrong,p,system,role="system"))
+    error_plan=dict(operation="write",ordinal=1,effect="error",prefix=0)
+    error_event=dict(type="event",event=dict(event["event"],status="failed-no-success",injection=error_plan))
+    error_terminal=dict(type="terminal",outcome="failed",fault_hit=True,failed=True)
+    error_rows=[system,req,error_event]
+    assert observe(error_rows,error_plan,None,None,False,role="system")["plan"]==error_plan
+    assert observe(error_rows+[error_terminal],error_plan,21,"backend-failed",True,role="system")["terminal"]
+    for code,problem in ((20,"cut"),(0,None),(21,None),(1,"backend-failed")):
+        reject(lambda code=code,problem=problem:observe(error_rows+[error_terminal],error_plan,
+            code,problem,True,role="system"))
     return rejected
 
 if __name__=="__main__":
