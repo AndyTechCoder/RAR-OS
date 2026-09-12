@@ -89,3 +89,14 @@ downloads, build or execution. No new target dependency, guest networking,
 raw disk, device passthrough, Data-write authority or production key.
 Root is immutable laboratory boot input, not hardware immutability. Public
 fixture keys and rollbackable local journal state retain existing limitations.
+
+### Completed-read boundary clarification
+
+Inspection consumes opaque CompleteRead, which has no production constructor in
+this unactivated batch. Only a test-only mock can issue one, after successful
+exact-length input; partial or failed reads refuse a token. The future native
+bridge must supply the independently reviewed production issuer. The planner's
+matches_observations compares values only, not freshness; copied observations
+cannot establish fresh I/O. Native one-shot receipt/seal/incarnation and exclusive
+ownership remain required before any repair write. No claim of enforced fresh
+native reads or guest repair is made by these source APIs.

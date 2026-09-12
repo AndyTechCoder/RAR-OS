@@ -26,14 +26,31 @@ impl<'a> Factory<'a> {
     pub fn manifest_digest(&self)->[u8;32]{self.layer.manifest().digest()}
 }
 
-/// Evidence from a complete bounded content read; never construct from a transport
-/// failure or a partially filled buffer. No public constructor or caller boolean.
+/// A complete sealed read issued by the future reviewed native bridge.
+/// Deliberately has NO production constructor in this unactivated source batch.
+/// Its bytes cannot be supplied through a public or crate-private raw constructor.
+pub struct CompleteRead<'a>{bytes:&'a[u8]}
+#[cfg(test)]
+impl<'a> CompleteRead<'a>{
+    /// Mock of a bridge that issues a receipt only after successful exact I/O.
+    /// Test-only: this is not the production provenance or transport boundary.
+    pub(crate) fn test_completed(expected:usize,result:Result<&'a[u8],()>)->Result<Self,Reject>{
+        let bytes=result.map_err(|_|Reject::Identity)?;
+        if expected<512||expected>manifest::SIZE+manifest::MAX_PAYLOAD||bytes.len()!=expected{
+            return Err(Reject::Identity);
+        }
+        Ok(Self{bytes})
+    }
+}
+
+/// Evidence from an opaque complete read. No public constructor/caller boolean.
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 pub struct Inspection {
     current:Record, role:Role, referenced:LayerId,
     length:usize, observed_hash:[u8;32], usable:bool,
 }
-pub fn inspect(current:Record,role:Role,package:&[u8])->Result<Inspection,Reject> {
+pub(crate) fn inspect(current:Record,role:Role,read:CompleteRead<'_>)->Result<Inspection,Reject> {
+    let package=read.bytes;
     if package.len()>manifest::SIZE+manifest::MAX_PAYLOAD{return Err(Reject::Identity);}
     let referenced=match role {
         Role::Active=>current.active(),
@@ -52,7 +69,7 @@ pub fn inspect(current:Record,role:Role,package:&[u8])->Result<Inspection,Reject
 
 /// A plan does not authorize publication. Native use additionally requires
 /// exclusive System ownership, sealed-root binding, trial health and one-shot
-/// request/seal/incarnation correlation. Reobserve immediately before mutation.
+/// request/seal/incarnation correlation. Native freshness is not established here.
 pub struct Plan {
     current:Record, active:Inspection, prior:Option<Inspection>,
     factory_hash:[u8;32], next:Record,
@@ -78,9 +95,10 @@ impl Plan {
     }
     pub fn next(&self)->Record{self.next}
     pub fn factory_hash(&self)->[u8;32]{self.factory_hash}
-    /// Exact fresh observations must still match. This performs no I/O and cannot
-    /// establish native provenance/exclusion or consume the owner's transaction.
-    pub fn recheck(&self,current:Record,factory:&Factory<'_>,active:Inspection,prior:Option<Inspection>)
+    /// Equality check only, NOT evidence of freshness. The native bridge must
+    /// independently issue fresh one-shot reads before calling and consuming its
+    /// pending transaction. Copying old Inspection values cannot prove that gate.
+    pub fn matches_observations(&self,current:Record,factory:&Factory<'_>,active:Inspection,prior:Option<Inspection>)
         ->Result<(),Reject>
     {
         if current!=self.current||factory.package_hash!=self.factory_hash||

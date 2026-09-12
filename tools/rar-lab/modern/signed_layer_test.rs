@@ -624,9 +624,26 @@ mod system_media {
 
 mod repair_decisions {
     use super::*;
-    use repair::{Factory,Plan,Role,Reject,inspect};
+    use repair::{Factory,Plan,Role,Reject,CompleteRead,Inspection};
     use journal::{Record,Slot};
     fn package(index:usize)->Vec<u8>{let(r,p)=case(index);[r,p].concat()}
+    fn inspect(current:Record,role:Role,bytes:&[u8])->Result<Inspection,Reject>{
+        repair::inspect(current,role,CompleteRead::test_completed(bytes.len(),Ok(bytes))?)
+    }
+    #[test]fn partial_or_failed_transport_never_yields_an_inspection_input(){
+        let bytes=package(0);
+        assert!(CompleteRead::test_completed(bytes.len(),Err(())).is_err());
+        for length in [0usize,1,383,512,bytes.len()-1]{
+            assert!(CompleteRead::test_completed(bytes.len(),Ok(&bytes[..length])).is_err());
+        }
+        assert!(CompleteRead::test_completed(0,Ok(&[])).is_err());
+        assert!(CompleteRead::test_completed(bytes.len()-1,Ok(&bytes)).is_err());
+        let read=CompleteRead::test_completed(bytes.len(),Ok(&bytes)).unwrap();
+        // The opaque non-Copy input is consumed once by inspection.
+        let observation=repair::inspect(record(),Role::Active,read).unwrap();
+        let factory=root(&bytes);
+        assert!(matches!(Plan::new(record(),&factory,observation,None),Err(Reject::ActiveUsable)));
+    }
     fn record()->Record{let(r,p)=case(0);Record::factory(&manifest::verify(r,p,1).unwrap())}
     fn root<'a>(p:&'a[u8])->Factory<'a>{Factory::verify(p,sha256::sha256(p).unwrap()).unwrap()}
     #[test]fn repair_root_is_exact_authenticated_immutable_generation_one(){
@@ -659,8 +676,8 @@ mod repair_decisions {
         assert_eq!(next.highest_committed_generation(),1);assert!(next.previous().is_none());
         assert_eq!(Record::decode(&next.encode()),Ok(next));
         assert_eq!(journal::select([&old.encode(),&next.encode()]).unwrap().record(),next);
-        assert_eq!(plan.recheck(old,&f,damage,None),Ok(()));
-        assert_eq!(plan.recheck(old,&f,good,None),Err(Reject::Changed));
+        assert_eq!(plan.matches_observations(old,&f,damage,None),Ok(()));
+        assert_eq!(plan.matches_observations(old,&f,good,None),Err(Reject::Changed));
         let updated=old.install(&manifest::verify(case(2).0,case(2).1,2).unwrap()).unwrap();
         let active=inspect(updated,Role::Active,&bad).unwrap();
         let prior=inspect(updated,Role::Prior,&p).unwrap();
@@ -688,9 +705,9 @@ mod repair_decisions {
         let plan=Plan::new(updated,&f,active,Some(prior)).unwrap();
         assert_eq!(plan.factory_hash(),sha256::sha256(&p).unwrap());
         bad[513]^=1;let changed=inspect(updated,Role::Active,&bad).unwrap();
-        assert_eq!(plan.recheck(updated,&f,changed,Some(prior)),Err(Reject::Changed));
-        assert_eq!(plan.recheck(updated,&f,active,None),Err(Reject::Changed));
-        assert_eq!(plan.recheck(old,&f,active,Some(prior)),Err(Reject::Changed));
+        assert_eq!(plan.matches_observations(updated,&f,changed,Some(prior)),Err(Reject::Changed));
+        assert_eq!(plan.matches_observations(updated,&f,active,None),Err(Reject::Changed));
+        assert_eq!(plan.matches_observations(old,&f,active,Some(prior)),Err(Reject::Changed));
         // A signed package under the wrong journal identity is not usable.
         let mismatched=inspect(updated,Role::Active,&p).unwrap();
         assert!(Plan::new(updated,&f,mismatched,Some(prior)).is_ok());
