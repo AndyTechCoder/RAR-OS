@@ -830,3 +830,22 @@ high-water/stale installs and invalid inputs without I/O. Prior content rejectio
 leaves read-only inspection possible, but transport/uncertainty remains sticky.
 The native one-shot protocol and actual repair cloud scenarios are still absent;
 no M4.3 completion or repaired-guest result is claimed.
+
+
+### Exact-head source gate remediation
+
+Candidate33292ba12bf4f66dcae18aee26062b1243e07c8b passed Foundation, Platform and
+Desktop checks. Specifications34669503069 passed56 core tests, then correctly
+refused the production library's unused unactivated repair helpers under
+-Dwarnings. No warning suppression, public authority widening or test removal
+is permitted. The pure planner module, repair-only journal constructors and
+System inspection/repair storage mechanisms are now explicitly cfg(test) until
+the native coordinator is implemented. Existing kind3 decoding remains intact;
+native inspection syscall primitives remain as reviewed. Removing these gates
+requires wiring and reviewing the real caller, not declaring recovery complete.
+
+The same remediation adds repair-specific selector-race, partial-sink, stale
+cancelled-token, every-copy-read-failure and maximum-slot-boundary tests in both
+directions. Maximum-size storage fixtures are intentionally unauthenticated
+framing tests, never native factory inputs. All tests remain enabled in cloud
+test builds. These changes still require exact-head cloud validation.

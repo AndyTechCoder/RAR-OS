@@ -371,3 +371,17 @@ prior attempt, then must stop or use the separately reviewed Repair protocol.
 Tests cover exact record/kind/hash/generation binding, protected old bytes,
 stale-generation refusal and every observed preparation/publication I/O failure.
 These fake-media tests are not native interrupted-repair evidence.
+
+
+### Unactivated implementation build boundary
+
+Until the native one-shot Repair coordinator and CompleteRead issuer exist,
+the pure repair module in the core library, repair-only journal constructors,
+System InspectionRole/inspect_stored and prepare_repair/Purpose::Repair are
+compiled only under cfg(test). This is an explicit non-activation boundary, not
+a dead-code warning exemption. Test builds retain the full mechanism and fault
+suite. Kind3 journal decoding/succession recognition remains in normal builds.
+The already reviewed kernel inspection/root-hash syscalls are unchanged.
+Native integration must remove the corresponding gates together with real
+callers and their independent boundary tests; there is no production repair
+transaction at this checkpoint.

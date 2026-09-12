@@ -620,6 +620,99 @@ mod system_media {
         }));
     }
 
+
+    #[test]fn repair_copy_rejects_selector_races_partial_sink_and_stale_cancelled_tokens(){
+        let factory=package(0);let hash=sha256::sha256(&factory).unwrap();
+        for position in [0usize,1,3]{
+            let(media,mut volume,before)=installed_volume();
+            let next=before.repair_factory(&manifest::verify(case(0).0,case(0).1,1).unwrap()).unwrap();
+            let prepared=volume.prepare_repair(&factory,hash,next).unwrap();
+            media.0.borrow_mut().ops.clear();
+            if position==0{media.0.borrow_mut().blocks.insert(1,[0;512]);}
+            let mut calls=0;
+            assert!(volume.copy_prepared(&prepared,|_,_,_|{
+                calls+=1;
+                if calls==position{media.0.borrow_mut().blocks.insert(1,[0;512]);}
+                Ok(())
+            }).is_err());
+            assert!(volume.is_readonly());if position==0{assert_eq!(calls,0);}
+            assert_eq!(volume.publish(&prepared,next),Err(Reject::ReadOnly));
+            assert!(!media.0.borrow().ops.iter().any(|op|matches!(op,Op::Write(_)|Op::Flush)));
+        }
+        let(media,mut volume,before)=installed_volume();
+        let next=before.repair_factory(&manifest::verify(case(0).0,case(0).1,1).unwrap()).unwrap();
+        let stale=volume.prepare_repair(&factory,hash,next).unwrap();
+        volume.cancel(&stale).unwrap();
+        let current=volume.prepare_repair(&factory,hash,next).unwrap();
+        let count=media.0.borrow().ops.len();
+        assert_eq!(volume.copy_prepared(&stale,|_,_,_|panic!("stale sink")),Err(Reject::Policy));
+        assert_eq!(volume.publish(&stale,next),Err(Reject::Policy));
+        assert_eq!(media.0.borrow().ops.len(),count);assert!(!volume.is_readonly());
+        let mut prefix=0;
+        assert_eq!(volume.copy_prepared(&current,|_,_,bytes|{
+            prefix+=bytes.len();Err(())
+        }),Err(Reject::Sink));
+        assert_eq!(prefix,512);assert!(volume.is_readonly());
+        let count=media.0.borrow().ops.len();
+        assert_eq!(volume.publish(&current,next),Err(Reject::ReadOnly));
+        assert_eq!(volume.cancel(&current),Err(Reject::ReadOnly));
+        assert_eq!(media.0.borrow().ops.len(),count);
+        // This proves source ownership only, not native staging abort/cleanup.
+    }
+    #[test]fn repair_copy_each_read_failure_is_terminal_and_does_not_publish(){
+        let factory=package(0);let hash=sha256::sha256(&factory).unwrap();
+        let(media,mut volume,before)=installed_volume();
+        let next=before.repair_factory(&manifest::verify(case(0).0,case(0).1,1).unwrap()).unwrap();
+        let prepared=volume.prepare_repair(&factory,hash,next).unwrap();
+        media.0.borrow_mut().ops.clear();
+        volume.copy_prepared(&prepared,|_,_,_|Ok(())).unwrap();
+        let calls=media.0.borrow().ops.len();
+        for cut in 1..=calls{
+            let(media,mut volume,before)=installed_volume();
+            let prepared=volume.prepare_repair(&factory,hash,next).unwrap();
+            let protected=media.0.borrow().blocks.clone();
+            {let mut d=media.0.borrow_mut();d.ops.clear();d.fail=Some(cut);}
+            assert!(volume.copy_prepared(&prepared,|_,_,_|Ok(())).is_err());
+            assert!(volume.is_readonly());assert_eq!(volume.record(),before);
+            let count=media.0.borrow().ops.len();
+            assert_eq!(volume.publish(&prepared,next),Err(Reject::ReadOnly));
+            assert_eq!(media.0.borrow().ops.len(),count);
+            assert_eq!(media.0.borrow().blocks,protected);
+        }
+    }
+    #[test]fn repair_maximum_storage_shape_is_confined_in_both_slot_directions(){
+        // Deliberately synthetic framing: storage has no signature authority.
+        // These bytes must NEVER be used as an authenticated native factory.
+        let mut data=vec![0x5a;MAX_PACKAGE];data[..384].copy_from_slice(case(0).0);
+        data[56..60].copy_from_slice(&2_097_152u32.to_le_bytes());
+        let hash=sha256::sha256(&data).unwrap();
+        for installed in [false,true]{
+            let(media,mut volume,before)=if installed{installed_volume()}else{
+                let(media,before,_)=seed();let volume=mount(media.clone());(media,volume,before)
+            };
+            let next=before.repair_factory(&manifest::verify(case(0).0,case(0).1,1).unwrap()).unwrap();
+            let target=slot_start(next.active().slot());
+            let limit=target+system_volume::SLOT_SECTORS;
+            media.0.borrow_mut().blocks.insert(system_volume::FIRST_RESERVED,[0xa5;512]);
+            let protected=media.0.borrow().blocks.clone();media.0.borrow_mut().ops.clear();
+            let prepared=volume.prepare_repair(&data,hash,next).unwrap();
+            let mut copied=0;
+            volume.copy_prepared(&prepared,|total,offset,bytes|{
+                assert_eq!(total,MAX_PACKAGE);assert_eq!(offset,copied);
+                assert_eq!(bytes,&data[offset..offset+bytes.len()]);copied+=bytes.len();Ok(())
+            }).unwrap();
+            assert_eq!(copied,MAX_PACKAGE);assert_eq!(volume.record(),before);
+            for op in &media.0.borrow().ops{match op{
+                Op::Write(sector)=>assert!((target..limit).contains(sector)),
+                Op::Read(sector)=>assert!(*sector<2||(target..limit).contains(sector)),
+                Op::Flush=>{}
+            }}
+            for(sector,bytes)in protected{
+                if !(target..limit).contains(&sector){assert_eq!(media.0.borrow().blocks.get(&sector),Some(&bytes));}
+            }
+        }
+    }
+
     #[test]fn damaged_prior_content_leaves_inspection_but_not_an_implicit_retry(){
         for offset in [0usize,72]{
             let (media,mut volume,before)=installed_volume();

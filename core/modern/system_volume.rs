@@ -9,6 +9,8 @@ pub const MAX_PACKAGE: usize = manifest::SIZE + manifest::MAX_PAYLOAD;
 pub const FIRST_RESERVED: u32 = 8196;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Reject { Capacity, Buffer, Framing, Io, Changed, ReadOnly, Policy, Indeterminate, Sink }
+// Unactivated recovery mechanisms remain test-only until native integration.
+#[cfg(test)]
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 pub(crate) enum InspectionRole {Active,Prior}
 /// Implemented only over the System service's kernel-bound device. Capacity and
@@ -54,7 +56,7 @@ pub struct Identity {
 }
 /// Private fields and no Clone: only this volume can produce a prepared state.
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
-enum Purpose{Install,Fallback,Boot,Repair(Record)}
+enum Purpose{Install,Fallback,Boot,#[cfg(test)] Repair(Record)}
 pub struct Prepared {before:Selection,identity:Identity,purpose:Purpose}
 impl Prepared {pub fn identity(&self)->Identity{self.identity}}
 pub struct Volume<I:Io>{io:I,selected:Selection,locked:bool,next:Option<u64>,pending:Option<(Identity,Purpose)>}
@@ -103,6 +105,7 @@ impl<I:Io> Volume<I> {
     /// This has no native caller until the reviewed inspection protocol exists.
     /// The sink must discard its entire prefix on any error. No CompleteRead
     /// or executable seal is issued by this storage primitive.
+    #[cfg(test)]
     pub(crate) fn inspect_stored<F>(&mut self,role:InspectionRole,mut sink:F)
         ->Result<(usize,[u8;32]),Reject>
         where F:FnMut(usize,usize,&[u8])->Result<(),()>
@@ -276,6 +279,7 @@ impl<I:Io> Volume<I> {
     /// independently bind the immutable factory root and authorize exact next.
     /// This method alone is NOT damage, signing, health or execution authority.
     /// No native caller exists until that reviewed protocol is integrated.
+    #[cfg(test)]
     pub(crate) fn prepare_repair(&mut self,package:&[u8],expected_hash:[u8;32],next:Record)
         ->Result<Prepared,Reject>
     {
@@ -326,6 +330,7 @@ impl<I:Io> Volume<I> {
         self.open()?;
         self.matches(prepared)?;
         if prepared.purpose==Purpose::Boot{return Err(Reject::Policy);}
+        #[cfg(test)]
         if let Purpose::Repair(authorized)=prepared.purpose{if next!=authorized{return Err(Reject::Policy);}}
         if prepared.purpose==Purpose::Fallback&&self.record().fallback().map_err(|_|Reject::Policy)?!=next{
             return Err(Reject::Policy);
