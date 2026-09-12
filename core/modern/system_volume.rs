@@ -9,6 +9,8 @@ pub const MAX_PACKAGE: usize = manifest::SIZE + manifest::MAX_PAYLOAD;
 pub const FIRST_RESERVED: u32 = 8196;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Reject { Capacity, Buffer, Framing, Io, Changed, ReadOnly, Policy, Indeterminate, Sink }
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub(crate) enum InspectionRole {Active,Prior}
 /// Implemented only over the System service's kernel-bound device. Capacity and
 /// device identity are independently enforced by the kernel/PIO owner.
 pub trait Io {
@@ -93,6 +95,43 @@ impl<I:Io> Volume<I> {
         self.open()?;
         let result=self.stream_inner(slot,&mut sink);
         if matches!(result,Err(Reject::Io|Reject::Changed)){self.locked=true;}
+        result
+    }
+    /// Read-only recovery inspection, not a prepared update or damage proof.
+    /// A malformed header yields its complete first sector; otherwise stream
+    /// every storage sector, including final padding for Manager validation.
+    /// This has no native caller until the reviewed inspection protocol exists.
+    /// The sink must discard its entire prefix on any error. No CompleteRead
+    /// or executable seal is issued by this storage primitive.
+    pub(crate) fn inspect_stored<F>(&mut self,role:InspectionRole,mut sink:F)
+        ->Result<(usize,[u8;32]),Reject>
+        where F:FnMut(usize,usize,&[u8])->Result<(),()>
+    {
+        self.open()?;
+        if self.pending.is_some(){return Err(Reject::Policy);}
+        let layer=match role{
+            InspectionRole::Active=>self.record().active(),
+            InspectionRole::Prior=>self.record().previous().ok_or(Reject::Policy)?,
+        };
+        let result=(||{
+            self.observe()?;
+            let start=slot_start(layer.slot());
+            let first=self.io.read(start).map_err(|_|Reject::Io)?;
+            let length=package_length(&first).map(|n|sectors(n)*512).unwrap_or(512);
+            let mut hash=Sha256::new();
+            for index in 0..length/512{
+                let sector=if index==0{first}else{
+                    self.io.read(start+index as u32).map_err(|_|Reject::Io)?
+                };
+                hash.update(&sector).map_err(|_|Reject::Framing)?;
+                sink(length,index*512,&sector).map_err(|_|Reject::Sink)?;
+            }
+            self.observe()?;
+            Ok((length,hash.finalize()))
+        })();
+        // A partial sink or uncertain observation is never content-invalid
+        // evidence and cannot be retried through this same owner.
+        if result.is_err(){self.locked=true;}
         result
     }
     /// Only this transaction-bound route may feed an install/fallback staging
@@ -325,6 +364,68 @@ mod tests {
         let stale=Prepared{before:last.before,identity:Identity{transaction:1,..last.identity},purpose:Purpose::Install};
         assert_eq!(volume.copy_prepared(&stale,|_,_,_|panic!("stale sink")),Err(Reject::Policy));
         assert_eq!(volume.io.calls,calls);
+    }
+
+    #[test]fn recovery_inspection_reads_full_storage_without_write_authority(){
+        use std::collections::BTreeMap;
+        struct Media{blocks:BTreeMap<u32,[u8;512]>,calls:usize,fail:Option<usize>}
+        impl Io for Media{
+            fn read(&mut self,s:u32)->Result<[u8;512],()>{
+                self.calls+=1;if self.fail==Some(self.calls){return Err(());}
+                Ok(*self.blocks.get(&s).unwrap_or(&[0;512]))
+            }
+            fn write(&mut self,_:u32,_:&[u8;512])->Result<(),()>{panic!("inspection wrote media")}
+            fn flush(&mut self)->Result<(),()>{panic!("inspection flushed media")}
+        }
+        fn media()->Media{
+            let mut record=[0;512];record[..8].copy_from_slice(b"RARSYS00");
+            record[10..12].copy_from_slice(&512u16.to_le_bytes());record[14]=255;
+            for offset in [16usize,24,32,40]{record[offset..offset+8].copy_from_slice(&1u64.to_le_bytes());}
+            record[64..96].fill(1);let hash=sha256(&record[..480]).unwrap();record[480..].copy_from_slice(&hash);
+            let mut blocks=BTreeMap::new();blocks.insert(0,record);
+            Media{blocks,calls:0,fail:None}
+        }
+        fn header(payload:u32)->[u8;512]{
+            let mut p=[0;512];p[..8].copy_from_slice(b"RARMODL0");
+            p[10..12].copy_from_slice(&384u16.to_le_bytes());p[12]=1;
+            p[16..40].copy_from_slice(b"rar.alpha.ed25519.v0\0\0\0\0");
+            p[56..60].copy_from_slice(&payload.to_le_bytes());p[72]=1;p[288..320].fill(1);p
+        }
+        for payload in [None,Some(512),Some(manifest::MAX_PAYLOAD as u32)]{
+            let mut m=media();if let Some(n)=payload{m.blocks.insert(2,header(n));}
+            // Nonzero tail is returned intact for independent damage checking.
+            m.blocks.insert(3,[0xa5;512]);
+            let mut v=Volume::mount(m,SECTORS).unwrap();let before=v.record();
+            let expected=payload.map(|n|sectors(manifest::SIZE+n as usize)*512).unwrap_or(512);
+            let mut bytes=vec![];
+            let (length,hash)=v.inspect_stored(InspectionRole::Active,|total,offset,sector|{
+                assert_eq!(total,expected);assert_eq!(offset,bytes.len());assert_eq!(sector.len(),512);
+                bytes.extend_from_slice(sector);Ok(())
+            }).unwrap();
+            assert_eq!(length,expected);assert_eq!(bytes.len(),expected);
+            assert_eq!(hash,sha256(&bytes).unwrap());assert_eq!(v.record(),before);
+            assert_eq!(v.next,Some(1));assert!(v.pending.is_none());assert!(!v.is_readonly());
+            if expected>512{assert_eq!(&bytes[512..1024],&[0xa5;512]);}
+            let calls=v.io.calls;
+            assert_eq!(v.inspect_stored(InspectionRole::Prior,|_,_,_|panic!("absent prior read")),Err(Reject::Policy));
+            assert_eq!(v.io.calls,calls);
+        }
+        // Mount uses calls1/2; inspection then has exactly six reads: selectors,
+        // two payload sectors and the final selectors. Every failure is sticky.
+        for cut in 3..=8{
+            let mut m=media();m.blocks.insert(2,header(512));m.fail=Some(cut);
+            let mut v=Volume::mount(m,SECTORS).unwrap();
+            assert_eq!(v.inspect_stored(InspectionRole::Active,|_,_,_|Ok(())),Err(Reject::Io));
+            assert!(v.is_readonly());let calls=v.io.calls;
+            assert_eq!(v.inspect_stored(InspectionRole::Active,|_,_,_|panic!("retried")),Err(Reject::ReadOnly));
+            assert_eq!(v.io.calls,calls);assert!(v.pending.is_none());
+        }
+        let mut m=media();m.blocks.insert(2,header(512));
+        let mut v=Volume::mount(m,SECTORS).unwrap();
+        assert_eq!(v.inspect_stored(InspectionRole::Active,|_,offset,_|{
+            if offset==512{Err(())}else{Ok(())}
+        }),Err(Reject::Sink));
+        assert!(v.is_readonly());assert!(v.pending.is_none());
     }
 
 }
