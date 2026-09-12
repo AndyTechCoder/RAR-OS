@@ -1,3 +1,26 @@
+# M4.3 repair core — source work in progress, 2026-09-12
+
+M4.1 and M4.2 remain accepted at their exact development snapshots below.
+M4.3 is not complete. The first coherent repair source batch adds an opaque
+factory/content inspection/repair planner, explicit kind3 System selector
+succession, and signed-fixture plus selector failure/tear tests under ADR0036.
+It introduces no Data authority, native repair mode, new syscall, guest profile
+or runtime claim. Independent source review and cloud checks are pending.
+
+The planner refuses an intact active or named prior, binds exact record/role/
+observed content, preserves high-water, and requires the exact authenticated
+immutable factory generation1. Its complete sealed-read and trusted root-hash
+provenance obligations remain native integration work, not established by a
+caller-provided slice or source test. Old-reader handling is documented as an
+unsupported downgrade, never an automatic migration or format.
+
+Next: finish focused review/cloud source validation, integrate the immutable
+root identity and sealed inspection/System-only repair transaction, then prove
+fresh-VM repair and interrupted repair. Complete the full fault/release gates.
+No local/SSD mutation, deletion, download, build or execution is authorized.
+
+---
+
 # Accepted M4.2 development snapshot — 2026-09-12
 
 M4.2 signed live updates is complete at source

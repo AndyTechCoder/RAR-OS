@@ -300,3 +300,34 @@ copy identity, sink-prefix failure refusing publication, exact-prior fallback,
 all fallback preparation/publication I/O call failures, and maximum2097536-byte
 package preparation/readback with reserved-tail preservation. Actual native
 health, sink abort, process replacement and crash-cut tests remain pending.
+
+## M4.3 additive private v0 repair amendment
+
+ADR0036 specifies the owner-delegated M4.3 direction and alternatives. Add kind3
+Repair without reinterpreting existing kind0/1/2 bytes. Repair increments
+sequence, binds exact parent sequence/hash, uses the opposite slot, exact
+immutable authenticated factory generation1, no prior, and unchanged high-water.
+Factory repair when highest==1 is valid. Root provenance and content damage are
+verified separately by the opaque core planner; selector checksums are not that
+authority. Repair is not an Install downgrade or ordinary prior fallback.
+
+The first implementation is pure source logic, not activated native repair:
+core/modern/repair.rs provides crate-private trusted factory injection and plan
+creation, bounded complete-content inspections, exact reobservation checks and
+a planned Record. It neither allocates a large package buffer nor receives a
+Data handle. Runtime use must independently bind immutable boot hash, sealed
+reads, request/seal/incarnation, exclusive System ownership, readback and health.
+Read errors/partial transport buffers are never eligible inspection inputs.
+
+Compatibility: new readers preserve old record decoding and do not auto-migrate.
+Legacy readers reject kind3; if its protected predecessor remains valid, they
+can select that historical record provisionally, then must authenticate its
+referenced package before execution. That may halt on damaged content; it is
+not repair support or prevention of old-software/disk rollback. Matched new
+boot/controller inputs are required for repaired laboratory fixtures. Unknown
+or ambiguous data remains unavailable without any automatic formatting/export/
+migration writes. DataVault bytes are unchanged; stable public formats remain
+outside this private experimental amendment.
+
+Earlier statements that no repair planning exists are historical. Native repair,
+interruption/reboot proof and M4.3 release acceptance remain pending.

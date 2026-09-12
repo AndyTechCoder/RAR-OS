@@ -5,6 +5,7 @@
 #[path = "../../../core/crypto/ed25519.rs"] mod ed25519;
 #[path = "../../../core/modern/manifest.rs"] mod manifest;
 #[path = "../../../core/modern/journal.rs"] mod journal;
+#[path = "../../../core/modern/repair.rs"] mod repair;
 #[path = "../../../core/modern/system_volume.rs"] mod system_volume;
 #[path = "../../../core/modern/update_wire.rs"] mod update_wire;
 #[path = "../../../core/modern/update_system.rs"] mod update_system;
@@ -619,4 +620,80 @@ mod system_media {
         }));
     }
 
+}
+
+mod repair_decisions {
+    use super::*;
+    use repair::{Factory,Plan,Role,Reject,inspect};
+    use journal::{Record,Slot};
+    fn package(index:usize)->Vec<u8>{let(r,p)=case(index);[r,p].concat()}
+    fn record()->Record{let(r,p)=case(0);Record::factory(&manifest::verify(r,p,1).unwrap())}
+    fn root<'a>(p:&'a[u8])->Factory<'a>{Factory::verify(p,sha256::sha256(p).unwrap()).unwrap()}
+    #[test]fn repair_root_is_exact_authenticated_immutable_generation_one(){
+        let p=package(0);let hash=sha256::sha256(&p).unwrap();
+        let f=Factory::verify(&p,hash).unwrap();
+        assert_eq!(f.package_hash(),hash);assert_eq!(f.manifest_digest(),record().active().digest());
+        assert!(Factory::verify(&p,[0;32]).is_err());
+        let mut wrong=hash;wrong[0]^=1;assert!(Factory::verify(&p,wrong).is_err());
+        let mut damaged=p.clone();damaged[512]^=1;
+        assert!(Factory::verify(&damaged,hash).is_err());
+        // Recomputing the expected hash cannot bypass signature/payload checks.
+        assert!(Factory::verify(&damaged,sha256::sha256(&damaged).unwrap()).is_err());
+        for index in [1,2,3]{
+            let p=package(index);assert!(Factory::verify(&p,sha256::sha256(&p).unwrap()).is_err());
+        }
+        for length in [0usize,383,384,895,p.len()-1]{
+            let bytes=&p[..length];assert!(Factory::verify(bytes,sha256::sha256(bytes).unwrap()).is_err());
+        }
+    }
+    #[test]fn repair_requires_damaged_active_and_no_verified_prior(){
+        let p=package(0);let f=root(&p);let old=record();
+        let good=inspect(old,Role::Active,&p).unwrap();
+        assert!(matches!(Plan::new(old,&f,good,None),Err(Reject::ActiveUsable)));
+        assert_eq!(inspect(old,Role::Prior,&p),Err(Reject::MissingPrior));
+        let mut bad=p.clone();bad[512]^=1;
+        let damage=inspect(old,Role::Active,&bad).unwrap();
+        let plan=Plan::new(old,&f,damage,None).unwrap();let next=plan.next();
+        assert_eq!(next.sequence(),2);assert_eq!(next.active().slot(),Slot::B);
+        assert_eq!(next.active().generation(),1);assert_eq!(next.active().digest(),old.active().digest());
+        assert_eq!(next.highest_committed_generation(),1);assert!(next.previous().is_none());
+        assert_eq!(Record::decode(&next.encode()),Ok(next));
+        assert_eq!(journal::select([&old.encode(),&next.encode()]).unwrap().record(),next);
+        assert_eq!(plan.recheck(old,&f,damage,None),Ok(()));
+        assert_eq!(plan.recheck(old,&f,good,None),Err(Reject::Changed));
+        let updated=old.install(&manifest::verify(case(2).0,case(2).1,2).unwrap()).unwrap();
+        let active=inspect(updated,Role::Active,&bad).unwrap();
+        let prior=inspect(updated,Role::Prior,&p).unwrap();
+        assert!(matches!(Plan::new(updated,&f,active,None),Err(Reject::MissingPrior)));
+        assert!(matches!(Plan::new(updated,&f,active,Some(prior)),Err(Reject::PriorUsable)));
+        let prior_bad=inspect(updated,Role::Prior,&bad).unwrap();
+        let plan=Plan::new(updated,&f,active,Some(prior_bad)).unwrap();let repaired=plan.next();
+        assert_eq!(repaired.active().slot(),Slot::A);
+        assert_eq!(repaired.highest_committed_generation(),2);
+        assert_eq!(repaired.minimum_install_generation(),Ok(3));
+        assert!(repaired.install(&manifest::verify(case(2).0,case(2).1,2).unwrap()).is_err());
+        assert!(repaired.fallback().is_err());
+        assert_eq!(journal::select([&repaired.encode(),&updated.encode()]).unwrap().record(),repaired);
+    }
+    #[test]fn repair_plan_refuses_mixed_records_roles_and_changed_observations(){
+        let p=package(0);let f=root(&p);let old=record();
+        let updated=old.install(&manifest::verify(case(2).0,case(2).1,2).unwrap()).unwrap();
+        let mut bad=p.clone();bad[512]^=1;
+        let active=inspect(updated,Role::Active,&bad).unwrap();
+        let prior=inspect(updated,Role::Prior,&bad).unwrap();
+        let stale=inspect(old,Role::Active,&bad).unwrap();
+        assert!(matches!(Plan::new(updated,&f,stale,Some(prior)),Err(Reject::Identity)));
+        assert!(matches!(Plan::new(updated,&f,prior,Some(active)),Err(Reject::Identity)));
+        assert!(matches!(Plan::new(old,&f,stale,Some(prior)),Err(Reject::MissingPrior)));
+        let plan=Plan::new(updated,&f,active,Some(prior)).unwrap();
+        assert_eq!(plan.factory_hash(),sha256::sha256(&p).unwrap());
+        bad[513]^=1;let changed=inspect(updated,Role::Active,&bad).unwrap();
+        assert_eq!(plan.recheck(updated,&f,changed,Some(prior)),Err(Reject::Changed));
+        assert_eq!(plan.recheck(updated,&f,active,None),Err(Reject::Changed));
+        assert_eq!(plan.recheck(old,&f,active,Some(prior)),Err(Reject::Changed));
+        // A signed package under the wrong journal identity is not usable.
+        let mismatched=inspect(updated,Role::Active,&p).unwrap();
+        assert!(Plan::new(updated,&f,mismatched,Some(prior)).is_ok());
+        assert!(inspect(old,Role::Active,&vec![0;system_volume::MAX_PACKAGE+1]).is_err());
+    }
 }

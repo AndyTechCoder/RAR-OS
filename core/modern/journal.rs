@@ -26,11 +26,11 @@ impl LayerId {
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Kind { Factory, Install, Fallback }
+enum Kind { Factory, Install, Fallback, Repair }
 impl Kind {
-    fn byte(self) -> u8 { match self { Self::Factory => 0, Self::Install => 1, Self::Fallback => 2 } }
+    fn byte(self) -> u8 { match self { Self::Factory => 0, Self::Install => 1, Self::Fallback => 2, Self::Repair => 3 } }
     fn parse(v: u8) -> Result<Self, Reject> {
-        match v { 0 => Ok(Self::Factory), 1 => Ok(Self::Install), 2 => Ok(Self::Fallback), _ => Err(Reject::State) }
+        match v { 0 => Ok(Self::Factory), 1 => Ok(Self::Install), 2 => Ok(Self::Fallback), 3 => Ok(Self::Repair), _ => Err(Reject::State) }
     }
 }
 
@@ -93,6 +93,21 @@ impl Record {
         // Never lower the install high-water mark when executing authorized fallback.
         Ok(n)
     }
+    /// Pure repair planning only. The repair module separately binds the exact
+    /// immutable factory and damaged content. No disk/lifecycle authority follows.
+    pub(crate) fn repair_factory(&self, factory:&VerifiedLayer<'_>)->Result<Self,Reject> {
+        self.repair_id(LayerId::from_verified(self.active.slot.other(),factory))
+    }
+    fn repair_id(&self,factory:LayerId)->Result<Self,Reject> {
+        if !factory.valid()||factory.generation!=1||factory.slot!=self.active.slot.other(){
+            return Err(Reject::State);
+        }
+        let mut n=self.next()?;
+        n.kind=Kind::Repair;n.active=factory;n.previous=None;
+        // Preserve the high-water even when the immutable root is generation1.
+        if !n.valid(){return Err(Reject::State);}
+        Ok(n)
+    }
     fn valid(&self) -> bool {
         if self.sequence == 0 || !self.active.valid() || self.highest < self.active.generation { return false; }
         if let Some(p) = self.previous {
@@ -108,6 +123,9 @@ impl Record {
             Kind::Fallback => self.sequence >= 3 && self.previous.is_none() &&
                 self.parent_sequence == self.sequence-1 && self.parent_digest != [0;32] &&
                 self.highest > self.active.generation,
+            Kind::Repair => self.sequence >= 2 && self.previous.is_none() &&
+                self.active.generation == 1 && self.parent_sequence == self.sequence-1 &&
+                self.parent_digest != [0;32],
         }
     }
     pub fn encode(&self) -> [u8;SIZE] {
@@ -157,6 +175,8 @@ impl Record {
                 self.highest==self.active.generation,
             Kind::Fallback=>older.previous==Some(self.active) && self.previous.is_none() &&
                 self.highest==older.highest,
+            Kind::Repair=>self.active.slot==older.active.slot.other() &&
+                self.active.generation==1 && self.previous.is_none() && self.highest==older.highest,
         }
     }
 }
@@ -462,6 +482,79 @@ mod tests {
         assert_eq!(recovered.record(),fallback);
         assert_eq!(recovered.record().highest_committed_generation(),b.highest);
         assert_eq!(recovered.record().active(),a.active());
+    }
+
+    #[test]fn repair_preserves_highwater_and_has_strict_root_shape(){
+        let (a,b,_)=chain();
+        for old in [a,b,b.fallback().unwrap()] {
+            let repaired=old.repair_id(id(old.active.slot.other(),1)).unwrap();
+            assert_eq!(repaired.highest,old.highest);
+            assert_eq!(repaired.previous,None);
+            assert_eq!(Record::decode(&repaired.encode()),Ok(repaired));
+            assert_eq!(select([&old.encode(),&repaired.encode()]).unwrap().record(),repaired);
+            assert_eq!(repaired.minimum_install_generation(),old.minimum_install_generation());
+            assert_eq!(old.repair_id(id(old.active.slot,1)),Err(Reject::State));
+            assert_eq!(old.repair_id(id(old.active.slot.other(),2)),Err(Reject::State));
+            let mut wrong=repaired;wrong.highest+=1;
+            assert_eq!(select([&old.encode(),&wrong.encode()]),Err(Reject::Ambiguous));
+            let mut wrong=repaired;wrong.active.slot=old.active.slot;
+            assert_eq!(select([&old.encode(),&wrong.encode()]),Err(Reject::Ambiguous));
+            let mut exhausted=old;exhausted.sequence=u64::MAX;
+            assert_eq!(exhausted.repair_id(id(old.active.slot.other(),1)),Err(Reject::Exhausted));
+        }
+    }
+    #[test]fn repair_publication_all_io_boundaries_and_513_tears_keep_complete_record(){
+        let (a,b,_)=chain();let fallback=b.fallback().unwrap();
+        for (sectors,old) in [
+            ([a.encode(),[0;SIZE]],a),
+            ([a.encode(),b.encode()],b),
+            ([fallback.encode(),b.encode()],fallback),
+        ] {
+            let next=old.repair_id(id(old.active.slot.other(),1)).unwrap();
+            for at in 1..=6 {for after in [false,true] {
+                publication_fault(sectors,old,next,at,255,after);
+            }}
+            for tear in 0..=SIZE{publication_fault(sectors,old,next,3,tear,false);}
+            let mut journal=Journal::mount(Media::new(sectors)).unwrap();
+            journal.commit(next).unwrap();
+            let rebooted=Journal::mount(journal.into_io().reboot()).unwrap();
+            assert_eq!(rebooted.record(),next);
+            assert_eq!(rebooted.record().highest_committed_generation(),old.highest);
+        }
+    }
+
+    #[test]fn repair_canonical_bytes_and_illegal_semantics_are_rejected(){
+        let old=base().install_id(id(Slot::B,2)).unwrap();
+        let next=old.repair_id(id(Slot::A,1)).unwrap();
+        let encoded=next.encode();
+        for p in 0..SIZE{
+            let mut bad=encoded;bad[p]^=1;
+            assert!(Record::decode(&bad).is_err(),"repair byte {p}");
+            assert!(Record::decode(&encoded[..p]).is_err());
+        }
+        assert!(Record::decode(&[0;SIZE+1]).is_err());
+        for offset in [13usize,16,24,56,128] {
+            let mut bad=encoded;bad[offset]^=1;
+            let checksum=hash(&bad[..480]);bad[480..].copy_from_slice(&checksum);
+            if let Ok(selected)=select([&old.encode(),&bad]){
+                assert_eq!(selected.record(),old,"illegal repair field {offset}");
+            }
+        }
+        for offset in [12usize,14,32,40,48,64,96] {
+            let mut bad=encoded;
+            match offset{12=>bad[12]=4,14=>bad[14]=1,64=>bad[64..96].fill(0),_=>bad[offset]^=1}
+            let checksum=hash(&bad[..480]);bad[480..].copy_from_slice(&checksum);
+            assert!(Record::decode(&bad).is_err(),"repair shape {offset}");
+        }
+        // Historical decoder's exhaustive kind0..2 match rejects kind3.
+        fn legacy_decode(bytes:&[u8;SIZE])->Option<Record>{
+            if bytes[12]>2{None}else{Record::decode(bytes).ok()}
+        }
+        assert_eq!(legacy_decode(&encoded),None);
+        assert_eq!(legacy_decode(&old.encode()),Some(old));
+        // It may retain old provisionally, but cannot treat Repair as an update
+        // or reset high-water. Actual boot must separately authenticate old bytes.
+        assert_eq!(legacy_decode(&old.encode()).unwrap().highest,2);
     }
 
 }

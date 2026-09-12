@@ -9,6 +9,7 @@ pub mod sha512;
 pub mod ed25519;
 pub mod manifest;
 pub mod journal;
+pub mod repair;
 pub mod system_volume;
 pub mod update_wire;
 pub mod update_system;
