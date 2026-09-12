@@ -50,10 +50,15 @@ joins, fixed topology, immutable boot hash and exact source/controller identitie
 ## Validation and limits
 
 Pure tests exercise exact oracle bytes, illegal mutations, fixed corruption
-geometry, joined-owner refusal, one-shot/short-write behavior, independent
+geometry, joined-owner refusal, first/second short or raised writes, failed flush,
+sticky one-shot/no-retry behavior after every partial mutation, independent
 command/serial plans and evidence framing. Existing five cases and independent
 unknown-publisher validation are retained. The new case makes six primary
 scenarios plus the separate unknown-publisher composition.
+
+The no-command plan and exact final image prove automatic repair. Ordering of
+publication before GUI startup is established by the reviewed native boot path;
+this capture does not provide a cross-stream timestamp barrier for that ordering.
 
 This positive scenario is not the interrupted-repair fault matrix. M4.3 still
 requires interrupted System writes/flush/publication with fresh restart, remaining
