@@ -2,7 +2,7 @@
 Reuses the inspected existing cloud confinement; no direct VM process API.
 """
 import os
-CASES=("update","bad-health","bad-signature","bad-abi","selector-error")
+CASES=("update","bad-health","bad-signature","bad-abi","selector-error","repair-both")
 def public_file(path,data):
     with path.open("xb") as out:
         out.write(data);out.flush();os.fchmod(out.fileno(),0o444)
@@ -63,10 +63,10 @@ def observe(load,execute,launcher,inputs,boot,sizes,evidence,report,save,bank):
             [(inputs,"/artifact")],600,64*1024*1024)
         public_file(evidence/("signed-"+case+".json"),raw)
         results[case]=validator.validate(raw,boot,sizes,case,
-            bank["modern-settings-factory.layer"],bank["modern-settings-"+("update" if case=="selector-error" else case)+".layer"])
+            bank["modern-settings-factory.layer"],bank["modern-settings-"+("update" if case in ("selector-error","repair-both") else case)+".layer"])
         report["signed_runtime_checks"]=results;save()
     report["status"]="observed";save()
-    print("Signed runtime: five fixed actual scenarios independently checked; alternate publisher and milestone review remain.",flush=True)
+    print("Signed runtime: six fixed actual scenarios independently checked; alternate publisher and milestone review remain.",flush=True)
 
 def observe_unknown(load,build,execute,compiler,launcher,source,controller,work,evidence,report,save,preliminary,sizes):
     # A second literal five-window composition, never a sixth native mapping.

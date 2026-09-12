@@ -3,6 +3,7 @@ No role/path selector, arbitrary fault operation, VM, file or process API.
 """
 from hashlib import sha256
 RECONCILE=b"RAR-PANIC:CODE=UPDATE-RECONCILE"
+PANIC=b"RAR-PANIC:BEGIN\n"+RECONCILE+b"\nRAR-PANIC:HALT\n"
 B_START=4099*512
 def plan(candidate):
     if type(candidate) is not bytes or not 896<=len(candidate)<=2097536:
@@ -73,27 +74,79 @@ def scan(records,candidate,selector):
 def serial_status(serial,hit,final=False):
     if type(serial) is not bytes or len(serial)>65536 or not serial.isascii():raise ValueError("bounded guest serial")
     if any(s in serial for s in (b"UNEXPECTED-USER-FAULT",b"INVALID-USER-RETURN")):raise ValueError("guest isolation fault")
-    count=serial.count(RECONCILE)
-    remaining=serial.replace(RECONCILE,b"")
-    if b"RAR-PANIC" in remaining:
-        # A split final line may be drained, never accepted as evidence.
-        tail=serial.split(b"\n")[-1].rstrip(b"\r")
-        if not final and count==0 and RECONCILE.startswith(tail) and tail.startswith(b"RAR-PANIC"):
-            return "waiting"
-        raise ValueError("unplanned guest panic")
-    if count>1:raise ValueError("repeated reconcile stop")
-    if count==1:
-        if any(RECONCILE in line and line.rstrip(b"\r")!=RECONCILE for line in serial.split(b"\n")):
-            raise ValueError("exact reconcile line only")
-        if hit is None:
-            if final:raise ValueError("reconcile without exact System receipt")
-            return "waiting"
-        return "reconciled"
-    if final:raise ValueError("missing reconcile stop")
-    return "running"
+    at=serial.find(b"RAR-PANIC")
+    if at<0:
+        if final:raise ValueError("missing exact reconcile panic frame")
+        return "running"
+    tail=serial[at:]
+    if (at!=0 and serial[at-1]!=10) or not PANIC.startswith(tail):
+        # Bounded inert hex aids diagnosis without emitting guest control bytes.
+        raise ValueError("unplanned guest panic frame: "+tail[:256].hex())
+    if tail!=PANIC:
+        if final:raise ValueError("incomplete reconcile panic frame")
+        return "waiting"
+    if hit is None:
+        if final:raise ValueError("reconcile without exact System receipt")
+        return "waiting"
+    return "reconciled"
+def status_reply(value):
+    if (type(value) is not dict or set(value)!={"running","singlestep","status"} or
+        value["running"] is not True or value["singlestep"] is not False or value["status"]!="running"):
+        raise ValueError("exact running reconcile QMP barrier")
+    return value
+
+def checked_events(events,receipts,rows,drained,rtc_path,hit,base):
+    """Exact planned System EIO, not a generic event-policy exception."""
+    if (type(hit) is not dict or type(hit.get("terminal")) is not bool or
+        type(hit.get("plan")) is not dict or hit["plan"].get("operation")!="write" or
+        hit["plan"].get("effect")!="error" or hit["plan"].get("prefix")!=0 or
+        type(rows) is not list or len(rows)<2 or
+        type(rows[-1]) is not dict or type(rows[-2]) is not dict or
+        set(rows[-1])!={"execute","id"} or set(rows[-2])!={"execute","id","arguments"} or
+        type(rows[-1]["id"]) is not int or rows[-1]["id"]!=len(rows) or
+        type(rows[-2]["id"]) is not int or rows[-2]["id"]!=len(rows)-1 or
+        rows[-1].get("execute")!="query-status" or rows[-2].get("execute")!="send-key" or
+        rows[-2].get("arguments")!={"keys":[{"type":"qcode","data":"ret"}],"hold-time":50}):
+        raise ValueError("verified selector error and final barrier required")
+    phases=base.receipt_phases(receipts,events,rows,drained)
+    if (not 2<=len(events)<=6 or type(rtc_path) is not str or
+        not rtc_path.startswith("/machine/unattached/")):
+        raise ValueError("bounded exact System fault events")
+    rtc=0;io=0
+    for index,event in enumerate(events):
+        if (phases[index] not in (("continue-reply","running-reply") if index==0 else ("running-reply",)) or
+            type(event) is not dict or
+            set(event)!=({"event","timestamp"} if index==0 else {"event","timestamp","data"}) or
+            (event["event"]!="RESUME" if index==0 else event["event"] not in ("RTC_CHANGE","BLOCK_IO_ERROR"))):
+            raise ValueError("unplanned System fault event or receipt phase")
+        stamp=event["timestamp"]
+        if (type(stamp) is not dict or set(stamp)!={"seconds","microseconds"} or
+            type(stamp["seconds"]) is not int or not 0<=stamp["seconds"]<1<<63 or
+            type(stamp["microseconds"]) is not int or not 0<=stamp["microseconds"]<1000000):
+            raise ValueError("canonical fault event timestamp")
+        if index:
+            data=event["data"]
+            if event["event"]=="RTC_CHANGE":
+                rtc+=1
+                if (rtc>4 or type(data) is not dict or set(data)!={"offset","qom-path"} or
+                    type(data["offset"]) is not int or not -(1<<63)<=data["offset"]<1<<63 or
+                    data["qom-path"]!=rtc_path):raise ValueError("exact RTC identity")
+            else:
+                io+=1
+                if (io!=1 or receipts[index]["request_id"] not in (rows[-2]["id"],rows[-1]["id"]) or
+                    type(data) is not dict or set(data)!={"device","node-name","operation","action","reason"} or
+                    data["device"]!="" or data["node-name"]!="rar-system" or
+                    data["operation"]!="write" or data["action"]!="report" or
+                    type(data["reason"]) is not str or not 1<=len(data["reason"])<=256 or
+                    not data["reason"].isascii() or any(ord(c)<32 or ord(c)==127 for c in data["reason"])):
+                    raise ValueError("one exact planned System write-error event")
+    if io!=1:raise ValueError("missing planned System write-error event")
+    return rtc
+
 def joined(vm,candidate,selector,base):
     vm.service()
     if serial_status(bytes(vm.serial),vm.system_fault_hit,True)!="reconciled":raise ValueError("exact fault stop")
+    barrier=status_reply(vm.request({"execute":"query-status"}))
     stopped=vm.destroy()
     if (stopped.get("joined") is not True or vm.cleanup_succeeded is not True or vm.qmp_drained is not True or
         len(stopped.get("backends",[]))!=3):raise ValueError("whole VM/backends joined")
@@ -113,6 +166,7 @@ def joined(vm,candidate,selector,base):
     serial_status(bytes(vm.serial),summaries[1],True)
     return dict(cut=stopped,audit=summaries,system_fault=summaries[1],argv=vm.argv,preflight=vm.preflight,
         commands=vm.commands,events=vm.events,event_receipts=vm.event_receipts,qmp_drained=vm.qmp_drained,
+        status_barrier=barrier,
         serial=bytes(vm.serial).decode("ascii"))
 def self_test():
     candidate=b"x"*896;selector=b"s"*512;p=plan(candidate)
@@ -127,7 +181,7 @@ def self_test():
     assert scan(rows,candidate,selector) is None
     emit("write",512,512,"failed-no-success",payload_sha256=sha256(selector).hexdigest(),injection=p)
     hit=scan(rows,candidate,selector);assert hit["offset"]==512 and hit["counts"]["write"]==3
-    assert serial_status(RECONCILE+b"\n",hit,True)=="reconciled"
+    assert serial_status(PANIC,hit,True)=="reconciled"
     rejected=0
     def reject(fn):
         nonlocal rejected
@@ -141,11 +195,66 @@ def self_test():
         bad=copy.deepcopy(rows);entry=bad[target] if target==0 else bad[target]["event"];entry[field]=value
         reject(lambda bad=bad:scan(bad,candidate,selector))
     reject(lambda:scan(rows+[dict(type="request",operation="read",offset=0,length=512)],candidate,selector))
-    for serial in (RECONCILE+b"-OTHER",b"prefix"+RECONCILE,RECONCILE+RECONCILE,b"RAR-PANIC:CODE=OTHER",b"UNEXPECTED-USER-FAULT",b""):
+    for serial in (RECONCILE+b"\n",PANIC+b"extra",b"prefix"+PANIC,PANIC+PANIC,
+        PANIC.replace(b"UPDATE-RECONCILE",b"OTHER"),PANIC.replace(b"BEGIN",b"WRONG"),
+        PANIC.replace(b"HALT",b"WRONG"),b"UNEXPECTED-USER-FAULT",b""):
         reject(lambda serial=serial:serial_status(serial,hit,True))
-    reject(lambda:serial_status(RECONCILE,None,True))
-    assert serial_status(RECONCILE,None)=="waiting"
-    assert serial_status(RECONCILE[:15],None)=="waiting"
+    reject(lambda:serial_status(PANIC,None,True))
+    assert serial_status(PANIC,None)=="waiting"
+    assert serial_status(b"RAR-MODERN:GUI-READY\n"+PANIC,hit,True)=="reconciled"
+    for n in range(len(b"RAR-PANIC")):
+        assert serial_status(PANIC[:n],hit)=="running"
+        reject(lambda n=n:serial_status(PANIC[:n],hit,True))
+    for n in range(len(b"RAR-PANIC"),len(PANIC)):
+        assert serial_status(PANIC[:n],hit)=="waiting"
+        reject(lambda n=n:serial_status(PANIC[:n],hit,True))
+    assert status_reply(dict(running=True,singlestep=False,status="running"))["running"] is True
+    for bad in ({},dict(running=1,singlestep=False,status="running"),
+        dict(running=True,singlestep=0,status="running"),dict(running=False,singlestep=False,status="paused"),
+        dict(running=True,singlestep=False,status="running",extra=0)):
+        reject(lambda bad=bad:status_reply(bad))
+    # Real receipt-phase parser over inert event/command/audit fixtures.
+    import importlib.util
+    from pathlib import Path
+    spec=importlib.util.spec_from_file_location("selector_event_base",Path(__file__).with_name("runtime_evidence.py"))
+    base=importlib.util.module_from_spec(spec);spec.loader.exec_module(base)
+    commands=[dict(execute="qmp_capabilities",id=1),dict(execute="cont",id=2),
+        dict(execute="send-key",id=3,arguments={"keys":[{"type":"qcode","data":"ret"}],"hold-time":50}),
+        dict(execute="query-status",id=4)]
+    resume=dict(event="RESUME",timestamp=dict(seconds=1,microseconds=1))
+    error=dict(event="BLOCK_IO_ERROR",timestamp=dict(seconds=1,microseconds=2),
+        data={"device":"","node-name":"rar-system","operation":"write","action":"report","reason":"Input/output error"})
+    rtc=dict(event="RTC_CHANGE",timestamp=dict(seconds=1,microseconds=3),
+        data={"offset":0,"qom-path":"/machine/unattached/device[7]"})
+    terminal=scan(rows+[dict(type="terminal",outcome="failed",fault_hit=True,failed=True)],candidate,selector)
+    def check(events,ids,receipt=terminal,cmd=commands):
+        receipts=[dict(event_index=i,request_id=n) for i,n in enumerate(ids)]
+        return checked_events(events,receipts,cmd,True,"/machine/unattached/device[7]",receipt,base)
+    for identity in (3,4):assert check([resume,error],[2,identity])==0
+    assert check([resume,rtc,error],[2,3,4])==1
+    for events,ids in (([resume],[2]),([resume,error,error],[2,3,4]),
+        ([resume,error],[2,None]),([resume,error],[2,2]),
+        ([resume,error],[None,4]),([resume,rtc],[2,4])):
+        reject(lambda events=events,ids=ids:check(events,ids))
+    for field,value in (("device","other"),("node-name","rar-data"),("node-name","rar-boot"),
+        ("operation","read"),("action","stop"),("reason","bad"+chr(10)),("reason","x"*257),("reason",0)):
+        bad=copy.deepcopy(error);bad["data"][field]=value
+        reject(lambda bad=bad:check([resume,bad],[2,4]))
+    for name in ("STOP","SHUTDOWN","RESET","GUEST_PANICKED","RESUME"):
+        bad=copy.deepcopy(error);bad["event"]=name
+        reject(lambda bad=bad:check([resume,bad],[2,4]))
+    bad=copy.deepcopy(error);bad["timestamp"]["seconds"]=True
+    reject(lambda:check([resume,bad],[2,4]))
+    bad=copy.deepcopy(rtc);bad["data"]["qom-path"]="/machine/other"
+    reject(lambda:check([resume,bad,error],[2,3,4]))
+    assert check([resume,error],[2,4],dict(terminal,terminal=False))==0
+    reject(lambda:check([resume,error],[2,4],dict(terminal,terminal=None)))
+    reject(lambda:check([resume,error],[2,4],cmd=commands[:-1]))
+    reject(lambda:check([resume]+[rtc]*5+[error],[2]+[3]*5+[4]))
+    wrong=copy.deepcopy(commands);wrong[-1]["extra"]=True
+    reject(lambda:check([resume,error],[2,4],cmd=wrong))
+    wrong=copy.deepcopy(commands);wrong[-2]["arguments"]["keys"][0]["data"]="esc"
+    reject(lambda:check([resume,error],[2,4],cmd=wrong))
     return rejected
 if __name__=="__main__":
     import sys

@@ -29,7 +29,7 @@ def identity(fd,size,readonly):
     return (info.st_dev,info.st_ino,info.st_size)
 
 class Fixture:
-    """One exclusive regular file; no mutation API after empty provisioning."""
+    """One exclusive cloud fixture; only fixed reviewed System corruption is permitted."""
     def __init__(self,root,role,data):
         if role not in ("data","system") or type(data) is not bytes:
             raise ValueError("fixed fixture role")
@@ -37,6 +37,7 @@ class Fixture:
         if len(data)!=size:
             raise ValueError("fixed fixture geometry")
         self.fd=self.observer=None
+        self.repair_damage_used=False
         self.role,self.size=role,size
         path=root/(role+".img")
         try:
@@ -66,6 +67,33 @@ class Fixture:
         if len(data)!=self.size or identity(self.observer,self.size,True)!=self.bound:
             raise ValueError("short or changed frozen image")
         return data
+
+
+    def damage_system_headers(self,vms,installed,damaged):
+        """One-shot two-byte corruption, only after all VMs/backends are joined.
+        No caller offsets, paths, device selector, payload writes or retry.
+        The scenario independently derives both exact images from signed inputs.
+        """
+        if self.role!="system" or self.repair_damage_used:
+            raise ValueError("unused System-only repair fixture")
+        if (type(installed) is not bytes or type(damaged) is not bytes or
+            len(installed)!=8388608 or len(damaged)!=8388608):
+            raise ValueError("exact System image pair")
+        expected=bytearray(installed)
+        for offset in (1024,1024+4097*512):expected[offset]^=1
+        if bytes(expected)!=damaged:raise ValueError("only fixed two-byte header damage")
+        if self.freeze(vms)!=installed:raise ValueError("exact joined installed System required")
+        # Consume before the first attempted write. Short/error writes never retry.
+        self.repair_damage_used=True
+        for offset in (1024,1024+4097*512):
+            if identity(self.fd,self.size,False)!=self.bound:
+                raise ValueError("System descriptor changed before corruption")
+            if os.pwrite(self.fd,damaged[offset:offset+1],offset)!=1:
+                raise OSError("short fixed System corruption; no retry")
+        os.fsync(self.fd)
+        if self.freeze(vms)!=damaged:raise ValueError("fixed corruption readback mismatch")
+        return dict(offsets=[1024,1024+4097*512],xor=1,
+                    before_sha256=sha(installed),after_sha256=sha(damaged))
 
     def close(self):
         errors=[]
@@ -383,6 +411,57 @@ def self_test():
     for cleanup,drained in ((False,True),(True,False),(1,True),(True,1)):
         vm=SimpleNamespace(closed=True,cleanup_succeeded=cleanup,qmp_drained=drained,child=None)
         reject(lambda vm=vm:fixture.freeze([vm]))
+
+    # Pure mocks exercise the fixed corruption API without opening or writing files.
+    from unittest.mock import patch
+    original=bytes(8388608);changed=bytearray(original)
+    for offset in (1024,1024+4097*512):changed[offset]^=1
+    damaged=bytes(changed)
+    fixture=object.__new__(Fixture);fixture.role="data";fixture.repair_damage_used=False
+    reject(lambda:fixture.damage_system_headers([],original,damaged))
+    fixture.role="system"
+    reject(lambda:fixture.damage_system_headers([],original,original))
+    # A failed real joined-process check must precede every mocked write.
+    blocked=SimpleNamespace(closed=False)
+    with patch.object(os,"pwrite",side_effect=AssertionError("no write before join")):
+        reject(lambda:fixture.damage_system_headers([blocked],original,damaged))
+    for failure,at in (("none",0),("short",1),("short",2),
+                       ("write-error",1),("write-error",2),("flush-error",1)):
+        fixture=object.__new__(Fixture);fixture.role="system";fixture.repair_damage_used=False
+        fixture.fd=101;fixture.size=8388608;fixture.bound=(1,2,8388608)
+        frozen=iter((original,damaged));fixture.freeze=lambda vms:next(frozen)
+        writes=[];flushes=[]
+        def write(fd,value,offset):
+            writes.append((fd,value,offset))
+            if len(writes)==at:
+                if failure=="short":return 0
+                if failure=="write-error":raise OSError("injected corruption write failure")
+            return len(value)
+        def flush(fd):
+            flushes.append(fd)
+            if failure=="flush-error":raise OSError("injected corruption flush failure")
+        with patch.object(os,"fstat",return_value=SimpleNamespace(st_mode=stat.S_IFREG,
+                st_nlink=1,st_size=8388608,st_uid=65532,st_dev=1,st_ino=2)),\
+             patch.object(fcntl,"fcntl",return_value=os.O_RDWR),\
+             patch.object(os,"pwrite",side_effect=write),\
+             patch.object(os,"fsync",side_effect=flush):
+            if failure!="none":
+                try:fixture.damage_system_headers([object()],original,damaged)
+                except OSError:pass
+                else:raise AssertionError("failed corruption retried or accepted")
+                assert len(writes)==(2 if failure=="flush-error" else at)
+                assert flushes==([101] if failure=="flush-error" else [])
+            else:
+                receipt=fixture.damage_system_headers([object()],original,damaged)
+                assert receipt["after_sha256"]==sha(damaged)
+                assert writes==[(101,b"\x01",1024),(101,b"\x01",1024+4097*512)]
+                assert flushes==[101]
+            expected=[(101,b"\x01",1024),(101,b"\x01",1024+4097*512)]
+            assert writes==expected[:len(writes)]
+            assert fixture.repair_damage_used
+            before=(list(writes),list(flushes))
+            reject(lambda:fixture.damage_system_headers([object()],original,damaged))
+            assert (writes,flushes)==before
     return rejected
 
 if __name__=="__main__":

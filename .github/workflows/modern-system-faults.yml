@@ -1,0 +1,53 @@
+name: Modern System fault matrix
+run-name: Modern System fault matrix ${{ inputs.source_sha }}
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact reviewed canonical source commit
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: modern-system-faults
+  cancel-in-progress: false
+jobs:
+  system-faults:
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        transaction: [install, repair]
+    if: github.repository == 'AndyTechCoder/RAR-OS' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    env:
+      RAR_SYSTEM_TRANSACTION: ${{ matrix.transaction }}
+      RAR_SOURCE_SHA: ${{ inputs.source_sha }}
+      RAR_CONTROLLER_SHA: ${{ github.sha }}
+    steps:
+      - name: Validate exact source identity
+        run: |
+          /usr/bin/python3 -I -B -c 'import os,re; assert re.fullmatch("[0-9a-f]{40}",os.environ["RAR_SOURCE_SHA"])'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.RAR_CONTROLLER_SHA }}
+          persist-credentials: false
+          path: controller
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.RAR_SOURCE_SHA }}
+          persist-credentials: false
+          path: source
+      - name: Build and observe every fixed System transaction boundary
+        run: /usr/bin/python3 -I -B controller/tools/rar-lab/modern/system_fault_dispatch.py
+      - name: Retain actual evidence including failures
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: modern-system-${{ matrix.transaction }}-faults-${{ github.run_id }}-${{ github.run_attempt }}
+          path: modern-system-${{ matrix.transaction }}-faults-evidence/
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 6

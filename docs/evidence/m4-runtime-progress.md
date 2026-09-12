@@ -1,4 +1,39 @@
-# M4.3 repair core — source work in progress, 2026-09-12
+# Current M4 integration status — 2026-09-12
+
+M4.1 persistent files and M4.2 signed live updates are accepted at their recorded
+development snapshots. M4.3 automatic factory recovery now also has actual cloud
+evidence: run34692159832/job103549214972 passed on native source
+00c6b5e93f99200eb36f799d25753510a0a9baed and trusted controller
+6c8c8a684978a324ac6a35d1d4f14edb2bfdfb7b.
+
+Seven signed-runtime scenarios used21 fresh VM lifecycles, including damaged
+System banks -> automatic factory repair -> new boot with working Settings/Files
+and the preserved note. Data stayed physically read-only during recovery and
+byte-identical. The service image limit was preserved; reviewed size optimisation
+resolved its earlier build failure. This is real recovery evidence, not source
+or model-only success.
+
+Remaining for M4.3/full M4: the complete actual System interruption matrix,
+final whole-M4 regression/reproducibility evidence, integrated-head/exact-main
+checks, consolidated release acceptance and v0.4.0-modern-alpha publication.
+The fixed matrix is implemented in PR202; independent review fixes require exact
+cloud CI before trusted-main activation. This checkpoint does not claim those
+remaining runs have passed.
+
+Integration preserves all native target blobs from source00c6 and all later
+trusted-main controller fixes, including the service size correction. Histories
+are joined, not rebased or force-pushed. PR158 remains draft until the final gate.
+See docs/evidence/m4-system-fault-campaign.md and the GitHub PR/release evidence
+for the exact subsequent results. Historical checkpoints below are provenance,
+not current implementation status.
+
+No Mac/SSD source writes, downloads, builds, mounts, deletions or target/VM
+execution. All repository changes are GitHub-only; all target execution is in
+reviewed confined disposable cloud profiles.
+
+---
+
+# Historical M4.3 repair-core checkpoint — 2026-09-12
 
 M4.1 and M4.2 remain accepted at their exact development snapshots below.
 M4.3 is not complete. The first coherent repair source batch adds an opaque

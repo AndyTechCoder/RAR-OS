@@ -59,3 +59,85 @@ and final M4.2 acceptance against the task contract. M4.3 remains separate.
 The source branch lacks the later main signed-size build-tool fix; approved
 cloud runs use trusted-main tooling explicitly. An optional main-to-draft
 tooling sync was denied by auto-review and was not retried or bypassed.
+
+## Exact fatal framing correction
+
+Actual campaign34657349650 (controller366669d3, source93ac75b) passed the first
+four scenarios, including the native stale-authority probe, then failed in the
+selector-error parser. The checker expected one code line, but the unchanged
+foundation fatal() emits three LF-terminated lines: RAR-PANIC:BEGIN,
+RAR-PANIC:CODE=UPDATE-RECONCILE, RAR-PANIC:HALT. The original failed run did not
+retain the complete failed VM transcript, so this definite framing bug is not
+proof that no other guest issue exists.
+
+Accept only that complete contiguous terminal frame after the exact System fault
+receipt; truncated frames, another code, reordered/wrong envelope, repetition or
+trailing bytes remain failures. Every recognizable panic prefix is waiting-only; shorter initial fragments
+remain nonfinal/running under the outer scenario deadline. Every truncated
+final frame is rejected. Unexpected panic diagnostics include at most256 bytes
+encoded as inert hex. No kernel behavior or generic panic policy changes.
+The exact-source cloud campaign must be rerun after review and tooling checks.
+
+
+## Reconcile QMP barrier
+
+PR196 merged as eef9fcf37d5f10407144b6bfd684c3ded89ac4c5 after independent
+review and Specifications34658214170 passed (82 selector-fault negatives).
+Actual rerun34659553868 returned the complete selector-error scenario, including
+the exact reconcile frame and fresh boot, but independent event validation
+rejected a receipt phase. It remains a failed campaign, not M4.2 acceptance.
+Artifact10285779601 has SHA256
+188021684e7fa4c36c96b16c0b443e69f8bfff3dba06bef920f63b693b1bcf7f.
+The sixth unknown-publisher case was not reached.
+
+The selector path previously buffered QMP events after its final Enter until
+post-reap draining. A single exact read-only query-status after the complete
+reconcile frame and terminal System receipt now drains prior events through
+an actual running-reply receipt. The barrier is consumed before sending, cannot
+be retried, and is the final command only in selector VM2. Its exact running,
+non-single-step reply is retained and independently checked. No other mode gains
+post-start query permission. All generic event rules remain unchanged, including
+post-reap refusal; a genuinely later advisory event still fails closed.
+
+Negative tests cover early/missing receipt, missing reconcile, duplicate or
+non-final queries, wrong response types/status, partial-send no-retry and other
+modes. Phase failures now include the existing bounded inert event summary.
+No guest input, disk write, target change or unreviewed runtime activation is
+introduced. A bounded reviewed rerun is still required; no blind retry loop.
+
+
+The fixed profile reports injected I/O errors through QMP BLOCK_IO_ERROR, as the
+existing accepted Data-fault matcher already requires. The selector case therefore
+uses a separate exact System matcher after full backend audit rescanning: one
+rar-system write/report error, bounded inert reason, received at the final Enter
+or read-only barrier, with the exact terminal selector fault. Missing/duplicate
+errors, other nodes, post-reap receipts, other lifecycle events and malformed
+fields fail. RESUME and at most four identity-checked RTC events retain their
+existing bounds. Non-selector cases retain the unmodified baseline event policy.
+This completes the expected-fault evidence contract; it does not classify an
+uninspected event from the failed artifact as safe or count that run as passing.
+
+
+## Operation receipt versus shutdown receipt (2026-09-12)
+
+The owner renewed safe continuation and standing in-scope self-approval after the
+bounded stop. Prior run34662264976 failed because the pre-barrier check required
+a terminal process record. Source diagnosis is definitive: block_wire catches
+the injected operation OSError, sends NBD EIO5 and keeps serving; block_process
+emits terminal only when the transport later exits. Operation failure and process
+termination are different events. No unchanged retry is authorized by this note.
+
+The pre-barrier check now rescans the exact selector fault and requires the exact
+reconcile frame, with the existing VM/peer/channel checks. It does not demand a
+premature terminal. The read-only query remains final, single-use, consumed before
+send and exact-response-checked. After whole-VM teardown, System -9/backend-failed
+permits an absent terminal (owned forced kill), while natural21/backend-failed
+requires the exact terminal. The independent retained checker repeats this
+correlation. No request after the fault, wrong exit, peer failure, malformed
+record, unrelated QMP event or changed Data is excused.
+
+A new real cloud-only System backend test proves EIO5 arrives while the process
+is alive and no terminal exists, then separately proves owned kill and peer-EOF
+outcomes on fresh fixtures. Inert VM tests cover both states and reject natural
+exit without terminal. No Mac/SSD files or target execution are involved.
+M4.2 remains incomplete until reviewed final checks and actual campaign pass.

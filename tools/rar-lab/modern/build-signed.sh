@@ -14,7 +14,7 @@ for name in update bad-health bad-signature bad-abi factory; do
     cp "$input" "/tmp/modern-settings-$name.layer"
 done
 rustc --edition 2024 --target x86_64-unknown-uefi \
-  -C opt-level=2 -C panic=abort -C no-redzone=yes \
+  -C opt-level=z -C lto=fat -C codegen-units=1 -C panic=abort -C no-redzone=yes \
   -C debuginfo=0 -C strip=symbols -C relocation-model=static \
   -C link-arg=/timestamp:0 -C link-arg=/DEBUG:NONE \
   -C link-arg=/base:0x400000 -C link-arg=/fixed \
