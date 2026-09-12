@@ -350,7 +350,7 @@ impl Runtime{
                     raw.as_mut_ptr(),raw.len());}
                 let request=abi::stage_request(&raw).ok_or(Error::Invalid)?;
                 let (seal,accepted,reply)=match request{
-                    abi::StageRequest::Begin{length,reply}=>{
+                    abi::StageRequest::Begin{length,reply}|abi::StageRequest::BeginInspection{length,reply}=>{
                         // Validate the entire result BEFORE reserving or consuming
                         // a seal. Invalid output pointers cannot strand a stage.
                         self.buffer(reply,abi::STAGE_REPLY_BYTES,true)?;
@@ -358,8 +358,16 @@ impl Runtime{
                             self.processes[i].memory==retirement::Memory::Clean&&
                             self.processes[i].state==State::Dead&&self.processes[i].root==0);
                         let slot=self.policy.as_ref().unwrap().staging_slot(current,frame.rdi,clean)?;
-                        let id=self.staging.as_mut().ok_or(Error::Denied)?
-                            .begin(slot,length).map_err(stage_error)?;
+                        let inspection=matches!(request,abi::StageRequest::BeginInspection{..});
+                        if inspection{
+                            let manager=self.processes[8];
+                            if manager.memory!=retirement::Memory::Live||manager.state==State::Dead||manager.root==0{
+                                return Err(Error::Denied);
+                            }
+                        }
+                        let buffer=self.staging.as_mut().ok_or(Error::Denied)?;
+                        let id=if inspection{buffer.begin_inspection(slot,length)}else{buffer.begin(slot,length)}
+                            .map_err(stage_error)?;
                         (id.seal(),0,reply)
                     },
                     abi::StageRequest::Abort{seal,reply}=>{
@@ -408,12 +416,13 @@ impl Runtime{
             abi::STAGE_VIEW=>{
                 self.policy.as_ref().ok_or(Error::Denied)?.stage_view(current,frame.rdi)?;
                 match frame.rsi{
-                    0=>{
+                    0|10=>{
                         if frame.r10!=abi::STAGE_VIEW_BYTES as u64{return Err(Error::Invalid);}
                         self.buffer(frame.rdx,abi::STAGE_VIEW_BYTES,true)?;
                         let stage=self.staging.as_ref().ok_or(Error::Denied)?;
                         let id=stage.reserved().ok_or(Error::Stale)?;
-                        stage.view(id.seal()).map_err(stage_error)?;
+                        if frame.rsi==10{stage.inspection_view(id.seal())}else{stage.view(id.seal())}
+                            .map_err(stage_error)?;
                         if !self.stage_readonly||!self.stage_view{return Err(Error::Busy);}
                         let mut response=[0u8;abi::STAGE_VIEW_BYTES];
                         for (i,value) in [id.seal(),id.length() as u64,abi::STAGE_VIEW_ADDRESS,id.slot() as u64].into_iter().enumerate(){
@@ -424,12 +433,23 @@ impl Runtime{
                         unsafe{ptr::copy_nonoverlapping(response.as_ptr(),frame.rdx as *mut u8,response.len());}
                         Ok(0)
                     },
-                    1=>{
+                    1|11=>{
                         if frame.r10!=0{return Err(Error::Invalid);}
                         self.policy.as_ref().unwrap().stage_reject(current,frame.rdi)?;
                         let stage=self.staging.as_ref().ok_or(Error::Denied)?;
-                        stage.view(frame.rdx).map_err(stage_error)?;
+                        if frame.rsi==11{stage.inspection_view(frame.rdx)}else{stage.view(frame.rdx)}
+                            .map_err(stage_error)?;
                         self.reject_stage(frame.rdx);Ok(0)
+                    },
+                    12=>{
+                        if frame.r10!=32{return Err(Error::Invalid);}
+                        self.buffer(frame.rdx,32,true)?;
+                        let hash=lab_images::factory_hash().map_err(|_|Error::Invalid)?;
+                        // SAFETY: exact current Manager-owned32-byte output was
+                        // validated before hashing. The fixed immutable boot
+                        // component is not selected or supplied by the caller.
+                        unsafe{ptr::copy_nonoverlapping(hash.as_ptr(),frame.rdx as *mut u8,32);}
+                        Ok(0)
                     },
                     2=>{
                         self.buffer(frame.r10,32,true)?;

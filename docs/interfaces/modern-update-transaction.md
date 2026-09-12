@@ -418,3 +418,20 @@ produce matched supervisor/kernel cfgs and the actual signed input bank; no
 existing workflow selects this new composition. Additional cloud checks compile
 both actual signed entry modules to Linux objects only. That cannot execute the
 entry, certify UEFI linking or establish a successful VM boot.
+
+
+### M4.3 source inspection bridge
+
+The private inspection opcodes and fixed kernel-derived factory identity are
+specified in modern-runtime-v1.md, section M4.3 inspection and immutable factory
+identity primitives. This supersedes copy-only opcode descriptions above, not
+the active/prior boot coordinator or publication rules. The full Repair
+transaction remains unimplemented.
+
+System will stream complete rounded sectors into the Inspection purpose.
+Manager must independently validate framing and padding, then hash/verify only
+the logical factory bytes against the kernel's fixed component hash. The boot
+image identity—not an IPC-supplied expected hash—is the independent root.
+Factory inspection phases must zero-pad to whole sectors without altering the
+logical package used for signature/full-package identity. A native CompleteRead
+issuer and the fixed one-shot Repair protocol still require integration.

@@ -807,3 +807,16 @@ as missing evidence, verifies only the logical package and includes padding in
 the observation hash. Tests cover valid non-sector-aligned packages, damaged
 padding, malformed first sectors, short/excess receipts and maximum bounds.
 No production CompleteRead issuer exists yet; these remain source preparations.
+
+
+### Native inspection primitive preparation (supersedes earlier unreachable staging notes)
+
+Prepared source now adds the distinct Inspection begin/metadata/reject syscall
+routes and fixed kernel-derived immutable factory hash, with existing capability,
+pointer, RO/NX mapping, purpose and scrub gates. ABI tests cover canonical bounds
+and cross-purpose limits; the pure kernel test registry includes component-hash
+bounds/padding/absence tests. No System/Manager Repair transaction or production
+CompleteRead issuer is wired, and no new native scenario has executed.
+The earlier f0143aad claim that no syscall can mint Inspection described that
+earlier snapshot only; the new mechanisms require focused native-boundary review
+and exact-head cloud validation before any activation or acceptance.

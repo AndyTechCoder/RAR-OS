@@ -137,6 +137,7 @@ pub fn device_op(operation:u64,value:u64,extra:u64)->Option<DeviceOp> {
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 pub enum StageRequest {
     Begin{length:usize,reply:u64},
+    BeginInspection{length:usize,reply:u64},
     Finish{seal:u64,reply:u64},
     Abort{seal:u64,reply:u64},
     Append{seal:u64,offset:usize,pointer:u64,length:usize,reply:u64},
@@ -151,11 +152,14 @@ pub fn stage_request(raw:&[u8])->Option<StageRequest>{
     match op{
         0 if seal==0&&offset==0&&pointer==0&&(896..=2_097_536).contains(&length)=>
             Some(StageRequest::Begin{length,reply}),
+        4 if seal==0&&offset==0&&pointer==0&&(512..=2_097_664).contains(&length)&&length%512==0=>
+            Some(StageRequest::BeginInspection{length,reply}),
         3 if seal!=0&&offset==0&&pointer==0&&length==0=>Some(StageRequest::Abort{seal,reply}),
         2 if seal!=0&&offset==0&&pointer==0&&length==0=>Some(StageRequest::Finish{seal,reply}),
         1 if seal!=0&&pointer>=4096&&(1..=512).contains(&length)=>{
             let offset=usize::try_from(offset).ok()?;
-            if offset.checked_add(length)?>2_097_536{return None;}
+            // Exact purpose/length is enforced by the reserved kernel Buffer.
+            if offset.checked_add(length)?>2_097_664{return None;}
             Some(StageRequest::Append{seal,offset,pointer,length,reply})
         },
         _=>None,
@@ -302,4 +306,23 @@ mod tests {
         for opcode in [12,255,65536,u64::MAX] {assert_eq!(device_op(opcode,0,0),None);}
         assert_eq!(device_op(11,65535,0),Some(DeviceOp::WriteWord(65535)));
     }
+    #[test]fn inspection_copy_framing_is_distinct_and_sector_bounded(){
+        for length in [512,1024,2_097_664]{
+            assert_eq!(stage_request(&stage_words([4,0,0,0,length,0x600000])),
+                Some(StageRequest::BeginInspection{length:length as usize,reply:0x600000}));
+        }
+        for length in [0,511,513,896,2_097_665,u64::MAX]{
+            assert_eq!(stage_request(&stage_words([4,0,0,0,length,0x600000])),None);
+        }
+        for field in [1usize,2,3]{
+            let mut words=[4,0,0,0,512,0x600000];words[field]=1;
+            assert_eq!(stage_request(&stage_words(words)),None);
+        }
+        assert_eq!(stage_request(&stage_words([4,0,0,0,512,0])),None);
+        assert_eq!(stage_request(&stage_words([0,0,0,0,2_097_664,0x600000])),None);
+        assert_eq!(stage_request(&stage_words([1,1,2_097_152,0x600000,512,0x600100])),
+            Some(StageRequest::Append{seal:1,offset:2_097_152,pointer:0x600000,length:512,reply:0x600100}));
+        assert_eq!(stage_request(&stage_words([1,1,2_097_153,0x600000,512,0x600100])),None);
+    }
+
 }

@@ -27,3 +27,6 @@ mod bootstrap_integration {
 }
 
 pub mod staging;
+
+// Pure immutable component identity helpers; no package execution in tests.
+mod lab_images;

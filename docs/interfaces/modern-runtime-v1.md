@@ -460,3 +460,47 @@ framing, writable-span and authority checks. Tests cover invalid/overflowing
 pointers, missing/read-only/WX spans, wrong lengths/callers/handles, bootstrap
 denial, exact bytes and zero writer calls on all refusals. This is focused
 source-adapter evidence; actual privileged VM execution remains required.
+
+
+## M4.3 inspection and immutable factory identity primitives
+
+This matched-build private extension supersedes earlier staging opcode lists.
+It adds mechanisms, not a native Repair transaction or M4.3 acceptance. The
+System/Manager protocol still must issue and consume fresh one-shot receipts,
+verify damage/root/health and bind exact durable publication.
+
+STAGE_COPY operation4 begins an Inspection reservation: seal, offset and input
+pointer are zero; length is a whole number of512-byte sectors from512 through
+2097664; reply is the existing checked16-byte response. The kernel chooses the
+Clean vacant Settings slot and requires a live Manager before reserving.
+Operation0 remains executable-package-only, with its896..2097536 bounds.
+The shared Append framing admits offset+length through2097664, but the Buffer
+always checks its exact reserved purpose and length; this cannot expand an
+executable reservation. Finish/Abort retain their existing full-copy, alias,
+seal and scrub rules. Inspection is a distinct identity purpose.
+
+Manager-only STAGE_VIEW operation10 uses the existing32-byte output framing and
+returns only a sealed Inspection's seal, rounded length, fixedRO/NX address and
+reserved slot. Operation11 uses exact seal and zero extra argument; it rejects
+only an Inspection after the usual no-staged-executable/no-trial check, withdraws
+the view, restores supervisor writes and fully scrubs. Existing operations0/1
+and every accept/trial/release path remain executable-view-only. Inspection
+bytes cannot authenticate, trial or execute through those paths. No new
+mapping window, capability grant or Data authority is added.
+
+STAGE_VIEW operation12 takes the Manager capability, RDX writable32-byte output
+and R10 exactly32. There is no caller index, path, source pointer or expected
+hash. The kernel derives SHA256 from fixed immutable laboratory input4's exact
+logical package bytes, excluding page padding, after validating the complete
+output span. Missing/invalid input returns an error without a fallback/zero
+identity. Pure tests expose no embedded packages. The independently validated
+containing boot/kernel image is the trust anchor; this hash only derives its
+factory component identity. This is laboratory provenance, not hardware secure
+boot. Manager must still verify the sealed factory's exact full-package hash,
+signature, generation1, compatibility and PE policy.
+
+The same soleCPU/IF=0, current-owner pointer, immutable boot containment,
+no-writable-alias, TLB invalidation and full-scrub invariants apply. The new hash
+copy writes only a fully prevalidated Manager-owned32-byte span with no yield.
+Source ABI/buffer/hash tests do not execute privileged mapping instructions;
+fresh certified-cloud runtime evidence remains required before acceptance.

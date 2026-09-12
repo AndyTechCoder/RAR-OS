@@ -184,3 +184,16 @@ Unexpected short or extra sectors are missing evidence and return Identity,
 not a damage observation. Nonzero final padding is content damage. Verification
 uses only the logical package; observation equality hashes all stored bytes.
 This does not provide native provenance, fresh I/O or repair authority.
+
+
+### Native primitive allocation
+
+Private STAGE_COPY operation4 begins Inspection; shared Append's framing ceiling
+is2097664 while the Buffer enforces each reservation's exact purpose/length.
+Private STAGE_VIEW10 reads Inspection metadata,11 rejects/scrubs only Inspection,
+and12 derives the exact logical input4 SHA256 from the containing trusted boot
+image. Existing executable views and trial paths reject Inspection. See
+modern-runtime-v1.md for exact argument, identity and safety rules. This reviewed
+root-provider refinement avoids a generated Manager constant while remaining
+independent of System IPC. It does not create a CompleteRead issuer, implement
+the Repair transaction or constitute native runtime acceptance.
