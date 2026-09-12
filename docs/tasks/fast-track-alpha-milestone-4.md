@@ -2,7 +2,10 @@
 
 Status: M4.1 COMPLETE at accepted development snapshot
 fd1982665b81ba2e672e0044165d68e09daa47f0 (2026-09-10).
-M4.2, M4.3 and full Milestone 4 remain incomplete. This is not main-release
+M4.2 COMPLETE at accepted development snapshot
+93ac75b086755a9b57a1e0998dc16a36eb147be0 with controller
+14d6612bd7e7f6593ce89b71a89a60d283027aa6 (2026-09-12).
+M4.3 and full Milestone 4 remain incomplete. This is not main-release
 acceptance or production certification. See docs/evidence/m4-runtime-progress.md
 for exact runtime evidence, source identities, review and integration checks.
 Direction: 2026-09-05 UTC, "Perfect. So then let's continue with the next, milestone 4".
@@ -72,7 +75,8 @@ converted into a persistent format.
 The owner approved this organization on 2026-09-08. It replaces the delivery
 sequence, not the ten completion requirements above, ADR0034 review boundaries,
 or any host/data safety constraint. M4.1 is complete at the accepted development
-snapshot above; M4.2 and M4.3 remain incomplete.
+snapshot above; M4.2 is complete at the source/controller pair above;
+M4.3 remains incomplete.
 
 ### M4.1 — Persistent files
 
@@ -98,6 +102,11 @@ do not postpone an unsafe prerequisite merely because final release is later.
 This section primarily covers requirements4,7,8,9 and the storage isolation in5.
 
 ### M4.2 — Signed live updates
+
+Status: COMPLETE at the development source/controller pair above. Actual six-case
+cloud campaign34664032961 passed; exact evidence and independent acceptance
+review are recorded in docs/evidence/m4-runtime-progress.md. PR158 remains
+draft/unmerged pending M4.3 integration and final release gates.
 
 Connect canonical signed metadata and inactive System payload storage to the
 actual component loader and lifecycle mechanisms. Replace Settings executable
@@ -179,8 +188,9 @@ launcher to discover whether it is safe.
 ## Limits and progress
 
 M4.1's acceptance targets are complete at the recorded development snapshot.
-Remaining Milestone 4 work is actual signed component replacement, update/fallback
-integration, immutable System-only recovery and the final whole-M4 runtime,
+M4.2's signed component replacement and update/fallback acceptance targets are
+complete at the exact source/controller pair above. Remaining Milestone 4 work
+is immutable System-only recovery and the final whole-M4 runtime,
 regression/reproducibility/review/release gates. Networking, SDK, additional hardware profiles, AI/agents,
 production identity/hardware-backed secrets and an external cryptographic audit
 remain later work. A failure to finish any requirement is reported explicitly,

@@ -1,3 +1,90 @@
+# Accepted M4.2 development snapshot — 2026-09-12
+
+M4.2 signed live updates is complete at source
+93ac75b086755a9b57a1e0998dc16a36eb147be0 with trusted controller
+14d6612bd7e7f6593ce89b71a89a60d283027aa6. Independent focused
+acceptance review found no remaining M4.2 blocker after the final controller
+Specifications34664012701/job103472147122 passed at that exact revision. This supersedes historical incomplete
+M4.2 checkpoints, not the safety boundaries or remaining M4.3 requirements.
+M4.1 remains accepted at fd1982665b81ba2e672e0044165d68e09daa47f0.
+PR158 remains draft/unmerged; this is not whole-M4/main-release acceptance,
+v0.4 publication or production security certification.
+
+## Actual behavior and exact evidence
+
+Cloud run https://github.com/AndyTechCoder/RAR-OS/actions/runs/34664032961
+(job103472206047) succeeded on 2026-09-12 in 3m54s. The completed log binds the
+source and controller above and reports all five fixed scenarios independently
+checked, followed by actual rejection of a correctly signed non-enrolled
+publisher. Six scenarios use eighteen fresh VM lifecycles, with no retained RAM
+or guest-network channel.
+
+The reviewed producer and independent retained-evidence validator cover:
+- Changed native Settings executable behavior and compact mode while peers live.
+- Failed health, tampered signature, incompatible ABI and unknown publisher
+  refusal; stale generation refusal after fresh boot.
+- Post-cutover UD2 failure and fresh verified prior-component fallback.
+- Kernel-observed old queue removal, stale endpoint/capability denial and
+  consumed lifecycle-token rejection.
+- Exact injected System selector-write EIO, canonical reconcile panic,
+  one-shot final status barrier, bounded whole-VM/backend teardown, and fresh
+  factory selection with retained synthetic file.
+- Exact persistent Data-image identity across update/fallback/error paths.
+
+Retained artifact10287894113, modern-signed-runtime-34664032961-1:
+21 files, ZIP1467368 bytes, SHA256
+0e7b3579141ff61bad35ac732ef1b67b798eeaf89a858fbe0fff820d498f484f.
+Availability and digest were checked through GitHub metadata; no artifact was
+downloaded locally. Detailed evidence validation ran in the cloud. Final
+review uses completed sanitized logs, exact source/controller and prior focused
+code review, not a claim of separately re-extracting the artifact locally.
+
+Exact-source checks: Specifications34655109736/job103445692408,
+Foundation34655109758, Platform34655109752 and Desktop34655109760 passed.
+Controller correction PR198 headf21840d8226cc8acda535fd8a54a5bcbc459c1a8
+passed full Specifications34662911092/job103468963988 and independent focused
+review before merge. Its real backend test proves EIO precedes process shutdown.
+The fix preserves exact fault-audit checks and correlates natural exit21 with
+its terminal record; owned SIGKILL exit-9 need not invent a terminal record.
+
+## Prior failures and disposition
+
+Runs34657349650,34659553868 and34662264976 failed and remain failed evidence,
+not acceptance. The diagnosed harness defects were respectively panic-frame
+parsing, selector-specific event/barrier validation, and prematurely requiring
+a process-terminal record for an operation EIO. PR196/197/198 corrected these
+with focused negatives and independent review. No native target change was
+needed between source93ac75b and this successful campaign. No failed check was
+ignored, weakened into unconditional acceptance, or silently relabeled.
+
+## Remaining M4.3 work and limits
+
+Immutable System-only repair and restartable interrupted repair, the full
+controller-owned fault matrix, final crypto comparisons/reproducibility/
+regressions/reviews, exact-main acceptance and v0.4 release remain unfinished.
+Existing prior-component fallback is not immutable recovery repair.
+Laboratory keys/data are public fixtures. Rollback protection is relative to
+intact local journal state, not a hardware monotonic anchor. No production
+confidentiality, arbitrary hardware support or universal restart-free update
+claim is made.
+
+All repository mutations are GitHub-only. No Mac/SSD file creation, edits,
+deletion, artifact downloads, builds, mounting or RAR/VM execution occurred.
+Only reviewed disposable cloud profiles executed target tests.
+
+## Next concrete action
+
+Begin M4.3 by specifying and independently reviewing the immutable-factory
+repair contract; implement the System-only repair path and restart tests,
+then complete the final fault and
+release gates. No additional owner permission packet is required for routine
+safe implementation within the approved scope; independent boundary review
+and actual cloud evidence remain mandatory.
+
+---
+
+# Historical checkpoints (preserved; superseded by acceptance above)
+
 # Verified M4.2 source result — 2026-09-11
 
 M4.2 remains incomplete; do not begin M4.3 or merge PR158.
