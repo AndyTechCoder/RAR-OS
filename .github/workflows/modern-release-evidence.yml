@@ -1,0 +1,38 @@
+name: Preserve Modern release evidence
+run-name: Preserve Modern release evidence ${{ github.sha }}
+on:
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: Existing draft v0.4.0-modern-alpha prerelease at current main
+        required: true
+        type: string
+      proofs:
+        description: Exact bounded JSON of eight successful current-main artifact identities and Specifications run
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: modern-release-evidence
+  cancel-in-progress: false
+jobs:
+  preserve:
+    if: github.repository == 'AndyTechCoder/RAR-OS' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          path: controller
+      - name: Preserve verified opaque proof bundles without extracting or executing
+        env:
+          RAR_RELEASE_ID: ${{ inputs.release_id }}
+          RAR_RELEASE_PROOFS: ${{ inputs.proofs }}
+          RAR_RELEASE_TOKEN: ${{ github.token }}
+        run: /usr/bin/python3 -I -B controller/tools/rar-lab/modern/release_evidence.py
