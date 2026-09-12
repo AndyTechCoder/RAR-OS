@@ -95,7 +95,7 @@ class Tests(unittest.TestCase):
                 interrupted=True;raise TimeoutError("injected before creation")
             if any(a["name"]==name for a in release["assets"]):raise AssertionError("asset overwrite")
             asset=dict(id=1000+len(release["assets"]),name=name,size=len(raw),digest="sha256:"+sha(raw),
-                state="uploaded",browser_download_url="https://github.com/"+subject.REPO+"/releases/download/"+subject.TAG+"/"+name)
+                state="uploaded",browser_download_url="https://github.com/"+subject.REPO+"/releases/download/untagged-fixture/"+name)
             release["assets"].append(asset);uploaded_raw[name]=raw
             if fault:
                 interrupted=True;raise TimeoutError("injected response loss after creation")
@@ -122,6 +122,7 @@ class Tests(unittest.TestCase):
             return
         result=run();self.assertEqual(len(result["artifacts"]),8);self.assertEqual(len(release["assets"]),9)
         self.assertEqual(result["source"],SOURCE);self.assertEqual(result["publisher_source"],publisher_source)
+        self.assertTrue(all(set(row["asset"])=={"id","name","size","digest"} for row in result["artifacts"]))
         self.assertEqual(len(downloads),8);self.assertTrue(release["draft"])
         self.assertTrue(all(method in ("GET","POST") for method,path in calls))
         if resume:
@@ -142,14 +143,20 @@ class Tests(unittest.TestCase):
         asset=dict(id=1,name=name,size=len(raw),digest="sha256:"+sha(raw),state="uploaded",
             browser_download_url="https://github.com/"+subject.REPO+"/releases/download/"+subject.TAG+"/"+name)
         self.assertEqual(subject.asset_check(asset,name,raw,sha)["id"],1)
-        for key in asset:
+        for key in ("id","name","size","digest","state"):
             bad=dict(asset);bad.pop(key)
             with self.subTest(missing=key),self.assertRaises(ValueError):subject.asset_check(bad,name,raw,sha)
         for key,value in (("id",True),("id",0),("name","other"),("size",True),("size",999),
-            ("digest","sha256:"+"0"*64),("state","new"),("browser_download_url",None),
-            ("browser_download_url","https://elsewhere.invalid/proof"),("browser_download_url",asset["browser_download_url"]+"?x=1")):
+            ("digest","sha256:"+"0"*64),("state","new")):
             bad=dict(asset);bad[key]=value
             with self.subTest(key=key,value=value),self.assertRaises(ValueError):subject.asset_check(bad,name,raw,sha)
+        expected={key:asset[key] for key in ("id","name","size","digest")}
+        for url in (None,123,"https://elsewhere.invalid/proof",
+            "https://github.com/"+subject.REPO+"/releases/download/untagged-abc/"+name):
+            bad=dict(asset);bad["browser_download_url"]=url
+            self.assertEqual(subject.asset_check(bad,name,raw,sha),expected)
+        bad=dict(asset);bad.pop("browser_download_url")
+        self.assertEqual(subject.asset_check(bad,name,raw,sha),expected)
     def test_frozen_main_source_and_separate_publisher(self):
         self.exercise(resume=True,publisher_source="c"*40)
         for failure in ("publisher-run","publisher-title","publisher-artifact","publisher-release"):

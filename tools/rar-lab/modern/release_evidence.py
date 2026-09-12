@@ -67,10 +67,9 @@ def artifact_check(value,row,source,attempt):
 def asset_check(value,name,raw,sha):
     if (type(value) is not dict or type(value.get("id")) is not int or value["id"]<=0 or
         value.get("name")!=name or type(value.get("size")) is not int or value["size"]!=len(raw) or
-        value.get("digest")!="sha256:"+sha(raw) or value.get("state")!="uploaded" or
-        value.get("browser_download_url")!="https://github.com/"+REPO+"/releases/download/"+TAG+"/"+name):
+        value.get("digest")!="sha256:"+sha(raw) or value.get("state")!="uploaded"):
         raise ValueError("exact uploaded release asset")
-    return {key:value[key] for key in ("id","name","size","digest","browser_download_url")}
+    return {key:value[key] for key in ("id","name","size","digest")}
 def api_url(method,path,release_id,source,raw):
     root="/releases/"+str(release_id)
     upload=(method=="POST" and type(raw) is bytes and 1<=len(raw)<=128*1024**2 and
@@ -108,8 +107,7 @@ def promote(github,api,release_id,source,plan,sha,canonical,publisher_source=Non
         asset=existing.get(name)
         if asset is not None and (type(asset.get("size")) is not int or asset["size"]!=row["size"] or
             asset.get("digest")!="sha256:"+row["sha256"] or asset.get("state")!="uploaded" or
-            type(asset.get("id")) is not int or asset["id"]<=0 or
-            asset.get("browser_download_url")!="https://github.com/"+REPO+"/releases/download/"+TAG+"/"+name):
+            type(asset.get("id")) is not int or asset["id"]<=0):
             raise ValueError("existing proof differs; never overwrite or delete")
         checked.append((row,run))
     def upload(name,raw):
@@ -121,7 +119,7 @@ def promote(github,api,release_id,source,plan,sha,canonical,publisher_source=Non
     for row,run in checked:
         name="m4-"+row["kind"]+"-"+source[:12]+"-proof.zip"
         if name in existing:
-            asset={key:existing[name][key] for key in ("id","name","size","digest","browser_download_url")}
+            asset={key:existing[name][key] for key in ("id","name","size","digest")}
         else:
             raw=github.zip(row["artifact_id"],row["size"])
             if sha(raw)!=row["sha256"]:raise ValueError("downloaded artifact digest mismatch")
