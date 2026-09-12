@@ -702,15 +702,26 @@ $modern_repair_status"; then fail "duplicate repair status accepted"; fi
 if modern_repair_registration unknown "" ""; then fail "unknown repair presence accepted"; fi
 modern_repair_file=docs/adr/0036-system-only-factory-repair.md
 modern_repair_actual_index=$(sed -n '/^- \[ADR 0036:/p' docs/README.md)
-modern_repair_expected_count=34
+modern_repair_presence=absent
+[ ! -L "$modern_repair_file" ] || fail "repair proposal must not be a symlink"
 if [ -f "$modern_repair_file" ]; then
+    [ -s "$modern_repair_file" ] || fail "repair proposal is empty"
+    [ "$(sed -n '/^# /p' "$modern_repair_file")" = '# ADR 0036: Bounded immutable-factory System repair' ] || fail "repair proposal title drift"
     modern_repair_registration present "$modern_repair_actual_index" \
         "$(sed -n '/^Status:/p' "$modern_repair_file")" || fail "repair proposal registration/status drift"
-    modern_repair_expected_count=35
+    modern_repair_presence=present
 else
+    [ ! -e "$modern_repair_file" ] || fail "repair proposal must be a regular file"
     modern_repair_registration absent "$modern_repair_actual_index" "" || fail "repair index without canonical proposal"
 fi
-[ "$adr_count" -eq "$modern_repair_expected_count" ] || fail "unexpected indexed ADR count"
+modern_repair_count() {
+    case "$1:$2" in absent:34|present:35) return 0 ;; *) return 1 ;; esac
+}
+modern_repair_count absent 34 || fail "base ADR count refused"
+modern_repair_count present 35 || fail "repair ADR count refused"
+if modern_repair_count present 34; then fail "repair replacing an existing ADR accepted"; fi
+if modern_repair_count absent 35; then fail "extra ADR without repair accepted"; fi
+modern_repair_count "$modern_repair_presence" "$adr_count" || fail "unexpected indexed ADR count"
 
 # Pure registration/status drift fixtures; no files, launches or approval grants.
 modern_ide_registration() {
