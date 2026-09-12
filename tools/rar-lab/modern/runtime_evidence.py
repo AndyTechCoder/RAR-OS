@@ -173,7 +173,8 @@ def checked_event_stream(events,receipts,rows,drained,rtc_path):
     for index,event in enumerate(events):
         if (type(event) is not dict or
             phases[index] not in (("continue-reply","running-reply") if index==0 else ("running-reply",))):
-            raise ValueError("event before sole continue or malformed object")
+            raise ValueError("event before sole continue or malformed object: "+
+                             json.dumps(event_summary(events,phases),sort_keys=True))
         name="RESUME" if index==0 else "RTC_CHANGE"
         fields={"event","timestamp"} if index==0 else {"event","timestamp","data"}
         if set(event)!=fields or event["event"]!=name:

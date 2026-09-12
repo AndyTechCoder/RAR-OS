@@ -89,9 +89,66 @@ def serial_status(serial,hit,final=False):
         if final:raise ValueError("reconcile without exact System receipt")
         return "waiting"
     return "reconciled"
+def status_reply(value):
+    if (type(value) is not dict or set(value)!={"running","singlestep","status"} or
+        value["running"] is not True or value["singlestep"] is not False or value["status"]!="running"):
+        raise ValueError("exact running reconcile QMP barrier")
+    return value
+
+def checked_events(events,receipts,rows,drained,rtc_path,hit,base):
+    """Exact planned System EIO, not a generic event-policy exception."""
+    if (type(hit) is not dict or hit.get("terminal") is not True or
+        type(hit.get("plan")) is not dict or hit["plan"].get("operation")!="write" or
+        hit["plan"].get("effect")!="error" or hit["plan"].get("prefix")!=0 or
+        type(rows) is not list or len(rows)<2 or
+        type(rows[-1]) is not dict or type(rows[-2]) is not dict or
+        set(rows[-1])!={"execute","id"} or set(rows[-2])!={"execute","id","arguments"} or
+        type(rows[-1]["id"]) is not int or rows[-1]["id"]!=len(rows) or
+        type(rows[-2]["id"]) is not int or rows[-2]["id"]!=len(rows)-1 or
+        rows[-1].get("execute")!="query-status" or rows[-2].get("execute")!="send-key" or
+        rows[-2].get("arguments")!={"keys":[{"type":"qcode","data":"ret"}],"hold-time":50}):
+        raise ValueError("verified terminal selector error and final barrier required")
+    phases=base.receipt_phases(receipts,events,rows,drained)
+    if (not 2<=len(events)<=6 or type(rtc_path) is not str or
+        not rtc_path.startswith("/machine/unattached/")):
+        raise ValueError("bounded exact System fault events")
+    rtc=0;io=0
+    for index,event in enumerate(events):
+        if (phases[index] not in (("continue-reply","running-reply") if index==0 else ("running-reply",)) or
+            type(event) is not dict or
+            set(event)!=({"event","timestamp"} if index==0 else {"event","timestamp","data"}) or
+            (event["event"]!="RESUME" if index==0 else event["event"] not in ("RTC_CHANGE","BLOCK_IO_ERROR"))):
+            raise ValueError("unplanned System fault event or receipt phase")
+        stamp=event["timestamp"]
+        if (type(stamp) is not dict or set(stamp)!={"seconds","microseconds"} or
+            type(stamp["seconds"]) is not int or not 0<=stamp["seconds"]<1<<63 or
+            type(stamp["microseconds"]) is not int or not 0<=stamp["microseconds"]<1000000):
+            raise ValueError("canonical fault event timestamp")
+        if index:
+            data=event["data"]
+            if event["event"]=="RTC_CHANGE":
+                rtc+=1
+                if (rtc>4 or type(data) is not dict or set(data)!={"offset","qom-path"} or
+                    type(data["offset"]) is not int or not -(1<<63)<=data["offset"]<1<<63 or
+                    data["qom-path"]!=rtc_path):raise ValueError("exact RTC identity")
+            else:
+                io+=1
+                if (io!=1 or receipts[index]["request_id"] not in (rows[-2]["id"],rows[-1]["id"]) or
+                    type(data) is not dict or set(data)!={"device","node-name","operation","action","reason"} or
+                    data["device"]!="" or data["node-name"]!="rar-system" or
+                    data["operation"]!="write" or data["action"]!="report" or
+                    type(data["reason"]) is not str or not 1<=len(data["reason"])<=256 or
+                    not data["reason"].isascii() or any(ord(c)<32 or ord(c)==127 for c in data["reason"])):
+                    raise ValueError("one exact planned System write-error event")
+    if io!=1:raise ValueError("missing planned System write-error event")
+    return rtc
+
 def joined(vm,candidate,selector,base):
     vm.service()
     if serial_status(bytes(vm.serial),vm.system_fault_hit,True)!="reconciled":raise ValueError("exact fault stop")
+    if type(vm.system_fault_hit) is not dict or vm.system_fault_hit.get("terminal") is not True:
+        raise ValueError("terminal System receipt before QMP barrier")
+    barrier=status_reply(vm.request({"execute":"query-status"}))
     stopped=vm.destroy()
     if (stopped.get("joined") is not True or vm.cleanup_succeeded is not True or vm.qmp_drained is not True or
         len(stopped.get("backends",[]))!=3):raise ValueError("whole VM/backends joined")
@@ -111,6 +168,7 @@ def joined(vm,candidate,selector,base):
     serial_status(bytes(vm.serial),summaries[1],True)
     return dict(cut=stopped,audit=summaries,system_fault=summaries[1],argv=vm.argv,preflight=vm.preflight,
         commands=vm.commands,events=vm.events,event_receipts=vm.event_receipts,qmp_drained=vm.qmp_drained,
+        status_barrier=barrier,
         serial=bytes(vm.serial).decode("ascii"))
 def self_test():
     candidate=b"x"*896;selector=b"s"*512;p=plan(candidate)
@@ -152,6 +210,52 @@ def self_test():
     for n in range(len(b"RAR-PANIC"),len(PANIC)):
         assert serial_status(PANIC[:n],hit)=="waiting"
         reject(lambda n=n:serial_status(PANIC[:n],hit,True))
+    assert status_reply(dict(running=True,singlestep=False,status="running"))["running"] is True
+    for bad in ({},dict(running=1,singlestep=False,status="running"),
+        dict(running=True,singlestep=0,status="running"),dict(running=False,singlestep=False,status="paused"),
+        dict(running=True,singlestep=False,status="running",extra=0)):
+        reject(lambda bad=bad:status_reply(bad))
+    # Real receipt-phase parser over inert event/command/audit fixtures.
+    import importlib.util
+    from pathlib import Path
+    spec=importlib.util.spec_from_file_location("selector_event_base",Path(__file__).with_name("runtime_evidence.py"))
+    base=importlib.util.module_from_spec(spec);spec.loader.exec_module(base)
+    commands=[dict(execute="qmp_capabilities",id=1),dict(execute="cont",id=2),
+        dict(execute="send-key",id=3,arguments={"keys":[{"type":"qcode","data":"ret"}],"hold-time":50}),
+        dict(execute="query-status",id=4)]
+    resume=dict(event="RESUME",timestamp=dict(seconds=1,microseconds=1))
+    error=dict(event="BLOCK_IO_ERROR",timestamp=dict(seconds=1,microseconds=2),
+        data={"device":"","node-name":"rar-system","operation":"write","action":"report","reason":"Input/output error"})
+    rtc=dict(event="RTC_CHANGE",timestamp=dict(seconds=1,microseconds=3),
+        data={"offset":0,"qom-path":"/machine/unattached/device[7]"})
+    terminal=scan(rows+[dict(type="terminal",outcome="failed",fault_hit=True,failed=True)],candidate,selector)
+    def check(events,ids,receipt=terminal,cmd=commands):
+        receipts=[dict(event_index=i,request_id=n) for i,n in enumerate(ids)]
+        return checked_events(events,receipts,cmd,True,"/machine/unattached/device[7]",receipt,base)
+    for identity in (3,4):assert check([resume,error],[2,identity])==0
+    assert check([resume,rtc,error],[2,3,4])==1
+    for events,ids in (([resume],[2]),([resume,error,error],[2,3,4]),
+        ([resume,error],[2,None]),([resume,error],[2,2]),
+        ([resume,error],[None,4]),([resume,rtc],[2,4])):
+        reject(lambda events=events,ids=ids:check(events,ids))
+    for field,value in (("device","other"),("node-name","rar-data"),("node-name","rar-boot"),
+        ("operation","read"),("action","stop"),("reason","bad"+chr(10)),("reason","x"*257),("reason",0)):
+        bad=copy.deepcopy(error);bad["data"][field]=value
+        reject(lambda bad=bad:check([resume,bad],[2,4]))
+    for name in ("STOP","SHUTDOWN","RESET","GUEST_PANICKED","RESUME"):
+        bad=copy.deepcopy(error);bad["event"]=name
+        reject(lambda bad=bad:check([resume,bad],[2,4]))
+    bad=copy.deepcopy(error);bad["timestamp"]["seconds"]=True
+    reject(lambda:check([resume,bad],[2,4]))
+    bad=copy.deepcopy(rtc);bad["data"]["qom-path"]="/machine/other"
+    reject(lambda:check([resume,bad,error],[2,3,4]))
+    reject(lambda:check([resume,error],[2,4],dict(terminal,terminal=False)))
+    reject(lambda:check([resume,error],[2,4],cmd=commands[:-1]))
+    reject(lambda:check([resume]+[rtc]*5+[error],[2]+[3]*5+[4]))
+    wrong=copy.deepcopy(commands);wrong[-1]["extra"]=True
+    reject(lambda:check([resume,error],[2,4],cmd=wrong))
+    wrong=copy.deepcopy(commands);wrong[-2]["arguments"]["keys"][0]["data"]="esc"
+    reject(lambda:check([resume,error],[2,4],cmd=wrong))
     return rejected
 if __name__=="__main__":
     import sys

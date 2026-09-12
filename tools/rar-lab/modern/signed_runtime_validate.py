@@ -37,6 +37,9 @@ def commands(rows,index,case,value,profile):
         plain.append({k:v for k,v in row.items() if k!="id"})
     start=[{"execute":"qmp_capabilities"}]+[c for _,c in profile.preflight_requests()]+[{"execute":"cont"}]
     if plain[:len(start)]!=start:raise ValueError("paused preflight then sole continue")
+    if case=="selector-error" and index==2:
+        if plain[-1]!={"execute":"query-status"}:raise ValueError("final reconcile status barrier required")
+        plain=plain[:-1]
     keys,scenes=plan(case,index,value);groups=[0]*(len(keys)+1);at=0
     capture={"execute":"screendump","arguments":{"filename":profile.directory(index)+"/frame.ppm"}}
     for row in plain[len(start):]:
@@ -110,8 +113,9 @@ def validate(raw,boot,firmware_sizes,case,factory,candidate):
     for index,proof in enumerate(proofs,1):
         selector=case=="selector-error" and index==2
         wanted={"cut","audit","argv","preflight","commands","events","event_receipts","qmp_drained","serial"}
-        if selector:wanted.add("system_fault")
+        if selector:wanted.update(("system_fault","status_barrier"))
         if type(proof) is not dict or set(proof)!=wanted:raise ValueError("VM proof fields")
+        if selector:helper("system_selector_fault").status_reply(proof["status_barrier"])
         cut=proof["cut"]
         if (type(cut) is not dict or set(cut)!={"vm_pid","vm_returncode","backends","joined"} or
             cut["joined"] is not True or type(cut["vm_pid"]) is not int or cut["vm_pid"]<=0 or
@@ -124,8 +128,6 @@ def validate(raw,boot,firmware_sizes,case,factory,candidate):
         if type(preflight) is not dict or set(preflight)!={"raw","verified"}:raise ValueError("preflight")
         verified=profile.validate_preflight(preflight["raw"],index>1,index,firmware_sizes)
         if verified!=preflight["verified"]:raise ValueError("independent paused topology")
-        base.checked_event_stream(proof["events"],proof["event_receipts"],
-            proof["commands"],proof["qmp_drained"],verified["rtc_path"])
         audits=[];current=[]
         for role,report in zip(("data","system","boot"),cut["backends"]):
             if type(report) is not dict or set(report)!={"returncode","problem","records","joined"} or report["joined"] is not True:
@@ -142,6 +144,12 @@ def validate(raw,boot,firmware_sizes,case,factory,candidate):
             else:audits.append(persist.audit(records,role,ready,index>1,index==2 and role=="system"))
             current.append((ready["device"],ready["inode"],ready["capacity"]))
         if base.canonical(audits)!=base.canonical(proof["audit"]) or len({(d,i) for d,i,_ in current})!=3:raise ValueError("audit or disk separation")
+        if selector:
+            helper("system_selector_fault").checked_events(proof["events"],proof["event_receipts"],
+                proof["commands"],proof["qmp_drained"],verified["rtc_path"],audits[1],base)
+        else:
+            base.checked_event_stream(proof["events"],proof["event_receipts"],
+                proof["commands"],proof["qmp_drained"],verified["rtc_path"])
         bindings.append(current)
     if len(set(pids))!=3 or bindings[1:]!=[bindings[0],bindings[0]]:
         raise ValueError("fresh processes must retain the same three separate inodes")
@@ -178,10 +186,13 @@ def self_test():
                 if at in scenes:plain.append(capture)
                 if at<len(keys):plain.append({"execute":"send-key","arguments":{
                     "keys":[{"type":"qcode","data":keys[at]}],"hold-time":50}})
+            if case=="selector-error" and index==2:plain.append({"execute":"query-status"})
             rows=[dict(row,id=n) for n,row in enumerate(plain,1)]
             assert commands(rows,index,case,value,profile)==list(scenes.values())
             for changed in (rows[:-1],[dict(rows[0],id=True)]+rows[1:],
                 rows+[{"id":len(rows)+1,"execute":"cont"}],
+                rows+[{"id":len(rows)+1,"execute":"query-status"}],
+                [dict(row,id=n) for n,row in enumerate(plain[:-2]+plain[-1:]+plain[-2:-1],1)],
                 [dict(row,id=n) for n,row in enumerate(plain[1:],1)]):
                 reject(lambda changed=changed:commands(changed,index,case,value,profile))
             names=[]
