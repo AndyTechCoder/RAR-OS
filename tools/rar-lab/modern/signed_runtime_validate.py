@@ -128,8 +128,6 @@ def validate(raw,boot,firmware_sizes,case,factory,candidate):
         if type(preflight) is not dict or set(preflight)!={"raw","verified"}:raise ValueError("preflight")
         verified=profile.validate_preflight(preflight["raw"],index>1,index,firmware_sizes)
         if verified!=preflight["verified"]:raise ValueError("independent paused topology")
-        base.checked_event_stream(proof["events"],proof["event_receipts"],
-            proof["commands"],proof["qmp_drained"],verified["rtc_path"])
         audits=[];current=[]
         for role,report in zip(("data","system","boot"),cut["backends"]):
             if type(report) is not dict or set(report)!={"returncode","problem","records","joined"} or report["joined"] is not True:
@@ -146,6 +144,12 @@ def validate(raw,boot,firmware_sizes,case,factory,candidate):
             else:audits.append(persist.audit(records,role,ready,index>1,index==2 and role=="system"))
             current.append((ready["device"],ready["inode"],ready["capacity"]))
         if base.canonical(audits)!=base.canonical(proof["audit"]) or len({(d,i) for d,i,_ in current})!=3:raise ValueError("audit or disk separation")
+        if selector:
+            helper("system_selector_fault").checked_events(proof["events"],proof["event_receipts"],
+                proof["commands"],proof["qmp_drained"],verified["rtc_path"],audits[1],base)
+        else:
+            base.checked_event_stream(proof["events"],proof["event_receipts"],
+                proof["commands"],proof["qmp_drained"],verified["rtc_path"])
         bindings.append(current)
     if len(set(pids))!=3 or bindings[1:]!=[bindings[0],bindings[0]]:
         raise ValueError("fresh processes must retain the same three separate inodes")

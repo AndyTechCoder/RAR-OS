@@ -104,3 +104,15 @@ non-final queries, wrong response types/status, partial-send no-retry and other
 modes. Phase failures now include the existing bounded inert event summary.
 No guest input, disk write, target change or unreviewed runtime activation is
 introduced. A bounded reviewed rerun is still required; no blind retry loop.
+
+
+The fixed profile reports injected I/O errors through QMP BLOCK_IO_ERROR, as the
+existing accepted Data-fault matcher already requires. The selector case therefore
+uses a separate exact System matcher after full backend audit rescanning: one
+rar-system write/report error, bounded inert reason, received at the final Enter
+or read-only barrier, with the exact terminal selector fault. Missing/duplicate
+errors, other nodes, post-reap receipts, other lifecycle events and malformed
+fields fail. RESUME and at most four identity-checked RTC events retain their
+existing bounds. Non-selector cases retain the unmodified baseline event policy.
+This completes the expected-fault evidence contract; it does not classify an
+uninspected event from the failed artifact as safe or count that run as passing.
