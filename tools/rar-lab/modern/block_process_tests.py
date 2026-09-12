@@ -36,8 +36,8 @@ def main():
         path = root/("disk-"+str(len(descriptors)))
         fd = os.open(path,os.O_RDWR|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW|os.O_CLOEXEC,0o600)
         descriptors.append(fd)
-        size = 32768*512 if kind=="boot" else 194*512
-        if kind=="boot":
+        size = {"boot":32768*512,"system":16384*512,"data":194*512}[kind]
+        if kind in ("boot","system"):
             # This is an O_EXCL-created empty fixture, never an existing file.
             # Grow a sparse zero image: preserve full geometry and actual FD I/O
             # without retaining 16MiB of redundant zero pages in shared /tmp.
@@ -133,6 +133,39 @@ def main():
             handshake(c2)
             self.assertEqual(request(c2,0,offset=1024,length=512),bytes(512))
             two.stop()
+
+        def test_system_eio_receipt_precedes_transport_shutdown(self):
+            for ending in ("kill","eof"):
+                fd=image(kind="system")
+                plan=dict(operation="write",ordinal=1,effect="error",prefix=0)
+                b,c=start(fd,kind="system",fault=plan)
+                handshake(c,size=16384*512)
+                request(c,1,offset=512,length=512,data=b"F"*512,error=5)
+                until=time.monotonic()+2
+                while not any(r["type"]=="event" for r in b.records):
+                    self.assertIsNone(b.poll())
+                    if time.monotonic()>=until:self.fail("missing actual EIO audit")
+                    time.sleep(0.005)
+                self.assertIsNone(b.poll())
+                self.assertIsNone(b.problem)
+                self.assertFalse(any(r["type"]=="terminal" for r in b.records))
+                events=[r["event"] for r in b.records if r["type"]=="event"]
+                self.assertEqual(len(events),1)
+                self.assertEqual(events[0]["status"],"failed-no-success")
+                self.assertEqual(events[0]["injection"],plan)
+                self.assertEqual(os.pread(fd,512,512),bytes(512))
+                if ending=="eof":
+                    c.close()
+                    self.assertEqual(finished(b),21)
+                result=b.stop()
+                self.assertTrue(result["joined"])
+                self.assertEqual(result["returncode"],21 if ending=="eof" else -9)
+                self.assertEqual(result["problem"],"backend-failed")
+                terminals=[r for r in result["records"] if r["type"]=="terminal"]
+                if ending=="eof":
+                    self.assertEqual(terminals,[dict(type="terminal",outcome="failed",fault_hit=True,failed=True)])
+                else:self.assertEqual(terminals,[])
+                self.assertEqual(len([r for r in result["records"] if r["type"]=="request"]),1)
 
         def test_torn_cut_has_no_reply_and_records_actual_prefix(self):
             fd = image()
@@ -258,11 +291,11 @@ def main():
 
     try:
         suite = unittest.defaultTestLoader.loadTestsFromTestCase(Tests)
-        assert suite.countTestCases() == 8
+        assert suite.countTestCases() == 9
         result = unittest.TextTestRunner(verbosity=2).run(suite)
         if not result.wasSuccessful():
             raise SystemExit(1)
-        print("Modern backend process: 8 tests; real child kill/join, retained bytes, lost volatile state, torn cut, readonly and deadline; no VM/target execution")
+        print("Modern backend process: 9 tests; real child kill/join, retained bytes, lost volatile state, torn cut, readonly and deadline; no VM/target execution")
     finally:
         for backend in backends:
             if not backend.closed:

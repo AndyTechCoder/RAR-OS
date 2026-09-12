@@ -116,3 +116,28 @@ fields fail. RESUME and at most four identity-checked RTC events retain their
 existing bounds. Non-selector cases retain the unmodified baseline event policy.
 This completes the expected-fault evidence contract; it does not classify an
 uninspected event from the failed artifact as safe or count that run as passing.
+
+
+## Operation receipt versus shutdown receipt (2026-09-12)
+
+The owner renewed safe continuation and standing in-scope self-approval after the
+bounded stop. Prior run34662264976 failed because the pre-barrier check required
+a terminal process record. Source diagnosis is definitive: block_wire catches
+the injected operation OSError, sends NBD EIO5 and keeps serving; block_process
+emits terminal only when the transport later exits. Operation failure and process
+termination are different events. No unchanged retry is authorized by this note.
+
+The pre-barrier check now rescans the exact selector fault and requires the exact
+reconcile frame, with the existing VM/peer/channel checks. It does not demand a
+premature terminal. The read-only query remains final, single-use, consumed before
+send and exact-response-checked. After whole-VM teardown, System -9/backend-failed
+permits an absent terminal (owned forced kill), while natural21/backend-failed
+requires the exact terminal. The independent retained checker repeats this
+correlation. No request after the fault, wrong exit, peer failure, malformed
+record, unrelated QMP event or changed Data is excused.
+
+A new real cloud-only System backend test proves EIO5 arrives while the process
+is alive and no terminal exists, then separately proves owned kill and peer-EOF
+outcomes on fresh fixtures. Inert VM tests cover both states and reject natural
+exit without terminal. No Mac/SSD files or target execution are involved.
+M4.2 remains incomplete until reviewed final checks and actual campaign pass.
