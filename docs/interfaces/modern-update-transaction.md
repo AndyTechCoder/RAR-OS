@@ -496,3 +496,31 @@ and behavior are unchanged. Source tests cover exact framing/full-width
 identities, every truncation and byte substitution, fragment order/hash binding,
 sector bounds, cross-family refusal, role/Record matching and exact releases.
 These are source tests, not native complete-read or recovery proof.
+
+
+### Serialized inspection progress guard
+
+The private Manager-side Progress state machine now enforces the protocol
+sequence rather than relying on Phase::next alone. It retains the exact decoded
+Record/Snapshot and full System incarnation, permits one outstanding Inspect,
+binds each canonical offer, requires strictly increasing nonzero seals, and
+requires a single Release followed by its exact authenticated Released reply
+before the next phase. Every invalid state transition or peer/identity mismatch
+permanently poisons that progress instance. Fresh phases compare all original
+storage identity fields, including full stored-byte hash and padded length.
+Prior phases are omitted only when the retained Record has no prior.
+
+All initial and fresh phases MUST complete before the first repair write.
+The guard's consuming finish returns no repair permit: it does not prove kernel
+envelope provenance, VIEW10 mapping/purpose, actual bytes or fresh device I/O.
+The native adapter must validate those independently, classify through its
+opaque complete-read lease, successfully scrub through VIEW11 before Release,
+and obtain the independently rooted Plan before any payload preparation.
+A phase comparison cannot substitute for a fresh read or successful cleanup.
+There is still no native caller at this source checkpoint.
+
+Six additional test groups exercise complete four/six-phase sequences and
+every incomplete prefix, both System slot directions, duplicate/early/replayed
+messages, full-width peer incarnation, seal exhaustion, every fresh identity
+field, every Released-byte mutation and Inspection truncation. These tests
+exercise protocol logic only and do not establish running-OS recovery.

@@ -146,6 +146,100 @@ impl Inspection{
         }
     }
 }
+
+/// Serialized Manager-side inspection progress. This is a protocol guard, not
+/// a kernel lease or proof of fresh I/O. The native adapter must authenticate
+/// kernel envelopes, validate VIEW10 and hash the actual bytes before offer(),
+/// and successfully scrub VIEW11 before accepting the Released frame.
+/// All errors poison this transaction; recovery never retries it in place.
+pub struct Progress {
+    snapshot:Snapshot, record:Record, system_incarnation:u64,
+    state:ProgressState, last_seal:u64, observations:[Option<Inspection>;3],
+}
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+enum ProgressState { Ready(Phase), Awaiting(Phase), Offered(Inspection), Releasing(Inspection), Complete, Halted }
+impl Progress {
+    pub fn new(snapshot:Snapshot,record:Record,system_incarnation:u64)->Result<Self,Error>{
+        if system_incarnation==0||!snapshot.matches_record(record){return Err(Error::Identity);}
+        Ok(Self{snapshot,record,system_incarnation,state:ProgressState::Ready(Phase::Active),
+            last_seal:0,observations:[None;3]})
+    }
+    pub fn halt(&mut self){self.state=ProgressState::Halted;}
+    pub fn is_halted(&self)->bool{self.state==ProgressState::Halted}
+    fn reject<T>(&mut self,error:Error)->Result<T,Error>{self.halt();Err(error)}
+    pub fn request(&mut self)->Result<[u8;BYTES],Error>{
+        let ProgressState::Ready(phase)=self.state else{return self.reject(Error::Order);};
+        let frame=match self.snapshot.control(phase,None,false){
+            Ok(frame)=>frame,Err(e)=>return self.reject(e),
+        };
+        self.state=ProgressState::Awaiting(phase);Ok(frame)
+    }
+    /// sender/incarnation MUST come from the kernel envelope, never the payload.
+    /// The native caller separately validates the kernel view and actual bytes.
+    pub fn offer(&mut self,sender:u64,incarnation:u64,raw:&[u8])->Result<Inspection,Error>{
+        if sender!=9||incarnation!=self.system_incarnation{return self.reject(Error::Identity);}
+        let ProgressState::Awaiting(phase)=self.state else{return self.reject(Error::Order);};
+        let offer=match Inspection::parse(raw){Ok(t)=>t,Err(e)=>return self.reject(e)};
+        if !offer.binds(self.snapshot,self.record,phase)||offer.seal<=self.last_seal{
+            return self.reject(Error::Identity);
+        }
+        // Leave enough identity space for every remaining required phase.
+        // Exhaustion is a terminal refusal, never wraparound or a partial
+        // successful exchange that cannot possibly reach completion.
+        let mut remaining=0u64;
+        let mut next=phase.next(self.record.previous().is_some());
+        while let Some(p)=next{
+            remaining+=1;next=p.next(self.record.previous().is_some());
+        }
+        if offer.seal.checked_add(remaining).is_none(){return self.reject(Error::Identity);}
+        let index=match phase{
+            Phase::Active|Phase::FreshActive=>0,
+            Phase::Prior|Phase::FreshPrior=>1,
+            Phase::Factory|Phase::FreshFactory=>2,
+        };
+        if matches!(phase,Phase::FreshActive|Phase::FreshPrior|Phase::FreshFactory){
+            let Some(old)=self.observations[index]else{return self.reject(Error::Order);};
+            // New seals/phases are mandatory, but all storage identity fields
+            // must still match. This comparison is NOT evidence of fresh I/O.
+            if (offer.slot,offer.generation,offer.length,offer.digest,offer.stored_hash)!=
+                (old.slot,old.generation,old.length,old.digest,old.stored_hash){
+                return self.reject(Error::Identity);
+            }
+        }else{
+            if self.observations[index].is_some(){return self.reject(Error::Order);}
+            self.observations[index]=Some(offer);
+        }
+        self.state=ProgressState::Offered(offer);Ok(offer)
+    }
+    /// Build the release only after native classification and VIEW11 cleanup.
+    /// This value does not attest that either operation actually occurred.
+    pub fn release_request(&mut self)->Result<[u8;BYTES],Error>{
+        let ProgressState::Offered(offer)=self.state else{return self.reject(Error::Order);};
+        match self.snapshot.control(offer.phase,Some(offer.seal),false){
+            Ok(frame)=>{self.state=ProgressState::Releasing(offer);Ok(frame)},Err(e)=>self.reject(e),
+        }
+    }
+    pub fn released(&mut self,sender:u64,incarnation:u64,raw:&[u8])->Result<(),Error>{
+        if sender!=9||incarnation!=self.system_incarnation{return self.reject(Error::Identity);}
+        let ProgressState::Releasing(offer)=self.state else{return self.reject(Error::Order);};
+        if let Err(e)=self.snapshot.check_control(raw,offer.phase,Some(offer.seal),true){
+            return self.reject(e);
+        }
+        self.last_seal=offer.seal;
+        self.state=match offer.phase.next(self.record.previous().is_some()){
+            Some(phase)=>ProgressState::Ready(phase),None=>ProgressState::Complete,
+        };
+        Ok(())
+    }
+    /// Consumes the ordered protocol progress once. NOT a repair permit: native
+    /// complete-read receipts, independently rooted Plan, and freshness remain
+    /// required before any write. No reference or reusable token escapes.
+    pub fn finish(mut self)->Result<(),Error>{
+        if self.state!=ProgressState::Complete{return self.reject(Error::Order);}
+        self.halt();Ok(())
+    }
+}
+
 #[cfg(test)]mod tests{
     use super::*;
     fn record()->Record{
@@ -233,4 +327,157 @@ impl Inspection{
         assert_eq!(Phase::FreshActive.next(true),Some(Phase::FreshPrior));
         assert_eq!(Phase::FreshFactory.next(true),None);
     }
+    fn prior_record(active:Slot)->Record{
+        let mut b=record().encode();b[12]=1;b[13]=if active==Slot::A{0}else{1};
+        b[14]=if active==Slot::A{1}else{0};
+        for at in [16usize,24,40]{b[at..at+8].copy_from_slice(&2u64.to_le_bytes());}
+        for at in [48usize,56]{b[at..at+8].copy_from_slice(&1u64.to_le_bytes());}
+        b[64..96].fill(2);b[96..128].fill(1);b[128..160].fill(7);
+        let hash=sha256(&b[..480]).unwrap();b[480..].copy_from_slice(&hash);
+        Record::decode(&b).unwrap()
+    }
+    const INC:u64=(1<<48)+3;
+    fn session(r:Record)->(Snapshot,Progress){
+        let s=Snapshot::from_record((1<<40)+7,r).unwrap();
+        (s,Progress::new(s,r,INC).unwrap())
+    }
+    fn observed(r:Record,s:Snapshot,phase:Phase,seal:u64)->Inspection{
+        let (slot,generation,digest)=match phase{
+            Phase::Active|Phase::FreshActive=>{
+                let l=r.active();(l.slot(),l.generation(),l.digest())},
+            Phase::Prior|Phase::FreshPrior=>{
+                let l=r.previous().unwrap();(l.slot(),l.generation(),l.digest())},
+            Phase::Factory|Phase::FreshFactory=>(r.active().slot().other(),1,[7;32]),
+        };
+        Inspection{phase,request:s.request,seal,sequence:r.sequence(),slot,generation,digest,
+            length:1024,stored_hash:[match phase{Phase::Active|Phase::FreshActive=>11,
+                Phase::Prior|Phase::FreshPrior=>12,_=>13};32]}
+    }
+    fn step(p:&mut Progress,s:Snapshot,t:Inspection){
+        assert_eq!(p.request(),s.control(t.phase,None,false));
+        assert_eq!(p.offer(9,INC,&t.frame().unwrap()),Ok(t));
+        assert_eq!(p.release_request(),s.control(t.phase,Some(t.seal),false));
+        p.released(9,INC,&s.control(t.phase,Some(t.seal),true).unwrap()).unwrap();
+    }
+    #[test]fn progress_requires_every_initial_and_fresh_phase_in_both_slot_directions(){
+        for r in [record(),prior_record(Slot::A),prior_record(Slot::B)]{
+            let(s,mut p)=session(r);let mut phase=Some(Phase::Active);let mut seal=1;
+            while let Some(current)=phase{
+                step(&mut p,s,observed(r,s,current,seal));
+                phase=current.next(r.previous().is_some());seal+=1;
+            }
+            assert_eq!(p.finish(),Ok(()));
+            // All prefixes, including before the final release, are incomplete.
+            for prefix in 0..seal-1{
+                let(_,mut p)=session(r);let mut phase=Phase::Active;
+                for n in 0..prefix{
+                    step(&mut p,s,observed(r,s,phase,n+1));
+                    phase=phase.next(r.previous().is_some()).unwrap();
+                }
+                assert_eq!(p.finish(),Err(Error::Order));
+            }
+        }
+    }
+    #[test]fn progress_rejects_duplicate_requests_offers_and_early_or_repeated_releases(){
+        let r=record();let(s,_)=session(r);let t=observed(r,s,Phase::Active,1);
+        let offer=t.frame().unwrap();let ack=s.control(t.phase,Some(t.seal),true).unwrap();
+        for attack in 0..7{
+            let(_,mut p)=session(r);
+            match attack{
+                0=>{assert!(p.offer(9,INC,&offer).is_err());},
+                1=>{p.request().unwrap();assert!(p.request().is_err());},
+                2=>{p.request().unwrap();p.offer(9,INC,&offer).unwrap();
+                    assert!(p.offer(9,INC,&offer).is_err());},
+                3=>{p.request().unwrap();assert!(p.release_request().is_err());},
+                4=>{p.request().unwrap();p.offer(9,INC,&offer).unwrap();
+                    assert!(p.released(9,INC,&ack).is_err());},
+                5=>{p.request().unwrap();p.offer(9,INC,&offer).unwrap();p.release_request().unwrap();
+                    assert!(p.release_request().is_err());},
+                _=>{step(&mut p,s,t);assert!(p.released(9,INC,&ack).is_err());},
+            }
+            assert!(p.is_halted());assert!(p.request().is_err());
+            assert!(p.offer(9,INC,&offer).is_err());assert!(p.finish().is_err());
+        }
+    }
+    #[test]fn progress_authenticates_full_peer_identity_and_poison_is_sticky(){
+        let r=record();let(s,_)=session(r);let t=observed(r,s,Phase::Active,1);
+        for(sender,incarnation)in [(8,INC),(9,3),(9,0),(9,INC+1),(10,INC)]{
+            for at_release in [false,true]{
+                let(_,mut p)=session(r);p.request().unwrap();
+                if at_release{
+                    p.offer(9,INC,&t.frame().unwrap()).unwrap();p.release_request().unwrap();
+                    assert!(p.released(sender,incarnation,&s.control(t.phase,Some(1),true).unwrap()).is_err());
+                }else{assert!(p.offer(sender,incarnation,&t.frame().unwrap()).is_err());}
+                assert!(p.is_halted());assert!(p.request().is_err());
+            }
+        }
+        assert!(Progress::new(s,r,0).is_err());
+        assert!(Progress::new(Snapshot{record_hash:[9;32],..s},r,INC).is_err());
+        let(_,mut p)=session(r);p.halt();assert!(p.finish().is_err());
+    }
+    #[test]fn progress_rejects_stale_seals_wrong_phase_and_substituted_snapshot(){
+        let r=record();let(s,_)=session(r);
+        for defect in 0..6{
+            let(_,mut p)=session(r);step(&mut p,s,observed(r,s,Phase::Active,10));
+            p.request().unwrap();let mut t=observed(r,s,Phase::Factory,11);
+            match defect{0=>t.seal=10,1=>t.seal=9,2=>t.phase=Phase::FreshFactory,
+                3=>t.request+=1,4=>t.sequence+=1,_=>t.slot=r.active().slot()}
+            assert!(p.offer(9,INC,&t.frame().unwrap()).is_err());assert!(p.is_halted());
+        }
+        // Refuse exhaustion before accepting a phase with no possible successor.
+        for r in [record(),prior_record(Slot::A),prior_record(Slot::B)]{
+            let(s,_)=session(r);let mut phases=vec![];let mut phase=Some(Phase::Active);
+            while let Some(p)=phase{phases.push(p);phase=p.next(r.previous().is_some());}
+            for target in 0..phases.len()-1{
+                let(_,mut p)=session(r);
+                for(i,&phase)in phases[..target].iter().enumerate(){
+                    step(&mut p,s,observed(r,s,phase,i as u64+1));
+                }
+                p.request().unwrap();let remaining=(phases.len()-1-target)as u64;
+                let impossible=u64::MAX-remaining+1;
+                assert!(p.offer(9,INC,&observed(r,s,phases[target],impossible).frame().unwrap()).is_err());
+                assert!(p.is_halted());
+            }
+            let(_,mut p)=session(r);
+            for(i,&phase)in phases.iter().enumerate(){
+                let seal=u64::MAX-(phases.len()-1-i)as u64;
+                step(&mut p,s,observed(r,s,phase,seal));
+            }
+            assert_eq!(p.finish(),Ok(())); // MAX is legal only at the final phase.
+        }
+    }
+    #[test]fn progress_compares_all_fresh_storage_identity_fields_and_requires_release(){
+        for target in [Phase::FreshActive,Phase::FreshPrior,Phase::FreshFactory]{
+            for field in 0..5{
+                let r=prior_record(Slot::B);let(s,mut p)=session(r);
+                let mut phase=Phase::Active;let mut seal=1;
+                while phase!=target{
+                    step(&mut p,s,observed(r,s,phase,seal));
+                    seal+=1;phase=phase.next(true).unwrap();
+                }
+                p.request().unwrap();let mut t=observed(r,s,phase,seal);
+                match field{0=>t.slot=t.slot.other(),1=>t.generation+=1,2=>t.length+=512,
+                    3=>t.digest[0]^=1,_=>t.stored_hash[0]^=1}
+                assert!(p.offer(9,INC,&t.frame().unwrap()).is_err());assert!(p.is_halted());
+            }
+        }
+        let r=record();let(s,mut p)=session(r);let mut phase=Phase::Active;let mut seal=1;
+        while phase!=Phase::FreshFactory{
+            step(&mut p,s,observed(r,s,phase,seal));seal+=1;phase=phase.next(false).unwrap();
+        }
+        p.request().unwrap();p.offer(9,INC,&observed(r,s,phase,seal).frame().unwrap()).unwrap();
+        p.release_request().unwrap();assert_eq!(p.finish(),Err(Error::Order));
+    }
+    #[test]fn progress_rejects_every_release_byte_mutation_and_offer_truncation(){
+        let r=record();let(s,_)=session(r);let t=observed(r,s,Phase::Active,1);
+        let offer=t.frame().unwrap();let ack=s.control(t.phase,Some(1),true).unwrap();
+        for n in 0..BYTES{
+            let(_,mut p)=session(r);p.request().unwrap();
+            assert!(p.offer(9,INC,&offer[..n]).is_err());assert!(p.is_halted());
+            let(_,mut p)=session(r);p.request().unwrap();p.offer(9,INC,&offer).unwrap();
+            p.release_request().unwrap();let mut bad=ack;bad[n]^=1;
+            assert!(p.released(9,INC,&bad).is_err());assert!(p.is_halted());
+        }
+    }
+
 }

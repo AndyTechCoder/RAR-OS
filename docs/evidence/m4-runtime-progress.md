@@ -879,3 +879,24 @@ groups cover framing/order/identity/shape negatives. Native System/Manager
 callers, opaque lease issuance and automatic repair remain to be implemented;
 this codec does not produce CompleteRead or authorize writes. Exact-head tests
 and independent source review are required for this new batch.
+
+
+### Inspection codec cloud result and ordered-progress implementation
+
+Exact source229e5d2ea6eacbc506fae4d7bfcd9615078c0b0a passed all four cloud checks:
+Specifications34679147545, Foundation34679147518, Platform34679147519 and
+Desktop34679147546. The codec source review found no concrete blocking issue;
+its decoders are not native read receipts or repair authorization.
+
+The next source checkpoint implements the Manager-side serialized inspection
+progress guard: exact snapshot/record/incarnation, one outstanding phase,
+strictly increasing seals, exact one-shot Release/Released progression, initial
+versus fresh storage identity comparison, and permanent poison on any mismatch.
+It adds six focused positive/negative test groups without changing native boot
+or granting write authority. Exact-head validation and independent review for
+this addition are pending at commit time.
+
+M4.3 remains incomplete. Native System/Manager integration and the production
+CompleteRead lease still need implementation, followed by actual cloud repair,
+fresh-VM restart/fault evidence, final regressions/reproducibility and release
+review. No host/SSD writes or target execution were used for this checkpoint.
