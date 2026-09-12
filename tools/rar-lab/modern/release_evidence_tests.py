@@ -16,7 +16,7 @@ def fixture():
         aid=100+index;run=200+index;raw=("inert-"+kind).encode();raws[aid]=raw
         rows.append(dict(kind=kind,artifact_id=aid,run_id=run,size=len(raw),sha256=sha(raw)))
         filename,title=subject.KINDS[kind]
-        runs[run]=dict(id=run,run_attempt=1,status="completed",conclusion="success",head_sha=SOURCE,
+        runs[run]=dict(id=run,run_attempt=1,status="completed",conclusion="success",head_sha=SOURCE,head_branch="main",
             event="workflow_dispatch" if title else "push",path=".github/workflows/"+filename,
             repository=dict(full_name=subject.REPO),head_repository=dict(full_name=subject.REPO),
             display_title=(title+SOURCE if title else kind+" "+SOURCE),html_url="https://github.com/"+subject.REPO+"/actions/runs/"+str(run))
@@ -25,7 +25,7 @@ def fixture():
                 "system-install":"modern-system-install-faults","system-repair":"modern-system-repair-faults",
                 "data":"modern-data-faults","signed":"modern-signed-runtime","crypto":"modern-crypto",
                 "foundation":"foundation","platform":"platform","desktop":"desktop"}[kind])+"-"+str(run)+"-1")
-    runs[999]=dict(id=999,run_attempt=1,status="completed",conclusion="success",head_sha=SOURCE,event="push",
+    runs[999]=dict(id=999,run_attempt=1,status="completed",conclusion="success",head_sha=SOURCE,head_branch="main",event="push",
         path=".github/workflows/specifications.yml",repository=dict(full_name=subject.REPO),
         head_repository=dict(full_name=subject.REPO),display_title="Specifications source "+SOURCE,
         html_url="https://github.com/"+subject.REPO+"/actions/runs/999")
@@ -58,10 +58,17 @@ class Tests(unittest.TestCase):
             ("POST",root+"/assets?name=../../other",b"x"),("POST",root+"/assets?name=release-record.json&x=y",b"x"),
             ("POST","https://elsewhere.invalid",b"x"),("POST",root+"/assets?name=release-record.json",b"")):
             with self.assertRaises(ValueError):subject.api_url(method,path,RID,SOURCE,raw)
-    def exercise(self,failure=None,resume=False,interrupt=None,publish_at=None):
+    def exercise(self,failure=None,resume=False,interrupt=None,publish_at=None,publisher_source=SOURCE):
         plan,raws,runs,metadata,release=fixture();calls=[];downloads=[];interrupted=False;uploaded_raw={}
         if failure=="failed-run":runs[208]["conclusion"]="failure"
         if failure=="wrong-source":runs[208]["head_sha"]="b"*40
+        if failure=="wrong-branch":runs[208]["head_branch"]="codex/proposal"
+        if failure=="legacy-push":runs[208]["event"]="push"
+        if failure=="spec-dispatch":runs[999]["event"]="workflow_dispatch"
+        if failure=="publisher-run":runs[208]["head_sha"]=publisher_source
+        if failure=="publisher-title":runs[208]["display_title"]="Desktop "+publisher_source
+        if failure=="publisher-artifact":metadata[108]["workflow_run"]["head_sha"]=publisher_source
+        if failure=="publisher-release":release["target_commitish"]=publisher_source
         if failure=="wrong-title":runs[201]["display_title"]="Modern System fault matrix "+"b"*40
         if failure=="wrong-artifact":metadata[108]["workflow_run"]["id"]=999
         if failure=="old-attempt":runs[208]["run_attempt"]=2
@@ -93,7 +100,7 @@ class Tests(unittest.TestCase):
             if fault:
                 interrupted=True;raise TimeoutError("injected response loss after creation")
             return copy.deepcopy(asset)
-        def run():return subject.promote(NS(metadata=meta,zip=download),api,RID,SOURCE,plan,sha,canonical)
+        def run():return subject.promote(NS(metadata=meta,zip=download),api,RID,SOURCE,plan,sha,canonical,publisher_source)
         if publish_at is not None:
             with self.assertRaises(ValueError):run()
             self.assertEqual(sum(method=="POST" for method,path in calls),max(0,publish_at-2))
@@ -114,6 +121,7 @@ class Tests(unittest.TestCase):
             self.assertFalse(any(method=="POST" for method,path in calls));self.assertEqual(downloads,[])
             return
         result=run();self.assertEqual(len(result["artifacts"]),8);self.assertEqual(len(release["assets"]),9)
+        self.assertEqual(result["source"],SOURCE);self.assertEqual(result["publisher_source"],publisher_source)
         self.assertEqual(len(downloads),8);self.assertTrue(release["draft"])
         self.assertTrue(all(method in ("GET","POST") for method,path in calls))
         if resume:
@@ -142,10 +150,18 @@ class Tests(unittest.TestCase):
             ("browser_download_url","https://elsewhere.invalid/proof"),("browser_download_url",asset["browser_download_url"]+"?x=1")):
             bad=dict(asset);bad[key]=value
             with self.subTest(key=key,value=value),self.assertRaises(ValueError):subject.asset_check(bad,name,raw,sha)
+    def test_frozen_main_source_and_separate_publisher(self):
+        self.exercise(resume=True,publisher_source="c"*40)
+        for failure in ("publisher-run","publisher-title","publisher-artifact","publisher-release"):
+            with self.subTest(failure=failure):self.exercise(failure=failure,publisher_source="c"*40)
+        self.exercise(failure="invalid-publisher",publisher_source="main")
+        plan,*_=fixture()
+        with self.assertRaises(ValueError):
+            subject.promote(NS(),None,RID,"main",plan,sha,canonical,"c"*40)
     def test_exact_success_and_idempotent_resume(self):self.exercise(resume=True)
     def test_invalid_proofs_never_upload_or_publish(self):
         for failure in ("failed-run","wrong-source","wrong-title","wrong-artifact","expired",
-                        "digest","not-draft","wrong-release","unrelated-asset","old-attempt"):
+                        "digest","not-draft","wrong-release","unrelated-asset","old-attempt","wrong-branch","legacy-push","spec-dispatch"):
             with self.subTest(failure=failure):self.exercise(failure)
     def test_metadata_and_asset_checks(self):
         plan,raws,runs,metadata,release=fixture();row=plan["artifacts"][0]

@@ -10,7 +10,7 @@ KINDS={
  "data":("modern-data-faults.yml","Modern Data faults "),
  "signed":("modern-signed-runtime.yml","Modern signed runtime "),
  "crypto":("modern-crypto.yml","Modern crypto handoff "),
- "foundation":("foundation.yml",None),"platform":("platform.yml",None),"desktop":("desktop.yml",None)}
+ "foundation":("foundation.yml","Foundation "),"platform":("platform.yml","Platform "),"desktop":("desktop.yml","Desktop ")}
 def exact_int(value,maximum=1<<63):
     if type(value) is not int or not 0<value<maximum:raise ValueError("positive bounded integer")
     return value
@@ -37,20 +37,20 @@ def release_check(value,release_id,source):
     if (type(value) is not dict or type(value.get("id")) is not int or value["id"]!=release_id or
         value.get("tag_name")!=TAG or value.get("target_commitish")!=source or
         value.get("draft") is not True or value.get("prerelease") is not True):
-        raise ValueError("one exact draft prerelease at current main")
+        raise ValueError("one exact draft prerelease at the proven main revision")
 def run_check(value,run_id,source,kind):
     filename,title=KINDS[kind] if kind!="specifications" else ("specifications.yml","Specifications source ")
-    event="workflow_dispatch" if title and kind!="specifications" else "push"
+    event="push" if kind=="specifications" else "workflow_dispatch"
     if (type(value) is not dict or type(value.get("id")) is not int or value["id"]!=run_id or
         type(value.get("run_attempt")) is not int or value["run_attempt"]<=0 or
         value.get("status")!="completed" or value.get("conclusion")!="success" or
-        value.get("head_sha")!=source or value.get("event")!=event or
+        value.get("head_sha")!=source or value.get("head_branch")!="main" or value.get("event")!=event or
         value.get("path")!=".github/workflows/"+filename or
         value.get("repository",{}).get("full_name")!=REPO or
         value.get("head_repository",{}).get("full_name")!=REPO or
         (title is not None and value.get("display_title")!=title+source)):
-        raise ValueError("successful exact-main fixed workflow proof")
-    return {key:value[key] for key in ("id","path","head_sha","event","conclusion","display_title","html_url","run_attempt")}
+        raise ValueError("successful frozen-main fixed workflow proof")
+    return {key:value[key] for key in ("id","path","head_sha","event","conclusion","display_title","html_url","run_attempt","head_branch")}
 def artifact_check(value,row,source,attempt):
     if (type(value) is not dict or type(value.get("id")) is not int or value["id"]!=row["artifact_id"] or
         type(value.get("size_in_bytes")) is not int or value["size_in_bytes"]!=row["size"] or
@@ -80,7 +80,11 @@ def api_url(method,path,release_id,source,raw):
         raise ValueError("fixed draft/asset API only")
     return "https://"+("uploads.github.com" if upload else "api.github.com")+"/repos/"+REPO+path
 
-def promote(github,api,release_id,source,plan,sha,canonical):
+def promote(github,api,release_id,source,plan,sha,canonical,publisher_source=None):
+    publisher_source=source if publisher_source is None else publisher_source
+    for revision in (source,publisher_source):
+        if type(revision) is not str or re.fullmatch("[0-9a-f]{40}",revision) is None:
+            raise ValueError("exact frozen release and publisher revisions")
     rows=selection(plan);release=api("GET","/releases/"+str(release_id))
     release_check(release,release_id,source)
     assets=release.get("assets")
@@ -112,7 +116,7 @@ def promote(github,api,release_id,source,plan,sha,canonical):
         # Narrow the external-publication race; final publication remains a separate gate.
         release_check(api("GET","/releases/"+str(release_id)),release_id,source)
         return asset_check(api("POST","/releases/"+str(release_id)+"/assets?name="+name,raw),name,raw,sha)
-    record=dict(schema="rar-modern-release-evidence-v0",source=source,tag=TAG,
+    record=dict(schema="rar-modern-release-evidence-v0",source=source,publisher_source=publisher_source,tag=TAG,
         specifications=spec,artifacts=[],status="verified-proof-assets",publication_control="separate-final-release-gate")
     for row,run in checked:
         name="m4-"+row["kind"]+"-"+source[:12]+"-proof.zip"
@@ -138,8 +142,9 @@ def main():
         "GITHUB_ACTIONS":"true","GITHUB_REPOSITORY":REPO,"GITHUB_EVENT_NAME":"workflow_dispatch",
         "GITHUB_REF":"refs/heads/main","RUNNER_OS":"Linux","RUNNER_ARCH":"X64","ImageOS":"ubuntu24"}.items())):
         raise ValueError("trusted-main hosted cloud publication only")
-    source=os.environ.get("GITHUB_SHA","")
-    if re.fullmatch("[0-9a-f]{40}",source) is None:raise ValueError("exact current main SHA")
+    source=os.environ.get("RAR_RELEASE_SOURCE","");publisher_source=os.environ.get("GITHUB_SHA","")
+    if any(re.fullmatch("[0-9a-f]{40}",v) is None for v in (source,publisher_source)):
+        raise ValueError("exact frozen release and current-main publisher SHAs")
     here=Path(__file__).resolve().parent
     if here!=Path(os.environ["GITHUB_WORKSPACE"]).resolve(strict=True)/"controller/tools/rar-lab/modern":
         raise ValueError("fixed trusted checkout")
@@ -169,6 +174,6 @@ def main():
             value=response.read(4*1024**2+1)
             if len(value)>4*1024**2:raise ValueError("bounded release response")
         return intake.unique(value)
-    promote(github,api,release_id,source,plan,intake.sha,intake.canonical)
+    promote(github,api,release_id,source,plan,intake.sha,intake.canonical,publisher_source)
     print("All draft release evidence assets verified; publication is a separate final gate.",flush=True)
 if __name__=="__main__":main()

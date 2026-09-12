@@ -4,11 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       release_id:
-        description: Existing draft v0.4.0-modern-alpha prerelease at current main
+        description: Existing draft v0.4.0-modern-alpha prerelease at the frozen release revision
+        required: true
+        type: string
+      source_sha:
+        description: Exact previously merged main revision proven by all selected main-branch runs
         required: true
         type: string
       proofs:
-        description: Exact bounded JSON of eight successful current-main artifact identities and Specifications run
+        description: Exact bounded JSON of eight successful frozen-main artifact identities and Specifications run
         required: true
         type: string
 permissions:
@@ -32,6 +36,7 @@ jobs:
           path: controller
       - name: Preserve verified opaque proof bundles without extracting or executing
         env:
+          RAR_RELEASE_SOURCE: ${{ inputs.source_sha }}
           RAR_RELEASE_ID: ${{ inputs.release_id }}
           RAR_RELEASE_PROOFS: ${{ inputs.proofs }}
           RAR_RELEASE_TOKEN: ${{ github.token }}
