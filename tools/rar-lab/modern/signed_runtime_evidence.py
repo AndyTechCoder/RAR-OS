@@ -79,6 +79,96 @@ def validate_repair_system(observed,factory,candidate):
     return dict(sha256=sha256(observed).hexdigest(),outcome="repair",
         sequence=3,active_generation=1,high_water=2,active_slot=0,previous=None)
 
+def system_fault_cases(factory,candidate,mode):
+    """Every physical write and flush; fixed effects, no caller disk offsets."""
+    if mode not in ("install","repair"):raise ValueError("fixed System transaction")
+    package(factory);package(candidate)
+    payload=factory if mode=="repair" else candidate
+    sectors=(len(payload)+511)//512
+    return [dict(operation=operation,ordinal=ordinal,effect=effect,
+                 prefix=255 if effect in ("torn-cut","short-error") else 0)
+        for operation,count in (("write",sectors+1),("flush",2))
+        for ordinal in range(1,count+1)
+        for effect in ("before-cut","after-cut","error","torn-cut","short-error")]
+
+def system_fault_operations(factory,candidate,mode):
+    """Ordered permitted System mutations, including unflushed writes."""
+    if mode not in ("install","repair"):raise ValueError("fixed System transaction")
+    installed,_,repaired=repair_images(factory,candidate)
+    payload=factory if mode=="repair" else candidate
+    start=1024 if mode=="repair" else 1024+SLOT_BYTES
+    rounded=(len(payload)+511)//512*512;padded=payload+bytes(rounded-len(payload))
+    writes=[dict(operation="write",offset=start+i,length=512,
+        payload_sha256=sha256(padded[i:i+512]).hexdigest()) for i in range(0,rounded,512)]
+    selector=repaired[:512] if mode=="repair" else installed[512:1024]
+    return writes+[dict(operation="flush",offset=0,length=0),
+        dict(operation="write",offset=0 if mode=="repair" else 512,length=512,
+             payload_sha256=sha256(selector).hexdigest()),
+        dict(operation="flush",offset=0,length=0)]
+
+def system_fault_image(factory,candidate,mode,case):
+    """Replay only the fixed native sector order against stable/volatile bytes.
+    This is an independent expectation, not proof an injected operation occurred.
+    Actual backend audit, complete joins and fresh-VM behavior remain required.
+    """
+    cases=system_fault_cases(factory,candidate,mode)
+    if type(case) is not int or not 0<=case<len(cases):raise ValueError("fixed fault index")
+    selected=cases[case]
+    installed,damaged,repaired=repair_images(factory,candidate)
+    if mode=="repair":
+        initial=damaged;payload=factory;start=1024;selector=repaired[:512];selector_offset=0
+    else:
+        initial=bytearray(installed);initial[512:1024]=bytes(512)
+        initial[1024+SLOT_BYTES:]=bytes(SYSTEM_BYTES-1024-SLOT_BYTES)
+        initial=bytes(initial);payload=candidate;start=1024+SLOT_BYTES
+        selector=installed[512:1024];selector_offset=512
+    rounded=(len(payload)+511)//512*512
+    padded=payload+bytes(rounded-len(payload))
+    operations=[("write",start+i,padded[i:i+512]) for i in range(0,rounded,512)]
+    operations+=[("flush",0,b""),("write",selector_offset,selector),("flush",0,b"")]
+    stable=bytearray(initial);volatile=bytearray(initial);dirty=set();counts={"write":0,"flush":0}
+    for operation,offset,value in operations:
+        counts[operation]+=1
+        hit=operation==selected["operation"] and counts[operation]==selected["ordinal"]
+        if hit and selected["effect"] in ("before-cut","error"):break
+        if hit and selected["effect"] in ("torn-cut","short-error"):
+            parts=[(offset,value)] if operation=="write" else [
+                (i,bytes(volatile[i:i+512])) for i in sorted(dirty)]
+            left=selected["prefix"]
+            if left>sum(len(part) for _,part in parts):raise ValueError("prefix exceeds pending bytes")
+            for position,part in parts:
+                n=min(left,len(part));stable[position:position+n]=part[:n];left-=n
+            break
+        if operation=="write":
+            volatile[offset:offset+512]=value;dirty.add(offset)
+        else:
+            for position in sorted(dirty):stable[position:position+512]=volatile[position:position+512]
+            dirty.clear()
+        if hit:break
+    else:raise AssertionError("fixed transaction did not hit its fault")
+    return bytes(stable)
+
+def system_fault_restart(factory,candidate,mode,case):
+    """Exact old/new/repair/fallback selection after whole-VM destruction."""
+    frozen=system_fault_image(factory,candidate,mode,case)
+    installed,damaged,repaired=repair_images(factory,candidate)
+    if mode=="install":
+        # Exact or invalid selector1; selector0 remains intact and authenticated.
+        committed=frozen[512:1024]==installed[512:1024]
+        return frozen,committed,"installed" if committed else "factory"
+    if frozen[:512]==repaired[:512]:return frozen,False,"repair"
+    rounded=(len(factory)+511)//512*512
+    intact=frozen[1024:1024+rounded]==factory+bytes(rounded-len(factory))
+    if intact:
+        result=bytearray(frozen)
+        result[:512]=record(2,3,2,0,package(factory),None,installed[512:1024])
+        return bytes(result),False,"fallback"
+    # With both damaged headers and intact selector2, bootstrap must repair anew.
+    result=bytearray(frozen)
+    result[1024:1024+rounded]=factory+bytes(rounded-len(factory))
+    result[:512]=repaired[:512]
+    return bytes(result),False,"repair"
+
 def settings_expected(visual,updated,compact=False):
     if type(updated) is not bool or type(compact) is not bool or compact and not updated:
         raise ValueError("fixed Settings code state")
@@ -129,6 +219,46 @@ def self_test():
         try:validate_repair_system(bytes(changed),factory,candidate)
         except ValueError:pass
         else:raise AssertionError("changed repair System accepted")
+    # Independent stable-byte crash expectations at every native System boundary.
+    for mode in ("install","repair"):
+        plans=system_fault_cases(factory,candidate,mode)
+        assert len(plans)==25
+        assert {(p["operation"],p["ordinal"]) for p in plans}=={
+            ("write",1),("write",2),("write",3),("flush",1),("flush",2)}
+        images=[];outcomes=set()
+        for case,plan in enumerate(plans):
+            frozen=system_fault_image(factory,candidate,mode,case)
+            after,updated,chosen=system_fault_restart(factory,candidate,mode,case)
+            images.append(frozen);outcomes.add(chosen)
+            assert type(frozen) is bytes and len(frozen)==SYSTEM_BYTES
+            assert type(after) is bytes and len(after)==SYSTEM_BYTES
+            if mode=="install":
+                assert frozen[:512]==outputs[0][:512]
+                assert after==frozen
+                assert updated==(chosen=="installed")
+                assert frozen[1024:1024+SLOT_BYTES]==outputs[0][1024:1024+SLOT_BYTES]
+            else:
+                assert frozen[512:1024]==installed[512:1024]
+                assert frozen[1024+SLOT_BYTES:]==damaged[1024+SLOT_BYTES:]
+                assert after[512:1024]==installed[512:1024]
+                assert after[1024:1024+len(factory)]==factory
+                assert after[1024+SLOT_BYTES:]==damaged[1024+SLOT_BYTES:]
+                assert after[:512] in (
+                    repaired[:512],record(2,3,2,0,package(factory),None,installed[512:1024]))
+                assert not updated and chosen in ("repair","fallback")
+            if plan["operation"]=="flush" and plan["ordinal"]==2 and plan["effect"]=="after-cut":
+                assert frozen==(repaired if mode=="repair" else installed)
+        assert len(set(map(lambda b:sha256(b).digest(),images)))>=3
+        assert outcomes==({"repair","fallback"} if mode=="repair" else {"installed","factory"})
+        for invalid in (-1,True,1.0,len(plans),None):
+            try:system_fault_image(factory,candidate,mode,invalid)
+            except ValueError:pass
+            else:raise AssertionError("invalid fixed System fault index accepted")
+    # A volatile first write never changes the physical image. A torn header can
+    # restore the prior unit, in which case fresh boot must use normal fallback.
+    assert system_fault_image(factory,candidate,"repair",0)==damaged
+    assert system_fault_image(factory,candidate,"repair",1)==damaged
+    assert system_fault_restart(factory,candidate,"repair",3)[2]=="fallback"
     from pathlib import Path
     import runpy
     visual=type("Visual",(),runpy.run_path(str(Path(__file__).resolve().with_name("visual_oracle.py"))))
