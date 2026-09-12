@@ -140,6 +140,8 @@ def validate(raw,boot,firmware_sizes,case,factory,candidate):
                 fault=helper("system_selector_fault").scan(records,candidate,
                     expected.expected_system(factory,candidate,"installed")[512:1024])
                 if fault is None or base.canonical(fault)!=base.canonical(proof["system_fault"]):raise ValueError("independent exact selector fault")
+                if report["returncode"]==21 and fault["terminal"] is not True:
+                    raise ValueError("natural System exit requires complete terminal receipt")
                 audits.append(fault)
             else:audits.append(persist.audit(records,role,ready,index>1,index==2 and role=="system"))
             current.append((ready["device"],ready["inode"],ready["capacity"]))

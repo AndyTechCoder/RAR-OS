@@ -318,9 +318,10 @@ class VM:
     def allowed(self,command):
         if command=={"execute":"query-status"} and self.started:
             fixed=getattr(self,"system_fault_audit",None)
-            return (fixed is not None and type(self.system_fault_hit) is dict and
-                self.system_fault_hit.get("terminal") is True and not getattr(self,"system_status_queried",False) and
-                fixed.serial_status(bytes(self.serial),self.system_fault_hit)=="reconciled")
+            if fixed is None or getattr(self,"system_status_queried",False):return False
+            observed=fixed.scan(self.backends[1].records,self.system_fault_candidate,self.system_fault_selector)
+            return (observed is not None and observed==self.system_fault_hit and
+                fixed.serial_status(bytes(self.serial),observed)=="reconciled")
         if command == {"execute":"qmp_capabilities"}:
             return self.identity == 0
         if command in [value for _,value in self.profile.preflight_requests()]:
@@ -875,26 +876,33 @@ def self_test():
             else:raise AssertionError("missing terminal did not fail bounded drain")
     malformed=copy.deepcopy(records);malformed[-2]["event"]["payload_sha256"]="a"*64
     reject(lambda:system_vm(malformed).service())
-    # No process/descriptor operation: verify exact service -> owned join path.
-    good=system_vm();good.argv=[];good.preflight={};good.commands=[]
-    good.events=[];good.event_receipts=[]
-    peers=[dict(type="ready",kind=k,readonly=True,export_readonly=False,
-        capacity=n,device=1,inode=i) for k,n,i in (("data",99328,3),("boot",16777216,4))]
-    good.backends[0].records=[peers[0]];good.backends[2].records=[peers[1]]
-    def joined_fake():
-        good.cleanup_succeeded=True;good.qmp_drained=True
-        return dict(vm_pid=123,vm_returncode=-9,joined=True,backends=[
-            dict(returncode=21 if n==1 else -9,problem="backend-failed",
-                joined=True,records=b.records) for n,b in enumerate(good.backends)])
-    good.destroy=joined_fake
-    def status_fake(command):
-        assert command=={"execute":"query-status"}
-        return dict(running=True,singlestep=False,status="running")
-    good.request=status_fake
-    proof=fixed.joined(good,candidate,selector_bytes,SimpleNamespace(audit=lambda *args:{}))
+    # Operation EIO keeps transport alive; terminal arrives only after EOF.
+    # Both owned SIGKILL without a terminal and natural exit21 with one are valid.
+    def joined_fixture(v,system_code):
+        v.argv=[];v.preflight={};v.commands=[];v.events=[];v.event_receipts=[]
+        peers=[dict(type="ready",kind=k,readonly=True,export_readonly=False,
+            capacity=n,device=1,inode=i) for k,n,i in (("data",99328,3),("boot",16777216,4))]
+        v.backends[0].records=[peers[0]];v.backends[2].records=[peers[1]]
+        def joined_fake():
+            v.cleanup_succeeded=True;v.qmp_drained=True
+            return dict(vm_pid=123,vm_returncode=-9,joined=True,backends=[
+                dict(returncode=system_code if n==1 else -9,problem="backend-failed",
+                    joined=True,records=b.records) for n,b in enumerate(v.backends)])
+        v.destroy=joined_fake
+        def status_fake(command):
+            assert command=={"execute":"query-status"}
+            return dict(running=True,singlestep=False,status="running")
+        v.request=status_fake
+        return fixed.joined(v,candidate,selector_bytes,SimpleNamespace(audit=lambda *args:{}))
+    good=system_vm()
+    proof=joined_fixture(good,21)
     assert proof["system_fault"]["terminal"] is True and proof["cut"]["joined"] is True
-    assert proof["status_barrier"]==dict(running=True,singlestep=False,status="running")
-    good.started=True
+    alive=system_vm(records[:-1],None,None)
+    live_proof=joined_fixture(alive,-9)
+    assert live_proof["system_fault"]["terminal"] is False and live_proof["cut"]["joined"] is True
+    assert live_proof["status_barrier"]==dict(running=True,singlestep=False,status="running")
+    reject(lambda:joined_fixture(system_vm(records[:-1],None,None),21))
+    good=alive;good.started=True
     assert good.allowed({"execute":"query-status"})
     good.system_status_queried=True
     assert not good.allowed({"execute":"query-status"})
@@ -902,7 +910,7 @@ def self_test():
     assert not good.allowed({"execute":"query-status"})
     good.system_fault_hit={"terminal":False}
     assert not good.allowed({"execute":"query-status"})
-    good.system_fault_hit=proof["system_fault"];good.serial=bytearray()
+    good.system_fault_hit=live_proof["system_fault"];good.serial=bytearray()
     assert not good.allowed({"execute":"query-status"})
     good.serial=bytearray(fixed.PANIC)
     good.identity=5;good.qmp_pending=None

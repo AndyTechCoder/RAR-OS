@@ -97,7 +97,7 @@ def status_reply(value):
 
 def checked_events(events,receipts,rows,drained,rtc_path,hit,base):
     """Exact planned System EIO, not a generic event-policy exception."""
-    if (type(hit) is not dict or hit.get("terminal") is not True or
+    if (type(hit) is not dict or type(hit.get("terminal")) is not bool or
         type(hit.get("plan")) is not dict or hit["plan"].get("operation")!="write" or
         hit["plan"].get("effect")!="error" or hit["plan"].get("prefix")!=0 or
         type(rows) is not list or len(rows)<2 or
@@ -107,7 +107,7 @@ def checked_events(events,receipts,rows,drained,rtc_path,hit,base):
         type(rows[-2]["id"]) is not int or rows[-2]["id"]!=len(rows)-1 or
         rows[-1].get("execute")!="query-status" or rows[-2].get("execute")!="send-key" or
         rows[-2].get("arguments")!={"keys":[{"type":"qcode","data":"ret"}],"hold-time":50}):
-        raise ValueError("verified terminal selector error and final barrier required")
+        raise ValueError("verified selector error and final barrier required")
     phases=base.receipt_phases(receipts,events,rows,drained)
     if (not 2<=len(events)<=6 or type(rtc_path) is not str or
         not rtc_path.startswith("/machine/unattached/")):
@@ -146,8 +146,6 @@ def checked_events(events,receipts,rows,drained,rtc_path,hit,base):
 def joined(vm,candidate,selector,base):
     vm.service()
     if serial_status(bytes(vm.serial),vm.system_fault_hit,True)!="reconciled":raise ValueError("exact fault stop")
-    if type(vm.system_fault_hit) is not dict or vm.system_fault_hit.get("terminal") is not True:
-        raise ValueError("terminal System receipt before QMP barrier")
     barrier=status_reply(vm.request({"execute":"query-status"}))
     stopped=vm.destroy()
     if (stopped.get("joined") is not True or vm.cleanup_succeeded is not True or vm.qmp_drained is not True or
@@ -249,7 +247,8 @@ def self_test():
     reject(lambda:check([resume,bad],[2,4]))
     bad=copy.deepcopy(rtc);bad["data"]["qom-path"]="/machine/other"
     reject(lambda:check([resume,bad,error],[2,3,4]))
-    reject(lambda:check([resume,error],[2,4],dict(terminal,terminal=False)))
+    assert check([resume,error],[2,4],dict(terminal,terminal=False))==0
+    reject(lambda:check([resume,error],[2,4],dict(terminal,terminal=None)))
     reject(lambda:check([resume,error],[2,4],cmd=commands[:-1]))
     reject(lambda:check([resume]+[rtc]*5+[error],[2]+[3]*5+[4]))
     wrong=copy.deepcopy(commands);wrong[-1]["extra"]=True
