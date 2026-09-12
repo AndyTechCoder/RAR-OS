@@ -9,13 +9,14 @@ pub mod sha512;
 pub mod ed25519;
 pub mod manifest;
 pub mod journal;
-// No production CompleteRead issuer or repair coordinator exists yet.
+// Pure repair planner tests live here; native main declares its opaque bridge.
 #[cfg(test)]
 pub mod repair;
 pub mod system_volume;
 pub mod update_wire;
 pub mod repair_wire;
 pub mod update_system;
+pub mod repair_system;
 pub mod update_manager;
 pub mod lab_input;
 pub mod update_control;

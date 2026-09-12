@@ -22,6 +22,10 @@ impl update_system::Stage for StageCopy{
         let(seal,accepted)=self.call(0,0,0,&[],length)?;
         if seal==0||accepted!=0{crate::fail();}Ok(seal)
     }
+    fn begin_inspection(&mut self,length:usize)->Result<u64,()>{
+        let(seal,accepted)=self.call(4,0,0,&[],length)?;
+        if seal==0||accepted!=0{crate::fail();}Ok(seal)
+    }
     fn append(&mut self,seal:u64,offset:usize,bytes:&[u8])->Result<(),()>{
         let expected=offset.checked_add(bytes.len()).ok_or(())?;
         if self.call(1,seal,offset,bytes,bytes.len())?==(seal,expected){Ok(())}else{Err(())}
@@ -88,6 +92,16 @@ fn transaction(boot:&Boot,requests:&mut wire::Requests,mode:Mode,index:u64)->Res
     if wire::parse_request(&first,Kind::Rejected)==Ok((mode,id,index)){return Err(Failure::Rejected);}
     let t=Transfer::parse(&first,Kind::Offer).map_err(|_|Failure::Channel)?;
     if (t.mode,t.request)!=(mode,id){return Err(Failure::Channel);}
+    complete_transaction(boot,t,|record,bytes|{
+        let verified=update_manager::verify(t,record,bytes).map_err(|_|())?;
+        Ok((verified.next(),verified.expected_ack().map_err(|_|())?))
+    })
+}
+/// Shared sealed readback, health, durable publication and cutover barrier.
+/// Verification returns owned values only; no staged borrow survives trial.
+fn complete_transaction<F>(boot:&Boot,t:Transfer,verify:F)->Result<u64,Failure>
+where F:for<'a> FnOnce(crate::journal::Record,&'a[u8])->Result<(Option<crate::journal::Record>,[u8;128]),()>
+{
     let mut record=RecordReceiver::new(t,Kind::RecordPart).map_err(|_|Failure::Channel)?;
     for offset in (0..512).step_by(PART){
         let reply=exchange(boot,&t.part(Kind::RecordGet,offset,&[]).map_err(|_|Failure::Channel)?)?;
@@ -108,10 +122,10 @@ fn transaction(boot:&Boot,requests:&mut wire::Requests,mode:Mode,index:u64)->Res
         // is read-only/NX and kernel-sealed across every root until this manager
         // explicitly rejects or accepts it. No Rust reference survives accept.
         let bytes=unsafe{core::slice::from_raw_parts(STAGE_VIEW_ADDRESS as *const u8,length)};
-        update_manager::verify(t,record,bytes).map(|v|(v.next(),v.expected_ack()))
+        verify(record,bytes)
     };
     let(next,ack)=match verified{
-        Ok((next,Ok(ack)))=>(next,ack),
+        Ok((next,ack))=>(next,ack),
         _=>{control(boot,1,t.seal,0)?;cancel(boot,t)?;return Err(Failure::Verify);}
     };
     let mut trial=[0u8;32];
@@ -232,11 +246,21 @@ pub fn manager(boot:&Boot)->!{
 }
 pub fn boot_selected(boot:&Boot,requests:&mut wire::Requests){
     let first=transaction(boot,requests,Mode::Boot,0).map(|_|());
-    let action=update_manager::boot_action(first,false);
-    let action=if action==BootAction::PriorOnce{
-        update_manager::boot_action(transaction(boot,requests,Mode::Fallback,0).map(|_|()),true)
-    }else{action};
-    match action{BootAction::Active=>{},_=>reconcile(boot)}
+    match update_manager::boot_action(first,false){
+        BootAction::Active=>return,
+        BootAction::PriorOnce=>{},
+        _=>reconcile(boot),
+    }
+    match transaction(boot,requests,Mode::Fallback,0){
+        Ok(_)=>return,
+        Err(Failure::Rejected|Failure::Verify|Failure::Trial)=>{},
+        Err(_)=>reconcile(boot),
+    }
+    // Health rejection alone is insufficient: the repair planner independently
+    // rejects intact active/prior bytes before the first repair write.
+    #[cfg(rar_signed_updates)]
+    if repair_transaction(boot,requests).is_ok(){return;}
+    reconcile(boot)
 }
 /// Future native callers must use this terminal wrapper, never handle an
 /// Indeterminate result as an ordinary process-level error.
@@ -261,4 +285,135 @@ pub fn laboratory_input(index:u64)->Option<&'static[u8]>{
     // this process runs. It is never replaced/unmapped during this incarnation;
     // adjacent padding is initialized and guards/other kernel bytes are excluded.
     Some(unsafe{core::slice::from_raw_parts(address as *const u8,length)})
+}
+
+
+/// Private constructor below authenticates the complete System exchange before
+/// any lease exists. Exclusive borrowing prevents a second outstanding lease.
+#[cfg(rar_signed_updates)]
+pub(crate) struct RepairRuntime<'b>{
+    boot:&'b Boot,snapshot:crate::repair_wire::Snapshot,current:crate::journal::Record,
+    progress:crate::repair_wire::Progress,
+}
+#[cfg(rar_signed_updates)]
+pub(crate) struct SealedInspection<'a,'b>{
+    runtime:&'a mut RepairRuntime<'b>,offer:crate::repair_wire::Inspection,released:bool,
+}
+#[cfg(rar_signed_updates)]
+impl<'b> RepairRuntime<'b>{
+    fn new(boot:&'b Boot,snapshot:crate::repair_wire::Snapshot,current:crate::journal::Record)->Result<Self,Failure>{
+        if boot.role!=8||boot.peers[9]==0{return Err(Failure::Native);}
+        let progress=crate::repair_wire::Progress::new(snapshot,current,boot.peers[9])
+            .map_err(|_|Failure::Channel)?;
+        Ok(Self{boot,snapshot,current,progress})
+    }
+    pub(crate) fn current(&self)->crate::journal::Record{self.current}
+    pub(crate) fn acquire(&mut self,phase:crate::repair_wire::Phase)->Result<SealedInspection<'_,'b>,Failure>{
+        let result=(||{
+            let request=self.progress.request().map_err(|_|Failure::Channel)?;
+            self.snapshot.check_control(&request,phase,None,false).map_err(|_|Failure::Channel)?;
+            // exchange/receive authenticates the kernel-stamped sender9/full
+            // incarnation and exact envelope length before yielding these bytes.
+            let reply=exchange(self.boot,&request)?;
+            let offer=self.progress.offer(9,self.boot.peers[9],&reply).map_err(|_|Failure::Channel)?;
+            let mut view=[0u8;STAGE_VIEW_BYTES];
+            control(self.boot,10,view.as_mut_ptr()as u64,STAGE_VIEW_BYTES as u64)?;
+            let word=|i:usize|u64::from_le_bytes(view[i*8..i*8+8].try_into().unwrap());
+            if word(0)!=offer.seal||word(1)!=offer.length as u64||
+                word(2)!=STAGE_VIEW_ADDRESS||!matches!(word(3),5|7){return Err(Failure::Native);}
+            // VIEW10 enforces Inspection purpose/sealed state and exact mapped
+            // length. IPC/session binding proves phase/Record/incarnation.
+            Ok(offer)
+        })();
+        match result{
+            Ok(offer)=>Ok(SealedInspection{runtime:self,offer,released:false}),
+            Err(error)=>{self.progress.halt();Err(error)},
+        }
+    }
+    fn prepare(self,next:crate::journal::Record)->Result<Transfer,Failure>{
+        self.progress.finish().map_err(|_|Failure::Channel)?;
+        if !next.is_repair_successor_of(&self.current){return Err(Failure::Verify);}
+        let bytes=next.encode();
+        for offset in (0..512).step_by(crate::repair_wire::PART){
+            let n=(512-offset).min(crate::repair_wire::PART);
+            let frame=self.snapshot.proposal_part(offset,Some(&bytes[offset..offset+n])).map_err(|_|Failure::Native)?;
+            let reply=exchange(self.boot,&frame)?;
+            self.snapshot.check_proposal_ack(&reply,offset).map_err(|_|Failure::Channel)?;
+        }
+        let reply=exchange(self.boot,&self.snapshot.prepare().map_err(|_|Failure::Native)?)?;
+        let t=Transfer::parse(&reply,Kind::Offer).map_err(|_|Failure::Channel)?;
+        if t.mode!=Mode::Repair||t.request!=self.snapshot.request||t.sequence!=self.snapshot.sequence{
+            return Err(Failure::Channel);
+        }
+        Ok(t)
+    }
+}
+#[cfg(rar_signed_updates)]
+impl SealedInspection<'_,'_>{
+    pub(crate) fn checked_bytes(&self)->Result<&[u8],Failure>{
+        // SAFETY: sole private constructor has checked authenticated one-shot
+        // System response and actual kernel VIEW10 identity/length/RO-NX mapping.
+        // Inspection sealing prevents System writes; exclusive runtime borrow
+        // prevents another request/unmap. The slice cannot outlive this lease
+        // borrow; release consumes the lease only after all borrows end.
+        let bytes=unsafe{core::slice::from_raw_parts(STAGE_VIEW_ADDRESS as *const u8,self.offer.length)};
+        if crate::sha256::sha256(bytes)!=Ok(self.offer.stored_hash){return Err(Failure::Verify);}
+        Ok(bytes)
+    }
+    pub(crate) fn release(mut self)->Result<(),Failure>{
+        control(self.runtime.boot,11,self.offer.seal,0)?;
+        let request=self.runtime.progress.release_request().map_err(|_|Failure::Channel)?;
+        let reply=exchange(self.runtime.boot,&request)?;
+        self.runtime.progress.released(9,self.runtime.boot.peers[9],&reply).map_err(|_|Failure::Channel)?;
+        self.released=true;Ok(())
+    }
+    pub(crate) fn abort(mut self)->Result<(),Failure>{
+        self.runtime.progress.halt();
+        let result=control(self.runtime.boot,11,self.offer.seal,0);
+        self.released=true;result
+    }
+}
+#[cfg(rar_signed_updates)]
+impl Drop for SealedInspection<'_,'_>{
+    fn drop(&mut self){
+        // No false cleanup claim. An unconsumed/failed lease poisons the only
+        // coordinator; its caller reconciles the guest. No second lease exists.
+        if !self.released{self.runtime.progress.halt();}
+    }
+}
+#[cfg(rar_signed_updates)]
+fn repair_transaction(boot:&Boot,requests:&mut wire::Requests)->Result<u64,Failure>{
+    use crate::repair_wire::{self as inspection,Phase};
+    use crate::repair::{self,Role};
+    let mut root=[0u8;32];
+    control(boot,12,root.as_mut_ptr()as u64,32)?;
+    if root==[0;32]{return Err(Failure::Native);}
+    let id=requests.next().map_err(|_|Failure::Native)?;
+    requests.accept(id).map_err(|_|Failure::Native)?;
+    let reply=exchange(boot,&inspection::start(id).map_err(|_|Failure::Native)?)?;
+    let snapshot=inspection::Snapshot::parse(&reply).map_err(|_|Failure::Channel)?;
+    if snapshot.request!=id{return Err(Failure::Channel);}
+    let mut receiver=inspection::RecordReceiver::new(snapshot).map_err(|_|Failure::Channel)?;
+    for offset in (0..512).step_by(inspection::PART){
+        let reply=exchange(boot,&snapshot.part(offset,None).map_err(|_|Failure::Channel)?)?;
+        receiver.push(&reply).map_err(|_|Failure::Channel)?;
+    }
+    let current=receiver.finish().map_err(|_|Failure::Channel)?;
+    let mut runtime=RepairRuntime::new(boot,snapshot,current)?;
+    let active=repair::native::stored(&mut runtime,Phase::Active,Role::Active)?;
+    let prior=if current.previous().is_some(){
+        Some(repair::native::stored(&mut runtime,Phase::Prior,Role::Prior)?)
+    }else{None};
+    let plan=repair::native::plan(&mut runtime,root,active,prior)?;
+    let fresh_active=repair::native::stored(&mut runtime,Phase::FreshActive,Role::Active)?;
+    let fresh_prior=if current.previous().is_some(){
+        Some(repair::native::stored(&mut runtime,Phase::FreshPrior,Role::Prior)?)
+    }else{None};
+    repair::native::recheck(&mut runtime,&plan,root,fresh_active,fresh_prior)?;
+    let t=runtime.prepare(plan.next())?;
+    complete_transaction(boot,t,|record,bytes|{
+        let next=plan.verify_readback(t,record,bytes).map_err(|_|())?;
+        let ack=t.committed(next.sequence()).and_then(|t|t.frame(Kind::Committed)).map_err(|_|())?;
+        Ok((Some(next),ack))
+    })
 }

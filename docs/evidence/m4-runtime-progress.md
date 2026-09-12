@@ -900,3 +900,32 @@ M4.3 remains incomplete. Native System/Manager integration and the production
 CompleteRead lease still need implementation, followed by actual cloud repair,
 fresh-VM restart/fault evidence, final regressions/reproducibility and release
 review. No host/SSD writes or target execution were used for this checkpoint.
+
+
+### Ordered-progress accepted source checks and native integration candidate
+
+Source8e510ec573e07dc3734ecd0302dab28dea472867 passed Specifications34680973843,
+Foundation34680973844, Platform34680973847 and Desktop34680973845 attempt2.
+Desktop attempt1 failed before guest execution because the pinned Debian
+snapshot package download connection closed; one identical failed-job retry
+passed. No dependency pin or safety check was changed. Independent exact-source
+review found no blocking Progress defect. Its low-priority direct Released
+length-coverage suggestion is included in the next integration tests.
+
+The next candidate wires the actual signed Manager/System bootstrap Repair:
+complete sealed inspections; independent kernel-derived factory hash; opaque
+native receipt issuer; fresh observations; exact Repair proposal; opposite-slot
+preparation/readback; and reuse of the existing health/durable-ACK/cutover path.
+Core storage/planner gates are removed only for real linked callers. The pure
+library still excludes the native unsafe issuer.
+
+New tests cover the full four/six-phase System protocol with signed readback and
+publication, preserved selected bytes/high-water, refusal before boot/after
+success, early prepare/incorrect phase/bad peer, incomplete I/O/staging and
+proposal/Release framing. They remain cloud source/model tests, not real native
+health, successful repair or fresh-VM restart proof. Candidate exact-head checks
+and focused independent native/unsafe review are pending at commit time.
+
+M4.3/full M4 remain incomplete until actual cloud recovery/fault campaigns,
+whole-M4 regressions/reproducibility/review and release gates pass. No release
+or main merge is authorized merely by this implementation checkpoint.

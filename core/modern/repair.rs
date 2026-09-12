@@ -27,9 +27,10 @@ impl<'a> Factory<'a> {
     pub fn manifest_digest(&self)->[u8;32]{self.layer.manifest().digest()}
 }
 
-/// A complete sealed read issued by the future reviewed native bridge.
-/// Deliberately has NO production constructor in this unactivated source batch.
-/// Its bytes cannot be supplied through a public or crate-private raw constructor.
+/// A complete sealed read issued only inside the native child module below.
+/// No public or crate-private raw-slice constructor exists. The child obtains
+/// an opaque lease from the authenticated runtime and consumes classification
+/// before releasing it; tests alone have an explicit mock issuer.
 pub struct CompleteRead<'a>{bytes:&'a[u8]}
 #[cfg(test)]
 impl<'a> CompleteRead<'a>{
@@ -112,6 +113,22 @@ impl Plan {
         let next=current.repair_factory(&factory.layer).map_err(|_|Reject::Exhausted)?;
         Ok(Self{current,active,prior,factory_hash:factory.package_hash,next})
     }
+    #[cfg(any(test,rar_signed_updates))]
+    pub(crate) fn verify_readback(&self,t:crate::update_wire::Transfer,current:Record,package:&[u8])
+        ->Result<Record,Reject>
+    {
+        use crate::update_wire::{Mode,Kind};
+        t.frame(Kind::Offer).map_err(|_|Reject::Identity)?;
+        let id=t.identity;let active=self.next.active();
+        if t.mode!=Mode::Repair||current!=self.current||t.sequence!=current.sequence()||
+            id.length!=package.len()||id.package_hash!=self.factory_hash||
+            (id.slot,id.generation,id.digest)!=(active.slot(),active.generation(),active.digest()){
+            return Err(Reject::Identity);
+        }
+        let factory=Factory::verify(package,self.factory_hash)?;
+        if factory.manifest_digest()!=active.digest(){return Err(Reject::Root);}
+        Ok(self.next)
+    }
     pub fn next(&self)->Record{self.next}
     pub fn factory_hash(&self)->[u8;32]{self.factory_hash}
     /// Equality check only, NOT evidence of freshness. The native bridge must
@@ -125,3 +142,7 @@ impl Plan {
         Ok(())
     }
 }
+
+#[cfg(all(rar_signed_updates,not(test)))]
+#[path="../../services/modern/repair_bridge.rs"]
+pub(crate) mod native;

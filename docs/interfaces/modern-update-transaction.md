@@ -524,3 +524,54 @@ every incomplete prefix, both System slot directions, duplicate/early/replayed
 messages, full-width peer incarnation, seal exhaustion, every fresh identity
 field, every Released-byte mutation and Inspection truncation. These tests
 exercise protocol logic only and do not establish running-OS recovery.
+
+
+### Native bootstrap Repair implementation (validation pending)
+
+The signed supervisor now attempts one Repair only after selected boot and the
+single named-prior fallback end with clean Rejected/Verify/Trial outcomes.
+Channel, native, transport and indeterminate outcomes stop the guest. A clean
+health failure does not imply damage: the independent planner refuses intact
+active or prior bytes before any repair write. Live-update commands cannot
+request Repair. System consumes a one-shot bootstrap gate before inspection;
+successful boot/commit or any install closes that gate.
+
+RARREP01 adds kind9 ProposalPart / kind10 ProposalAck, with the same request,
+snapshot sequence, six offsets and exact zero padding as kinds4/3 respectively.
+ProposalPart contains the full canonical512-byte proposed Record. Its receiver
+requires an exact structural Repair successor of the retained current Record.
+Kind11 Prepare has the exact FreshFactory Inspect control layout except kind11.
+It is accepted only after every initial/fresh inspection, release and all six
+proposal fragments. These frames provide no damage/root/health authority.
+RARUPD01 mode3 is Repair; ordinary Start in this mode is refused. Only completion
+of System's private inspection transaction can offer that executable mode.
+
+System streams active/prior full storage sectors into Inspection seals and
+zero-padded immutable input4 for factory phases. It reobserves the exact selector
+before/after each inspection and again before preparation, compares all fresh
+storage identities, and uses only immutable input4 for opposite-slot repair.
+Manager obtains the expected logical factory hash independently through VIEW12.
+
+Manager RepairRuntime owns the exact Snapshot/Record, authenticated System
+incarnation and Progress guard. Its only lease constructor exchanges the
+expected phase, validates actual VIEW10 seal/length/address/physical slot and
+permits a single exclusively borrowed, non-clonable SealedInspection. The one
+unsafe read-only slice is confined to checked_bytes, which compares the actual
+full stored-byte hash. The safe child module services/modern/repair_bridge.rs
+alone constructs CompleteRead privately, classifies it while borrowed and
+requires VIEW11 scrub plus exact Release/Released before returning owned
+observations or Plan. No raw-slice issuer or arbitrary issuer callback exists.
+Dropping an unfinished lease poisons the coordinator; it does not claim cleanup,
+retry or service-incarnation advancement. The outer caller reconciles the guest.
+
+After fresh reobservation, System prepares/flushes/readbacks the opposite slot.
+Manager revalidates its exact Plan against the executable sealed disk readback,
+then reuses the existing trial-health, desktop preparation, exact durable ACK
+and cutover barrier. The generic Install/Fallback verifier rejects Repair;
+there is no generation-floor bypass through ordinary installation.
+
+This is native source integration, NOT an accepted guest recovery result.
+Independent native/unsafe review, exact-head compilation/tests and the reviewed
+cloud repair/restart/interruption campaign remain mandatory. Data authority,
+kernel ABI, historical Boot/Install/Fallback encodings, dependencies and physical
+host restrictions are unchanged.

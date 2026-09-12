@@ -9,6 +9,7 @@ use crate::{journal::Record,system_volume::{Io,Volume,Prepared},
 /// abort identity. A native adapter must fail-stop on an invalid successful reply.
 pub trait Stage {
     fn begin(&mut self,length:usize)->Result<u64,()>;
+    fn begin_inspection(&mut self,_length:usize)->Result<u64,()>{Err(())}
     fn append(&mut self,seal:u64,offset:usize,bytes:&[u8])->Result<(),()>;
     fn finish(&mut self,seal:u64,length:usize)->Result<(),()>;
     fn abort(&mut self,seal:u64)->Result<(),()>;
@@ -21,36 +22,17 @@ struct Pending {
 pub enum Reply { Ignore, Frame([u8;128]), Halt }
 pub struct Server<I:Io> {
     volume:Volume<I>,manager:u64,requests:Requests,pending:Option<Pending>,halted:bool,
+    bootstrap_open:bool,boot_attempted:bool,prior_attempted:bool,repair_used:bool,
+    repair:Option<crate::repair_system::Session>,
 }
 impl<I:Io> Server<I> {
     pub fn new(volume:Volume<I>,manager:u64)->Result<Self,()> {
         if manager==0{return Err(());}
-        Ok(Self{volume,manager,requests:Requests::new(),pending:None,halted:false})
+        Ok(Self{volume,manager,requests:Requests::new(),pending:None,halted:false,bootstrap_open:true,boot_attempted:false,
+            prior_attempted:false,repair_used:false,repair:None})
     }
     fn halt(&mut self)->Reply{self.halted=true;Reply::Halt}
-    /// Immutable laboratory inputs are supplied by the native owner, never by
-    /// an IPC sender. Lookup occurs only after authenticated canonical Start.
-    pub fn handle<S:Stage,F:FnOnce(u64)->Option<&'static[u8]>>(
-        &mut self,sender:u64,incarnation:u64,bytes:&[u8],stage:&mut S,input:F
-    )->Reply {
-        if sender!=8||incarnation!=self.manager||bytes.len()!=128{return Reply::Ignore;}
-        if self.halted{return Reply::Halt;}
-        if self.pending.is_none() {
-            let Ok((mode,id,index))=wire::parse_request(bytes,Kind::Start) else{return Reply::Ignore;};
-            if self.requests.accept(id).is_err(){return Reply::Ignore;}
-            let prepared=match mode {
-                Mode::Boot=>self.volume.prepare_boot(),
-                Mode::Fallback=>self.volume.prepare_fallback(),
-                Mode::Install=>match input(index) {
-                    Some(package)=>self.volume.prepare(package),
-                    None=>return Reply::Frame(wire::request(Kind::Rejected,mode,id,index).unwrap()),
-                },
-            };
-            let prepared=match prepared {
-                Ok(p)=>p,
-                Err(_)=>{if self.volume.is_readonly(){return self.halt();}
-                    return Reply::Frame(wire::request(Kind::Rejected,mode,id,index).unwrap());}
-            };
+    fn offer_prepared<S:Stage>(&mut self,prepared:Prepared,mode:Mode,id:u64,index:u64,stage:&mut S)->Reply{
             let identity=prepared.identity();
             let seal=match stage.begin(identity.length){Ok(s) if s!=0=>s,_=>{
                 if self.volume.cancel(&prepared).is_err(){return self.halt();}
@@ -73,7 +55,67 @@ impl<I:Io> Server<I> {
             let frame=match transfer.frame(Kind::Offer){Ok(f)=>f,Err(_)=>return self.halt()};
             self.pending=Some(Pending{prepared,transfer,record:record.encode(),read_offset:0,
                 publish:None,next:None});
-            return Reply::Frame(frame);
+            Reply::Frame(frame)
+    }
+    /// Immutable laboratory inputs are supplied by the native owner, never by
+    /// an IPC sender. Lookup occurs only after authenticated canonical Start.
+    pub fn handle<S:Stage,F:FnOnce(u64)->Option<&'static[u8]>>(
+        &mut self,sender:u64,incarnation:u64,bytes:&[u8],stage:&mut S,input:F
+    )->Reply {
+        if sender!=8||incarnation!=self.manager||bytes.len()!=128{return Reply::Ignore;}
+        if self.halted{return Reply::Halt;}
+        if let Some(repair)=self.repair.as_mut(){
+            let reply=repair.handle(sender,incarnation,bytes,&mut self.volume,stage,input);
+            return match reply{
+                crate::repair_system::Reply::Ignore=>Reply::Ignore,
+                crate::repair_system::Reply::Frame(f)=>Reply::Frame(f),
+                crate::repair_system::Reply::Halt=>self.halt(),
+                crate::repair_system::Reply::Prepared{prepared,next,request}=>{
+                    if !next.is_repair_successor_of(&self.volume.record()){return self.halt();}
+                    self.repair=None;
+                    let reply=self.offer_prepared(prepared,Mode::Repair,request,0,stage);
+                    match reply{
+                        Reply::Frame(f)if Transfer::parse(&f,Kind::Offer).is_ok()=>Reply::Frame(f),
+                        _=>self.halt(),
+                    }
+                },
+            };
+        }
+        if self.pending.is_none() {
+            if let Ok(id)=crate::repair_wire::parse_start(bytes){
+                if !self.bootstrap_open||!self.boot_attempted||self.repair_used||
+                    (self.volume.record().previous().is_some()&&!self.prior_attempted)||
+                    self.requests.accept(id).is_err(){return self.halt();}
+                self.repair_used=true;
+                let repair=match crate::repair_system::Session::begin(&mut self.volume,self.manager,id){
+                    Ok(r)=>r,Err(())=>return self.halt(),
+                };
+                let frame=repair.snapshot_frame();self.repair=Some(repair);return Reply::Frame(frame);
+            }
+            if self.repair_used&&self.bootstrap_open{return self.halt();}
+            let Ok((mode,id,index))=wire::parse_request(bytes,Kind::Start) else{return Reply::Ignore;};
+            if self.requests.accept(id).is_err(){return Reply::Ignore;}
+            match mode{
+                Mode::Boot=>self.boot_attempted=true,
+                Mode::Fallback=>{if self.bootstrap_open{self.prior_attempted=true;}},
+                Mode::Install=>self.bootstrap_open=false,
+                Mode::Repair=>return self.halt(),
+            }
+            let prepared=match mode {
+                Mode::Repair=>return self.halt(),
+                Mode::Boot=>self.volume.prepare_boot(),
+                Mode::Fallback=>self.volume.prepare_fallback(),
+                Mode::Install=>match input(index) {
+                    Some(package)=>self.volume.prepare(package),
+                    None=>return Reply::Frame(wire::request(Kind::Rejected,mode,id,index).unwrap()),
+                },
+            };
+            let prepared=match prepared {
+                Ok(p)=>p,
+                Err(_)=>{if self.volume.is_readonly(){return self.halt();}
+                    return Reply::Frame(wire::request(Kind::Rejected,mode,id,index).unwrap());}
+            };
+            return self.offer_prepared(prepared,mode,id,index,stage);
         }
         let p=self.pending.as_mut().unwrap();
         let t=p.transfer;
@@ -113,6 +155,6 @@ impl<I:Io> Server<I> {
         let ack=match t.committed(sequence).and_then(|t|t.frame(Kind::Committed)){
             Ok(ack)=>ack,Err(_)=>return self.halt()
         };
-        self.pending=None;Reply::Frame(ack)
+        self.bootstrap_open=false;self.pending=None;Reply::Frame(ack)
     }
 }

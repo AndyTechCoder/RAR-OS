@@ -20,6 +20,7 @@ pub fn verify<'a>(t:Transfer,current:Record,package:&'a[u8])->Result<Verified<'a
     if current.sequence()!=t.sequence{return Err(Reject::Record);}
     let id=t.identity;
     let minimum=match t.mode{
+        Mode::Repair=>return Err(Reject::Transition),
         Mode::Boot=>{
             let active=current.active();
             if (id.slot,id.generation,id.digest)!=(active.slot(),active.generation(),active.digest()){
@@ -47,6 +48,7 @@ pub fn verify<'a>(t:Transfer,current:Record,package:&'a[u8])->Result<Verified<'a
         return Err(Reject::Identity);
     }
     let next=match t.mode{
+        Mode::Repair=>return Err(Reject::Transition),
         Mode::Boot=>None,
         Mode::Install=>Some(current.install(&layer).map_err(|_|Reject::Transition)?),
         Mode::Fallback=>Some(current.fallback().map_err(|_|Reject::Transition)?),

@@ -6,10 +6,10 @@ pub const BYTES:usize=128;
 pub const PART:usize=88;
 const MAGIC:&[u8;8]=b"RARUPD01";
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
-pub enum Mode{Boot,Install,Fallback}
+pub enum Mode{Boot,Install,Fallback,Repair}
 impl Mode{
-    fn byte(self)->u8{match self{Self::Boot=>0,Self::Install=>1,Self::Fallback=>2}}
-    fn parse(v:u8)->Option<Self>{match v{0=>Some(Self::Boot),1=>Some(Self::Install),2=>Some(Self::Fallback),_=>None}}
+    fn byte(self)->u8{match self{Self::Boot=>0,Self::Install=>1,Self::Fallback=>2,Self::Repair=>3}}
+    fn parse(v:u8)->Option<Self>{match v{0=>Some(Self::Boot),1=>Some(Self::Install),2=>Some(Self::Fallback),3=>Some(Self::Repair),_=>None}}
 }
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 pub enum Kind{Offer,RecordGet,RecordPart,PublishPart,PartAck,Commit,Committed,Cancel,Cancelled,Start,Rejected}

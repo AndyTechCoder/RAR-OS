@@ -9,6 +9,8 @@
 #[path = "../../../core/modern/system_volume.rs"] mod system_volume;
 #[path = "../../../core/modern/update_wire.rs"] mod update_wire;
 #[path = "../../../core/modern/update_system.rs"] mod update_system;
+#[path = "../../../core/modern/repair_wire.rs"] mod repair_wire;
+#[path = "../../../core/modern/repair_system.rs"] mod repair_system;
 #[path = "../../../core/modern/update_manager.rs"] mod update_manager;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)] pub enum Error { Invalid, Denied }
 #[path = "../../../nucleus/platform/pe.rs"] mod pe;
@@ -105,6 +107,10 @@ mod system_media {
     impl update_system::Stage for CopyStage{
         fn begin(&mut self,_:usize)->Result<u64,()>{if self.fail_begin{return Err(());}self.seal=self.seal.checked_add(1).ok_or(())?;
             self.bytes.clear();self.finished=false;self.aborted=false;Ok(self.seal)}
+        fn begin_inspection(&mut self,length:usize)->Result<u64,()>{
+            if !(512..=repair_wire::MAX_INSPECTION).contains(&length)||length%512!=0{return Err(());}
+            self.begin(length)
+        }
         fn append(&mut self,seal:u64,offset:usize,bytes:&[u8])->Result<(),()>{
             if self.fail_append||seal!=self.seal||offset!=self.bytes.len(){return Err(());}
             self.bytes.extend_from_slice(bytes);Ok(())}
@@ -792,6 +798,172 @@ mod system_media {
                     if *sector>=4099{assert_eq!(media.0.borrow().blocks.get(sector),Some(bytes));}
                 }
             }
+        }
+    }
+
+    fn recovery_input(index:u64)->Option<&'static[u8]>{
+        if index==4{Some(&FIXTURE[..1408])}else{lab_input(index)}
+    }
+    fn repair_handle(server:&mut update_system::Server<Media>,stage:&mut CopyStage,bytes:&[u8])
+        ->update_system::Reply{server.handle(8,(1u64<<40)+1,bytes,stage,recovery_input)}
+    fn damaged_session(prior:bool)->(Media,Record,update_system::Server<Media>,CopyStage,repair_wire::Snapshot){
+        use update_wire::{self as w,Mode,Kind};
+        let(media,current)=if prior{
+            let(media,volume,current)=installed_volume();drop(volume);(media,current)
+        }else{let(media,current,_)=seed();(media,current)};
+        {
+            let mut disk=media.0.borrow_mut();
+            disk.blocks.insert(slot_start(current.active().slot()),[0;512]);
+            if let Some(prior)=current.previous(){disk.blocks.insert(slot_start(prior.slot()),[0;512]);}
+        }
+        let mut server=update_system::Server::new(mount(media.clone()),(1u64<<40)+1).unwrap();
+        media.0.borrow_mut().ops.clear();let mut stage=CopyStage::default();
+        for(mode,id)in [(Mode::Boot,1),(Mode::Fallback,2)]{
+            let start=w::request(Kind::Start,mode,id,0).unwrap();
+            assert_eq!(frame(repair_handle(&mut server,&mut stage,&start)),
+                w::request(Kind::Rejected,mode,id,0).unwrap());
+        }
+        let raw=frame(repair_handle(&mut server,&mut stage,&repair_wire::start(3).unwrap()));
+        let snapshot=repair_wire::Snapshot::parse(&raw).unwrap();
+        let mut receiver=repair_wire::RecordReceiver::new(snapshot).unwrap();
+        for offset in (0..512).step_by(repair_wire::PART){
+            let get=snapshot.part(offset,None).unwrap();
+            receiver.push(&frame(repair_handle(&mut server,&mut stage,&get))).unwrap();
+        }
+        assert_eq!(receiver.finish(),Ok(current));(media,current,server,stage,snapshot)
+    }
+    fn inspection_phases(media:&Media,current:Record,server:&mut update_system::Server<Media>,
+        stage:&mut CopyStage,snapshot:repair_wire::Snapshot)->repair::Plan{
+        use repair_wire::{Phase,Progress};
+        let mut progress=Progress::new(snapshot,current,(1u64<<48)+9).unwrap();
+        let mut phase=Phase::Active;let mut active=None;let mut prior=None;
+        let mut fresh_active=None;let mut fresh_prior=None;let mut plan=None;
+        loop{
+            let request=progress.request().unwrap();
+            assert_eq!(request,snapshot.control(phase,None,false).unwrap());
+            let offer=frame(repair_handle(server,stage,&request));
+            let offer=progress.offer(9,(1u64<<48)+9,&offer).unwrap();
+            assert_eq!(offer.length,stage.bytes.len());assert!(stage.finished);
+            assert_eq!(sha256::sha256(&stage.bytes),Ok(offer.stored_hash));
+            match phase{
+                Phase::Active|Phase::Prior|Phase::FreshActive|Phase::FreshPrior=>{
+                    let role=if matches!(phase,Phase::Prior|Phase::FreshPrior){repair::Role::Prior}else{repair::Role::Active};
+                    let receipt=repair::CompleteRead::test_completed(stage.bytes.len(),Ok(&stage.bytes)).unwrap();
+                    let observation=repair::inspect(current,role,receipt).unwrap();
+                    match phase{Phase::Active=>active=Some(observation),Phase::Prior=>prior=Some(observation),
+                        Phase::FreshActive=>fresh_active=Some(observation),_=>fresh_prior=Some(observation)}
+                },
+                Phase::Factory|Phase::FreshFactory=>{
+                    assert_eq!(&stage.bytes[..1408],&FIXTURE[..1408]);
+                    assert!(stage.bytes[1408..].iter().all(|&b|b==0));
+                    let root=sha256::sha256(&FIXTURE[..1408]).unwrap();
+                    let factory=repair::Factory::verify(&stage.bytes[..1408],root).unwrap();
+                    if phase==Phase::Factory{
+                        plan=Some(repair::Plan::new(current,&factory,active.unwrap(),prior).unwrap());
+                    }else{
+                        plan.as_ref().unwrap().matches_observations(current,&factory,fresh_active.unwrap(),fresh_prior).unwrap();
+                    }
+                },
+            }
+            // Test-only stand-in for actual native VIEW11 cleanup.
+            update_system::Stage::abort(stage,offer.seal).unwrap();
+            let release=progress.release_request().unwrap();
+            let ack=frame(repair_handle(server,stage,&release));
+            progress.released(9,(1u64<<48)+9,&ack).unwrap();
+            assert!(!media.0.borrow().ops.iter().any(|op|matches!(op,Op::Write(_)|Op::Flush)));
+            match phase.next(current.previous().is_some()){Some(next)=>phase=next,None=>break}
+        }
+        progress.finish().unwrap();plan.unwrap()
+    }
+    #[test]fn bootstrap_repair_runs_full_inspection_readback_publication_and_preserves_highwater(){
+        use update_wire::{Transfer,Mode,Kind};
+        for prior in [false,true]{
+            let(media,current,mut server,mut stage,snapshot)=damaged_session(prior);
+            let protected=media.0.borrow().blocks.clone();
+            let plan=inspection_phases(&media,current,&mut server,&mut stage,snapshot);
+            let next=plan.next();let encoded=next.encode();
+            for offset in (0..512).step_by(repair_wire::PART){
+                let n=(512-offset).min(repair_wire::PART);
+                let part=snapshot.proposal_part(offset,Some(&encoded[offset..offset+n])).unwrap();
+                let ack=frame(repair_handle(&mut server,&mut stage,&part));
+                snapshot.check_proposal_ack(&ack,offset).unwrap();
+                assert!(!media.0.borrow().ops.iter().any(|op|matches!(op,Op::Write(_)|Op::Flush)));
+            }
+            let offer=frame(repair_handle(&mut server,&mut stage,&snapshot.prepare().unwrap()));
+            let transfer=Transfer::parse(&offer,Kind::Offer).unwrap();assert_eq!(transfer.mode,Mode::Repair);
+            assert_eq!(fetch(&mut server,&mut stage,transfer),current);
+            assert_eq!(plan.verify_readback(transfer,current,&stage.bytes),Ok(next));
+            assert!(matches!(update_manager::verify(transfer,current,&stage.bytes),Err(update_manager::Reject::Transition)));
+            let mut wrong=transfer;wrong.mode=Mode::Install;
+            assert!(plan.verify_readback(wrong,current,&stage.bytes).is_err());
+            wrong=transfer;wrong.identity.package_hash[0]^=1;
+            assert!(plan.verify_readback(wrong,current,&stage.bytes).is_err());
+            wrong=transfer;wrong.identity.slot=current.active().slot();
+            assert!(plan.verify_readback(wrong,current,&stage.bytes).is_err());
+            let mut damaged=stage.bytes.clone();damaged[512]^=1;
+            assert!(plan.verify_readback(transfer,current,&damaged).is_err());
+            publish_parts(&mut server,&mut stage,transfer,next);
+            let commit=transfer.frame(Kind::Commit).unwrap();
+            let ack=frame(repair_handle(&mut server,&mut stage,&commit));
+            assert_eq!(ack,transfer.committed(next.sequence()).unwrap().frame(Kind::Committed).unwrap());
+            assert_eq!(mount(media.clone()).record(),next);
+            assert_eq!(next.highest_committed_generation(),current.highest_committed_generation());
+            let floor=current.minimum_install_generation().unwrap();
+            assert_eq!(next.minimum_install_generation(),Ok(floor));
+            let start=slot_start(current.active().slot());
+            for sector in start..start+system_volume::SLOT_SECTORS{
+                assert_eq!(media.0.borrow().blocks.get(&sector),protected.get(&sector));
+            }
+            let count=media.0.borrow().ops.len();
+            assert_eq!(repair_handle(&mut server,&mut stage,&repair_wire::start(4).unwrap()),update_system::Reply::Halt);
+            assert_eq!(media.0.borrow().ops.len(),count);
+        }
+    }
+    #[test]fn repair_session_rejects_early_prepare_bad_peer_and_wrong_phase_without_writes(){
+        for attack in 0..4{
+            let(media,_,mut server,mut stage,snapshot)=damaged_session(true);
+            let count=media.0.borrow().ops.len();
+            let request=match attack{
+                0=>snapshot.prepare().unwrap(),
+                1=>snapshot.control(repair_wire::Phase::FreshFactory,None,false).unwrap(),
+                2=>snapshot.control(repair_wire::Phase::Active,Some(1),false).unwrap(),
+                _=>repair_wire::start(3).unwrap(),
+            };
+            assert_eq!(server.handle(7,(1u64<<40)+1,&request,&mut stage,recovery_input),update_system::Reply::Ignore);
+            assert_eq!(server.handle(8,1,&request,&mut stage,recovery_input),update_system::Reply::Ignore);
+            assert_eq!(media.0.borrow().ops.len(),count);
+            assert_eq!(repair_handle(&mut server,&mut stage,&request),update_system::Reply::Halt);
+            assert_eq!(media.0.borrow().ops.len(),count);
+            assert_eq!(repair_handle(&mut server,&mut stage,&snapshot.control(repair_wire::Phase::Active,None,false).unwrap()),update_system::Reply::Halt);
+        }
+    }
+    #[test]fn repair_inspection_io_and_partial_copy_fail_terminally_without_damage_receipt(){
+        for failure in 0..4{
+            let(media,_,mut server,mut stage,snapshot)=damaged_session(false);
+            match failure{
+                0=>{let mut disk=media.0.borrow_mut();disk.fail=Some(disk.ops.len()+1);},
+                1=>stage.fail_begin=true,2=>stage.fail_append=true,_=>stage.fail_finish=true,
+            }
+            let request=snapshot.control(repair_wire::Phase::Active,None,false).unwrap();
+            assert_eq!(repair_handle(&mut server,&mut stage,&request),update_system::Reply::Halt);
+            let count=media.0.borrow().ops.len();
+            assert_eq!(repair_handle(&mut server,&mut stage,&request),update_system::Reply::Halt);
+            assert_eq!(media.0.borrow().ops.len(),count);
+            assert!(!media.0.borrow().ops.iter().any(|op|matches!(op,Op::Write(_)|Op::Flush)));
+        }
+    }
+    #[test]fn repair_cannot_start_before_boot_attempt_or_after_successful_boot(){
+        use update_wire::{Mode,Kind};
+        for booted in [false,true]{
+            let(media,_,_)=seed();let mut server=update_system::Server::new(mount(media.clone()),(1u64<<40)+1).unwrap();
+            let mut stage=CopyStage::default();
+            let id=if booted{
+                let(t,_,_,ack)=prepared_flow(&mut server,&mut stage,Mode::Boot,1);
+                assert_eq!(frame(handle(&mut server,&mut stage,&t.frame(Kind::Commit).unwrap())),ack);2
+            }else{1};
+            let count=media.0.borrow().ops.len();
+            assert_eq!(repair_handle(&mut server,&mut stage,&repair_wire::start(id).unwrap()),update_system::Reply::Halt);
+            assert_eq!(media.0.borrow().ops.len(),count);
         }
     }
 

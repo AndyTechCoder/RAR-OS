@@ -240,6 +240,42 @@ impl Progress {
     }
 }
 
+
+impl Snapshot {
+    pub fn proposal_part(self,offset:usize,bytes:Option<&[u8]>)->Result<[u8;BYTES],Error>{
+        let mut frame=self.part(offset,bytes)?;frame[8]=if bytes.is_some(){9}else{10};Ok(frame)
+    }
+    pub fn check_proposal_ack(self,raw:&[u8],offset:usize)->Result<(),Error>{
+        if self.proposal_part(offset,None)?.as_slice()!=raw{return Err(Error::Identity);}Ok(())
+    }
+    pub fn prepare(self)->Result<[u8;BYTES],Error>{
+        let mut frame=self.control(Phase::FreshFactory,None,false)?;frame[8]=11;Ok(frame)
+    }
+    pub fn check_prepare(self,raw:&[u8])->Result<(),Error>{
+        if self.prepare()?.as_slice()!=raw{return Err(Error::Identity);}Ok(())
+    }
+}
+/// Exact structural Repair successor. This does not grant damage/root authority.
+pub struct ProposalReceiver{snapshot:Snapshot,current:Record,offset:usize,bytes:[u8;512]}
+impl ProposalReceiver{
+    pub fn new(snapshot:Snapshot,current:Record)->Result<Self,Error>{
+        if !snapshot.matches_record(current){return Err(Error::Identity);}
+        Ok(Self{snapshot,current,offset:0,bytes:[0;512]})
+    }
+    pub fn offset(&self)->usize{self.offset}
+    pub fn push(&mut self,raw:&[u8])->Result<(),Error>{
+        if self.offset>=512{return Err(Error::Order);}
+        let b=header(raw,9)?;let n=(512-self.offset).min(PART);
+        if self.snapshot.proposal_part(self.offset,Some(&b[40..40+n]))?!=*b{return Err(Error::Identity);}
+        self.bytes[self.offset..self.offset+n].copy_from_slice(&b[40..40+n]);self.offset+=n;Ok(())
+    }
+    pub fn finish(self)->Result<Record,Error>{
+        if self.offset!=512{return Err(Error::Order);}
+        let next=Record::decode(&self.bytes).map_err(|_|Error::Record)?;
+        if !next.is_repair_successor_of(&self.current){return Err(Error::Record);}Ok(next)
+    }
+}
+
 #[cfg(test)]mod tests{
     use super::*;
     fn record()->Record{
@@ -477,6 +513,52 @@ impl Progress {
             let(_,mut p)=session(r);p.request().unwrap();p.offer(9,INC,&offer).unwrap();
             p.release_request().unwrap();let mut bad=ack;bad[n]^=1;
             assert!(p.released(9,INC,&bad).is_err());assert!(p.is_halted());
+        }
+    }
+
+    #[test]fn proposal_requires_exact_repair_record_order_and_prepare_framing(){
+        let current=record();let snapshot=Snapshot::from_record(7,current).unwrap();
+        let mut bytes=current.encode();bytes[12]=3;bytes[13]=1;
+        bytes[16..24].copy_from_slice(&2u64.to_le_bytes());
+        bytes[56..64].copy_from_slice(&1u64.to_le_bytes());
+        bytes[128..160].copy_from_slice(&sha256(&current.encode()).unwrap());
+        let hash=sha256(&bytes[..480]).unwrap();bytes[480..].copy_from_slice(&hash);
+        let next=Record::decode(&bytes).unwrap();
+        for proposed in [current,next]{
+            let bytes=proposed.encode();let mut receiver=ProposalReceiver::new(snapshot,current).unwrap();
+            assert!(ProposalReceiver::new(snapshot,current).unwrap().finish().is_err());
+            for offset in (0..512).step_by(PART){
+                let n=(512-offset).min(PART);let frame=snapshot.proposal_part(offset,Some(&bytes[offset..offset+n])).unwrap();
+                for at in [0usize,8,9,16,24,32]{
+                    let mut wrong=frame;wrong[at]^=1;
+                    assert!(receiver.push(&wrong).is_err());assert_eq!(receiver.offset(),offset);
+                }
+                if offset==440{
+                    let mut wrong=frame;wrong[127]=1;assert!(receiver.push(&wrong).is_err());
+                }
+                receiver.push(&frame).unwrap();assert!(receiver.push(&frame).is_err());
+                let ack=snapshot.proposal_part(offset,None).unwrap();
+                snapshot.check_proposal_ack(&ack,offset).unwrap();
+                assert!(snapshot.check_get(&ack,offset).is_err());
+            }
+            assert_eq!(receiver.finish(),if proposed==next{Ok(next)}else{Err(Error::Record)});
+        }
+        let prepare=snapshot.prepare().unwrap();snapshot.check_prepare(&prepare).unwrap();
+        for n in 0..BYTES{
+            assert!(snapshot.check_prepare(&prepare[..n]).is_err());
+            let mut wrong=prepare;wrong[n]^=1;assert!(snapshot.check_prepare(&wrong).is_err());
+        }
+        assert!(snapshot.check_prepare(&[prepare.as_slice(),&[0]].concat()).is_err());
+        assert!(snapshot.check_control(&prepare,Phase::FreshFactory,None,false).is_err());
+    }
+    #[test]fn progress_rejects_truncated_and_overlong_release_acknowledgements(){
+        let r=record();let(s,_)=session(r);let t=observed(r,s,Phase::Active,1);
+        let ack=s.control(t.phase,Some(1),true).unwrap();
+        for length in 0..=BYTES{
+            let(_,mut p)=session(r);p.request().unwrap();p.offer(9,INC,&t.frame().unwrap()).unwrap();
+            p.release_request().unwrap();
+            let raw=if length==BYTES{[ack.as_slice(),&[0]].concat()}else{ack[..length].to_vec()};
+            assert!(p.released(9,INC,&raw).is_err());assert!(p.is_halted());
         }
     }
 
