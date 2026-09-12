@@ -929,3 +929,24 @@ and focused independent native/unsafe review are pending at commit time.
 M4.3/full M4 remain incomplete until actual cloud recovery/fault campaigns,
 whole-M4 regressions/reproducibility/review and release gates pass. No release
 or main merge is authorized merely by this implementation checkpoint.
+
+
+### Native integration checks and consolidated review remediation
+
+Source4dd3df6c7f324847735c5674dfa510c8a8d3e027 passed all four cloud checks:
+Specifications34682007992, Foundation34682008011, Platform34682007969 and
+Desktop34682007977. This includes the signed production object compilation and
+integrated protocol/planner tests, not a repaired guest or final release proof.
+
+Independent review identified an authenticated malformed-length path that was
+ignored before reaching the repair owner. Remediation preserves actual envelope
+length in the native System adapter, makes malformed authenticated repair
+frames terminal through inspection/readback/publication, and immediately
+rejects malformed authenticated System replies in Manager. Foreign/stale peers
+remain ignored. A new test injects short/overlong frames at every transaction
+prefix and requires sticky halt with no subsequent I/O. The lease constructor
+now validates VIEW10 and the actual stored-byte hash before Progress::offer,
+resolving review's order/documentation mismatch. No unsafe issuer was widened.
+
+These review fixes need exact-head cloud checks and exact-source review.
+M4.3 remains open for actual repair/restart/fault evidence and final release gates.

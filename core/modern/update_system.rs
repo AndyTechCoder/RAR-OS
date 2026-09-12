@@ -62,7 +62,7 @@ impl<I:Io> Server<I> {
     pub fn handle<S:Stage,F:FnOnce(u64)->Option<&'static[u8]>>(
         &mut self,sender:u64,incarnation:u64,bytes:&[u8],stage:&mut S,input:F
     )->Reply {
-        if sender!=8||incarnation!=self.manager||bytes.len()!=128{return Reply::Ignore;}
+        if sender!=8||incarnation!=self.manager{return Reply::Ignore;}
         if self.halted{return Reply::Halt;}
         if let Some(repair)=self.repair.as_mut(){
             let reply=repair.handle(sender,incarnation,bytes,&mut self.volume,stage,input);
@@ -80,6 +80,10 @@ impl<I:Io> Server<I> {
                     }
                 },
             };
+        }
+        if bytes.len()!=128{
+            if self.repair_used&&self.bootstrap_open{return self.halt();}
+            return Reply::Ignore;
         }
         if self.pending.is_none() {
             if let Ok(id)=crate::repair_wire::parse_start(bytes){

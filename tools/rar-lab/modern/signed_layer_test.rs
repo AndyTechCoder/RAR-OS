@@ -806,7 +806,7 @@ mod system_media {
     }
     fn repair_handle(server:&mut update_system::Server<Media>,stage:&mut CopyStage,bytes:&[u8])
         ->update_system::Reply{server.handle(8,(1u64<<40)+1,bytes,stage,recovery_input)}
-    fn damaged_session(prior:bool)->(Media,Record,update_system::Server<Media>,CopyStage,repair_wire::Snapshot){
+    fn damaged_session_at_snapshot(prior:bool)->(Media,Record,update_system::Server<Media>,CopyStage,repair_wire::Snapshot){
         use update_wire::{self as w,Mode,Kind};
         let(media,current)=if prior{
             let(media,volume,current)=installed_volume();drop(volume);(media,current)
@@ -825,6 +825,10 @@ mod system_media {
         }
         let raw=frame(repair_handle(&mut server,&mut stage,&repair_wire::start(3).unwrap()));
         let snapshot=repair_wire::Snapshot::parse(&raw).unwrap();
+        (media,current,server,stage,snapshot)
+    }
+    fn damaged_session(prior:bool)->(Media,Record,update_system::Server<Media>,CopyStage,repair_wire::Snapshot){
+        let(media,current,mut server,mut stage,snapshot)=damaged_session_at_snapshot(prior);
         let mut receiver=repair_wire::RecordReceiver::new(snapshot).unwrap();
         for offset in (0..512).step_by(repair_wire::PART){
             let get=snapshot.part(offset,None).unwrap();
@@ -964,6 +968,58 @@ mod system_media {
             let count=media.0.borrow().ops.len();
             assert_eq!(repair_handle(&mut server,&mut stage,&repair_wire::start(id).unwrap()),update_system::Reply::Halt);
             assert_eq!(media.0.borrow().ops.len(),count);
+        }
+    }
+
+    #[test]fn authenticated_bad_lengths_poison_every_repair_protocol_state(){
+        use repair_wire::{Phase,PART};
+        let(_,current,mut server,mut stage,snapshot)=damaged_session_at_snapshot(true);
+        let mut frames=vec![];
+        for offset in (0..512).step_by(PART){frames.push(snapshot.part(offset,None).unwrap());}
+        let mut phase=Some(Phase::Active);let mut seal=1;
+        while let Some(p)=phase{
+            frames.push(snapshot.control(p,None,false).unwrap());
+            frames.push(snapshot.control(p,Some(seal),false).unwrap());
+            phase=p.next(true);seal+=1;
+        }
+        let next=current.repair_factory(&manifest::verify(case(0).0,case(0).1,1).unwrap()).unwrap();
+        let bytes=next.encode();
+        for offset in (0..512).step_by(PART){
+            let n=(512-offset).min(PART);
+            frames.push(snapshot.proposal_part(offset,Some(&bytes[offset..offset+n])).unwrap());
+        }
+        for frame in &frames{
+            if &frame[..8]==b"RARREP01"&&frame[8]==7{
+                update_system::Stage::abort(&mut stage,u64::from_le_bytes(frame[24..32].try_into().unwrap())).unwrap();
+            }
+            assert!(matches!(repair_handle(&mut server,&mut stage,frame),update_system::Reply::Frame(_)));
+        }
+        let prepare=snapshot.prepare().unwrap();frames.push(prepare);
+        let offer=frame(repair_handle(&mut server,&mut stage,&prepare));
+        let transfer=update_wire::Transfer::parse(&offer,update_wire::Kind::Offer).unwrap();
+        for offset in (0..512).step_by(update_wire::PART){
+            frames.push(transfer.part(update_wire::Kind::RecordGet,offset,&[]).unwrap());
+        }
+        for offset in (0..512).step_by(update_wire::PART){
+            let n=(512-offset).min(update_wire::PART);
+            frames.push(transfer.part(update_wire::Kind::PublishPart,offset,&bytes[offset..offset+n]).unwrap());
+        }
+        for prefix in 0..=frames.len(){
+            for length in [1usize,127,129]{
+                let(media,_,mut server,mut stage,_)=damaged_session_at_snapshot(true);
+                for frame in &frames[..prefix]{
+                    if &frame[..8]==b"RARREP01"&&frame[8]==7{
+                        update_system::Stage::abort(&mut stage,u64::from_le_bytes(frame[24..32].try_into().unwrap())).unwrap();
+                    }
+                    assert!(matches!(repair_handle(&mut server,&mut stage,frame),update_system::Reply::Frame(_)),
+                        "prefix {prefix}");
+                }
+                let count=media.0.borrow().ops.len();
+                assert_eq!(repair_handle(&mut server,&mut stage,&vec![0;length]),update_system::Reply::Halt);
+                assert_eq!(repair_handle(&mut server,&mut stage,&transfer.frame(update_wire::Kind::Commit).unwrap()),
+                    update_system::Reply::Halt);
+                assert_eq!(media.0.borrow().ops.len(),count,"prefix {prefix} length {length}");
+            }
         }
     }
 

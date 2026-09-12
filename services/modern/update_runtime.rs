@@ -42,8 +42,12 @@ pub fn system<I:system_volume::Io>(boot:&Boot,volume:system_volume::Volume<I>,
     let mut server=update_system::Server::new(volume,boot.peers[8]).unwrap_or_else(|_|crate::fail());
     let mut stage=StageCopy::new(boot);
     loop{
-        let e=crate::receive(boot.caps[SELF_RECV]);
-        match server.handle(e.sender,e.generation,&e.bytes,&mut stage,input){
+        let e=match crate::poll_checked(boot.caps[SELF_RECV]){
+            Ok(Some(e))=>e,Ok(None)=>{crate::yield_now();continue;},Err(())=>crate::fail(),
+        };
+        let length=usize::try_from(e.length).unwrap_or_else(|_|crate::fail());
+        let bytes=e.bytes.get(..length).unwrap_or_else(||crate::fail());
+        match server.handle(e.sender,e.generation,bytes,&mut stage,input){
             update_system::Reply::Ignore=>{},
             update_system::Reply::Halt=>crate::fail(),
             // One bounded send. If the channel cannot deliver, stop; never
@@ -67,7 +71,9 @@ fn receive(boot:&Boot)->Result<[u8;128],Failure>{
     for _ in 0..65_536{
         if tick()?.checked_sub(start).ok_or(Failure::Native)?>1000{return Err(Failure::Channel);}
         match crate::poll_checked(boot.caps[SELF_RECV]).map_err(|_|Failure::Channel)?{
-            Some(e)if e.length==128&&e.sender==9&&e.generation==boot.peers[9]=>return Ok(e.bytes),
+            Some(e)if e.sender==9&&e.generation==boot.peers[9]=>{
+                if e.length!=128{return Err(Failure::Channel);}return Ok(e.bytes);
+            },
             _=>crate::yield_now(),
         }
     }
@@ -315,7 +321,8 @@ impl<'b> RepairRuntime<'b>{
             // exchange/receive authenticates the kernel-stamped sender9/full
             // incarnation and exact envelope length before yielding these bytes.
             let reply=exchange(self.boot,&request)?;
-            let offer=self.progress.offer(9,self.boot.peers[9],&reply).map_err(|_|Failure::Channel)?;
+            let offer=crate::repair_wire::Inspection::parse(&reply).map_err(|_|Failure::Channel)?;
+            if !offer.binds(self.snapshot,self.current,phase){return Err(Failure::Channel);}
             let mut view=[0u8;STAGE_VIEW_BYTES];
             control(self.boot,10,view.as_mut_ptr()as u64,STAGE_VIEW_BYTES as u64)?;
             let word=|i:usize|u64::from_le_bytes(view[i*8..i*8+8].try_into().unwrap());
@@ -323,10 +330,18 @@ impl<'b> RepairRuntime<'b>{
                 word(2)!=STAGE_VIEW_ADDRESS||!matches!(word(3),5|7){return Err(Failure::Native);}
             // VIEW10 enforces Inspection purpose/sealed state and exact mapped
             // length. IPC/session binding proves phase/Record/incarnation.
-            Ok(offer)
+            Ok((offer,reply))
         })();
         match result{
-            Ok(offer)=>Ok(SealedInspection{runtime:self,offer,released:false}),
+            Ok((offer,reply))=>{
+                let lease=SealedInspection{runtime:self,offer,released:false};
+                // Validate the actual bytes before advancing even the pure guard.
+                // Any failure drops this unescaped lease and poisons the owner.
+                lease.checked_bytes()?;
+                lease.runtime.progress.offer(9,lease.runtime.boot.peers[9],&reply)
+                    .map_err(|_|Failure::Channel)?;
+                Ok(lease)
+            },
             Err(error)=>{self.progress.halt();Err(error)},
         }
     }
@@ -351,8 +366,9 @@ impl<'b> RepairRuntime<'b>{
 #[cfg(rar_signed_updates)]
 impl SealedInspection<'_,'_>{
     pub(crate) fn checked_bytes(&self)->Result<&[u8],Failure>{
-        // SAFETY: sole private constructor has checked authenticated one-shot
-        // System response and actual kernel VIEW10 identity/length/RO-NX mapping.
+        // SAFETY: sole private constructor has checked the authenticated System
+        // response and actual kernel VIEW10 identity/length/RO-NX mapping.
+        // Before a lease escapes it also passes the one-shot Progress guard.
         // Inspection sealing prevents System writes; exclusive runtime borrow
         // prevents another request/unmap. The slice cannot outlive this lease
         // borrow; release consumes the lease only after all borrows end.
