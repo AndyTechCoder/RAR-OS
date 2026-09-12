@@ -26,7 +26,10 @@ mod bootstrap_integration {
     }
 }
 
+// Native entry includes staging directly; this wrapper exposes it for tests.
+#[cfg(test)]
 pub mod staging;
 
-// Pure immutable component identity helpers; no package execution in tests.
+// Native entry includes lab_images directly; no package execution in tests.
+#[cfg(test)]
 mod lab_images;

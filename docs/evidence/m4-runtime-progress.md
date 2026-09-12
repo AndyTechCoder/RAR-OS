@@ -849,3 +849,13 @@ cancelled-token, every-copy-read-failure and maximum-slot-boundary tests in both
 directions. Maximum-size storage fixtures are intentionally unauthenticated
 framing tests, never native factory inputs. All tests remain enabled in cloud
 test builds. These changes still require exact-head cloud validation.
+
+
+The remediated e90026 source advanced through the core build and all75 kernel
+tests, then the standalone kernel-library -Dwarnings step identified native-only
+staging entry points and immutable-image helpers without their native caller.
+The pure library wrapper now includes staging and lab_images under cfg(test);
+the actual native main declares both independently and remains unchanged.
+This preserves all kernel unit tests and the actual native object/build checks,
+without changing syscall behavior or relaxing warnings. Exact-head validation
+is still required. Specifications34669981342 is a failed run, not acceptance.
