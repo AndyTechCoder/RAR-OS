@@ -859,3 +859,23 @@ the actual native main declares both independently and remains unchanged.
 This preserves all kernel unit tests and the actual native object/build checks,
 without changing syscall behavior or relaxing warnings. Exact-head validation
 is still required. Specifications34669981342 is a failed run, not acceptance.
+
+
+### Verified source checkpoint and next native-channel preparation
+
+Source2ed4236eb7c1d226d52e82f2e735b3ef1e742789 passed all four checks:
+Specifications34670391243, Foundation34670391286, Platform34670391123 and
+Desktop34670391115. The completed logs include56 Modern core tests,75 kernel
+tests and90 signed-layer tests, including the new repair copy/failure/bounds
+cases. Review/evidence checkpoint is PR158 comment5643244194. This resolves
+the two historical build-gating failures above, not M4.3 runtime acceptance.
+
+The next source batch defines the separate exact128-byte RARREP01 inspection
+channel: request/snapshot, full ordered hashed Record assembly, six inspection
+phases with whole-sector bounds, and exact seal release messages. Pure binding
+checks distinguish selected active/prior metadata from untrusted factory
+metadata and reject ordinary executable-Transfer parsing. Four focused test
+groups cover framing/order/identity/shape negatives. Native System/Manager
+callers, opaque lease issuance and automatic repair remain to be implemented;
+this codec does not produce CompleteRead or authorize writes. Exact-head tests
+and independent source review are required for this new batch.

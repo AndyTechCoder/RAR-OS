@@ -435,3 +435,64 @@ image identity—not an IPC-supplied expected hash—is the independent root.
 Factory inspection phases must zero-pad to whole sectors without altering the
 logical package used for signature/full-package identity. A native CompleteRead
 issuer and the fixed one-shot Repair protocol still require integration.
+
+
+## M4.3 private repair inspection channel (source preparation)
+
+The separate RARREP01 family in core/modern/repair_wire.rs is exactly128 bytes,
+little-endian and zero-reserved. It is not an executable RARUPD01 Transfer and
+does not relax executable package bounds. No parser, snapshot or record fragment
+is a CompleteRead, authenticated sender, immutable root or repair authorization.
+There is no native sender/receiver at this source checkpoint.
+
+All frames: magic ASCII RARREP01 at0..7, kind byte8, nonzero full-u64 request
+at16..23. Fields not specified below MUST be zero, including trailing bytes.
+Reject truncation, excess bytes, unknown values and noncanonical framing.
+
+- Kind1 Start: only the common fields. No caller index/path/LBA/seal.
+- Kind2 Snapshot: nonzero selector sequence at32..39; SHA256 of the complete
+  encoded512-byte current Record at40..71. This is untrusted metadata until the
+  full record is assembled, decoded, and matched.
+- Kind3 RecordGet / kind4 RecordPart: snapshot sequence at24..31, sequential
+  byte offset at32..39. Offsets are exactly0,88,176,264,352,440. RecordPart data
+  begins at40 and has min(88,512-offset) bytes; final16 bytes are zero.
+  RecordGet has no data. The receiver binds request/sequence/offset, refuses
+  duplicate/out-of-order/mismatched chunks without advancing, and verifies the
+  full SHA256, canonical Record decoding and sequence before returning Record.
+  Fragments do not repeat the hash; the receiver retains the exact Snapshot.
+- Kind5 Inspection: phase byte9; referenced slot byte10 (A=0,B=1);
+  nonzero kernel seal at24..31; selector sequence at32..39; referenced
+  generation at40..47; whole-sector stored length at48..55; manifest digest
+  at56..87; full stored-byte SHA256 at88..119. Both digests are nonzero.
+  Reserved11..15 and120..127 are zero. Length is512..2097664, multiple512.
+- Kind6 Inspect request / kind7 Release / kind8 Released: phase byte9,
+  selector sequence at32..39 and exact snapshot hash at40..71.
+  Inspect has seal0 at24..31; Release/Released require the exact nonzero seal.
+  No content bytes, boolean authorization or changed snapshot may be substituted.
+
+Phases0..5 are Active, Prior, Factory, FreshActive, FreshPrior, FreshFactory.
+Skip Prior/FreshPrior only if the assembled current Record has no named prior.
+An active/prior Inspection must name the exact corresponding slot/generation/
+manifest digest from that Record. Factory metadata names the planned opposite
+System destination and generation1, NOT the kernel physical staging slot.
+Its digest/hash are still untrusted until independently verified against the
+kernel-provided immutable factory identity and signature/policy.
+
+The future native Manager must authenticate fixed System9/full incarnation
+before decoding, hold exactly one outstanding request/phase/Record tuple,
+check the offered unique seal/length through actual VIEW10, and consume a
+non-clonable lease. Kernel purpose/sealing/mapping and authenticated IPC/session
+binding form the receipt together; VIEW10 alone does not authenticate IPC
+request IDs. No kernel ABI extension is required under these serialized,
+non-reused-seal invariants. VIEW11 retires/scrubs the seal, not a service
+incarnation. Only after successful classification and exact scrub/release may
+the runtime advance a phase; any transport/cleanup ambiguity halts recovery.
+The codec's Phase::next merely describes order and enforces none of that state.
+
+No repair payload preparation, health, selector publication or executable
+transfer occurs in this family. Those belong to the subsequent native one-shot
+Repair transaction and remain unwired. Existing Boot/Install/Fallback messages
+and behavior are unchanged. Source tests cover exact framing/full-width
+identities, every truncation and byte substitution, fragment order/hash binding,
+sector bounds, cross-family refusal, role/Record matching and exact releases.
+These are source tests, not native complete-read or recovery proof.
