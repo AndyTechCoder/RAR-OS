@@ -1,35 +1,44 @@
-# Current M4 integration status — 2026-09-12
+# M4 acceptance and evidence
 
-M4.1 persistent files and M4.2 signed live updates are accepted at their recorded
-development snapshots. M4.3 automatic factory recovery now also has actual cloud
-evidence: run34692159832/job103549214972 passed on native source
-00c6b5e93f99200eb36f799d25753510a0a9baed and trusted controller
-6c8c8a684978a324ac6a35d1d4f14edb2bfdfb7b.
+Final M4.3/full-M4 acceptance is recorded in the **published**
+[v0.4.0-modern-alpha release](https://github.com/AndyTechCoder/RAR-OS/releases/tag/v0.4.0-modern-alpha)
+and its byte-verified `release-record.json` and proof assets. Until that release
+is published after all required gates, M4.3/full M4 is incomplete. A draft,
+passing source tests, or this link alone is not acceptance.
 
-Seven signed-runtime scenarios used21 fresh VM lifecycles, including damaged
-System banks -> automatic factory repair -> new boot with working Settings/Files
-and the preserved note. Data stayed physically read-only during recovery and
-byte-identical. The service image limit was preserved; reviewed size optimisation
-resolved its earlier build failure. This is real recovery evidence, not source
-or model-only success.
+The [M4 task packet](https://github.com/AndyTechCoder/RAR-OS/blob/main/docs/tasks/fast-track-alpha-milestone-4.md)
+defines the unchanged ten behavior requirements. The release binds the accepted
+source/controller SHA, exact-main runs, independent review and durable evidence;
+[PR158](https://github.com/AndyTechCoder/RAR-OS/pull/158) records premerge progress.
+Read the published release for final status, not the historical checkpoints below.
 
-Remaining for M4.3/full M4: the complete actual System interruption matrix,
-final whole-M4 regression/reproducibility evidence, integrated-head/exact-main
-checks, consolidated release acceptance and v0.4.0-modern-alpha publication.
-The fixed matrix is implemented in PR202; independent review fixes require exact
-cloud CI before trusted-main activation. This checkpoint does not claim those
-remaining runs have passed.
+## Verified premerge checkpoint — 2026-09-12
 
-Integration preserves all native target blobs from source00c6 and all later
-trusted-main controller fixes, including the service size correction. Histories
-are joined, not rebased or force-pushed. PR158 remains draft until the final gate.
-See docs/evidence/m4-system-fault-campaign.md and the GitHub PR/release evidence
-for the exact subsequent results. Historical checkpoints below are provenance,
-not current implementation status.
+- M4.1 persistent files and M4.2 signed live updates are accepted at the recorded
+  development snapshots. Actual automatic System-only factory recovery is proven.
+- Integrated runtime source `8927f5e42858850882219bbf2316cf79a764e1bb`,
+  trusted controller `03002ccf2b8e1135ede3d2937abfdfb7dc631413`:
+  signed runtime34697871103 passed seven scenarios/21 fresh VM lifecycles;
+  crypto34697873683 passed; Data34697868693 passed60 content-checked fault cases.
+- Exact source `a205ac32ebed46534a43c83fba70ee06f04116c2` passed
+  Specifications34698422269, Foundation34698422253, Platform34698422255
+  and Desktop34698422258. Later source changes from8927 througha205 affect only
+  reviewed release-preservation tooling/tests/docs; target/controller blobs match.
+- At this recorded checkpoint System34697876196 Install/Repair jobs were still
+  running. Their terminal outcome, subsequent documentation-only checks,
+  consolidated premerge review, exact-main campaigns and release-preservation
+  outcome must be read from PR158 and the final release record. This historical
+  checkpoint does not assert that those pending gates passed.
 
-No Mac/SSD source writes, downloads, builds, mounts, deletions or target/VM
-execution. All repository changes are GitHub-only; all target execution is in
-reviewed confined disposable cloud profiles.
+Recovery uses independently verifiable immutable laboratory material, System-only
+writes and physically read-only, byte-identical Data. The full interrupted-update
+and recovery oracle requires complete old/new durable states after fresh boots.
+No check, fault coverage, image cap, authority boundary or review requirement
+is relaxed by this documentation.
+
+Repository mutations remain GitHub-only. No Mac/SSD writes, deletions, downloads,
+builds, mounts or target/VM execution. Laboratory fixtures are not real user data
+or production secrets; all runtime tests use reviewed confined cloud profiles.
 
 ---
 

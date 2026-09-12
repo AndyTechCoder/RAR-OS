@@ -5,9 +5,12 @@ fd1982665b81ba2e672e0044165d68e09daa47f0 (2026-09-10).
 M4.2 COMPLETE at accepted development snapshot
 93ac75b086755a9b57a1e0998dc16a36eb147be0 with controller
 14d6612bd7e7f6593ce89b71a89a60d283027aa6 (2026-09-12).
-M4.3 and full Milestone 4 remain incomplete. This is not main-release
-acceptance or production certification. See docs/evidence/m4-runtime-progress.md
-for exact runtime evidence, source identities, review and integration checks.
+M4.3/full Milestone 4 acceptance is recorded only by the published
+[v0.4.0-modern-alpha release](https://github.com/AndyTechCoder/RAR-OS/releases/tag/v0.4.0-modern-alpha)
+with its verified final-main evidence record and proof assets. Until publication
+after every gate below, M4.3/full M4 is incomplete. A draft or this link is not
+acceptance. See docs/evidence/m4-runtime-progress.md and PR158 for development
+snapshots and premerge evidence. No production certification is claimed.
 Direction: 2026-09-05 UTC, "Perfect. So then let's continue with the next, milestone 4".
 
 ## Baseline and purpose
@@ -76,7 +79,7 @@ The owner approved this organization on 2026-09-08. It replaces the delivery
 sequence, not the ten completion requirements above, ADR0034 review boundaries,
 or any host/data safety constraint. M4.1 is complete at the accepted development
 snapshot above; M4.2 is complete at the source/controller pair above;
-M4.3 remains incomplete.
+M4.3 acceptance follows the unchanged recovery/release gates below.
 
 ### M4.1 — Persistent files
 
@@ -189,9 +192,10 @@ launcher to discover whether it is safe.
 
 M4.1's acceptance targets are complete at the recorded development snapshot.
 M4.2's signed component replacement and update/fallback acceptance targets are
-complete at the exact source/controller pair above. Remaining Milestone 4 work
+complete at the exact source/controller pair above. M4.3's completion gate
 is immutable System-only recovery and the final whole-M4 runtime,
-regression/reproducibility/review/release gates. Networking, SDK, additional hardware profiles, AI/agents,
+regression/reproducibility/review/release evidence. Final acceptance and the
+exact released revision are recorded by the published release linked above. Networking, SDK, additional hardware profiles, AI/agents,
 production identity/hardware-backed secrets and an external cryptographic audit
 remain later work. A failure to finish any requirement is reported explicitly,
 not relabeled as successful Milestone 4.
