@@ -43,3 +43,7 @@ No release is published by this helper. Pure mocked tests cover exact selection,
 cross-source/wrong workflow/role/failed/expired evidence refusal, fixed API methods
 and URLs, no mutation before complete metadata validation, digest refusal,
 idempotent reuse, and refusal to overwrite or delete existing assets.
+
+## External publication race
+
+The helper rechecks the exact draft/prerelease/source before every upload and at completion. These checks cannot make external publication atomic with an upload. No other actor may publish or mutate this draft during preservation; the owner agent publishes only after the workflow succeeds and the final release gate passes. An interrupted transfer is resumed by matching existing fixed-name asset digests, never overwriting or deleting assets. Tests inject failure before and after server-side creation at each of the nine uploads.

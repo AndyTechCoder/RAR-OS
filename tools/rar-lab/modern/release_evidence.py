@@ -67,7 +67,8 @@ def artifact_check(value,row,source,attempt):
 def asset_check(value,name,raw,sha):
     if (type(value) is not dict or type(value.get("id")) is not int or value["id"]<=0 or
         value.get("name")!=name or type(value.get("size")) is not int or value["size"]!=len(raw) or
-        value.get("digest")!="sha256:"+sha(raw) or value.get("state")!="uploaded"):
+        value.get("digest")!="sha256:"+sha(raw) or value.get("state")!="uploaded" or
+        value.get("browser_download_url")!="https://github.com/"+REPO+"/releases/download/"+TAG+"/"+name):
         raise ValueError("exact uploaded release asset")
     return {key:value[key] for key in ("id","name","size","digest","browser_download_url")}
 def api_url(method,path,release_id,source,raw):
@@ -103,9 +104,14 @@ def promote(github,api,release_id,source,plan,sha,canonical):
         asset=existing.get(name)
         if asset is not None and (type(asset.get("size")) is not int or asset["size"]!=row["size"] or
             asset.get("digest")!="sha256:"+row["sha256"] or asset.get("state")!="uploaded" or
-            type(asset.get("id")) is not int or asset["id"]<=0):
+            type(asset.get("id")) is not int or asset["id"]<=0 or
+            asset.get("browser_download_url")!="https://github.com/"+REPO+"/releases/download/"+TAG+"/"+name):
             raise ValueError("existing proof differs; never overwrite or delete")
         checked.append((row,run))
+    def upload(name,raw):
+        # Narrow the external-publication race; final publication remains a separate gate.
+        release_check(api("GET","/releases/"+str(release_id)),release_id,source)
+        return asset_check(api("POST","/releases/"+str(release_id)+"/assets?name="+name,raw),name,raw,sha)
     record=dict(schema="rar-modern-release-evidence-v0",source=source,tag=TAG,
         specifications=spec,artifacts=[],status="verified-proof-assets",publication_control="separate-final-release-gate")
     for row,run in checked:
@@ -115,13 +121,14 @@ def promote(github,api,release_id,source,plan,sha,canonical):
         else:
             raw=github.zip(row["artifact_id"],row["size"])
             if sha(raw)!=row["sha256"]:raise ValueError("downloaded artifact digest mismatch")
-            asset=asset_check(api("POST","/releases/"+str(release_id)+"/assets?name="+name,raw),name,raw,sha)
+            asset=upload(name,raw)
         record["artifacts"].append(dict(kind=row["kind"],run=run,artifact_id=row["artifact_id"],
             artifact_sha256=row["sha256"],asset=asset))
         print("Preserved verified proof",name,row["size"],flush=True)
     raw=canonical(record);name="release-record.json"
     if name in existing:asset_check(existing[name],name,raw,sha)
-    else:asset_check(api("POST","/releases/"+str(release_id)+"/assets?name="+name,raw),name,raw,sha)
+    else:upload(name,raw)
+    release_check(api("GET","/releases/"+str(release_id)),release_id,source)
     # No PATCH/delete/publish operation exists here. Owner agent publishes only
     # after this workflow is fully successful and the final release gate passes.
     return record
