@@ -120,3 +120,55 @@ No hardware-backed or independent monotonic trust anchor is implemented.
 Architecture and security reviewers identified these requirements at baseline
 06ecaaad and proposed head2ec60aae. This refinement records the findings; it does
 not certify an unimplemented controller, crypto module, filesystem or runtime.
+
+## Proposed DataVault framing refinement
+
+The exact candidate is now documented in docs/interfaces/modern-data-v0.md.
+An all-byte-changing reservation precedes the sole per-slot AEAD seal. Ciphertext,
+tag and authenticated chain metadata are durable before a separate fixed commit
+marker. Recognized incomplete reservations burn slots; partial commit markers
+require a valid authenticated complete payload and can recover the new state
+without a pre-crash ACK. No consumed slot is reused or reformatted. This reflects
+read-only architecture review of the crash/nonce conflict; concrete source tests,
+independent review and actual device/profile evidence are still pending. Public
+lab keys, exact-erasure/whole-rollback limits and no writable clones stay explicit.
+This refinement is not runtime authorization or an accepted production format.
+
+## Refinement: signed compatibility matches the actual Modern-v1 kernel
+
+Under the owner's delegated safe-direction authority, correct the unactivated
+Modern-v0 layer candidate's signed kernel compatibility field at bytes228..231
+from0 to exact1. The actual kernel, service and app bootstrap uses RARMOD01,
+Boot368 and Envelope152. A manifest declaring ABI0 must not authorize that code.
+
+Alternatives considered: accepting both0 and1 or translating old bootstrap data
+would misrepresent compatibility and is rejected. A new manifest framing version
+would be needed if preserving an accepted ABI0 deployment; no such Modern layer
+has been accepted. Keep the experimental format0, component interface0, existing
+offsets, signature domain and preimage unchanged; reject all non1 kernel values.
+
+Consequences: zero-valued fixtures/packages remain incompatible. Every real
+Settings candidate must be newly generated and signed with the value1. The
+verifier checks this authenticated declaration before returning verified payload
+bytes for staging. Focused cross-module tests pin the actual ABI version, magic
+and Boot/Envelope sizes and reject0,2 and other unknown values. This refinement
+requires independent code/contract review and cloud checks before publication;
+it grants no loader/cutover, runtime acceptance or production security claim.
+
+
+## M4.2 refinement: fixed package slots and exclusive preparation
+
+Use the existing manifest followed by payload, with no new wrapper, in the
+disjoint fixed geometry specified in modern-system-v0.md. Alternatives of an
+extra length header or scanning old slot tails are unnecessary and rejected.
+The System service stages raw bytes and retains an opaque transaction-bound
+readback identity; the manager separately authenticates the exact kernel-sealed
+copy. A manager-owned VerifiedLayer never crosses into System's address space.
+Selector publication is encapsulated with package preparation so a plain Record
+cannot bypass inactive-slot durability. Content rejection does not itself forbid
+an authorized prior fallback; transport/changed/indeterminate failures do.
+
+This same-change source refinement is under the owner's M4.2 direction and
+staging-copy approval. It creates no authorization-only PR, new dependency,
+Data authority, host operation or runtime acceptance. Exact native channel,
+sealing, loader and health/cutover integration remain to be completed/reviewed.

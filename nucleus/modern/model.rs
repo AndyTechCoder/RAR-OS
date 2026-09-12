@@ -1,0 +1,1060 @@
+//! Modern-only logical IPC and replacement mechanism model.
+//! Kernel-owned state; callers/handles must come from the real trap context.
+//! No signature policy, page mapping, process execution or disk I/O here.
+#![forbid(unsafe_code)]
+
+pub const TASKS:usize=16;
+pub const PRINCIPALS:usize=10;
+pub const CAP_SLOTS:usize=12;
+pub const MESSAGE_BYTES:usize=128;
+pub const QUEUE_DEPTH:usize=4;
+pub const SEND:u8=1;
+pub const RECEIVE:u8=2;
+pub const HEALTH:u8=4;
+pub const MANAGE:u8=8;
+pub const DEVICE:u8=16;
+pub const INPUT:u8=32;
+pub const DRAW:u8=64;
+pub const COPY_STAGE:u8=128;
+pub const STAGE_CAP:usize=10;
+pub const INPUT_CAP:usize=7;
+pub const FRAMEBUFFER_CAP:usize=8;
+pub const DEVICE_CAP:usize=11;
+pub const SELF_CAP:usize=0;
+pub const SHELL_CAP:usize=1;
+pub const COMPOSITOR_CAP:usize=2;
+pub const HEALTH_CAP:usize=9;
+pub const MANAGER_CAP:usize=10;
+
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub enum Error {Invalid,Denied,Stale,Full,Empty,Exhausted,Busy}
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub struct Endpoint {pub slot:u8,pub incarnation:u64}
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub enum Device {Data,System}
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub enum Object {
+    None, NamedSend {principal:u8}, Receive(Endpoint),
+    TrialHealth {endpoint:Endpoint,token:u64}, Manager,
+    Device(Device), Input, Framebuffer, StageCopy,
+}
+#[derive(Clone,Copy)]
+struct Cap {generation:u32,rights:u8,object:Object,retired:bool}
+impl Cap {const EMPTY:Self=Self {generation:1,rights:0,object:Object::None,retired:false};}
+#[derive(Clone,Copy)]
+pub struct Caps {slots:[Cap;CAP_SLOTS]}
+impl Caps {
+    pub const fn new()->Self {Self {slots:[Cap::EMPTY;CAP_SLOTS]}}
+    pub fn grant(&mut self,index:usize,object:Object,rights:u8)->Result<u64,Error>{
+        let s=self.slots.get_mut(index).ok_or(Error::Invalid)?;
+        let allowed=match object {
+            Object::NamedSend {principal} if (principal as usize)<PRINCIPALS=>SEND,
+            Object::Receive(e) if (e.slot as usize)<TASKS&&e.incarnation!=0=>RECEIVE,
+            Object::TrialHealth {endpoint:e,token} if (e.slot as usize)<TASKS&&e.incarnation!=0&&token!=0=>HEALTH,
+            Object::Manager=>MANAGE,
+            Object::Device(_)=>DEVICE,
+            Object::Input=>INPUT,
+            Object::Framebuffer=>DRAW,
+            Object::StageCopy=>COPY_STAGE,
+            _=>return Err(Error::Invalid),
+        };
+        if rights!=allowed||s.retired||s.object!=Object::None {return Err(Error::Denied);}
+        s.object=object;s.rights=rights;
+        Ok((s.generation as u64)<<32 | (index as u64+1))
+    }
+    pub fn resolve(&self,handle:u64,right:u8)->Result<Object,Error>{
+        let i=(handle as u32).checked_sub(1).ok_or(Error::Invalid)? as usize;
+        let s=self.slots.get(i).ok_or(Error::Invalid)?;
+        if s.retired||s.object==Object::None||s.generation!=(handle>>32)as u32{return Err(Error::Stale);}
+        if right==0||right&s.rights!=right{return Err(Error::Denied);}
+        Ok(s.object)
+    }
+    pub fn revoke(&mut self,index:usize)->Result<(),Error>{
+        let s=self.slots.get_mut(index).ok_or(Error::Invalid)?;
+        s.object=Object::None;s.rights=0;
+        if let Some(n)=s.generation.checked_add(1){s.generation=n;}else{s.retired=true;}
+        Ok(())
+    }
+    fn revoke_all(&mut self){for i in 0..CAP_SLOTS {let _=self.revoke(i);}}
+    pub fn handle(&self,index:usize)->Result<u64,Error>{
+        let s=self.slots.get(index).ok_or(Error::Invalid)?;
+        if s.retired||s.object==Object::None{return Err(Error::Stale);}
+        Ok((s.generation as u64)<<32|(index as u64+1))
+    }
+}
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub struct Message {pub principal:u8,pub incarnation:u64,pub length:u8,pub bytes:[u8;MESSAGE_BYTES]}
+impl Message {
+    const EMPTY:Self=Self {principal:0,incarnation:0,length:0,bytes:[0;MESSAGE_BYTES]};
+    fn stamp(principal:u8,incarnation:u64,bytes:&[u8])->Result<Self,Error>{
+        if principal as usize>=PRINCIPALS||incarnation==0||bytes.is_empty()||bytes.len()>MESSAGE_BYTES {
+            return Err(Error::Invalid);
+        }
+        let mut m=Self {principal,incarnation,length:bytes.len()as u8,..Self::EMPTY};
+        m.bytes[..bytes.len()].copy_from_slice(bytes);Ok(m)
+    }
+}
+#[derive(Clone,Copy)]
+struct Queue {messages:[Message;QUEUE_DEPTH],length:usize}
+impl Queue {
+    const fn new()->Self {Self {messages:[Message::EMPTY;QUEUE_DEPTH],length:0}}
+    fn push(&mut self,m:Message)->Result<(),Error>{
+        if self.length==QUEUE_DEPTH||
+            self.messages[..self.length].iter().filter(|x|x.principal==m.principal&&x.incarnation==m.incarnation).count()>=2 {
+            return Err(Error::Full);
+        }
+        self.messages[self.length]=m;self.length+=1;Ok(())
+    }
+    fn pop(&mut self)->Result<Message,Error>{
+        if self.length==0{return Err(Error::Empty);}
+        let m=self.messages[0];self.messages.copy_within(1..self.length,0);
+        self.length-=1;self.messages[self.length]=Message::EMPTY;Ok(m)
+    }
+    fn purge(&mut self,principal:u8,incarnation:u64){
+        let mut n=0;
+        for i in 0..self.length{
+            let m=self.messages[i];
+            if m.principal!=principal||m.incarnation!=incarnation{self.messages[n]=m;n+=1;}
+        }
+        self.messages[n..].fill(Message::EMPTY);self.length=n;
+    }
+}
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub enum State {Vacant,Trial,Healthy,Active}
+#[derive(Clone,Copy)]
+struct Process {state:State,principal:Option<u8>,incarnation:u64,caps:Caps,queue:Queue}
+impl Process {const EMPTY:Self=Self {state:State::Vacant,principal:None,incarnation:0,caps:Caps::new(),queue:Queue::new()};}
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub struct Trial {token:u64,endpoint:Endpoint,previous:Option<Endpoint>,budget:u32,
+    signed_budget:u32,image_seal:u64,image_digest:[u8;32],image_generation:u64}
+impl Trial {
+    pub fn token(&self)->u64 {self.token}
+    pub fn endpoint(&self)->Endpoint {self.endpoint}
+    pub fn image_seal(&self)->u64 {self.image_seal}
+    pub fn signed_budget(&self)->u32 {self.signed_budget}
+    pub fn image_digest(&self)->[u8;32] {self.image_digest}
+    pub fn image_generation(&self)->u64 {self.image_generation}
+}
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub struct Cutover {pub previous:Option<Endpoint>,pub current:Endpoint}
+/// Precomputed candidate grants only: never snapshot unrelated runtime state.
+/// The native owner retains this across durable System I/O, then revalidates.
+#[derive(Clone,Copy)]
+pub struct Handover {trial:Trial,caps:Caps}
+/// Complete prepared desktop authority, still unpublished. Bootstrap services
+/// remain live in Runtime, never copied/restored from this plan.
+pub struct DesktopHandover{candidate:Handover,caps:[Caps;7],bindings:[Option<Endpoint>;PRINCIPALS],clock:u64}
+impl DesktopHandover{
+    pub fn binding(&self,role:usize)->Option<Endpoint>{self.bindings.get(role).copied().flatten()}
+    pub fn handle(&self,slot:usize,index:usize)->Result<u64,Error>{
+        let role=if slot==self.candidate.endpoint().slot as usize{5}
+            else if [0,1,2,3,4,6].contains(&slot){slot}else{return Err(Error::Invalid);};
+        self.caps[role].handle(index)
+    }
+}
+pub const DESKTOP_PLAN_MAX:usize=8192;
+const _:()=assert!(core::mem::size_of::<DesktopHandover>()<=DESKTOP_PLAN_MAX);
+impl Handover {
+    pub fn endpoint(&self)->Endpoint{self.trial.endpoint}
+    pub fn token(&self)->u64{self.trial.token}
+    pub fn handle(&self,index:usize)->Result<u64,Error>{self.caps.handle(index)}
+}
+// Only the native sealed-buffer bridge inserts this manager-authenticated record.
+#[derive(Clone,Copy)]
+struct StagedImage {seal:u64,slot:u8,digest:[u8;32],generation:u64,signed_budget:u32}
+
+// Certified signed-lab probe only. No syscall, caller payload or new grant.
+#[cfg(any(test,rar_signed_updates))]
+const STALE_SENTINEL:&[u8]=b"RAR-STALE-PROBE";
+#[cfg(any(test,rar_signed_updates))]
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub struct StaleProbe {endpoint:Endpoint,handle:u64}
+
+pub struct Runtime {
+    processes:[Process;TASKS],bindings:[Option<Endpoint>;PRINCIPALS],
+    clock:u64,next_token:u64,trial:Option<Trial>,staged:Option<StagedImage>,recovery_required:bool,
+    bootstrapping:bool,
+}
+impl Runtime {
+    /// Retained full graph for the accepted M4.1 composition and focused tests.
+    pub fn new()->Self{Self::initial(false)}
+    /// Construct only bootstrap services. Never grant then revoke desktop state.
+    pub fn bootstrap()->Self{Self::initial(true)}
+    fn initial(bootstrapping:bool)->Self{
+        let mut r=Self {processes:[Process::EMPTY;TASKS],bindings:[None;PRINCIPALS],
+            clock:1,next_token:1,trial:None,staged:None,recovery_required:false,bootstrapping};
+        for i in [0,1,2,3,4,5,6,8,9]{
+            if bootstrapping&&!matches!(i,8|9){continue;}
+            let e=Endpoint {slot:i as u8,incarnation:1};
+            r.processes[i].state=State::Active;r.processes[i].principal=Some(i as u8);r.processes[i].incarnation=1;
+            r.bindings[i]=Some(e);
+            if i!=2 {r.processes[i].caps.grant(SELF_CAP,Object::Receive(e),RECEIVE).unwrap();}
+        }
+        r.processes[8].caps.grant(MANAGER_CAP,Object::Manager,MANAGE).unwrap();
+        r.processes[8].caps.grant(1,Object::NamedSend{principal:9},SEND).unwrap();
+        r.processes[9].caps.grant(1,Object::NamedSend{principal:8},SEND).unwrap();
+        // Released desktop's least-authority IPC graph, with logical endpoints.
+        for (caller,slot,principal) in [(0,2,3),(0,4,4),(0,5,5),(0,6,6),
+            (1,4,4),(1,6,6),(2,1,0),(4,2,3),(4,3,1),
+            (5,1,0),(5,2,3),(6,2,3),(6,3,1),(6,4,8)] {
+            if !bootstrapping{r.processes[caller].caps.grant(slot,Object::NamedSend {principal},SEND).unwrap();}
+        }
+        if !bootstrapping{r.processes[1].caps.grant(DEVICE_CAP,Object::Device(Device::Data),DEVICE).unwrap();}
+        r.processes[9].caps.grant(DEVICE_CAP,Object::Device(Device::System),DEVICE).unwrap();
+        r.processes[9].caps.grant(STAGE_CAP,Object::StageCopy,COPY_STAGE).unwrap();
+        if !bootstrapping{
+            r.processes[2].caps.grant(INPUT_CAP,Object::Input,INPUT).unwrap();
+            r.processes[3].caps.grant(FRAMEBUFFER_CAP,Object::Framebuffer,DRAW).unwrap();
+        }
+        // Principal8 manages lifecycle; only System service9 receives System I/O.
+        r
+    }
+    /// Bounded current snapshot; no allocation, grants, counters or fallible lookup.
+    pub fn binding_generations(&self)->[u64;PRINCIPALS]{
+        self.bindings.map(|e|e.map_or(0,|e|e.incarnation))
+    }
+    pub fn bootstrapping(&self)->bool{self.bootstrapping}
+    pub fn recovery_required(&self)->bool {self.recovery_required}
+    pub fn binding(&self,principal:usize)->Result<Option<Endpoint>,Error>{
+        self.bindings.get(principal).copied().ok_or(Error::Invalid)
+    }
+    pub fn state(&self,slot:usize)->Result<State,Error>{
+        self.processes.get(slot).map(|p|p.state).ok_or(Error::Invalid)
+    }
+    pub fn handle(&self,slot:usize,index:usize)->Result<u64,Error>{
+        self.processes.get(slot).ok_or(Error::Invalid)?.caps.handle(index)
+    }
+    /// Resolve only the trapped caller's table. No device selector comes from
+    /// user bytes. Native adapter code must map the returned kind to fixed ports.
+    /// This checks mechanism authority, not profile/capacity or ATA sequencing.
+    pub fn device(&self,caller:usize,handle:u64)->Result<Device,Error> {
+        let p=self.processes.get(caller).ok_or(Error::Invalid)?;
+        if p.state!=State::Active {return Err(Error::Denied);}
+        let expected=match p.principal {Some(1)=>Device::Data,Some(9)=>Device::System,
+            _=>return Err(Error::Denied)};
+        if p.caps.resolve(handle,DEVICE)?!=Object::Device(expected) {return Err(Error::Denied);}
+        Ok(expected)
+    }
+    pub fn input(&self,caller:usize,handle:u64)->Result<(),Error> {
+        let p=self.processes.get(caller).ok_or(Error::Invalid)?;
+        if p.state!=State::Active||p.principal!=Some(2)||
+            p.caps.resolve(handle,INPUT)?!=Object::Input {return Err(Error::Denied);}
+        Ok(())
+    }
+    pub fn framebuffer(&self,caller:usize,handle:u64)->Result<(),Error> {
+        let p=self.processes.get(caller).ok_or(Error::Invalid)?;
+        if p.state!=State::Active||p.principal!=Some(3)||
+            p.caps.resolve(handle,DRAW)?!=Object::Framebuffer {return Err(Error::Denied);}
+        Ok(())
+    }
+    /// Distinct System-only byte-copy authority. It is not a device selector,
+    /// Manager grant, verification result or executable mapping capability.
+    pub fn stage_copy(&self,caller:usize,handle:u64)->Result<(),Error>{
+        let p=self.processes.get(caller).ok_or(Error::Invalid)?;
+        if self.recovery_required||p.state!=State::Active||p.principal!=Some(9)||
+            p.caps.resolve(handle,COPY_STAGE)?!=Object::StageCopy{return Err(Error::Denied);}
+        Ok(())
+    }
+    /// Native IF=0 adapter supplies physical Clean facts, never user arguments.
+    /// It must immediately reserve the returned slot in the single Buffer.
+    pub fn staging_slot(&self,caller:usize,handle:u64,clean:[bool;2])->Result<usize,Error>{
+        self.stage_copy(caller,handle)?;
+        if self.trial.is_some()||self.staged.is_some(){return Err(Error::Busy);}
+        [5usize,7].into_iter().enumerate()
+            .find(|&(n,i)|clean[n]&&self.processes[i].state==State::Vacant)
+            .map(|(_,i)|i).ok_or(Error::Busy)
+    }
+    /// Only live shell's named Settings send or compositor's framebuffer grant
+    /// permits the fixed Settings binding query. It grants no new send rights.
+    pub fn settings_binding(&self,caller:usize,handle:u64)->Result<Option<Endpoint>,Error>{
+        let p=self.processes.get(caller).ok_or(Error::Invalid)?;
+        if p.state!=State::Active{return Err(Error::Denied);}
+        match p.principal{
+            Some(0) if p.caps.resolve(handle,SEND)?==(Object::NamedSend{principal:5})=>{},
+            Some(3) if p.caps.resolve(handle,DRAW)?==Object::Framebuffer=>{},
+            _=>return Err(Error::Denied),
+        }
+        Ok(self.bindings[5])
+    }
+    fn manager(&self,caller:usize,handle:u64)->Result<(),Error>{
+        let p=self.processes.get(caller).ok_or(Error::Invalid)?;
+        if p.state!=State::Active||p.principal!=Some(8)||
+            p.caps.resolve(handle,MANAGE)?!=Object::Manager{return Err(Error::Denied);}
+        Ok(())
+    }
+    /// Fixed manager-only immutable staging inspection; no System/device grant.
+    pub fn stage_view(&self,caller:usize,handle:u64)->Result<(),Error>{
+        self.manager(caller,handle)?;
+        if self.recovery_required{return Err(Error::Denied);}Ok(())
+    }
+    /// Fixed status for the existing Manager grant, not arbitrary identity lookup.
+    pub fn update_bindings(&self,caller:usize,handle:u64)->Result<[u64;2],Error>{
+        self.stage_view(caller,handle)?;
+        if self.bootstrapping{return Err(Error::Busy);}
+        Ok([self.bindings[6].map_or(0,|e|e.incarnation),
+            self.bindings[5].map_or(0,|e|e.incarnation)])
+    }
+    pub fn stage_reject(&self,caller:usize,handle:u64)->Result<(),Error>{
+        self.stage_view(caller,handle)?;
+        if self.trial.is_some()||self.staged.is_some(){return Err(Error::Busy);}Ok(())
+    }
+    /// Kernel adapter only: metadata is read from the exact sealed reservation
+    /// after the trusted manager verifies it. No user register supplies a budget.
+    pub fn authenticated_stage(&mut self,caller:usize,handle:u64,seal:u64,slot:usize,
+        digest:[u8;32],generation:u64,signed_budget:u32)->Result<(),Error>{
+        self.stage_reject(caller,handle)?;
+        if seal==0||!matches!(slot,5|7)||digest==[0;32]||generation==0||
+            !(1..=100).contains(&signed_budget){return Err(Error::Invalid);}
+        if self.processes[slot].state!=State::Vacant{return Err(Error::Busy);}
+        self.staged=Some(StagedImage{seal,slot:slot as u8,digest,generation,signed_budget});
+        Ok(())
+    }
+    pub fn discard_staged(&mut self,caller:usize,handle:u64,seal:u64)->Result<(),Error>{
+        self.stage_view(caller,handle)?;
+        if self.trial.is_some(){return Err(Error::Busy);}
+        if self.staged.is_none_or(|s|s.seal!=seal){return Err(Error::Stale);}
+        self.staged=None;Ok(())
+    }
+    pub fn trial(&self)->Option<Trial>{self.trial}
+    fn endpoint_alive(&self,e:Endpoint)->bool{
+        self.processes.get(e.slot as usize).is_some_and(|p|p.state==State::Active&&p.incarnation==e.incarnation)
+    }
+    /// Requires a kernel-owned authenticated staged record. No caller budget is
+    /// accepted: the trial derives its bound and image identity from that record.
+    pub fn begin_trial(&mut self,caller:usize,handle:u64,image_seal:u64)->Result<Trial,Error>{
+        self.manager(caller,handle)?;
+        if self.recovery_required{return Err(Error::Denied);}
+        if self.trial.is_some(){return Err(Error::Busy);}
+        let stage=self.staged.ok_or(Error::Stale)?;
+        if image_seal==0||image_seal!=stage.seal{return Err(Error::Stale);}
+        if stage.generation==0||stage.digest==[0;32]||!(1..=100).contains(&stage.signed_budget){
+            return Err(Error::Invalid);
+        }
+        let budget=stage.signed_budget;
+        let previous=self.bindings[5];
+        if previous.is_some_and(|e|!self.endpoint_alive(e)){return Err(Error::Stale);}
+        // The staging bridge reserves one physically Clean slot before copying.
+        // Never select another vacant slot after verification of sealed bytes.
+        let index=stage.slot as usize;
+        if !matches!(index,5|7){return Err(Error::Invalid);}
+        if self.processes[index].state!=State::Vacant{return Err(Error::Busy);}
+        let incarnation=self.clock.checked_add(1).ok_or(Error::Exhausted)?;
+        let next_token=self.next_token.checked_add(1).ok_or(Error::Exhausted)?;
+        let endpoint=Endpoint {slot:index as u8,incarnation};
+        let token=self.next_token;
+        let mut caps=self.processes[index].caps;
+        caps.grant(HEALTH_CAP,Object::TrialHealth {endpoint,token},HEALTH)?;
+        let trial=Trial {token,endpoint,previous,budget,signed_budget:budget,image_seal,
+            image_digest:stage.digest,image_generation:stage.generation};
+        // No fallible work after publishing model state.
+        self.clock=incarnation;self.next_token=next_token;self.staged=None;
+        self.processes[index]=Process {state:State::Trial,principal:None,incarnation,caps,queue:Queue::new()};
+        self.trial=Some(trial);Ok(trial)
+    }
+    pub fn ready(&mut self,caller:usize,handle:u64,token:u64)->Result<(),Error>{
+        let trial=self.trial.ok_or(Error::Stale)?;
+        let p=self.processes.get_mut(caller).ok_or(Error::Invalid)?;
+        if caller!=trial.endpoint.slot as usize||p.state!=State::Trial||
+            p.incarnation!=trial.endpoint.incarnation||token!=trial.token||
+            p.caps.resolve(handle,HEALTH)?!=(Object::TrialHealth {endpoint:trial.endpoint,token}) {
+            return Err(Error::Denied);
+        }
+        p.caps.revoke(HEALTH_CAP)?;
+        p.state=State::Healthy;Ok(())
+    }
+    pub fn send(&mut self,caller:usize,handle:u64,bytes:&[u8])->Result<(),Error>{
+        let p=self.processes.get(caller).ok_or(Error::Invalid)?;
+        if p.state!=State::Active{return Err(Error::Denied);}
+        let Object::NamedSend {principal}=p.caps.resolve(handle,SEND)? else{return Err(Error::Denied);};
+        let sender=p.principal.ok_or(Error::Denied)?;
+        let e=self.bindings[principal as usize].ok_or(Error::Stale)?;
+        if !self.endpoint_alive(e){return Err(Error::Stale);}
+        let m=Message::stamp(sender,p.incarnation,bytes)?;
+        self.processes[e.slot as usize].queue.push(m)
+    }
+
+    /// Called by the native IF=0 owner immediately before the unchanged cutover.
+    /// Never consume a queue or reserve across the durable transaction.
+    #[cfg(any(test,rar_signed_updates))]
+    pub fn lab_stale_begin(&mut self,caller:usize,handle:u64)->Result<Option<StaleProbe>,Error>{
+        self.stage_view(caller,handle)?;
+        if self.bootstrapping{return Err(Error::Busy);}
+        let Some(endpoint)=self.bindings[5] else{return Ok(None);};
+        if !self.endpoint_alive(endpoint){return Err(Error::Stale);}
+        let send_handle=self.handle(endpoint.slot as usize,SHELL_CAP)?;
+        if self.processes[endpoint.slot as usize].caps.resolve(send_handle,SEND)?
+            !=(Object::NamedSend{principal:0}){return Err(Error::Denied);}
+        // Refuse any preexisting identical bytes, even from another sender.
+        if self.processes.iter().any(|p|p.queue.messages[..p.queue.length].iter()
+            .any(|m|m.length as usize==STALE_SENTINEL.len()&&
+                &m.bytes[..STALE_SENTINEL.len()]==STALE_SENTINEL)){return Err(Error::Busy);}
+        let shell=self.bindings[0].ok_or(Error::Stale)?;
+        if !self.endpoint_alive(shell){return Err(Error::Stale);}
+        let q=&self.processes[shell.slot as usize].queue;
+        if q.length==QUEUE_DEPTH||q.messages[..q.length].iter()
+            .filter(|m|m.principal==5&&m.incarnation==endpoint.incarnation).count()>=2{
+            return Err(Error::Full);
+        }
+        self.send(endpoint.slot as usize,send_handle,STALE_SENTINEL)?;
+        if self.lab_stale_count(endpoint)!=1{return Err(Error::Invalid);}
+        Ok(Some(StaleProbe{endpoint,handle:send_handle}))
+    }
+    #[cfg(any(test,rar_signed_updates))]
+    fn lab_stale_count(&self,endpoint:Endpoint)->usize{
+        self.processes.iter().map(|p|p.queue.messages[..p.queue.length].iter()
+            .filter(|m|m.principal==5&&m.incarnation==endpoint.incarnation&&
+                m.length as usize==STALE_SENTINEL.len()&&
+                &m.bytes[..STALE_SENTINEL.len()]==STALE_SENTINEL).count()).sum()
+    }
+    /// Native caller runs this after physical retirement, still IF=0.
+    #[cfg(any(test,rar_signed_updates))]
+    pub fn lab_stale_finish(&mut self,caller:usize,handle:u64,probe:StaleProbe,
+        token:u64)->Result<(),Error>{
+        self.stage_view(caller,handle)?;
+        if self.endpoint_alive(probe.endpoint)||self.lab_stale_count(probe.endpoint)!=0||
+            self.bindings[5].is_none_or(|e|e==probe.endpoint||!self.endpoint_alive(e)){
+            return Err(Error::Invalid);
+        }
+        if self.send(probe.endpoint.slot as usize,probe.handle,STALE_SENTINEL)!=Err(Error::Denied)||
+            self.abort(caller,handle,token)!=Err(Error::Stale){return Err(Error::Invalid);}
+        Ok(())
+    }
+
+    pub fn receive(&mut self,caller:usize,handle:u64)->Result<Message,Error>{
+        let p=self.processes.get_mut(caller).ok_or(Error::Invalid)?;
+        if p.state!=State::Active{return Err(Error::Denied);}
+        let expected=Object::Receive(Endpoint {slot:caller as u8,incarnation:p.incarnation});
+        if p.caps.resolve(handle,RECEIVE)?!=expected{return Err(Error::Denied);}
+        p.queue.pop()
+    }
+    fn destroy(&mut self,index:usize){
+        if let Some(principal)=self.processes[index].principal{
+            let incarnation=self.processes[index].incarnation;
+            if self.bindings[principal as usize]==Some(Endpoint {slot:index as u8,incarnation}){
+                self.bindings[principal as usize]=None;
+            }
+            for p in &mut self.processes{p.queue.purge(principal,incarnation);}
+        }
+        let p=&mut self.processes[index];
+        p.state=State::Vacant;p.principal=None;p.queue=Queue::new();p.caps.revoke_all();
+    }
+    pub fn abort(&mut self,caller:usize,handle:u64,token:u64)->Result<(),Error>{
+        self.manager(caller,handle)?;
+        let t=self.trial.ok_or(Error::Stale)?;
+        if t.token!=token{return Err(Error::Stale);}
+        self.destroy(t.endpoint.slot as usize);self.trial=None;Ok(())
+    }
+    /// Precompute all fallible grants before asking System to publish a selector.
+    /// Does not freeze/snapshot peer queues, failures or other runtime state.
+    pub fn prepare_cutover(&self,caller:usize,handle:u64,token:u64)->Result<Handover,Error>{
+        self.stage_view(caller,handle)?;
+        let t=self.trial.ok_or(Error::Stale)?;
+        let index=t.endpoint.slot as usize;
+        if token!=t.token||self.bindings[5]!=t.previous||self.processes[index].state!=State::Healthy||
+            self.processes[index].incarnation!=t.endpoint.incarnation{return Err(Error::Stale);}
+        if t.previous.is_some_and(|e|!self.endpoint_alive(e)){return Err(Error::Stale);}
+        let mut caps=self.processes[index].caps;
+        caps.grant(SELF_CAP,Object::Receive(t.endpoint),RECEIVE)?;
+        caps.grant(SHELL_CAP,Object::NamedSend {principal:0},SEND)?;
+        caps.grant(COMPOSITOR_CAP,Object::NamedSend {principal:3},SEND)?;
+        Ok(Handover{trial:t,caps})
+    }
+    /// Native caller holds IF=0 and validates the durable, exact transaction ACK.
+    /// Candidate grants are already computed. All refusal precedes mutation.
+    pub fn cutover_prepared(&mut self,caller:usize,handle:u64,h:Handover)->Result<Cutover,Error>{
+        self.stage_view(caller,handle)?;
+        if self.bootstrapping{return Err(Error::Denied);}
+        let t=h.trial;let index=t.endpoint.slot as usize;
+        if self.trial!=Some(t)||self.processes[index].state!=State::Healthy||
+            self.processes[index].incarnation!=t.endpoint.incarnation{return Err(Error::Stale);}
+        // The prior may fault while System performs I/O. Never resurrect it.
+        // Nor may a different binding be overwritten by an old handover.
+        let expected=t.previous.filter(|&e|self.endpoint_alive(e));
+        if self.bindings[5]!=expected{return Err(Error::Stale);}
+        if let Some(old)=expected{self.destroy(old.slot as usize);}
+        let p=&mut self.processes[index];
+        p.queue=Queue::new();p.caps=h.caps;p.principal=Some(5);p.state=State::Active;
+        self.bindings[5]=Some(t.endpoint);self.trial=None;
+        Ok(Cutover{previous:t.previous,current:t.endpoint})
+    }
+    /// Prepare every desktop grant without publishing a single binding. The
+    /// native owner must construct all corresponding roots/Boots unscheduled.
+    pub fn prepare_desktop(&self,caller:usize,handle:u64,token:u64)->Result<DesktopHandover,Error>{
+        self.stage_view(caller,handle)?;
+        if !self.bootstrapping{return Err(Error::Denied);}
+        let candidate=self.prepare_cutover(caller,handle,token)?;
+        if candidate.trial.previous.is_some()||
+            [0usize,1,2,3,4,6].iter().any(|&i|self.bindings[i].is_some()||self.processes[i].state!=State::Vacant)||
+            self.bindings[5].is_some(){return Err(Error::Stale);}
+        if !self.bindings[9].is_some_and(|e|self.endpoint_alive(e)){return Err(Error::Denied);}
+        let clock=self.clock.checked_add(1).ok_or(Error::Exhausted)?;
+        let mut plan=DesktopHandover{candidate,caps:[Caps::new();7],
+            bindings:self.bindings,clock};
+        for i in [0usize,1,2,3,4,6]{
+            let e=Endpoint{slot:i as u8,incarnation:clock};plan.bindings[i]=Some(e);
+            let mut caps=self.processes[i].caps;
+            if i!=2{caps.grant(SELF_CAP,Object::Receive(e),RECEIVE)?;}
+            plan.caps[i]=caps;
+        }
+        for (caller,slot,principal) in [(0,2,3),(0,4,4),(0,5,5),(0,6,6),
+            (1,4,4),(1,6,6),(2,1,0),(4,2,3),(4,3,1),(6,2,3),(6,3,1),(6,4,8)]{
+            plan.caps[caller].grant(slot,Object::NamedSend{principal},SEND)?;
+        }
+        plan.caps[1].grant(DEVICE_CAP,Object::Device(Device::Data),DEVICE)?;
+        plan.caps[2].grant(INPUT_CAP,Object::Input,INPUT)?;
+        plan.caps[3].grant(FRAMEBUFFER_CAP,Object::Framebuffer,DRAW)?;
+        let e=candidate.endpoint();
+        plan.caps[5]=candidate.caps;
+        plan.bindings[5]=Some(e);Ok(plan)
+    }
+    /// Publish the already prepared complete graph under native IF=0. Every
+    /// refusal precedes mutation; no grant, allocation or counter increment below.
+    pub fn publish_desktop(&mut self,caller:usize,handle:u64,plan:DesktopHandover)->Result<(),Error>{
+        self.stage_view(caller,handle)?;
+        let t=plan.candidate.trial;
+        if !self.bootstrapping||self.trial!=Some(t)||self.clock.checked_add(1)!=Some(plan.clock)||
+            t.previous.is_some()||self.processes[t.endpoint.slot as usize].state!=State::Healthy||
+            self.bindings[5].is_some(){return Err(Error::Stale);}
+        for i in [0usize,1,2,3,4,6]{
+            if self.bindings[i].is_some()||self.processes[i].state!=State::Vacant{return Err(Error::Stale);}
+        }
+        for i in [8usize,9]{
+            if self.bindings[i]!=plan.bindings[i]||
+                !self.bindings[i].is_some_and(|e|self.endpoint_alive(e)){return Err(Error::Denied);}
+        }
+        for i in [0usize,1,2,3,4,6]{
+            self.processes[i]=Process{state:State::Active,principal:Some(i as u8),
+                incarnation:plan.clock,caps:plan.caps[i],queue:Queue::new()};
+        }
+        self.processes[t.endpoint.slot as usize]=Process{state:State::Active,principal:Some(5),
+            incarnation:t.endpoint.incarnation,caps:plan.caps[5],queue:Queue::new()};
+        for i in 0..7{self.bindings[i]=plan.bindings[i];}
+        self.clock=plan.clock;self.trial=None;self.bootstrapping=false;Ok(())
+    }
+    /// Convenience for the mechanism tests; not durable runtime authority.
+    pub fn cutover(&mut self,caller:usize,handle:u64,token:u64)->Result<Cutover,Error>{
+        let h=self.prepare_cutover(caller,handle,token)?;
+        self.cutover_prepared(caller,handle,h)
+    }
+    /// Timer/fault hooks derive endpoint incarnation from the saved context.
+    /// Delayed events cannot affect a reused physical slot.
+    /// Charge one delivered hardware preemption to the kernel-owned current
+    /// endpoint. Only the trap adapter may supply this identity; no user token,
+    /// budget or endpoint is accepted. The active trial token stays kernel-owned.
+    /// A stale CPU incarnation is an invariant error, not a charge to its reuse.
+    pub fn delivered_preemption(&mut self,endpoint:Endpoint)->Result<bool,Error>{
+        let token=self.trial.map_or(0,|trial|trial.token);
+        self.preempt(endpoint,token)
+    }
+    pub fn preempt(&mut self,endpoint:Endpoint,token:u64)->Result<bool,Error>{
+        let slot=endpoint.slot as usize;
+        let process=self.processes.get(slot).ok_or(Error::Invalid)?;
+        if process.state==State::Vacant||process.incarnation!=endpoint.incarnation{return Err(Error::Stale);}
+        let Some(mut t)=self.trial else{return Ok(false);};
+        if endpoint!=t.endpoint{return Ok(false);}
+        if token!=t.token{return Err(Error::Stale);}
+        if process.state!=State::Trial{return Ok(false);}
+        t.budget-=1;
+        if t.budget==0{self.destroy(slot);self.trial=None;Ok(true)}
+        else{self.trial=Some(t);Ok(false)}
+    }
+    pub fn fault(&mut self,endpoint:Endpoint)->Result<(),Error>{
+        let slot=endpoint.slot as usize;
+        let process=self.processes.get(slot).ok_or(Error::Invalid)?;
+        if process.state==State::Vacant||process.incarnation!=endpoint.incarnation{return Err(Error::Stale);}
+        if process.principal==Some(8) {
+            // Manager failure is a terminal controlled-recovery condition for
+            // lifecycle, not permission to strand a trial or silently grant a
+            // replacement manager. Preserve the currently active Settings.
+            if let Some(t)=self.trial{self.destroy(t.endpoint.slot as usize);}
+            self.trial=None;self.staged=None;self.recovery_required=true;
+        } else if self.trial.is_some_and(|t|t.endpoint==endpoint){self.trial=None;}
+        self.destroy(slot);Ok(())
+    }
+
+}
+impl Default for Caps {fn default()->Self{Self::new()}}
+impl Default for Runtime {fn default()->Self{Self::new()}}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+
+    #[test] fn update_channel_is_only_between_manager_and_system(){
+        for mut r in [Runtime::new(),Runtime::bootstrap()]{
+            let manager=r.handle(8,1).unwrap();let system=r.handle(9,1).unwrap();
+            r.send(8,manager,b"prepare").unwrap();
+            let m=r.receive(9,r.handle(9,0).unwrap()).unwrap();
+            assert_eq!((m.principal,m.incarnation),(8,1));
+            r.send(9,system,b"sealed").unwrap();
+            let m=r.receive(8,r.handle(8,0).unwrap()).unwrap();
+            assert_eq!((m.principal,m.incarnation),(9,1));
+            assert_eq!(r.device(8,manager),Err(Error::Denied));
+            assert_eq!(r.device(9,system),Err(Error::Denied));
+            assert_eq!(r.device(9,r.handle(9,DEVICE_CAP).unwrap()),Ok(Device::System));
+            assert!(r.stage_view(9,system).is_err());
+        }
+    }
+    #[test] fn bootstrap_has_no_desktop_authority_until_whole_graph_publication(){
+        assert!(core::mem::size_of::<DesktopHandover>()<=8192);
+        let mut r=Runtime::bootstrap();let h=manager(&r);
+        for i in 0..7{assert_eq!(r.binding(i),Ok(None));assert_eq!(r.state(i),Ok(State::Vacant));}
+        assert_eq!(r.binding(9),Ok(Some(Endpoint{slot:9,incarnation:1})));
+        r.authenticated_stage(8,h,20,5,[1;32],1,50).unwrap();
+        let t=r.begin_trial(8,h,20).unwrap();assert_eq!(t.previous,None);
+        assert!(r.prepare_desktop(8,h,t.token()).is_err());
+        r.ready(5,r.handle(5,HEALTH_CAP).unwrap(),t.token()).unwrap();
+        let plan=r.prepare_desktop(8,h,t.token()).unwrap();
+        for i in 0..7{assert_eq!(r.binding(i),Ok(None));}
+        assert_eq!(r.state(5),Ok(State::Healthy));
+        assert!(r.handle(1,DEVICE_CAP).is_err());assert!(plan.handle(1,DEVICE_CAP).is_ok());
+        r.publish_desktop(8,h,plan).unwrap();
+        for i in 0..7{assert!(r.binding(i).unwrap().is_some());}
+        assert_eq!(r.binding(5),Ok(Some(t.endpoint())));
+        assert_eq!(r.state(5),Ok(State::Active));assert!(!r.bootstrapping);
+    }
+    #[test] fn desktop_preparation_failure_or_bootstrap_loss_never_partially_publishes(){
+        for lost in [8usize,9]{
+            let mut r=Runtime::bootstrap();let h=manager(&r);
+            r.authenticated_stage(8,h,21,7,[1;32],1,50).unwrap();
+            let t=r.begin_trial(8,h,21).unwrap();
+            r.ready(7,r.handle(7,HEALTH_CAP).unwrap(),t.token()).unwrap();
+            let plan=r.prepare_desktop(8,h,t.token()).unwrap();
+            r.fault(Endpoint{slot:lost as u8,incarnation:1}).unwrap();
+            assert!(r.publish_desktop(8,h,plan).is_err());
+            for i in 0..7{assert_eq!(r.binding(i),Ok(None));}
+        }
+        let mut r=Runtime::bootstrap();let h=manager(&r);
+        r.authenticated_stage(8,h,22,5,[1;32],1,50).unwrap();let t=r.begin_trial(8,h,22).unwrap();
+        r.ready(5,r.handle(5,HEALTH_CAP).unwrap(),t.token()).unwrap();
+        r.clock=u64::MAX;
+        assert!(r.prepare_desktop(8,h,t.token()).is_err());
+        for i in 0..7{assert_eq!(r.binding(i),Ok(None));}
+    }
+    #[test] fn fixed_settings_binding_is_kernel_authenticated_and_narrow(){
+        let mut r=Runtime::new();let shell=r.handle(0,5).unwrap();let comp=r.handle(3,8).unwrap();
+        let old=r.binding(5).unwrap();
+        assert_eq!(r.settings_binding(0,shell),Ok(old));assert_eq!(r.settings_binding(3,comp),Ok(old));
+        for caller in 0..=TASKS{if caller!=0{assert!(r.settings_binding(caller,shell).is_err());}}
+        assert!(r.settings_binding(0,r.handle(0,4).unwrap()).is_err());
+        assert!(r.settings_binding(3,r.handle(3,0).unwrap()).is_err());
+        let t=healthy(&mut r);r.cutover(8,manager(&r),t.token()).unwrap();
+        assert_eq!(r.settings_binding(0,shell),Ok(Some(t.endpoint())));
+        r.fault(t.endpoint()).unwrap();assert_eq!(r.settings_binding(3,comp),Ok(None));
+        r.fault(Endpoint{slot:0,incarnation:1}).unwrap();assert!(r.settings_binding(0,shell).is_err());
+    }
+    #[test] fn authenticated_stage_is_manager_only_and_exactly_bounded(){
+        let mut r=Runtime::new();let h=manager(&r);
+        for caller in 0..=TASKS{if caller!=8{
+            assert!(r.authenticated_stage(caller,h,1,7,[1;32],2,10).is_err());
+        }}
+        for (seal,slot,digest,generation,budget) in [
+            (0,7,[1;32],2,10),(1,6,[1;32],2,10),(1,7,[0;32],2,10),
+            (1,7,[1;32],0,10),(1,7,[1;32],2,0),(1,7,[1;32],2,101)]{
+            assert!(r.authenticated_stage(8,h,seal,slot,digest,generation,budget).is_err());
+            assert!(r.staged.is_none());
+        }
+        assert_eq!(r.authenticated_stage(8,h,1,5,[1;32],2,10),Err(Error::Busy));
+        r.authenticated_stage(8,h,u64::MAX,7,[1;32],2,100).unwrap();
+        assert_eq!(r.discard_staged(8,h,1),Err(Error::Stale));
+        let t=r.begin_trial(8,h,u64::MAX).unwrap();
+        assert_eq!(t.image_seal(),u64::MAX);assert_eq!(t.endpoint().slot,7);
+        assert_eq!(t.signed_budget(),100);
+        assert_eq!(r.discard_staged(8,h,u64::MAX),Err(Error::Busy));
+        r.abort(8,h,t.token()).unwrap();
+        r.authenticated_stage(8,h,2,7,[2;32],3,1).unwrap();
+        r.discard_staged(8,h,2).unwrap();assert!(r.staged.is_none());
+    }
+    #[test] fn prepared_handover_preserves_intervening_peer_work_and_faults(){
+        let mut r=Runtime::new();let t=healthy(&mut r);let h=manager(&r);
+        let prepared=r.prepare_cutover(8,h,t.token()).unwrap();
+        let data=r.handle(1,4).unwrap();r.send(1,data,b"peer after prepare").unwrap();
+        let old=r.binding(5).unwrap().unwrap();r.fault(old).unwrap();
+        let cut=r.cutover_prepared(8,h,prepared).unwrap();
+        assert_eq!(cut.previous,Some(old));assert_eq!(r.state(old.slot as usize),Ok(State::Vacant));
+        let m=r.receive(4,r.handle(4,0).unwrap()).unwrap();
+        assert_eq!(&m.bytes[..m.length as usize],b"peer after prepare");
+        assert!(r.cutover_prepared(8,h,prepared).is_err());
+        assert_eq!(r.binding(5),Ok(Some(t.endpoint())));
+    }
+    #[test] fn prepared_handover_cannot_survive_candidate_or_manager_loss(){
+        for manager_loss in [false,true]{
+            let mut r=Runtime::new();let t=healthy(&mut r);let h=manager(&r);
+            let prepared=r.prepare_cutover(8,h,t.token()).unwrap();
+            let old=r.binding(5).unwrap();
+            r.fault(if manager_loss{Endpoint{slot:8,incarnation:1}}else{t.endpoint()}).unwrap();
+            assert!(r.cutover_prepared(8,h,prepared).is_err());assert_eq!(r.binding(5).unwrap(),old);
+        }
+    }
+
+    fn manager(r:&Runtime)->u64{r.handle(8,MANAGER_CAP).unwrap()}
+    fn stage(r:&mut Runtime,seal:u64,budget:u32){
+        let slot=[5usize,7].into_iter().find(|&i|r.processes[i].state==State::Vacant).unwrap_or(7);
+        r.staged=Some(StagedImage {seal,slot:slot as u8,digest:[0x42;32],generation:7,signed_budget:budget});
+    }
+    fn prepare(r:&mut Runtime,seal:u64,budget:u32)->Trial{
+        stage(r,seal,budget);r.begin_trial(8,manager(r),seal).unwrap()
+    }
+    fn healthy(r:&mut Runtime)->Trial{
+        let t=prepare(r,23,50);
+        r.ready(t.endpoint.slot as usize,r.handle(t.endpoint.slot as usize,HEALTH_CAP).unwrap(),t.token).unwrap();t
+    }
+    #[test] fn staging_authority_is_system_only_and_requires_physical_clean(){
+        let mut r=Runtime::new();let h=r.handle(9,STAGE_CAP).unwrap();
+        assert_eq!(r.stage_copy(9,h),Ok(()));
+        for caller in 0..=TASKS{if caller!=9{assert!(r.stage_copy(caller,h).is_err());}}
+        assert!(r.stage_copy(9,r.handle(9,DEVICE_CAP).unwrap()).is_err());
+        assert!(r.stage_copy(9,h^(1<<32)).is_err());
+        assert_eq!(r.staging_slot(9,h,[true,false]),Err(Error::Busy));
+        assert_eq!(r.staging_slot(9,h,[false,true]),Ok(7));
+        assert_eq!(r.staging_slot(9,h,[false,false]),Err(Error::Busy));
+        let t=prepare(&mut r,81,2);
+        assert_eq!(r.staging_slot(9,h,[true,true]),Err(Error::Busy));
+        assert!(r.stage_copy(t.endpoint.slot as usize,h).is_err());
+        r.abort(8,manager(&r),t.token).unwrap();
+        r.fault(Endpoint{slot:8,incarnation:1}).unwrap();
+        assert!(r.stage_copy(9,h).is_err());
+        let mut r=Runtime::new();let h=r.handle(9,STAGE_CAP).unwrap();
+        r.fault(Endpoint{slot:9,incarnation:1}).unwrap();assert!(r.stage_copy(9,h).is_err());
+    }
+    #[test] fn trial_uses_exact_reserved_slot_not_first_vacant_slot() {
+        let mut r=Runtime::new();
+        r.fault(Endpoint{slot:5,incarnation:1}).unwrap();
+        assert_eq!(r.state(5),Ok(State::Vacant));
+        assert_eq!(r.state(7),Ok(State::Vacant));
+        stage(&mut r,91,2);r.staged.as_mut().unwrap().slot=7;
+        let trial=r.begin_trial(8,manager(&r),91).unwrap();
+        assert_eq!(trial.endpoint.slot,7);
+        assert_eq!(r.state(5),Ok(State::Vacant));
+        assert_eq!(r.state(7),Ok(State::Trial));
+    }
+    #[test] fn invalid_or_occupied_reservation_never_consumes_stage_or_identity() {
+        let mut r=Runtime::new();stage(&mut r,92,3);
+        let clock=r.clock;let token=r.next_token;let prior=r.binding(5).unwrap();
+        for slot in [0,4,6,8,15,16,255] {
+            r.staged.as_mut().unwrap().slot=slot;
+            assert_eq!(r.begin_trial(8,manager(&r),92),Err(Error::Invalid));
+            assert_eq!(r.staged.unwrap().slot,slot);
+            assert_eq!(r.clock,clock);assert_eq!(r.next_token,token);
+            assert!(r.trial.is_none());assert_eq!(r.binding(5).unwrap(),prior);
+        }
+        r.staged.as_mut().unwrap().slot=5;
+        assert_eq!(r.begin_trial(8,manager(&r),92),Err(Error::Busy));
+        assert_eq!(r.staged.unwrap().slot,5);assert_eq!(r.state(7),Ok(State::Vacant));
+        assert_eq!(r.clock,clock);assert_eq!(r.next_token,token);
+        r.staged.as_mut().unwrap().slot=7;
+        assert_eq!(r.begin_trial(8,manager(&r),92).unwrap().endpoint.slot,7);
+    }
+    #[test] fn delivered_irq_charges_only_the_exact_trial_and_expires_once() {
+        let mut r=Runtime::new();let t=prepare(&mut r,71,2);
+        let old=r.binding(5).unwrap().unwrap();
+        for endpoint in [old,Endpoint{slot:0,incarnation:1},Endpoint{slot:8,incarnation:1}]{
+            assert_eq!(r.delivered_preemption(endpoint),Ok(false));
+        }
+        assert_eq!(r.trial.unwrap().budget,2);
+        assert_eq!(r.delivered_preemption(Endpoint{slot:t.endpoint.slot,
+            incarnation:t.endpoint.incarnation-1}),Err(Error::Stale));
+        assert_eq!(r.trial.unwrap().budget,2);
+        assert_eq!(r.delivered_preemption(t.endpoint),Ok(false));
+        assert_eq!(r.trial.unwrap().budget,1);
+        assert_eq!(r.delivered_preemption(t.endpoint),Ok(true));
+        assert_eq!(r.state(t.endpoint.slot as usize),Ok(State::Vacant));
+        assert_eq!(r.binding(5),Ok(Some(old)));
+        assert_eq!(r.delivered_preemption(t.endpoint),Err(Error::Stale));
+        let next=prepare(&mut r,72,2);
+        assert_eq!(next.endpoint.slot,t.endpoint.slot);
+        assert!(next.endpoint.incarnation>t.endpoint.incarnation);
+        assert_eq!(r.delivered_preemption(t.endpoint),Err(Error::Stale));
+        assert_eq!(r.trial.unwrap().budget,2);
+        assert_eq!(r.delivered_preemption(next.endpoint),Ok(false));
+        assert_eq!(r.trial.unwrap().budget,1);
+    }
+    #[test] fn delivered_irq_does_not_charge_healthy_or_activate_revoked_state() {
+        let mut r=Runtime::new();let t=healthy(&mut r);
+        let before=r.trial.unwrap().budget;
+        assert_eq!(r.delivered_preemption(t.endpoint),Ok(false));
+        assert_eq!(r.trial.unwrap().budget,before);
+        assert_eq!(r.state(t.endpoint.slot as usize),Ok(State::Healthy));
+        r.abort(8,manager(&r),t.token).unwrap();
+        assert_eq!(r.delivered_preemption(t.endpoint),Err(Error::Stale));
+        assert_eq!(r.delivered_preemption(Endpoint{slot:16,incarnation:1}),Err(Error::Invalid));
+        assert_eq!(r.delivered_preemption(Endpoint{slot:15,incarnation:1}),Err(Error::Stale));
+        // The dedicated idle CPU is excluded by the real trap adapter.
+        assert_eq!(r.delivered_preemption(Endpoint{slot:0,incarnation:1}),Ok(false));
+        let t=prepare(&mut r,73,1);
+        r.fault(Endpoint{slot:8,incarnation:1}).unwrap();
+        assert!(r.recovery_required());
+        assert_eq!(r.delivered_preemption(t.endpoint),Err(Error::Stale));
+        assert_eq!(r.state(t.endpoint.slot as usize),Ok(State::Vacant));
+    }
+    #[test] fn normal_boot_device_authority_is_caller_local_and_role_exact() {
+        let mut r=Runtime::new();let data=r.handle(1,DEVICE_CAP).unwrap();
+        let system=r.handle(9,DEVICE_CAP).unwrap();
+        assert_eq!(r.device(1,data),Ok(Device::Data));
+        assert_eq!(r.device(9,system),Ok(Device::System));
+        // Same numeric handle in two tables is not transferable authority.
+        assert_eq!(data,system);
+        for caller in 0..=TASKS {
+            if ![1,9].contains(&caller) {assert!(r.device(caller,data).is_err());}
+        }
+        for caller in [1,9] {
+            for handle in [0,u64::MAX,1,data^(1<<32),r.handle(caller,SELF_CAP).unwrap()] {
+                assert!(r.device(caller,handle).is_err());
+            }
+        }
+        assert!(r.handle(8,DEVICE_CAP).is_err());
+        r.fault(Endpoint{slot:1,incarnation:1}).unwrap();
+        assert!(r.device(1,data).is_err());assert_eq!(r.device(9,system),Ok(Device::System));
+        r.fault(Endpoint{slot:9,incarnation:1}).unwrap();
+        assert!(r.device(9,system).is_err());
+    }
+    #[test] fn input_framebuffer_and_trial_never_gain_disk_authority() {
+        let mut r=Runtime::new();let input=r.handle(2,INPUT_CAP).unwrap();
+        let draw=r.handle(3,FRAMEBUFFER_CAP).unwrap();
+        assert!(r.input(2,input).is_ok());assert!(r.framebuffer(3,draw).is_ok());
+        assert!(r.input(2,draw).is_err());assert!(r.framebuffer(3,input).is_err());
+        for caller in 0..TASKS {
+            if caller!=2 {assert!(r.input(caller,input).is_err());}
+            if caller!=3 {assert!(r.framebuffer(caller,draw).is_err());}
+        }
+        assert!(r.handle(2,SELF_CAP).is_err());
+        let trial=prepare(&mut r,1,2);let slot=trial.endpoint.slot as usize;
+        for h in [input,draw,r.handle(slot,HEALTH_CAP).unwrap()] {
+            assert!(r.device(slot,h).is_err());assert!(r.input(slot,h).is_err());
+            assert!(r.framebuffer(slot,h).is_err());
+        }
+        r.fault(Endpoint{slot:2,incarnation:1}).unwrap();
+        assert!(r.input(2,input).is_err());
+        r.fault(Endpoint{slot:3,incarnation:1}).unwrap();
+        assert!(r.framebuffer(3,draw).is_err());
+        let mut c=Caps::new();
+        for (object,right) in [(Object::Device(Device::Data),DEVICE),(Object::Device(Device::System),DEVICE),
+            (Object::Input,INPUT),(Object::Framebuffer,DRAW)] {
+            for wrong in [SEND,RECEIVE,HEALTH,MANAGE,DEVICE,INPUT,DRAW,255] {
+                if wrong!=right {assert!(c.grant(0,object,wrong).is_err());}
+            }
+        }
+    }
+    #[test] fn named_send_matrix_has_no_extra_edges() {
+        let r=Runtime::new();
+        let edges=[(0,2,3),(0,4,4),(0,5,5),(0,6,6),
+            (1,4,4),(1,6,6),(2,1,0),(4,2,3),(4,3,1),
+            (5,1,0),(5,2,3),(6,2,3),(6,3,1),(6,4,8),(8,1,9),(9,1,8)];
+        for caller in 0..TASKS {for slot in 0..CAP_SLOTS {
+            let expected=edges.iter().find(|&&(c,s,_)|c==caller&&s==slot).map(|&(_,_,p)|p);
+            let actual=r.handle(caller,slot).and_then(|h|r.processes[caller].caps.resolve(h,SEND));
+            match expected {
+                Some(principal)=>assert_eq!(actual,Ok(Object::NamedSend{principal})),
+                None=>assert!(actual.is_err()),
+            }
+        }}
+    }
+    #[test] fn full_desktop_named_graph_routes_storage_without_device_grants() {
+        let mut r=Runtime::new();
+        for (caller,slot,target) in [(0,2,3),(0,4,4),(0,5,5),(0,6,6),
+            (1,4,4),(1,6,6),(2,1,0),(4,2,3),(4,3,1),
+            (5,1,0),(5,2,3),(6,2,3),(6,3,1),(6,4,8),(8,1,9),(9,1,8)] {
+            r.send(caller,r.handle(caller,slot).unwrap(),b"route").unwrap();
+            let m=r.receive(target,r.handle(target,SELF_CAP).unwrap()).unwrap();
+            assert_eq!((m.principal,m.incarnation,m.length),(caller as u8,1,5));
+        }
+        for caller in [0,2,3,4,5,6,7,8] {assert!(r.handle(caller,DEVICE_CAP).is_err());}
+        let trial=healthy(&mut r);r.cutover(8,manager(&r),trial.token).unwrap();
+        assert!(r.handle(trial.endpoint.slot as usize,DEVICE_CAP).is_err());
+    }
+    #[test] fn trial_has_no_production_authority_and_health_is_one_shot(){
+        let mut r=Runtime::new();let t=prepare(&mut r,1,2);let slot=t.endpoint.slot as usize;
+        assert_eq!(slot,7);assert_eq!(r.binding(5).unwrap().unwrap().slot,5);
+        for h in [0,1,r.handle(slot,HEALTH_CAP).unwrap()]{
+            assert!(r.send(slot,h,b"x").is_err());assert!(r.receive(slot,h).is_err());
+        }
+        let h=r.handle(slot,HEALTH_CAP).unwrap();
+        assert!(r.ready(5,h,t.token).is_err());assert!(r.ready(slot,h,t.token+1).is_err());
+        r.ready(slot,h,t.token).unwrap();assert!(r.ready(slot,h,t.token).is_err());
+        assert_eq!(r.state(slot),Ok(State::Healthy));assert!(!r.preempt(t.endpoint,t.token).unwrap());
+    }
+    #[test] fn only_manager_can_prepare_commit_or_abort(){
+        let mut r=Runtime::new();let m=manager(&r);stage(&mut r,1,10);
+        for caller in 0..TASKS {if caller!=8 {assert!(r.begin_trial(caller,m,1).is_err());}}
+        for handle in [0,u64::MAX,1,m^(1<<32)]{assert!(r.begin_trial(8,handle,1).is_err());}
+        assert!(r.begin_trial(8,m,0).is_err());
+        let t=r.begin_trial(8,m,1).unwrap();
+        assert_eq!(r.begin_trial(8,m,1),Err(Error::Busy));
+        assert!(r.cutover(8,m,t.token).is_err());
+        assert!(r.abort(8,m,t.token+1).is_err());
+        r.abort(8,m,t.token).unwrap();assert!(r.abort(8,m,t.token).is_err());
+        assert!(r.begin_trial(8,m,1).is_err()); // consumed staged authority
+    }
+    #[test] fn staged_identity_and_signed_budget_are_bound_and_consumed(){
+        let mut r=Runtime::new();let m=manager(&r);
+        assert!(r.begin_trial(8,m,1).is_err()); // nonzero number alone is insufficient
+        for budget in [0,101,u32::MAX]{
+            stage(&mut r,1,budget);assert_eq!(r.begin_trial(8,m,1),Err(Error::Invalid));
+        }
+        for budget in [1,2,100]{
+            stage(&mut r,10,budget);
+            assert!(r.begin_trial(8,m,11).is_err()); // swapped/stale seal
+            let t=r.begin_trial(8,m,10).unwrap();
+            assert_eq!((t.signed_budget(),t.image_generation(),t.image_digest()),(budget,7,[0x42;32]));
+            assert!(r.staged.is_none());
+            for tick in 1..=budget{assert_eq!(r.preempt(t.endpoint,t.token).unwrap(),tick==budget);}
+            assert!(r.begin_trial(8,m,10).is_err()); // cannot recycle consumed seal
+        }
+    }
+    #[test] fn named_endpoints_follow_cutover_old_queues_and_handles_do_not(){
+        let mut r=Runtime::new();let shell_send=r.handle(0,5).unwrap();
+        let old_recv=r.handle(5,SELF_CAP).unwrap();let old_send=r.handle(5,SHELL_CAP).unwrap();
+        r.send(0,shell_send,b"old request").unwrap();
+        r.send(5,old_send,b"old response").unwrap();
+        let t=healthy(&mut r);let c=r.cutover(8,manager(&r),t.token).unwrap();
+        assert_eq!(c.previous,Some(Endpoint {slot:5,incarnation:1}));
+        assert_eq!(c.current,t.endpoint);assert_eq!(r.state(5),Ok(State::Vacant));
+        assert!(r.receive(5,old_recv).is_err());assert!(r.send(5,old_send,b"stale").is_err());
+        assert_eq!(r.receive(0,r.handle(0,SELF_CAP).unwrap()),Err(Error::Empty));
+        assert_eq!(r.receive(7,r.handle(7,SELF_CAP).unwrap()),Err(Error::Empty));
+        r.send(0,shell_send,b"new request").unwrap();
+        let msg=r.receive(7,r.handle(7,SELF_CAP).unwrap()).unwrap();
+        assert_eq!(&msg.bytes[..msg.length as usize],b"new request");
+        r.send(7,r.handle(7,SHELL_CAP).unwrap(),b"new response").unwrap();
+        let msg=r.receive(0,r.handle(0,SELF_CAP).unwrap()).unwrap();
+        assert_eq!((msg.principal,msg.incarnation),(5,2));
+    }
+    #[test] fn abort_timeout_and_candidate_fault_preserve_active_service(){
+        for mode in 0..3{
+            let mut r=Runtime::new();let t=prepare(&mut r,1,1);
+            match mode{0=>r.abort(8,manager(&r),t.token).unwrap(),1=>assert!(r.preempt(t.endpoint,t.token).unwrap()),_=>r.fault(t.endpoint).unwrap()}
+            assert_eq!(r.binding(5),Ok(Some(Endpoint {slot:5,incarnation:1})));
+            assert_eq!(r.state(7),Ok(State::Vacant));assert!(r.cutover(8,manager(&r),t.token).is_err());
+        }
+    }
+    #[test] fn post_cutover_failure_requires_fresh_incarnation_not_resurrection(){
+        let mut r=Runtime::new();let t=healthy(&mut r);r.cutover(8,manager(&r),t.token).unwrap();
+        let old_handle=r.handle(7,SHELL_CAP).unwrap();r.fault(t.endpoint).unwrap();
+        assert_eq!(r.binding(5),Ok(None));
+        let recovery=healthy(&mut r);assert_eq!(recovery.endpoint.slot,5);assert_eq!(recovery.endpoint.incarnation,3);
+        r.cutover(8,manager(&r),recovery.token).unwrap();
+        assert!(r.send(7,old_handle,b"x").is_err());assert_eq!(r.binding(5),Ok(Some(recovery.endpoint)));
+        for i in [0,1,2,3,4,6,8,9]{assert_eq!(r.binding(i).unwrap().unwrap().incarnation,1);}
+    }
+    #[test] fn delayed_old_timer_and_fault_events_cannot_cross_slot_reuse(){
+        let mut r=Runtime::new();let old=prepare(&mut r,1,1);
+        r.abort(8,manager(&r),old.token).unwrap();
+        let new=prepare(&mut r,2,2);assert_eq!(old.endpoint.slot,new.endpoint.slot);
+        assert_eq!(r.preempt(old.endpoint,old.token),Err(Error::Stale));
+        assert_eq!(r.fault(old.endpoint),Err(Error::Stale));
+        assert_eq!(r.preempt(new.endpoint,old.token),Err(Error::Stale));
+        assert_eq!(r.state(7),Ok(State::Trial));
+        r.ready(7,r.handle(7,HEALTH_CAP).unwrap(),new.token).unwrap();
+        r.cutover(8,manager(&r),new.token).unwrap();
+        assert_eq!(r.fault(old.endpoint),Err(Error::Stale));
+        assert_eq!(r.binding(5),Ok(Some(new.endpoint)));
+        r.fault(new.endpoint).unwrap();let restored=healthy(&mut r);
+        r.cutover(8,manager(&r),restored.token).unwrap();
+        assert_eq!(r.fault(Endpoint {slot:5,incarnation:1}),Err(Error::Stale));
+        assert_eq!(r.binding(5),Ok(Some(restored.endpoint)));
+    }
+    #[test] fn manager_fault_cancels_trial_and_requires_controlled_recovery(){
+        for ready in [false,true]{
+            let mut r=Runtime::new();let t=prepare(&mut r,1,2);
+            let health=r.handle(7,HEALTH_CAP).unwrap();
+            if ready{r.ready(7,health,t.token).unwrap();}
+            r.fault(Endpoint {slot:8,incarnation:1}).unwrap();
+            assert!(r.recovery_required());assert!(r.trial.is_none());assert!(r.staged.is_none());
+            assert_eq!(r.state(7),Ok(State::Vacant));assert_eq!(r.binding(8),Ok(None));
+            assert_eq!(r.binding(5),Ok(Some(Endpoint {slot:5,incarnation:1})));
+            assert!(r.ready(7,health,t.token).is_err());
+            r.send(0,r.handle(0,5).unwrap(),b"still alive").unwrap();
+        }
+    }
+    #[test] fn exhaustion_and_stale_trial_never_wrap_or_partially_cutover(){
+        let mut r=Runtime::new();stage(&mut r,1,1);r.clock=u64::MAX;
+        assert_eq!(r.begin_trial(8,manager(&r),1),Err(Error::Exhausted));
+        assert_eq!(r.state(7),Ok(State::Vacant));
+        r.clock=1;r.next_token=u64::MAX;
+        assert_eq!(r.begin_trial(8,manager(&r),1),Err(Error::Exhausted));
+        r.next_token=1;let t=healthy(&mut r);r.fault(Endpoint {slot:5,incarnation:1}).unwrap();
+        assert!(r.cutover(8,manager(&r),t.token).is_err());
+        r.abort(8,manager(&r),t.token).unwrap();assert_eq!(r.binding(5),Ok(None));
+    }
+    #[test] fn retired_caps_and_queue_limits_remain_fail_closed(){
+        let mut caps=Caps::new();caps.slots[0].generation=u32::MAX;
+        let h=caps.grant(0,Object::NamedSend {principal:5},SEND).unwrap();caps.revoke(0).unwrap();
+        assert!(caps.resolve(h,SEND).is_err());assert!(caps.grant(0,Object::Manager,MANAGE).is_err());
+        let mut r=Runtime::new();let h=r.handle(0,5).unwrap();
+        r.send(0,h,b"1").unwrap();r.send(0,h,b"2").unwrap();assert_eq!(r.send(0,h,b"3"),Err(Error::Full));
+    }
+    #[test]fn immutable_stage_view_and_reject_are_manager_only(){
+        let mut r=Runtime::new();let handle=manager(&r);
+        assert_eq!(r.stage_view(8,handle),Ok(()));
+        assert_eq!(r.stage_reject(8,handle),Ok(()));
+        for caller in 0..TASKS{
+            if caller!=8{assert!(r.stage_view(caller,handle).is_err());assert!(r.stage_reject(caller,handle).is_err());}
+        }
+        assert!(r.stage_view(8,r.handle(8,SELF_CAP).unwrap()).is_err());
+        stage(&mut r,1,1);assert_eq!(r.stage_reject(8,handle),Err(Error::Busy));
+        r.begin_trial(8,handle,1).unwrap();assert_eq!(r.stage_reject(8,handle),Err(Error::Busy));
+        r.fault(Endpoint{slot:8,incarnation:1}).unwrap();
+        assert!(r.stage_view(8,handle).is_err());assert!(r.stage_reject(8,handle).is_err());
+    }
+
+
+
+    #[test]fn signed_lab_stale_probe_preserves_other_messages_and_proves_denials(){
+        let mut r=Runtime::new();let t=healthy(&mut r);let manager=manager(&r);
+        let prepared=r.prepare_cutover(8,manager,t.token()).unwrap();
+        r.send(2,r.handle(2,1).unwrap(),b"unrelated").unwrap();
+        let probe=r.lab_stale_begin(8,manager).unwrap().unwrap();
+        assert_eq!(r.lab_stale_count(probe.endpoint),1);
+        assert_eq!(r.lab_stale_finish(8,manager,probe,t.token()),Err(Error::Invalid));
+        r.cutover_prepared(8,manager,prepared).unwrap();
+        assert_eq!(r.lab_stale_finish(8,manager,probe,t.token()),Ok(()));
+        let msg=r.receive(0,r.handle(0,SELF_CAP).unwrap()).unwrap();
+        assert_eq!(msg.principal,2);assert_eq!(&msg.bytes[..msg.length as usize],b"unrelated");
+        assert_eq!(r.receive(0,r.handle(0,SELF_CAP).unwrap()),Err(Error::Empty));
+    }
+    #[test]fn signed_lab_stale_probe_refuses_capacity_collision_and_wrong_manager(){
+        let mut r=Runtime::new();let h=manager(&r);
+        assert_eq!(r.lab_stale_begin(6,h),Err(Error::Denied));
+        r.send(5,r.handle(5,1).unwrap(),b"a").unwrap();
+        r.send(5,r.handle(5,1).unwrap(),b"b").unwrap();
+        assert_eq!(r.lab_stale_begin(8,h),Err(Error::Full));
+        assert_eq!(r.processes[0].queue.length,2);
+        let mut r=Runtime::new();let h=manager(&r);
+        r.send(2,r.handle(2,1).unwrap(),STALE_SENTINEL).unwrap();
+        assert_eq!(r.lab_stale_begin(8,h),Err(Error::Busy));
+        assert_eq!(r.processes[0].queue.length,1);
+        let mut r=Runtime::new();let h=manager(&r);
+        for (slot,cap) in [(2,1),(2,1),(5,1),(5,1)]{
+            r.send(slot,r.handle(slot,cap).unwrap(),b"full").unwrap();
+        }
+        assert_eq!(r.lab_stale_begin(8,h),Err(Error::Full));
+        assert_eq!(r.processes[0].queue.length,4);
+    }
+    #[test]fn signed_lab_stale_probe_skips_dead_prior_fallback(){
+        let mut r=Runtime::new();let h=manager(&r);
+        r.fault(r.binding(5).unwrap().unwrap()).unwrap();
+        let t=healthy(&mut r);
+        assert_eq!(r.lab_stale_begin(8,h),Ok(None));
+        r.cutover(8,h,t.token()).unwrap();
+        assert_eq!(r.binding(5).unwrap(),Some(t.endpoint()));
+    }
+
+    #[test]fn update_requests_do_not_grant_management_or_disk_authority(){
+        let mut r=Runtime::new();let h=r.handle(6,4).unwrap();
+        assert_eq!(r.update_bindings(8,manager(&r)),Ok([1,1]));
+        r.send(6,h,b"request").unwrap();
+        let msg=r.receive(8,r.handle(8,SELF_CAP).unwrap()).unwrap();
+        assert_eq!((msg.principal,msg.incarnation),(6,1));
+        for caller in 0..TASKS{if caller!=8{
+            assert!(r.update_bindings(caller,manager(&r)).is_err());
+        }}
+        assert!(r.update_bindings(8,r.handle(8,SELF_CAP).unwrap()).is_err());
+        let settings=r.binding(5).unwrap().unwrap();r.fault(settings).unwrap();
+        assert_eq!(r.update_bindings(8,manager(&r)),Ok([1,0]));
+        r.fault(Endpoint{slot:6,incarnation:1}).unwrap();
+        assert_eq!(r.update_bindings(8,manager(&r)),Ok([0,0]));
+        assert!(r.send(6,h,b"stale").is_err());
+        let b=Runtime::bootstrap();assert_eq!(b.update_bindings(8,manager(&b)),Err(Error::Busy));
+    }
+}

@@ -1,6 +1,14 @@
 # Release Roadmap
 
-## Current owner-directed milestone
+## Current owner-directed milestone: Modern Architecture
+
+Milestone3 is released as v0.3.0-usable-alpha. Milestone4 is active under
+`tasks/fast-track-alpha-milestone-4.md`. Signing primitives are merged; standalone
+manifest/journal/lifecycle implementations are in progress. Persistent disk,
+actual live replacement, encrypted Data, recovery and runtime evidence remain
+required. The following older current-scope statements are historical.
+
+## Historical Milestone 3 scope
 
 Milestone 3 Usable Graphical Alpha is now active under
 `docs/tasks/fast-track-alpha-milestone-3.md`, ADR0032 and the reviewed ADR0033

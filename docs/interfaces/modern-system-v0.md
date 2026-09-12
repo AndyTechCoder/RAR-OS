@@ -1,0 +1,387 @@
+# Modern-v0 signed layer and System journal
+
+Status: experimental candidate contract; not an active disk/profile authority.
+Applies only to the M4 laboratory Settings component. This is not stable RLM,
+RSM, RME or RCI. Existing Desktop-v0 and historical Alpha bytes are unchanged.
+ADR0034 remains proposed until the complete runtime/device/lifecycle boundary is
+reviewed. This file specifies the standalone codec/model before integration.
+
+## Representation and limits
+
+Unsigned integers are little-endian and occupy exactly the stated width.
+Byte arrays have no implicit terminator, alignment padding or host layout.
+Trailing bytes, truncated fields and nonzero reserved bytes fail closed.
+All inputs are borrowed immutable byte slices. No allocation, unsafe code,
+I/O, keys with real secrecy, kernel capabilities or execution occurs here.
+
+## Layer manifest: exactly 384 bytes
+
+| Offset | Bytes | Meaning |
+| --- | --- | --- |
+| 0 | 8 | ASCII RARMODL0 |
+| 8 | 2 | version 0 |
+| 10 | 2 | length 384 |
+| 12 | 4 | flags 1: PUBLIC LABORATORY FIXTURE ONLY |
+| 16 | 24 | ASCII rar.alpha.ed25519.v0 followed by four zero bytes |
+| 40 | 4 | component logical principal 5, Settings |
+| 44 | 2 | architecture 1, x86-64 |
+| 46 | 2 | component interface version 0 |
+| 48 | 4 | profile 1, Modern laboratory only |
+| 52 | 4 | component persistent state schema 0: stateless |
+| 56 | 4 | exact PE file length, 512 through 2097152 |
+| 60 | 4 | maximum mapped PE bytes, positive multiple of 4096, at most 131072 |
+| 64 | 8 | declared capability ceiling 7; phase grants are a strict subset |
+| 72 | 8 | positive signed update generation |
+| 80 | 32 | SHA256 of ASCII RAR-MODERN-SETTINGS-HEALTH-V0 plus one zero byte |
+| 112 | 32 | SHA256 of exact PE file bytes |
+| 144 | 32 | SHA256 of the exact laboratory public key |
+| 176 | 20 | nonzero source commit identity, binary Git SHA1 identifier, not a security hash |
+| 196 | 32 | nonzero SHA256 identity of the declared build inputs |
+| 228 | 4 | required Modern kernel ABI version 1 |
+| 232 | 4 | declared trial CPU budget, 1 through 100 preemptions |
+| 236 | 4 | dynamic heap budget 0 |
+| 240 | 4 | guarded user stack budget 16384 bytes |
+| 244 | 44 | zero reserved bytes |
+| 288 | 32 | nonzero manifest digest |
+| 320 | 64 | pure Ed25519 signature |
+
+The digest is SHA256(bytes[0..288]). The digest and signature fields are entirely
+absent from that preimage, not replaced by zeros. Signed bytes are exactly the
+18 ASCII bytes RAR-LAYER-ALPHA-V0, followed by one zero byte (a 19-byte
+domain prefix), then the 32-byte manifest digest: 51 bytes total, as required by ADR0019. This is PureEd25519, not Ed25519ph/ctx.
+
+The laboratory public key is RFC8032 section7.1 TEST1's
+d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a.
+Its published private seed is public test data. It cannot authenticate RAR
+production releases or protect against anyone who can sign with that fixture.
+Unknown keys/algorithms are rejected; there is no implicit owner-root enrollment.
+
+Ceiling bits are 0: shell send, 1: compositor send, 2: one-shot trial health.
+Trial receives only bit2, bound to its exact incarnation and consumed on report.
+Production receives only bits0/1. No storage, input, framebuffer, device, broad
+IPC or lifecycle authority follows from the manifest. The future kernel/broker
+must enforce these grants; this codec cannot grant capabilities.
+Source/build IDs are signed provenance labels, not proof of reproducibility;
+the cloud controller must verify actual source/build identities independently.
+
+## Validation and immutable-byte boundary
+
+Precedence is framing, reserved/flag encoding, algorithm, known publisher,
+manifest digest, strict signature, compatibility/provenance/health identity,
+resource budget, positive trusted minimum generation, exact bounded payload
+length, payload SHA256, then bounded PE/W^X parsing and declared image budget.
+Public parse alone returns UNTRUSTED metadata. Only verify returns a
+VerifiedLayer borrowing the same immutable manifest and payload. Its fields have
+no public constructor. It has no execution authority.
+
+Reuse the existing RAR PE parser: fixed virtual base 0x400000, mapped image at
+most 128KiB, at most16 sections, no imports/relocations/TLS/delayed imports,
+bounded headers/ranges and W^X sections. A mapped executable is not a UEFI
+application invocation: the eventual kernel constructs a protected user process.
+Before any runtime mapping the kernel must own and seal the exact verified bytes,
+prevent writable aliases, construct the process unschedulable, and recheck all
+privilege/layout conditions. A borrowed slice does not seal a mutable disk.
+
+Install uses highest_committed_generation + 1 as its minimum. Boot/fallback use
+the immutable lab floor1 plus an exact committed manifest identity/generation;
+they never accept any arbitrary lower signed image merely because its signature
+passes. Addition overflow retires updates rather than wrapping.
+
+## System selector: exactly one 512-byte sector
+
+Two sectors hold alternate selector records. These are UNTRUSTED checksummed
+metadata, not signatures, hardware counters or independent monotonic storage.
+
+| Offset | Bytes | Meaning |
+| --- | --- | --- |
+| 0 | 8 | ASCII RARSYS00 |
+| 8 | 2 | version0 |
+| 10 | 2 | length512 |
+| 12 | 1 | kind: 0 factory, 1 install, 2 authorized fallback |
+| 13 | 1 | active slot: 0 A, 1 B |
+| 14 | 1 | prior slot: 0 A, 1 B, 255 absent |
+| 15 | 1 | zero |
+| 16 | 8 | positive selector sequence |
+| 24 | 8 | highest committed signed generation, never lowered by fallback |
+| 32 | 8 | fixed laboratory root floor1 |
+| 40 | 8 | active signed generation |
+| 48 | 8 | prior signed generation, zero when absent |
+| 56 | 8 | parent selector sequence |
+| 64 | 32 | active nonzero manifest digest |
+| 96 | 32 | prior nonzero manifest digest, zero when absent |
+| 128 | 32 | SHA256 of the entire preceding512-byte selector; zero only factory |
+| 160 | 320 | zero reserved |
+| 480 | 32 | SHA256 of bytes[0..480] |
+
+Factory has sequence1, activeA, no prior/parent, and highest=active generation.
+Install has sequence>=2, opposite active/prior slots, new generation strictly
+greater than the preceding high-water mark, prior equal to preceding active,
+highest equal to new generation, and exact preceding sequence/hash.
+Fallback has sequence>=3, active equal to preceding prior, no new prior,
+unchanged highest, and exact preceding sequence/hash. The rejected current image
+is not installed as another fallback candidate. A second fallback without a new
+successful install fails. All generations are positive; prior is below active
+for an install. No counter saturates or wraps.
+
+Decode validates shape, checksum and semantic bounds. With two valid records,
+equal sequences, gaps, forks or an illegal transition are ambiguous and require
+read-only recovery. Otherwise select the higher legal successor. With only one
+valid record, select it provisionally. With none, do not autoformat.
+Before using any selected record, separately verify referenced signed manifests,
+exact generations/digests, payloads and floor. A selector checksum is not
+authorization. A maliciously rewritten/co-rolled-back complete disk cannot be
+detected by this format and is explicitly not an Alpha claim.
+
+## Publication, failure and repair obligations
+
+The library plans records and provides a bounded selector-publication primitive
+through a two-record SelectorIo interface. No native disk driver or guest durability
+proof exists. The future System service must write only the inactive payload/manifest slot,
+flush and read back/verify it, run candidate health, and publish the next record
+into the older selector sector only after required lifecycle preparation.
+Flush and read back that selector before reporting durable commit. Never mutate
+the current selector sector or current image during candidate preparation.
+
+If an inactive slot previously held a fallback, overwriting it temporarily
+removes that fallback. Until the new selector commits, the current active image
+must remain intact. If it independently fails during this window, recovery uses
+separately immutable material, not the overwritten prior slot.
+Failure after publication must be reconciled from durable state on reboot;
+post-cutover failure uses a newly health-tested previous image and a new
+incarnation, not resurrection of a killed process. Runtime/lifecycle sequencing
+and fault injection remain separate pending contracts.
+
+System recovery may repair only identified signed System units. It receives no
+Data write authority. Corrupt/ambiguous Data is never formatted by this module.
+Nothing here defines or writes the future encrypted Data schema.
+
+## Conformance, migration and limitations
+
+Tests cover canonical framing, every truncation, every reserved/algorithm byte,
+signed-preimage exclusion, unsigned/unknown-key rejection, policy bounds,
+deterministic malformed inputs, journal roundtrip, one-byte corruption, every
+prefix tear of a selector write, legal/illegal chains, fallback high-water
+retention and counter exhaustion. Prefix-tear tests are models, not proof of
+device flush/reorder semantics or cross-reboot persistence.
+
+Positive signed package interoperability, two independent crypto references,
+full fuzz/resource closure, the device/flush backend, real process replacement,
+Data encryption, full crash/recovery campaign and runtime proofs remain pending.
+Do not claim this component closes M4. No external target code is added.
+
+There is no existing Modern user dataset to migrate. These candidate bytes are
+not installed yet. Future incompatible versions must be explicitly rejected and
+require a reviewed read/export/migration path; never silently reinterpret,
+rewrite or erase unknown data. Codec, signature policy, journal planning,
+block transport, lifecycle and UI remain separately replaceable.
+
+## Selector publication primitive (not runtime activation)
+
+Journal::mount reads the two records and never writes. Selection remains
+provisional: signed image verification is still mandatory. Journal::commit
+accepts only a legal immediate successor of its mounted record, re-reads both
+records to refuse changed/ambiguous media, writes only the alternate selector,
+flushes, reads both back, requires exact new bytes and an unchanged protected
+record, and only then acknowledges and advances its in-memory selection.
+
+Any observed-media or I/O failure locks the instance read-only. Errors from the
+first attempted write onward are Indeterminate: reboot may select either complete
+state, and absence of an ACK must not be interpreted as absence of a commit.
+There is no retry, repair, format, payload write or Data handle in this primitive.
+Invalid successor requests are rejected before I/O without poisoning the instance.
+
+The System service remains responsible for exclusive ownership, durable inactive
+payload/manifest staging, exact re-verification and lifecycle/health preparation
+before committing. This helper supplies none of those capabilities or guarantees.
+The two-valued selector address is local to an eventual fixed System adapter;
+it cannot carry a user-selected disk/LBA. Actual kernel authority, device ordering
+and cloud cut-point proofs remain required. Cloud source tests exercise each I/O
+boundary, all 513 prefix tears, first/subsequent installs, fallback, no retries,
+unchanged active selector, invalid transitions and changed media.
+
+Focused readback fixtures also simulate successful writes/flush followed by wrong
+target bytes or a corrupted protected selector. Each is indeterminate and locks
+writes with no retry; fresh mount selects the remaining valid complete record.
+A successful fallback test checks ACK, retained high-water and fresh mount.
+
+## Experimental kernel compatibility correction
+
+Before any accepted signed Settings package, the authenticated LE u32 at bytes
+228..231 is corrected to exact value 1, matching Modern-v1 RARMOD01, Boot368
+and Envelope152. Manifest framing version0, component interface0, all offsets,
+signature preimage/domain and other policy constraints remain unchanged.
+Kernel-ABI0 and every value other than1 are rejected, never translated or
+silently upgraded. Existing zero-valued fixtures are not compatible layers.
+New real packages must be generated and signed with ABI1; changing this field
+after signing invalidates authentication. This corrects an unactivated candidate,
+not a stable format or an accepted on-disk deployment. See ADR0034 refinement.
+
+
+## M4.2 fixed System package adapter (source candidate)
+
+The sole fixed System device is exactly8MiB:16384 sectors of512 bytes. Selector
+sectors0/1 retain their existing bytes. Package A occupies sectors2..4098;
+package B occupies4099..8195;8196..16383 is reserved and never touched.
+Each slot has4097 sectors. Its logical bytes are the existing384-byte manifest
+immediately followed by its declared PE payload. There is no additional header.
+Total logical length is896..2097536. Read exactly ceil(length/512) sectors;
+unused bytes in the final sector must be zero. Remaining sectors in a slot may
+retain an older longer package but are unreachable and non-authoritative: boot,
+fallback and recovery must never scan them for another manifest.
+
+First parse the complete manifest framing before using its untrusted LEu32
+payload length to bound reads. This does not authenticate that length or package.
+Invalid content may permit reading the exact selector-authorized prior package;
+transport errors lock the volume. No malformed image permits autoformat.
+
+core/modern/system_volume.rs owns the sole transport and selector publication
+adapter. It accepts raw bounded package bytes, checks framing/generation as an
+input screen, writes only the opposite slot, flushes, and compares every written
+sector including padding. It observes exact selector record AND selected-sector
+identity before and after preparation. Any transport/changed-media/readback
+failure locks the instance without retries or selector publication.
+
+Successful preparation stores a private pending identity and returns a
+non-clonable Prepared value: monotonic full-width transaction, mounted selection,
+inactive slot, declared generation/manifest digest, exact logical length and
+SHA256 of ALL logical package bytes. Another preparation invalidates older
+tokens, including byte-identical restaging. Transaction exhaustion never wraps.
+The adapter exposes a one-sector-at-a-time readback callback for STAGE_COPY;
+no multi-megabyte service stack buffer is required for copy or publication.
+
+Prepared is not proof of signature, health or execution permission. System must
+copy the durable readback into the kernel reservation, finish sealing, and the
+separate manager must verify those exact immutable bytes. VerifiedLayer cannot
+cross the process boundary. The fixed lifecycle protocol must correlate the
+kernel-stamped sender/incarnation, transaction, seal and package identity and
+finish trial health plus all fallible handover preparation before requesting
+publication. This runtime protocol remains pending; the storage helper alone
+does not implement or authorize a live update.
+
+Publication consumes the adapter's matching pending state and Prepared value.
+The manager's proposed selector must match prepared slot/generation/digest.
+The adapter rereads the complete package, requires identical length/hash and
+zero padding, rereads exact selection, then delegates legal successor,
+alternate-sector write/flush/readback to Journal. A caller-provided Record alone
+cannot bypass preparation. Any publication failure locks the instance; from
+first attempted selector write onward failure is Indeterminate. Fresh boot must
+reconcile, never retry the uncertain commit. A final read also verifies selection.
+
+Focused cloud fixtures cover signed-package preparation/publication, all observed
+prepare/publication I/O call failures, stale token/record mismatch, changed
+package/selector, dishonest successful write ACK, malformed bounds/padding and
+content-versus-transport failure. These are source tests, not native System PIO,
+health, fallback, immutable-map or visible Settings replacement evidence.
+
+
+### Bound staging-copy and existing-prior fallback
+
+Only copy_prepared may feed the native STAGE_COPY transaction. It requires the
+same volume's pending identity and mounted selection, checks selection before
+and after streaming, and compares exact logical length/full-package hash.
+Any I/O, changed identity, invalid content or partial sink failure invalidates
+pending state and locks the transaction owner. After sink failure the caller
+must explicitly issue kernel ABORT for its COPYING reservation; it cannot
+FINISH or trial the partial copy. Generic read_stream/read_package is not a
+transaction-authorized staging path.
+
+prepare_fallback reads only the current selector's exact previous slot,
+generation and manifest digest, observes selection around that read, and creates
+a distinct pending identity without any package write or generation decrease.
+The manager must still reverify the sealed exact prior at floor1 plus committed
+identity, and health-test a fresh incarnation. Publication of that token accepts
+only the exact Record::fallback successor, retaining the high-water mark and
+removing the prior pointer. A second fallback without a new successful install
+fails. Corrupt prior, transport failure or selector change halts this operation;
+no factory scan, autoformat or resurrection of the retired process is allowed.
+
+Source fixtures now include selector changes before/during/after copy, stale
+copy identity, sink-prefix failure refusing publication, exact-prior fallback,
+all fallback preparation/publication I/O call failures, and maximum2097536-byte
+package preparation/readback with reserved-tail preservation. Actual native
+health, sink abort, process replacement and crash-cut tests remain pending.
+
+## M4.3 additive private v0 repair amendment
+
+ADR0036 specifies the owner-delegated M4.3 direction and alternatives. Add kind3
+Repair without reinterpreting existing kind0/1/2 bytes. Repair increments
+sequence, binds exact parent sequence/hash, uses the opposite slot, exact
+immutable authenticated factory generation1, no prior, and unchanged high-water.
+Factory repair when highest==1 is valid. Root provenance and content damage are
+verified separately by the opaque core planner; selector checksums are not that
+authority. Repair is not an Install downgrade or ordinary prior fallback.
+
+The first implementation is pure source logic, not activated native repair:
+core/modern/repair.rs provides crate-private trusted factory injection and plan
+creation, bounded complete-content inspections, exact reobservation checks and
+a planned Record. It neither allocates a large package buffer nor receives a
+Data handle. Runtime use must independently bind immutable boot hash, sealed
+reads, request/seal/incarnation, exclusive System ownership, readback and health.
+Read errors/partial transport buffers are never eligible inspection inputs.
+
+Compatibility: new readers preserve old record decoding and do not auto-migrate.
+Legacy readers reject kind3; if its protected predecessor remains valid, they
+can select that historical record provisionally, then must authenticate its
+referenced package before execution. That may halt on damaged content; it is
+not repair support or prevention of old-software/disk rollback. Matched new
+boot/controller inputs are required for repaired laboratory fixtures. Unknown
+or ambiguous data remains unavailable without any automatic formatting/export/
+migration writes. DataVault bytes are unchanged; stable public formats remain
+outside this private experimental amendment.
+
+Earlier statements that no repair planning exists are historical. Native repair,
+interruption/reboot proof and M4.3 release acceptance remain pending.
+
+### Completed-read boundary clarification
+
+Inspection consumes opaque CompleteRead, which has no production constructor in
+this unactivated batch. Only a test-only mock can issue one, after successful
+exact-length input; partial or failed reads refuse a token. The future native
+bridge must supply the independently reviewed production issuer. The planner's
+matches_observations compares values only, not freshness; copied observations
+cannot establish fresh I/O. Native one-shot receipt/seal/incarnation and exclusive
+ownership remain required before any repair write. No claim of enforced fresh
+native reads or guest repair is made by these source APIs.
+
+
+### M4.3 repair storage mechanism
+
+The crate-private prepare_repair mechanism accepts the immutable factory bytes,
+their expected complete logical hash and the exact Manager-authorized Repair
+successor. It first requires no pending operation, canonical repair succession,
+opposite slot, generation1, matching manifest digest and exact nonzero package
+hash. The caller remains responsible for the independently bound immutable root,
+both complete fresh damage inspections and one-shot bootstrap authorization;
+this storage method alone grants none of those decisions. No native caller is
+wired at this checkpoint.
+
+Preparation reuses the bounded opposite-slot write/flush/full-readback/selector
+observation path, retaining Purpose::Repair(exact_record) in the opaque pending
+token. Publish accepts only that exact record, not a structurally different
+Fallback naming the same package. Copying, health verification, native desktop
+preparation and correlated durable ACK remain separate required gates.
+Every preparation or publication I/O failure locks the owner. The previous
+selected record/payload and all Data remain outside the allowed write set.
+
+Prior preparation now distinguishes content Framing/Policy rejection from all
+other failures: content rejection leaves inspection possible with no pending
+token; transport, sink, uncertainty and future error classes lock. This does
+not create a retry loop: the native coordinator still permits only one exact
+prior attempt, then must stop or use the separately reviewed Repair protocol.
+Tests cover exact record/kind/hash/generation binding, protected old bytes,
+stale-generation refusal and every observed preparation/publication I/O failure.
+These fake-media tests are not native interrupted-repair evidence.
+
+
+### Unactivated implementation build boundary
+
+Until the native one-shot Repair coordinator and CompleteRead issuer exist,
+the pure repair module in the core library, repair-only journal constructors,
+System InspectionRole/inspect_stored and prepare_repair/Purpose::Repair are
+compiled only under cfg(test). This is an explicit non-activation boundary, not
+a dead-code warning exemption. Test builds retain the full mechanism and fault
+suite. Kind3 journal decoding/succession recognition remains in normal builds.
+The already reviewed kernel inspection/root-hash syscalls are unchanged.
+Native integration must remove the corresponding gates together with real
+callers and their independent boundary tests; there is no production repair
+transaction at this checkpoint.

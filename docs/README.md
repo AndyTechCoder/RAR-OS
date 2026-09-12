@@ -87,6 +87,7 @@ Status: Gate 0 approved on 2026-07-16
 - [ADR 0033: Bounded Usable Alpha Composition](adr/0033-usable-alpha-composition.md)
 - [ADR 0034: Proposed Modern Alpha Update and Recovery Boundary](adr/0034-modern-alpha-update-and-recovery.md)
 - [ADR 0035: Proposed Immutable IDE Inputs](adr/0035-immutable-ide-inputs.md)
+- [ADR 0036: Proposed System-only Factory Repair](adr/0036-system-only-factory-repair.md)
 
 Gate 0 approval covers ADRs 0001–0016 and the Release 0 task packet. Later
 indexed ADRs are authoritative only through their separately recorded approval
@@ -112,3 +113,7 @@ permanently irreplaceable.
 
 - [Desktop implementation and limitations](desktop-implementation.md)
 - [Desktop evidence publication guide](evidence/desktop-milestone-3.md)
+
+- [Modern-v0 candidate System contract](interfaces/modern-system-v0.md)
+
+- [Modern-v0 candidate lifecycle contract](interfaces/modern-lifecycle-v0.md)

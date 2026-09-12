@@ -4,8 +4,10 @@ use core::{arch::asm,mem,ptr};
 pub const MAGIC:u64=0x5241525f424f4f31;
 #[cfg(not(rar_platform))]
 pub const ARENA_PAGES:usize=1024;
-#[cfg(rar_platform)]
+#[cfg(all(rar_platform,not(rar_modern)))]
 pub const ARENA_PAGES:usize=9216;
+#[cfg(all(rar_platform,rar_modern))]
+pub const ARENA_PAGES:usize=crate::platform::staging::ARENA_PAGES;
 pub const STACK_GUARD:u64=0x100000;
 pub const STACK_TOP:u64=0x121000;
 pub const HEAP_OFFSET:u64=0x140000;
@@ -116,6 +118,8 @@ pub unsafe fn start(image:usize,system:*const SystemTable)->! {
     // Only explicit arena regions are mapped. Kernel/emergency guard pages stay absent.
     for page in 0..ARENA_PAGES {
         let offset=page as u64*4096;
+        #[cfg(all(rar_platform,rar_modern))]
+        if crate::platform::staging::guard_offset(offset){continue;}
         if [STACK_GUARD,STACK_TOP,0x160000,EMERGENCY_TOP].contains(&offset) {continue;}
         unsafe {tables.map(Mapping{virtual_start:arena+offset,physical_start:arena+offset,
             pages:1,writable:true,executable:false},arena,arena+ARENA_PAGES as u64*4096)}

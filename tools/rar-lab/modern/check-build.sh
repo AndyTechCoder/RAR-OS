@@ -53,3 +53,5 @@ cd "$root"
 
 /usr/bin/python3 -I -B tools/rar-lab/modern/system_fault_tests.py
 /usr/bin/python3 -I -B -c 'import ast; from pathlib import Path; root=Path("tools/rar-lab/modern"); [ast.parse((root/n).read_text(),filename=n) for n in ("system_fault_launch.py","system_fault_scenario.py","system_fault_validate.py","system_fault_controller.py","system_fault_dispatch.py","runtime_controller.py")]'
+
+/usr/bin/python3 -I -B tools/rar-lab/modern/release_evidence_tests.py

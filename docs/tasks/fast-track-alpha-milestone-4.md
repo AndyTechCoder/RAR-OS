@@ -1,7 +1,16 @@
 # Fast-Track Alpha Milestone 4: Modern Architecture
 
-Status: owner-directed; contract design and initial crypto primitive work in progress.
-No Modern runtime implementation or Milestone4 completion is claimed.
+Status: M4.1 COMPLETE at accepted development snapshot
+fd1982665b81ba2e672e0044165d68e09daa47f0 (2026-09-10).
+M4.2 COMPLETE at accepted development snapshot
+93ac75b086755a9b57a1e0998dc16a36eb147be0 with controller
+14d6612bd7e7f6593ce89b71a89a60d283027aa6 (2026-09-12).
+M4.3/full Milestone 4 acceptance is recorded only by the published
+[v0.4.0-modern-alpha release](https://github.com/AndyTechCoder/RAR-OS/releases/tag/v0.4.0-modern-alpha)
+with its verified final-main evidence record and proof assets. Until publication
+after every gate below, M4.3/full M4 is incomplete. A draft or this link is not
+acceptance. See docs/evidence/m4-runtime-progress.md and PR158 for development
+snapshots and premerge evidence. No production certification is claimed.
 Direction: 2026-09-05 UTC, "Perfect. So then let's continue with the next, milestone 4".
 
 ## Baseline and purpose
@@ -64,6 +73,87 @@ converted into a persistent format.
     still pass. Publish v0.4.0-modern-alpha only after reviewed final-head and
     exact-main evidence; model-only tests cannot satisfy runtime requirements.
 
+## Owner-approved three-section delivery
+
+The owner approved this organization on 2026-09-08. It replaces the delivery
+sequence, not the ten completion requirements above, ADR0034 review boundaries,
+or any host/data safety constraint. M4.1 is complete at the accepted development
+snapshot above; M4.2 is complete at the source/controller pair above;
+M4.3 acceptance follows the unchanged recovery/release gates below.
+
+### M4.1 — Persistent files
+
+Status: COMPLETE at fd1982665b81ba2e672e0044165d68e09daa47f0.
+Independent consolidated review found no remaining section acceptance gap.
+The completion basis is actual behavior and passing integrated-source checks,
+not documentation alone. Unfinished M4.2 work in draft PR158 is not approved
+for merge by this disposition.
+
+Deliver the actual Terminal -> storage service -> kernel-mediated Data device ->
+durable DataVault -> fresh-VM Files path. Reuse the working Desktop UI without
+changing its historical volatile profile. Finish the concrete bounded Modern
+device/syscall contract, separately enforce System/Data authority, wire the
+existing PIO and vault implementation, and mount rather than recreate contents.
+
+Acceptance: a controller-generated unpredictable value typed only during boot1
+survives complete QEMU destruction and fresh firmware state; boot2 Files and a
+separate frozen-image oracle agree. Include read/write denial for unauthorized
+roles, exact capacity checks, sticky failure/no autoformat, and representative
+controller-owned interrupted-write tests. Finish the reviewed crypto/reference
+and cloud-profile prerequisites before accepting encrypted runtime evidence;
+do not postpone an unsafe prerequisite merely because final release is later.
+This section primarily covers requirements4,7,8,9 and the storage isolation in5.
+
+### M4.2 — Signed live updates
+
+Status: COMPLETE at the development source/controller pair above. Actual six-case
+cloud campaign34664032961 passed; exact evidence and independent acceptance
+review are recorded in docs/evidence/m4-runtime-progress.md. PR158 remains
+draft/unmerged pending M4.3 integration and final release gates.
+
+Connect canonical signed metadata and inactive System payload storage to the
+actual component loader and lifecycle mechanisms. Replace Settings executable
+code while shell, compositor, Files and Terminal continue. Trial health has no
+production authority; atomic publication and incarnation/queue revocation must
+be enforced by the running kernel, not only by the lifecycle model.
+
+Acceptance: visibly different Settings behavior; tampered, unknown-key,
+incompatible and stale candidates rejected; failed startup and post-cutover
+failure restore the verified prior component without granting stale handles
+authority. Verify preserved persistent Data. Covers requirements1,2,3, the update
+portion of5, and the related System transaction cases in7.
+
+### M4.3 — Recovery and release
+
+Boot independently verifiable immutable laboratory recovery, identify and repair
+only damaged System units, and preserve the exact Data-image hash. Demonstrate
+restartable interrupted repair and complete the full controller-owned fault
+matrix across persistence, update and recovery. Run final crypto comparisons,
+two independent target builds and retained Desktop/Platform/Foundation
+regressions; retain actual serial output, screenshots, image/source/tool hashes
+and causal test evidence. Complete focused independent reviews/remediation,
+final-head and exact-main gates, then publish v0.4.0-modern-alpha.
+
+Covers the recovery portion of5, requirement6, full7/9 regression coverage and10.
+No section is complete until its actual cloud behavior is demonstrated; passing
+source/model tests, a compiler image, documentation or a prompt count is not the
+completion measure.
+
+### Execution discipline
+
+One main writer; one integrated implementation and outcome demonstration per
+section, with quick focused checks and a consolidated independent review near
+completion. Review security-critical contracts/authority before use and fixes
+before meaningful merges. A section can use coherent dependency changes where
+trusted-main execution requires them, but not authorization-only PR chains.
+
+Maintain docs/evidence/m4-runtime-progress.md with what works, exact evidence,
+remaining integration and the next concrete action. Shared compiler/reference
+work belongs to M4.1's required crypto validation and final M4.3 regression; it
+is not a fourth open-ended milestone. Preserve already-reviewed work, avoid
+duplicate live runs, diagnose a terminal failed/cancelled run before one bounded
+retry, and never weaken checks simply to report progress.
+
 ## Delivery and ownership
 
 One main writer. Read-only independent architecture/correctness/security reviews
@@ -100,10 +190,12 @@ launcher to discover whether it is safe.
 
 ## Limits and progress
 
-This document records acceptance targets, not completion. Current missing work:
-the Modern contracts/controller, cryptographic implementation/reference closure,
-persistent block/storage path, component replacement, update/recovery wiring and
-runtime evidence. Networking, SDK, additional hardware profiles, AI/agents,
+M4.1's acceptance targets are complete at the recorded development snapshot.
+M4.2's signed component replacement and update/fallback acceptance targets are
+complete at the exact source/controller pair above. M4.3's completion gate
+is immutable System-only recovery and the final whole-M4 runtime,
+regression/reproducibility/review/release evidence. Final acceptance and the
+exact released revision are recorded by the published release linked above. Networking, SDK, additional hardware profiles, AI/agents,
 production identity/hardware-backed secrets and an external cryptographic audit
 remain later work. A failure to finish any requirement is reported explicitly,
 not relabeled as successful Milestone 4.

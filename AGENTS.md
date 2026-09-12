@@ -1,6 +1,24 @@
 # RAR OS Agent Instructions
 
-## Active Fast-Track Alpha authority
+## Current owner-directed Milestone 4
+
+The owner directs completion of Modern Architecture under
+`docs/tasks/fast-track-alpha-milestone-4.md` and ADR0032. Milestone3 is released
+as v0.3.0-usable-alpha. This current scope supersedes the historical M3-only
+scope below; it does not relax any security or host boundary.
+
+Standalone crypto, signed-manifest/journal and lifecycle model work is in
+progress. Read ADR0034 and the candidate Modern interface documents. No new
+runtime/profile authority exists until its concrete controller/device/lifecycle
+review passes. Model tests are not proof of boot, persistence or live updates.
+M4 requires the actual acceptance evidence before release. Keep one continuing
+M4 implementation branch and batch related fixes; do not create authorization
+packet chains or request routine owner reapproval.
+
+All edits remain GitHub-only. No Mac/SSD mutation, deletion, compilation, image
+creation or RAR execution. Preserve published releases, branches and history.
+
+## Historical Milestone 3 authority
 
 ADR 0032 and `docs/tasks/fast-track-alpha-milestone-3.md` are the owner-approved
 execution authority for Fast-Track Alpha. They supersede the historic

@@ -1,6 +1,67 @@
+# M4 acceptance and evidence
+
+Final M4.3/full-M4 acceptance is recorded in the **published**
+[v0.4.0-modern-alpha release](https://github.com/AndyTechCoder/RAR-OS/releases/tag/v0.4.0-modern-alpha)
+and its byte-verified `release-record.json` and proof assets. Until that release
+is published after all required gates, M4.3/full M4 is incomplete. A draft,
+passing source tests, or this link alone is not acceptance.
+
+The [M4 task packet](https://github.com/AndyTechCoder/RAR-OS/blob/main/docs/tasks/fast-track-alpha-milestone-4.md)
+defines the unchanged ten behavior requirements. The release binds the accepted
+source/controller SHA, exact-main runs, independent review and durable evidence;
+[PR158](https://github.com/AndyTechCoder/RAR-OS/pull/158) records premerge progress.
+Read the published release for final status, not the historical checkpoints below.
+
+## Verified premerge checkpoint — 2026-09-12
+
+- M4.1 persistent files and M4.2 signed live updates are accepted at the recorded
+  development snapshots. Actual automatic System-only factory recovery is proven.
+- Integrated runtime source `8927f5e42858850882219bbf2316cf79a764e1bb`,
+  trusted controller `03002ccf2b8e1135ede3d2937abfdfb7dc631413`:
+  signed runtime34697871103 passed seven scenarios/21 fresh VM lifecycles;
+  crypto34697873683 passed; Data34697868693 passed60 content-checked fault cases.
+- Exact source `a205ac32ebed46534a43c83fba70ee06f04116c2` passed
+  Specifications34698422269, Foundation34698422253, Platform34698422255
+  and Desktop34698422258. Later source changes from8927 througha205 affect only
+  reviewed release-preservation tooling/tests/docs; target/controller blobs match.
+- At this recorded checkpoint System34697876196 Install/Repair jobs were still
+  running. Their terminal outcome, subsequent documentation-only checks,
+  consolidated premerge review, exact-main campaigns and release-preservation
+  outcome must be read from PR158 and the final release record. This historical
+  checkpoint does not assert that those pending gates passed.
+
+Recovery uses independently verifiable immutable laboratory material, System-only
+writes and physically read-only, byte-identical Data. The full interrupted-update
+and recovery oracle requires complete old/new durable states after fresh boots.
+No check, fault coverage, image cap, authority boundary or review requirement
+is relaxed by this documentation.
+
+Repository mutations remain GitHub-only. No Mac/SSD writes, deletions, downloads,
+builds, mounts or target/VM execution. Laboratory fixtures are not real user data
+or production secrets; all runtime tests use reviewed confined cloud profiles.
+
+---
+
 # Sprint Alpha 0.1 Status
 
-## Active milestone — Modern Architecture
+## Historical initial M4 implementation checkpoint
+
+- Baseline: M3 release preserved at 06ecaaad61ab40f4c90ee73df85ee3493c89ccc1.
+- M4 signing foundation merged in PR157 at 3bcf638a87007aee8320079132b42fb15395bcc8;
+  exact-main Specifications33947755718 passed.
+- Continuing PR158: bounded manifest validation, System journal selection,
+  SHA256 adapter and logical lifecycle mechanism models with matching contracts
+  and cloud tests. Lifecycle review findings closed at7283b418.
+- Additional candidates: bounded RFC8439 AEAD with official vectors and a
+  single-sector PIO transport with no native I/O or runtime device attachment.
+  All are unactivated; no persistent filesystem or complete M4 claim.
+- Still required: positive signed packages and independent reference closure,
+  actual sealed loading/PIO storage, encrypted Data, durable transactions,
+  GUI live replacement, reboot/fault/recovery evidence and M4 release gate.
+- Mac/SSD unchanged; no local builds or RAR execution.
+
+
+## Historical initial Modern Architecture status
 
 - Owner requested Milestone 4 on 2026-09-05 UTC.
 - Milestone 3 is published: [v0.3.0-usable-alpha](https://github.com/AndyTechCoder/RAR-OS/releases/tag/v0.3.0-usable-alpha)
@@ -9,8 +70,8 @@
   Foundation33942785929 and Specifications33942705881 passed.
 - Completed baseline: real graphical desktop, protected built-in apps and
   volatile files. Persistent data, signed updates and recovery are not present.
-- Current M4 step: proposed Modern architecture and causal recovery contract;
-  initial RAR-owned SHA-512/Ed25519 primitives and focused cloud tests are in review.
+- Current M4 step: signed layer, journal, lifecycle, AEAD and PIO candidates;
+  independent reference closure and runtime integration remain outstanding.
   Real signed loading, persistence and component replacement remain unimplemented.
 - Contract: `docs/tasks/fast-track-alpha-milestone-4.md`.
 - ADR0034 is proposed; no new cloud disk/launch authority is active.
