@@ -2,7 +2,7 @@
 import json,os,sys,importlib.util
 from pathlib import Path
 def main():
-    cases=("update","bad-health","bad-signature","bad-abi","selector-error")
+    cases=("update","bad-health","bad-signature","bad-abi","selector-error","repair-both")
     if len(sys.argv)!=2 or sys.argv[1] not in cases or not sys.flags.isolated or not sys.dont_write_bytecode:
         raise ValueError("fixed isolated signed cloud case")
     def fixed(name):

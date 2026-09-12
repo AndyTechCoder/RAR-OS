@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 import importlib.util
-CASES={"update":"update","bad-health":"update badhealth","bad-signature":"update badsig","bad-abi":"update badabi","selector-error":"update"}
+CASES={"update":"update","bad-health":"update badhealth","bad-signature":"update badsig","bad-abi":"update badabi","selector-error":"update","repair-both":"update"}
 def helper(name):
     path=Path(__file__).resolve().with_name(name+".py")
     spec=importlib.util.spec_from_file_location(name,path);m=importlib.util.module_from_spec(spec)
@@ -11,13 +11,18 @@ def plan(case,index,value):
     if case not in CASES or type(index) is not int or index not in (1,2,3):raise ValueError("fixed case/VM")
     if index==1:
         keys=helper("visual_oracle").plan(value)[0]
-        return keys,{0:"home-1",1:"terminal-1",len(keys):"saved"}
+        scenes={0:"home-1",1:"terminal-1",len(keys):"saved"}
+        if case=="repair-both":
+            keys+=list("update")+["ret","esc","f2"];scenes[len(keys)]="installed-1"
+        return keys,scenes
     if index==3:
         keys=["f2","esc","f1"];scenes={0:"home-3",1:"selected-3",3:"files-3"}
-        if case=="update":
+        if case in ("update","repair-both"):
             keys+=["esc","f3"];scenes[len(keys)]="terminal-3"
             keys+=list("update")+["ret","esc","f2"];scenes[len(keys)]="stale-rejected"
         return keys,scenes
+    if case=="repair-both":
+        return ["f2","esc","f1"],{0:"home-2",1:"repaired-2",3:"files-2"}
     if case=="selector-error":
         keys=["f3"]+list("update")+["ret"]
         return keys,{0:"home-2",1:"terminal-2"}
@@ -64,7 +69,10 @@ def transcript(serial,index,case,system_fault=None):
     markers=["UPDATE-REQUEST","UPDATE-REJECTED","UPDATE-INSTALLED","UPDATE-FALLBACK",
              "UPDATE-ACTIVE-LOST","SETTINGS-ACTIVE-FAULT","STALE-AUTHORITY-REVOKED"]
     expected=[]
-    if index==2:
+    if case=="repair-both":
+        expected=(["UPDATE-REQUEST","STALE-AUTHORITY-REVOKED","UPDATE-INSTALLED"] if index==1
+            else ["UPDATE-REQUEST","UPDATE-REJECTED"] if index==3 else [])
+    elif index==2:
         expected=(["UPDATE-REQUEST","STALE-AUTHORITY-REVOKED","UPDATE-INSTALLED","SETTINGS-ACTIVE-FAULT",
                    "UPDATE-ACTIVE-LOST","UPDATE-FALLBACK"] if case=="update" else
                   ["UPDATE-REQUEST"] if selector else ["UPDATE-REQUEST","UPDATE-REJECTED"])
@@ -75,6 +83,8 @@ def transcript(serial,index,case,system_fault=None):
         if serial.count(marker)!=expected.count(name):raise ValueError("unexpected lifecycle marker count")
     for name in expected:positions.append(serial.index("RAR-MODERN:"+name))
     if positions!=sorted(positions):raise ValueError("lifecycle causality order")
+    if case=="repair-both" and index==1 and serial.count("RAR-MODERN:PRIVATE-MEMORY-RETIRED")<1:
+        raise ValueError("actual installed component retirement missing")
     if index==2 and case=="update" and serial.count("RAR-MODERN:PRIVATE-MEMORY-RETIRED")<2:
         raise ValueError("actual old/candidate physical retirement missing")
 def validate(raw,boot,firmware_sizes,case,factory,candidate):
@@ -92,6 +102,8 @@ def validate(raw,boot,firmware_sizes,case,factory,candidate):
     fields={"schema","case","status","challenge","frames","vm_proofs","boot_sha256",
         "initial_data_sha256","frozen_data_sha256","frozen_data_base64","system_base64",
         "system_check","milestone_complete"}
+    if case=="repair-both":
+        fields.update(("installed_system_sha256","damaged_system_sha256","damaged_system_base64","system_corruption"))
     if (type(value) is not dict or set(value)!=fields or case not in CASES or value["case"]!=case or
         value["schema"]!="rar-signed-runtime-candidate-v1" or value["status"]!="observed" or
         value["milestone_complete"] is not False or value["boot_sha256"]!=base.digest(boot)):
@@ -105,7 +117,18 @@ def validate(raw,boot,firmware_sizes,case,factory,candidate):
         state["next_slot"]!=2 or state["readonly"]):
         raise ValueError("actual authenticated Data/challenge mismatch")
     system=base.decoded(value["system_base64"],8388608)
-    checked=expected.validate_system(system,factory,candidate,"fallback" if case=="update" else "rejected")
+    if case=="repair-both":
+        installed,damaged,_=expected.repair_images(factory,candidate)
+        actual_damaged=base.decoded(value["damaged_system_base64"],8388608)
+        receipt=dict(offsets=[1024,1024+expected.SLOT_BYTES],xor=1,
+            before_sha256=base.sha(installed),after_sha256=base.sha(damaged))
+        if (actual_damaged!=damaged or value["installed_system_sha256"]!=base.sha(installed) or
+            value["damaged_system_sha256"]!=base.sha(damaged) or
+            base.canonical(value["system_corruption"])!=base.canonical(receipt)):
+            raise ValueError("exact installed/damaged recovery starting state")
+        checked=expected.validate_repair_system(system,factory,candidate)
+    else:
+        checked=expected.validate_system(system,factory,candidate,"fallback" if case=="update" else "rejected")
     if value["system_check"]!=checked:raise ValueError("independent System result")
     proofs=value["vm_proofs"]
     if type(proofs) is not list or len(proofs)!=3:raise ValueError("exact three VM proofs")
@@ -143,7 +166,7 @@ def validate(raw,boot,firmware_sizes,case,factory,candidate):
                 if report["returncode"]==21 and fault["terminal"] is not True:
                     raise ValueError("natural System exit requires complete terminal receipt")
                 audits.append(fault)
-            else:audits.append(persist.audit(records,role,ready,index>1,index==2 and role=="system"))
+            else:audits.append(persist.audit(records,role,ready,index>1,role=="system" and (index==2 or case=="repair-both" and index==1)))
             current.append((ready["device"],ready["inode"],ready["capacity"]))
         if base.canonical(audits)!=base.canonical(proof["audit"]) or len({(d,i) for d,i,_ in current})!=3:raise ValueError("audit or disk separation")
         if selector:
@@ -165,7 +188,7 @@ def validate(raw,boot,firmware_sizes,case,factory,candidate):
         elif name.startswith("terminal-"):digest=visual.validate(pixels,1)
         elif name=="saved":digest=visual.validate(pixels,2,challenge)
         elif name.startswith("files-"):digest=visual.validate(pixels,3,challenge)
-        else:digest=expected.settings_validate(pixels,visual,name=="compact" or name=="candidate" and case=="update",name=="compact")
+        else:digest=expected.settings_validate(pixels,visual,name in ("compact","installed-1") or name=="candidate" and case=="update",name=="compact")
         if row["sha256"]!=digest:raise ValueError("actual full frame hash/expectation")
     return dict(case=case,frames=len(frames),fresh_vms=3,data_sha256=base.sha(data),
         system=checked,content_validated=True,provenance_validated=False,milestone_complete=False)
@@ -198,13 +221,17 @@ def self_test():
                 [dict(row,id=n) for n,row in enumerate(plain[1:],1)]):
                 reject(lambda changed=changed:commands(changed,index,case,value,profile))
             names=[]
-            if index==2:
+            if case=="repair-both":
+                names=(["UPDATE-REQUEST","STALE-AUTHORITY-REVOKED","UPDATE-INSTALLED"] if index==1
+                    else ["UPDATE-REQUEST","UPDATE-REJECTED"] if index==3 else [])
+            elif index==2:
                 names=(["UPDATE-REQUEST","STALE-AUTHORITY-REVOKED","UPDATE-INSTALLED","SETTINGS-ACTIVE-FAULT",
                     "UPDATE-ACTIVE-LOST","UPDATE-FALLBACK"] if case=="update" else
                     ["UPDATE-REQUEST"] if case=="selector-error" else ["UPDATE-REQUEST","UPDATE-REJECTED"])
             elif index==3 and case=="update":names=["UPDATE-REQUEST","UPDATE-REJECTED"]
             serial="RAR-MODERN:GUI-READY\n"+"".join("RAR-MODERN:"+n+"\n" for n in names)
             if index==2 and case=="update":serial+="RAR-MODERN:PRIVATE-MEMORY-RETIRED\n"*2
+            if index==1 and case=="repair-both":serial+="RAR-MODERN:PRIVATE-MEMORY-RETIRED\n"
             if case=="selector-error" and index==2:serial+=helper("system_selector_fault").PANIC.decode("ascii")
             receipt={} if case=="selector-error" and index==2 else None
             transcript(serial,index,case,receipt)

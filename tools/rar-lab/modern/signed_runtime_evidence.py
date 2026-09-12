@@ -56,6 +56,29 @@ def validate_system(observed,factory,candidate,outcome):
         active_generation=generation if outcome=="installed" else 1,
         high_water=1 if outcome=="rejected" else generation)
 
+
+def repair_images(factory,candidate):
+    """Fixed installed gen2 -> two invalid headers -> exact gen1 Repair.
+    Pure expectations only; never media mutation or runtime evidence.
+    """
+    old,new=package(factory),package(candidate)
+    if old[0]!=1 or new[0]!=2:raise ValueError("fixed repair generations1/2")
+    installed=expected_system(factory,candidate,"installed")
+    damaged=bytearray(installed)
+    for offset in (1024,1024+SLOT_BYTES):damaged[offset]^=1
+    repaired=bytearray(damaged)
+    rounded=(len(factory)+511)//512*512
+    repaired[1024:1024+rounded]=factory+bytes(rounded-len(factory))
+    repaired[:512]=record(3,3,2,0,old,None,installed[512:1024])
+    return installed,bytes(damaged),bytes(repaired)
+
+def validate_repair_system(observed,factory,candidate):
+    expected=repair_images(factory,candidate)[2]
+    if type(observed) is not bytes or observed!=expected:
+        raise ValueError("repair must preserve every non-target System byte")
+    return dict(sha256=sha256(observed).hexdigest(),outcome="repair",
+        sequence=3,active_generation=1,high_water=2,active_slot=0,previous=None)
+
 def settings_expected(visual,updated,compact=False):
     if type(updated) is not bool or type(compact) is not bool or compact and not updated:
         raise ValueError("fixed Settings code state")
@@ -90,6 +113,22 @@ def self_test():
         try:validate_system(image,factory,candidate,"rejected")
         except ValueError:pass
         else:raise AssertionError("publication accepted as rejection")
+    installed,damaged,repaired=repair_images(factory,candidate)
+    assert installed==outputs[1]
+    assert [i for i,(a,b) in enumerate(zip(installed,damaged)) if a!=b]==[1024,1024+SLOT_BYTES]
+    assert validate_repair_system(repaired,factory,candidate)["high_water"]==2
+    assert repaired[512:1024]==installed[512:1024]
+    assert repaired[1024+SLOT_BYTES:]==damaged[1024+SLOT_BYTES:]
+    for image in (installed,damaged,outputs[0],outputs[2]):
+        try:validate_repair_system(image,factory,candidate)
+        except ValueError:pass
+        else:raise AssertionError("non-repair System accepted")
+    for at in (12,13,14,16,24,40,48,56,64,128,480,512,992,1024,
+               1024+len(factory),1024+SLOT_BYTES,8196*512,SYSTEM_BYTES-1):
+        changed=bytearray(repaired);changed[at]^=1
+        try:validate_repair_system(bytes(changed),factory,candidate)
+        except ValueError:pass
+        else:raise AssertionError("changed repair System accepted")
     from pathlib import Path
     import runpy
     visual=type("Visual",(),runpy.run_path(str(Path(__file__).resolve().with_name("visual_oracle.py"))))
