@@ -89,9 +89,18 @@ def serial_status(serial,hit,final=False):
         if final:raise ValueError("reconcile without exact System receipt")
         return "waiting"
     return "reconciled"
+def status_reply(value):
+    if (type(value) is not dict or set(value)!={"running","singlestep","status"} or
+        value["running"] is not True or value["singlestep"] is not False or value["status"]!="running"):
+        raise ValueError("exact running reconcile QMP barrier")
+    return value
+
 def joined(vm,candidate,selector,base):
     vm.service()
     if serial_status(bytes(vm.serial),vm.system_fault_hit,True)!="reconciled":raise ValueError("exact fault stop")
+    if type(vm.system_fault_hit) is not dict or vm.system_fault_hit.get("terminal") is not True:
+        raise ValueError("terminal System receipt before QMP barrier")
+    barrier=status_reply(vm.request({"execute":"query-status"}))
     stopped=vm.destroy()
     if (stopped.get("joined") is not True or vm.cleanup_succeeded is not True or vm.qmp_drained is not True or
         len(stopped.get("backends",[]))!=3):raise ValueError("whole VM/backends joined")
@@ -111,6 +120,7 @@ def joined(vm,candidate,selector,base):
     serial_status(bytes(vm.serial),summaries[1],True)
     return dict(cut=stopped,audit=summaries,system_fault=summaries[1],argv=vm.argv,preflight=vm.preflight,
         commands=vm.commands,events=vm.events,event_receipts=vm.event_receipts,qmp_drained=vm.qmp_drained,
+        status_barrier=barrier,
         serial=bytes(vm.serial).decode("ascii"))
 def self_test():
     candidate=b"x"*896;selector=b"s"*512;p=plan(candidate)
@@ -152,6 +162,11 @@ def self_test():
     for n in range(len(b"RAR-PANIC"),len(PANIC)):
         assert serial_status(PANIC[:n],hit)=="waiting"
         reject(lambda n=n:serial_status(PANIC[:n],hit,True))
+    assert status_reply(dict(running=True,singlestep=False,status="running"))["running"] is True
+    for bad in ({},dict(running=1,singlestep=False,status="running"),
+        dict(running=True,singlestep=0,status="running"),dict(running=False,singlestep=False,status="paused"),
+        dict(running=True,singlestep=False,status="running",extra=0)):
+        reject(lambda bad=bad:status_reply(bad))
     return rejected
 if __name__=="__main__":
     import sys

@@ -316,6 +316,11 @@ class VM:
         return line_json(raw)
 
     def allowed(self,command):
+        if command=={"execute":"query-status"} and self.started:
+            fixed=getattr(self,"system_fault_audit",None)
+            return (fixed is not None and type(self.system_fault_hit) is dict and
+                self.system_fault_hit.get("terminal") is True and not getattr(self,"system_status_queried",False) and
+                fixed.serial_status(bytes(self.serial),self.system_fault_hit)=="reconciled")
         if command == {"execute":"qmp_capabilities"}:
             return self.identity == 0
         if command in [value for _,value in self.profile.preflight_requests()]:
@@ -384,6 +389,8 @@ class VM:
             raise ValueError("unapproved QMP command/state/budget")
         # A completed prior reply must be consumed before signaling the fault.
         if getattr(self,"fault_plan",None) is not None:self.service()
+        if command=={"execute":"query-status"} and self.started:
+            self.system_status_queried=True
         self.identity += 1
         self.qmp_pending=self.identity
         message = dict(command,id=self.identity)
@@ -880,8 +887,31 @@ def self_test():
             dict(returncode=21 if n==1 else -9,problem="backend-failed",
                 joined=True,records=b.records) for n,b in enumerate(good.backends)])
     good.destroy=joined_fake
+    def status_fake(command):
+        assert command=={"execute":"query-status"}
+        return dict(running=True,singlestep=False,status="running")
+    good.request=status_fake
     proof=fixed.joined(good,candidate,selector_bytes,SimpleNamespace(audit=lambda *args:{}))
     assert proof["system_fault"]["terminal"] is True and proof["cut"]["joined"] is True
+    assert proof["status_barrier"]==dict(running=True,singlestep=False,status="running")
+    good.started=True
+    assert good.allowed({"execute":"query-status"})
+    good.system_status_queried=True
+    assert not good.allowed({"execute":"query-status"})
+    good.system_status_queried=False;good.system_fault_hit=None
+    assert not good.allowed({"execute":"query-status"})
+    good.system_fault_hit={"terminal":False}
+    assert not good.allowed({"execute":"query-status"})
+    good.system_fault_hit=proof["system_fault"];good.serial=bytearray()
+    assert not good.allowed({"execute":"query-status"})
+    good.serial=bytearray(fixed.PANIC)
+    good.identity=5;good.qmp_pending=None
+    def failed_send(raw):raise ValueError("partial send fixture")
+    good.connection=SimpleNamespace(settimeout=lambda x:None,setblocking=lambda x:None,sendall=failed_send)
+    reject(lambda:VM.request(good,{"execute":"query-status"}))
+    assert good.system_status_queried is True and not good.allowed({"execute":"query-status"})
+    good.system_fault_audit=None
+    assert not good.allowed({"execute":"query-status"})
 
     return rejected
 
