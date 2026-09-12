@@ -713,7 +713,7 @@ def self_test():
     # Exact request-time stream receipts. These mocks do not open a socket.
     def event_vm():
         value=object.__new__(VM)
-        value.identity=0;value.events=[];value.event_receipts=[]
+        value.identity=0;value.events=[];value.event_receipts=[];value.started=False
         value.qmp_drained=False;value.qemu_reaped=True
         value.qmp_bytes=bytearray();value.qmp_total=0;value.commands=[]
         value.allowed=lambda command:True
