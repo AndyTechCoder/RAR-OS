@@ -239,7 +239,7 @@ def self_test():
         ([resume,error],[None,4]),([resume,rtc],[2,4])):
         reject(lambda events=events,ids=ids:check(events,ids))
     for field,value in (("device","other"),("node-name","rar-data"),("node-name","rar-boot"),
-        ("operation","read"),("action","stop"),("reason","bad\\n"),("reason","x"*257),("reason",0)):
+        ("operation","read"),("action","stop"),("reason","bad"+chr(10)),("reason","x"*257),("reason",0)):
         bad=copy.deepcopy(error);bad["data"][field]=value
         reject(lambda bad=bad:check([resume,bad],[2,4]))
     for name in ("STOP","SHUTDOWN","RESET","GUEST_PANICKED","RESUME"):
