@@ -7,6 +7,9 @@
 pub const MANIFEST_BYTES:usize=384;
 pub const MIN_PACKAGE:usize=MANIFEST_BYTES+512;
 pub const MAX_PACKAGE:usize=MANIFEST_BYTES+2*1024*1024;
+/// Inspection includes full storage sectors, including the final zero padding.
+pub const MIN_INSPECTION:usize=512;
+pub const MAX_INSPECTION:usize=MAX_PACKAGE.div_ceil(512)*512;
 pub const BUFFER_BYTES:usize=513*4096;
 pub const MAX_CHUNK:usize=512;
 pub const PRIVATE_PAGES:usize=9216;
@@ -31,11 +34,14 @@ pub fn region(arena:u64,pages:usize)->Result<Region,Error>{
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 pub enum Error {Bounds,Busy,Stale,Order,Incomplete,Exhausted,State}
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
-pub struct Identity {seal:u64,slot:u8,length:usize}
+pub struct Identity {seal:u64,slot:u8,length:usize,purpose:Purpose}
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+enum Purpose {Executable,Inspection}
 impl Identity {
     pub fn seal(self)->u64{self.seal}
     pub fn slot(self)->usize{self.slot as usize}
     pub fn length(self)->usize{self.length}
+    pub fn inspection(self)->bool{self.purpose==Purpose::Inspection}
 }
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 enum Phase {Empty,Copying,Sealed}
@@ -58,12 +64,23 @@ impl<'a> Buffer<'a> {
     /// All rejection checks precede mutation. One full-u64 seal is consumed for
     /// each accepted begin; abort cannot return it to the sequence.
     pub fn begin(&mut self,slot:usize,length:usize)->Result<Identity,Error>{
+        self.begin_kind(slot,length,Purpose::Executable)
+    }
+    /// Read-only storage inspection. This purpose cannot be converted into an
+    /// executable package view, even when its length also fits package bounds.
+    /// Native integration must separately admit the inspection-only syscall.
+    pub(crate) fn begin_inspection(&mut self,slot:usize,length:usize)->Result<Identity,Error>{
+        self.begin_kind(slot,length,Purpose::Inspection)
+    }
+    fn begin_kind(&mut self,slot:usize,length:usize,purpose:Purpose)->Result<Identity,Error>{
         if self.phase!=Phase::Empty{return Err(Error::Busy);}
-        if !matches!(slot,5|7)||!(MIN_PACKAGE..=MAX_PACKAGE).contains(&length){
-            return Err(Error::Bounds);
-        }
+        let bounded=match purpose{
+            Purpose::Executable=>(MIN_PACKAGE..=MAX_PACKAGE).contains(&length),
+            Purpose::Inspection=>(MIN_INSPECTION..=MAX_INSPECTION).contains(&length)&&length%512==0,
+        };
+        if !matches!(slot,5|7)||!bounded{return Err(Error::Bounds);}
         let seal=self.next.ok_or(Error::Exhausted)?;
-        let id=Identity{seal,slot:slot as u8,length};
+        let id=Identity{seal,slot:slot as u8,length,purpose};
         self.next=seal.checked_add(1);
         self.identity=Some(id);self.copied=0;self.phase=Phase::Copying;
         Ok(id)
@@ -95,7 +112,14 @@ impl<'a> Buffer<'a> {
     /// The lifetime prevents clear/append while this safe Rust view is live.
     pub fn view(&self,seal:u64)->Result<&[u8],Error>{
         let id=self.identity(seal)?;
-        if self.phase!=Phase::Sealed{return Err(Error::State);}
+        if self.phase!=Phase::Sealed||id.purpose!=Purpose::Executable{return Err(Error::State);}
+        Ok(&self.bytes[..id.length])
+    }
+    /// Non-executable inspection bytes. No signature, damage or freshness
+    /// authority is inferred from the kernel's successful byte-copy seal.
+    pub(crate) fn inspection_view(&self,seal:u64)->Result<&[u8],Error>{
+        let id=self.identity(seal)?;
+        if self.phase!=Phase::Sealed||id.purpose!=Purpose::Inspection{return Err(Error::State);}
         Ok(&self.bytes[..id.length])
     }
     pub fn reserved(&self)->Option<Identity>{self.identity}
@@ -231,6 +255,45 @@ mod tests{
         fill(&mut b,next,1);b.finish(next.seal()).unwrap();
         assert_eq!(b.copying(next.seal()),Err(Error::State));
         assert_eq!(b.clear_with(id.seal(),|_|panic!("stale eraser called")),Err(Error::Stale));
+    }
+
+    #[test]fn inspection_seals_never_become_executable_views(){
+        assert_eq!(MAX_INSPECTION,2_097_664);
+        assert!(MAX_INSPECTION<BUFFER_BYTES);
+        let mut bytes=vec![0;BUFFER_BYTES];let mut b=Buffer::new(&mut bytes).unwrap();
+        for n in [MIN_INSPECTION,1024,MAX_INSPECTION]{
+            let id=b.begin_inspection(7,n).unwrap();assert!(id.inspection());
+            assert_eq!(b.inspection_view(id.seal()),Err(Error::State));
+            fill(&mut b,id,0x5a);b.finish(id.seal()).unwrap();
+            assert_eq!(b.inspection_view(id.seal()).unwrap().len(),n);
+            assert_eq!(b.view(id.seal()),Err(Error::State));
+            assert_eq!(b.begin(5,MIN_PACKAGE),Err(Error::Busy));
+            b.clear(id.seal()).unwrap();
+            assert_eq!(b.inspection_view(id.seal()),Err(Error::Stale));
+            assert!(b.bytes.iter().all(|&byte|byte==0));
+        }
+        let id=b.begin(5,MIN_PACKAGE).unwrap();assert!(!id.inspection());
+        fill(&mut b,id,1);b.finish(id.seal()).unwrap();
+        assert_eq!(b.inspection_view(id.seal()),Err(Error::State));
+        assert_eq!(b.view(id.seal()).unwrap().len(),MIN_PACKAGE);
+    }
+    #[test]fn inspection_bounds_reject_partial_sector_and_do_not_consume_seal(){
+        let mut bytes=vec![0;BUFFER_BYTES];let mut b=Buffer::new(&mut bytes).unwrap();
+        for length in [0,511,513,896,MAX_INSPECTION-1,MAX_INSPECTION+1,usize::MAX]{
+            assert_eq!(b.begin_inspection(7,length),Err(Error::Bounds));
+            assert_eq!(b.reserved(),None);assert_eq!(b.next,Some(1));
+        }
+        for slot in [0,4,6,8,usize::MAX]{
+            assert_eq!(b.begin_inspection(slot,512),Err(Error::Bounds));
+        }
+        let id=b.begin_inspection(5,512).unwrap();
+        b.append(id.seal(),0,&[1;511]).unwrap();
+        assert_eq!(b.finish(id.seal()),Err(Error::Incomplete));
+        assert_eq!(b.inspection_view(id.seal()),Err(Error::State));
+        assert_eq!(b.view(id.seal()),Err(Error::State));
+        b.clear(id.seal()).unwrap();
+        let next=b.begin(7,MIN_PACKAGE).unwrap();assert!(next.seal()>id.seal());
+        assert_eq!(b.append(id.seal(),0,b"x"),Err(Error::Stale));
     }
 
 }

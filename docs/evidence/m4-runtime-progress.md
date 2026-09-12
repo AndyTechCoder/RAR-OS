@@ -772,3 +772,23 @@ matches_observations compares values only, not freshness; copied observations
 cannot establish fresh I/O. Native one-shot receipt/seal/incarnation and exclusive
 ownership remain required before any repair write. No claim of enforced fresh
 native reads or guest repair is made by these source APIs.
+
+
+### M4.3 continuation: strict registration and inspection staging preparation
+
+Source47599's Specifications34666337685 stopped at the legacy fixed34-ADR count;
+the other three checks passed. PR199 corrects optional proposed ADR0036
+registration without granting native authority. Its reviewed remediation904b1fa
+requires a regular non-symlink nonempty file, exact title/index/proposed status
+and count34 without /35 with the proposal. Exact-main validation is still required
+before that checker can validate this branch.
+
+The prepared staging extension distinguishes non-executable whole-sector
+inspection seals from executable package seals. Inspection bounds are512 through
+2097664 bytes in whole sectors; executable bounds remain896 through2097536.
+Neither view accepts the other purpose. Added source tests cover incomplete
+copies, stale seals, zeroing, both maximum bounds and cross-purpose refusal.
+No native syscall issues an inspection seal yet and CompleteRead still has no
+production issuer. This is preparation, not actual recovery execution or M4.3
+completion. ADR0036 now records the reviewed native bridge sequence and retains
+proposed status.
