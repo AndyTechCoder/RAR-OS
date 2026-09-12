@@ -113,7 +113,7 @@ fixture keys and rollbackable local journal state retain existing limitations.
 
 Inspection consumes opaque CompleteRead, which has no production constructor in
 this unactivated batch. Only a test-only mock can issue one, after successful
-exact-length input; partial or failed reads refuse a token. The future native
+exact-length whole-sector input; partial, unaligned or failed reads refuse a token. The future native
 bridge must supply the independently reviewed production issuer. The planner's
 matches_observations compares values only, not freshness; copied observations
 cannot establish fresh I/O. Native one-shot receipt/seal/incarnation and exclusive
@@ -174,3 +174,13 @@ unchanged high-water, stale-install refusal and byte-identical Data. Each
 interrupted write/flush/publication case must stop and join the old VM/backends
 before examining media and restarting. These are required future runtime tests,
 not evidence supplied by the current pure staging/planner code.
+
+### Implemented pure storage-shape classifier
+
+Before any native issuer exists, the pure classifier now independently checks
+the reader's exact shape: malformed framing permits only a complete512-byte
+sector; parseable framing requires exactly the sector-rounded declared package.
+Unexpected short or extra sectors are missing evidence and return Identity,
+not a damage observation. Nonzero final padding is content damage. Verification
+uses only the logical package; observation equality hashes all stored bytes.
+This does not provide native provenance, fresh I/O or repair authority.

@@ -7,6 +7,7 @@ use crate::{journal::{Record,LayerId},manifest::{self,VerifiedLayer},sha256::sha
 pub enum Reject { Root, MissingPrior, ActiveUsable, PriorUsable, Identity, Changed, Exhausted }
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 pub enum Role { Active, Prior }
+const MAX_STORED:usize=(manifest::SIZE+manifest::MAX_PAYLOAD).div_ceil(512)*512;
 
 /// Exact immutable boot-bound factory, not just any correctly signed generation1.
 /// The caller must independently bind expected_hash to immutable boot provenance.
@@ -36,35 +37,53 @@ impl<'a> CompleteRead<'a>{
     /// Test-only: this is not the production provenance or transport boundary.
     pub(crate) fn test_completed(expected:usize,result:Result<&'a[u8],()>)->Result<Self,Reject>{
         let bytes=result.map_err(|_|Reject::Identity)?;
-        if expected<512||expected>manifest::SIZE+manifest::MAX_PAYLOAD||bytes.len()!=expected{
+        if !(512..=MAX_STORED).contains(&expected)||expected%512!=0||bytes.len()!=expected{
             return Err(Reject::Identity);
         }
         Ok(Self{bytes})
     }
 }
 
-/// Evidence from an opaque complete read. No public constructor/caller boolean.
+/// Evidence from an opaque complete sector read. No caller-supplied damage
+/// boolean. Full storage bytes (including padding) bind observation equality.
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 pub struct Inspection {
     current:Record, role:Role, referenced:LayerId,
     length:usize, observed_hash:[u8;32], usable:bool,
 }
 pub(crate) fn inspect(current:Record,role:Role,read:CompleteRead<'_>)->Result<Inspection,Reject> {
-    let package=read.bytes;
-    if package.len()>manifest::SIZE+manifest::MAX_PAYLOAD{return Err(Reject::Identity);}
+    let stored=read.bytes;
+    if !(512..=MAX_STORED).contains(&stored.len())||stored.len()%512!=0{
+        return Err(Reject::Identity);
+    }
     let referenced=match role {
         Role::Active=>current.active(),
         Role::Prior=>current.previous().ok_or(Reject::MissingPrior)?,
     };
-    let observed_hash=sha256(package).map_err(|_|Reject::Identity)?;
-    let usable=if package.len()<manifest::SIZE {false} else {
-        match manifest::verify(&package[..manifest::SIZE],&package[manifest::SIZE..],1) {
-            Ok(layer)=>layer.manifest().generation()==referenced.generation() &&
-                layer.manifest().digest()==referenced.digest(),
-            Err(_)=>false,
-        }
+    // Independently reconstruct the reader's exact complete-read shape. Wrong
+    // shape is missing transport evidence, never proof that media is damaged.
+    let logical=manifest::Manifest::parse(&stored[..manifest::SIZE]).ok().and_then(|_|{
+        let payload=u32::from_le_bytes(stored[56..60].try_into().unwrap())as usize;
+        (512..=manifest::MAX_PAYLOAD).contains(&payload).then_some(manifest::SIZE+payload)
+    });
+    let usable=match logical{
+        None=>{
+            if stored.len()!=512{return Err(Reject::Identity);}
+            false
+        },
+        Some(length)=>{
+            if stored.len()!=length.div_ceil(512)*512{return Err(Reject::Identity);}
+            if stored[length..].iter().any(|&byte|byte!=0){false}else{
+                match manifest::verify(&stored[..manifest::SIZE],&stored[manifest::SIZE..length],1){
+                    Ok(layer)=>layer.manifest().generation()==referenced.generation()&&
+                        layer.manifest().digest()==referenced.digest(),
+                    Err(_)=>false,
+                }
+            }
+        },
     };
-    Ok(Inspection{current,role,referenced,length:package.len(),observed_hash,usable})
+    let observed_hash=sha256(stored).map_err(|_|Reject::Identity)?;
+    Ok(Inspection{current,role,referenced,length:stored.len(),observed_hash,usable})
 }
 
 /// A plan does not authorize publication. Native use additionally requires

@@ -627,11 +627,15 @@ mod repair_decisions {
     use repair::{Factory,Plan,Role,Reject,CompleteRead,Inspection};
     use journal::{Record,Slot};
     fn package(index:usize)->Vec<u8>{let(r,p)=case(index);[r,p].concat()}
+    fn stored(bytes:&[u8])->Vec<u8>{
+        let mut out=bytes.to_vec();out.resize(bytes.len().div_ceil(512)*512,0);out
+    }
     fn inspect(current:Record,role:Role,bytes:&[u8])->Result<Inspection,Reject>{
-        repair::inspect(current,role,CompleteRead::test_completed(bytes.len(),Ok(bytes))?)
+        let bytes=stored(bytes);
+        repair::inspect(current,role,CompleteRead::test_completed(bytes.len(),Ok(&bytes))?)
     }
     #[test]fn partial_or_failed_transport_never_yields_an_inspection_input(){
-        let bytes=package(0);
+        let raw=package(0);let bytes=stored(&raw);
         assert!(CompleteRead::test_completed(bytes.len(),Err(())).is_err());
         for length in [0usize,1,383,512,bytes.len()-1]{
             assert!(CompleteRead::test_completed(bytes.len(),Ok(&bytes[..length])).is_err());
@@ -641,7 +645,7 @@ mod repair_decisions {
         let read=CompleteRead::test_completed(bytes.len(),Ok(&bytes)).unwrap();
         // The opaque non-Copy input is consumed once by inspection.
         let observation=repair::inspect(record(),Role::Active,read).unwrap();
-        let factory=root(&bytes);
+        let factory=root(&raw);
         assert!(matches!(Plan::new(record(),&factory,observation,None),Err(Reject::ActiveUsable)));
     }
     fn record()->Record{let(r,p)=case(0);Record::factory(&manifest::verify(r,p,1).unwrap())}
@@ -713,4 +717,36 @@ mod repair_decisions {
         assert!(Plan::new(updated,&f,mismatched,Some(prior)).is_ok());
         assert!(inspect(old,Role::Active,&vec![0;system_volume::MAX_PACKAGE+1]).is_err());
     }
+    #[test]fn stored_shape_and_padding_are_independently_verified(){
+        let raw=package(0);let factory=root(&raw);let old=record();let good=stored(&raw);
+        let classify=|bytes:&[u8]|repair::inspect(old,Role::Active,
+            CompleteRead::test_completed(bytes.len(),Ok(bytes))?);
+        assert!(matches!(Plan::new(old,&factory,classify(&good).unwrap(),None),Err(Reject::ActiveUsable)));
+        // Aligned successful short/overlong receipts still are NOT damage proof.
+        assert_eq!(classify(&good[..512]),Err(Reject::Identity));
+        let mut excess=good.clone();excess.extend_from_slice(&[0;512]);
+        assert_eq!(classify(&excess),Err(Reject::Identity));
+        // Nonzero storage padding is damaged content, not an incomplete read.
+        assert!(raw.len()<good.len());let mut padding=good.clone();padding[raw.len()]=1;
+        let damage=classify(&padding).unwrap();let plan=Plan::new(old,&factory,damage,None).unwrap();
+        padding[raw.len()+1]=1;
+        assert_eq!(plan.matches_observations(old,&factory,classify(&padding).unwrap(),None),Err(Reject::Changed));
+        let malformed=[0u8;512];
+        assert!(Plan::new(old,&factory,classify(&malformed).unwrap(),None).is_ok());
+        assert_eq!(classify(&[0u8;1024]),Err(Reject::Identity));
+        for length in [0u32,511,2_097_153,u32::MAX]{
+            let mut header=good[..512].to_vec();header[56..60].copy_from_slice(&length.to_le_bytes());
+            assert!(Plan::new(old,&factory,classify(&header).unwrap(),None).is_ok());
+            header.extend_from_slice(&[0;512]);assert_eq!(classify(&header),Err(Reject::Identity));
+        }
+        let mut maximum=vec![0u8;2_097_664];
+        maximum[..384].copy_from_slice(&raw[..384]);
+        maximum[56..60].copy_from_slice(&2_097_152u32.to_le_bytes());
+        assert!(Plan::new(old,&factory,classify(&maximum).unwrap(),None).is_ok());
+        assert_eq!(classify(&maximum[..512]),Err(Reject::Identity));
+        for length in [511,513,896,2_097_665]{
+            assert!(CompleteRead::test_completed(length,Ok(&vec![0;length])).is_err());
+        }
+    }
+
 }

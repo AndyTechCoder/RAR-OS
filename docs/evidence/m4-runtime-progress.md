@@ -800,3 +800,10 @@ include all rounded storage padding. Source tests forbid every write/flush,
 cover minimum/maximum lengths, all read failures, sink-prefix failure and changed
 selectors before/after copying. Every in-flight failure locks the owner without
 issuing a receipt. No native caller or CompleteRead authority is added.
+
+The pure repair classifier now consumes only complete whole-sector test receipts,
+independently reconstructs framing/rounded length, rejects short or excess shapes
+as missing evidence, verifies only the logical package and includes padding in
+the observation hash. Tests cover valid non-sector-aligned packages, damaged
+padding, malformed first sectors, short/excess receipts and maximum bounds.
+No production CompleteRead issuer exists yet; these remain source preparations.
