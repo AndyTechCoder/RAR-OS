@@ -792,3 +792,11 @@ No native syscall issues an inspection seal yet and CompleteRead still has no
 production issuer. This is preparation, not actual recovery execution or M4.3
 completion. ADR0036 now records the reviewed native bridge sequence and retains
 proposed status.
+
+The matching System read primitive inspects only the selected active or named
+prior slot, with exact selector observations before and after complete-sector
+streaming. Malformed headers yield one complete512-byte sector; parsed packages
+include all rounded storage padding. Source tests forbid every write/flush,
+cover minimum/maximum lengths, all read failures, sink-prefix failure and changed
+selectors before/after copying. Every in-flight failure locks the owner without
+issuing a receipt. No native caller or CompleteRead authority is added.

@@ -368,10 +368,11 @@ mod tests {
 
     #[test]fn recovery_inspection_reads_full_storage_without_write_authority(){
         use std::collections::BTreeMap;
-        struct Media{blocks:BTreeMap<u32,[u8;512]>,calls:usize,fail:Option<usize>}
+        struct Media{blocks:BTreeMap<u32,[u8;512]>,calls:usize,fail:Option<usize>,change:Option<usize>}
         impl Io for Media{
             fn read(&mut self,s:u32)->Result<[u8;512],()>{
                 self.calls+=1;if self.fail==Some(self.calls){return Err(());}
+                if self.change==Some(self.calls)&&s==0{return Ok([0;512]);}
                 Ok(*self.blocks.get(&s).unwrap_or(&[0;512]))
             }
             fn write(&mut self,_:u32,_:&[u8;512])->Result<(),()>{panic!("inspection wrote media")}
@@ -383,7 +384,7 @@ mod tests {
             for offset in [16usize,24,32,40]{record[offset..offset+8].copy_from_slice(&1u64.to_le_bytes());}
             record[64..96].fill(1);let hash=sha256(&record[..480]).unwrap();record[480..].copy_from_slice(&hash);
             let mut blocks=BTreeMap::new();blocks.insert(0,record);
-            Media{blocks,calls:0,fail:None}
+            Media{blocks,calls:0,fail:None,change:None}
         }
         fn header(payload:u32)->[u8;512]{
             let mut p=[0;512];p[..8].copy_from_slice(b"RARMODL0");
@@ -419,6 +420,15 @@ mod tests {
             assert!(v.is_readonly());let calls=v.io.calls;
             assert_eq!(v.inspect_stored(InspectionRole::Active,|_,_,_|panic!("retried")),Err(Reject::ReadOnly));
             assert_eq!(v.io.calls,calls);assert!(v.pending.is_none());
+        }
+        for changed_at in [3,7]{
+            let mut m=media();m.blocks.insert(2,header(512));m.change=Some(changed_at);
+            let mut v=Volume::mount(m,SECTORS).unwrap();let before=v.record();let mut copied=0;
+            assert_eq!(v.inspect_stored(InspectionRole::Active,|_,_,bytes|{
+                copied+=bytes.len();Ok(())
+            }),Err(Reject::Changed));
+            assert_eq!(copied,if changed_at==3{0}else{1024});
+            assert!(v.is_readonly());assert_eq!(v.record(),before);assert!(v.pending.is_none());
         }
         let mut m=media();m.blocks.insert(2,header(512));
         let mut v=Volume::mount(m,SECTORS).unwrap();
