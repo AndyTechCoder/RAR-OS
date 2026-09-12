@@ -6,6 +6,9 @@ def observe(load,execute,launcher,inputs,boot,sizes,evidence,report,save,bank,mo
     if mode not in ("install","repair"):raise ValueError("fixed System transaction")
     factory=bank["modern-settings-factory.layer"];candidate=bank["modern-settings-update.layer"]
     plans=load("signed_runtime_evidence").system_fault_cases(factory,candidate,mode)
+    print("System matrix sizing:",mode,"factory bytes",len(factory),"candidate bytes",len(candidate),
+        "payload sectors",(len(factory if mode=="repair" else candidate)+511)//512,
+        "cases",len(plans),flush=True)
     if not 1<=len(plans)<=256:raise ValueError("System campaign case budget")
     validator=load("system_fault_validate");public=load("signed_runtime_controller").public_file
     start=time.monotonic();seen={key:set() for key in ("image_id","key_sha256","challenge")}

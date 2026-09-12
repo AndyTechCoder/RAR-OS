@@ -4,6 +4,25 @@ No CLI, paths from callers, guest networking or owner-machine execution.
 import base64,json,os,time
 from pathlib import Path
 
+def settle_error(vm,receipt):
+    """Observe native fail-stop after EIO; an immediate controller kill is not proof."""
+    if receipt["plan"]["effect"] in ("before-cut","after-cut","torn-cut"):return
+    until=min(vm.deadline,time.monotonic()+25)
+    while True:
+        vm.service()
+        rows=vm.backends[1].records
+        hit=vm.fault_audit.scan(rows,receipt["plan"],rows[0],role="system")
+        if hit is None or any(hit[k]!=receipt[k] for k in
+            ("request_index","event_index","offset","length")):
+            raise ValueError("settle fault identity changed")
+        if any(row.get("type")=="request" and row.get("operation") in ("write","flush")
+            for row in rows[hit["event_index"]+1:]):
+            raise ValueError("native retried System mutation after error")
+        if vm.transaction_serial.serial_status(bytes(vm.serial),hit)=="reconciled":
+            vm.transaction_serial.serial_status(bytes(vm.serial),hit,True)
+            return
+        if time.monotonic()>=until:raise TimeoutError("native System error did not reconcile")
+
 def joined_fault(vm,observation,base):
     receipt=vm.fault_receipt(observation)
     if getattr(vm,"fault_role",None)!="system":raise ValueError("System fault owner required")
@@ -12,6 +31,7 @@ def joined_fault(vm,observation,base):
         {"code":None,"problem":None,"eof":False},
         {"code":21,"problem":"backend-failed","eof":True})
     if receipt["delivery"] not in allowed:raise ValueError("exact System fault delivery")
+    settle_error(vm,receipt)
     stopped=vm.destroy()
     if (stopped.get("joined") is not True or vm.cleanup_succeeded is not True or
         vm.qmp_drained is not True or len(stopped.get("backends",[]))!=3 or

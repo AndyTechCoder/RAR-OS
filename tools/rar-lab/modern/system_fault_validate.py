@@ -86,11 +86,12 @@ def fault_serial(serial,mode,matched):
     if serial.count("RAR-MODERN:UPDATE-REQUEST")!=(1 if mode=="install" else 0):
         raise ValueError("wrong update trigger count")
     rejected=serial.count("RAR-MODERN:UPDATE-REJECTED")
-    if rejected not in ((0,1) if mode=="install" else (0,)):
-        raise ValueError("unexpected rejection count")
+    if rejected!=0:
+        raise ValueError("System I/O uncertainty cannot report ordinary rejection")
     # A deliberate cut can truncate the exact expected reconcile panic emission.
     # Never permit a different panic or any panic lacking the backend fault proof.
-    helper("system_selector_fault").serial_status(serial.encode(),matched)
+    helper("system_selector_fault").serial_status(serial.encode(),matched,
+        matched is not None and matched["plan"]["effect"] in ("error","short-error"))
     if "RAR-PANIC" in serial and matched is None:raise ValueError("unproven panic")
 
 def validate(raw,boot,firmware_sizes,mode,case,factory,candidate):

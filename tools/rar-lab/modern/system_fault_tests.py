@@ -14,9 +14,9 @@ validator=load("system_fault_validate");visual=load("visual_oracle")
 profile=load("vm_profile");persist=load("persistence");audit=load("fault_audit")
 events=load("fault_events");launch=load("system_fault_launch")
 campaign=load("system_fault_controller")
-def fake(generation,byte):
-    data=bytearray(896);data[:8]=b"RARMODL0";data[56:60]=(512).to_bytes(4,"little")
-    data[72:80]=generation.to_bytes(8,"little");data[384:]=bytes([byte])*512
+def fake(generation,byte,size=896):
+    data=bytearray(size);data[:8]=b"RARMODL0";data[56:60]=(size-384).to_bytes(4,"little")
+    data[72:80]=generation.to_bytes(8,"little");data[384:]=bytes([byte])*(size-384)
     data[288:320]=bytes.fromhex(base.sha(data[:288]));return bytes(data)
 FACTORY,CANDIDATE=fake(1,1),fake(2,2)
 def rows_for(ready,operations,plan=None):
@@ -96,6 +96,7 @@ def document(mode="repair",case=0):
         if number==1 and mode=="repair":
             serial+="RAR-MODERN:UPDATE-REQUEST\nRAR-MODERN:STALE-AUTHORITY-REVOKED\nRAR-MODERN:UPDATE-INSTALLED\nRAR-MODERN:PRIVATE-MEMORY-RETIRED\n"
         if number==2:serial=serial+"RAR-MODERN:UPDATE-REQUEST\n" if mode=="install" else ""
+        if number==2 and not cut:serial+=load("system_selector_fault").PANIC.decode()
         stopped=dict(vm_pid=100+number,vm_returncode=-9,backends=reports,joined=True)
         proof=dict(cut=stopped,audit=summaries,argv=profile.argv(number,7,8,9,number>1),
             preflight=dict(raw={},verified=dict(rtc_path="/machine/unattached/device[7]")),
@@ -137,6 +138,23 @@ class Tests(unittest.TestCase):
                 with self.assertRaises(ValueError):validator.mutation_sequence(bad,FACTORY,CANDIDATE,mode,plan)
                 bad=rows+[dict(type="request",operation="flush",offset=0,length=0)]
                 with self.assertRaises(ValueError):validator.mutation_sequence(bad,FACTORY,CANDIDATE,mode,plan)
+    def test_realistic_sizes_and_fail_closed_case_budget(self):
+        for size in (897,24576,24577,131456):
+            factory,candidate=fake(1,1,size),fake(2,2,size)
+            for mode in ("install","repair"):
+                plans=oracle.system_fault_cases(factory,candidate,mode)
+                sectors=(size+511)//512
+                self.assertEqual(len(plans),5*(sectors+3))
+                operations=oracle.system_fault_operations(factory,candidate,mode)
+                self.assertEqual(len(operations),sectors+3)
+                self.assertEqual(operations[sectors-1]["length"],512)
+                if size>24576:
+                    def forbidden(*args):raise AssertionError("over-budget case executed")
+                    with self.assertRaises(ValueError):
+                        campaign.observe(lambda name:oracle,forbidden,None,None,None,None,None,{},forbidden,
+                            {"modern-settings-factory.layer":factory,"modern-settings-update.layer":candidate},mode)
+                else:self.assertLessEqual(len(plans),256)
+
     def test_complete_retained_envelopes(self):
         for mode in ("install","repair"):
             for case in (0,1,2,3,4,10,18,24):
@@ -146,6 +164,33 @@ class Tests(unittest.TestCase):
                     self.assertFalse(result["provenance_validated"])
                     self.assertFalse(result["milestone_complete"])
                     self.assertEqual(result["fresh_vms"],3)
+    def test_error_requires_observed_native_reconcile(self):
+        for mode in ("install","repair"):
+            for case in (2,4):
+                doc=document(mode,case);serial=doc["vm_proofs"][1]["serial"]
+                self.assertTrue(self.check(doc)["content_validated"])
+                doc["vm_proofs"][1]["serial"]=serial.split("RAR-PANIC")[0]
+                with self.assertRaises(ValueError):self.check(doc)
+                doc["vm_proofs"][1]["serial"]=serial[:-1]
+                with self.assertRaises(ValueError):self.check(doc)
+                doc["vm_proofs"][1]["serial"]="RAR-MODERN:UPDATE-REJECTED\n"+serial
+                with self.assertRaises(ValueError):self.check(doc)
+        scenario=load("system_fault_scenario");fixed=load("system_selector_fault")
+        plan=oracle.system_fault_cases(FACTORY,CANDIDATE,"repair")[2]
+        ready=dict(type="ready",kind="system",capacity=8388608,device=1,inode=11,readonly=False,export_readonly=False)
+        rows=rows_for(ready,oracle.system_fault_operations(FACTORY,CANDIDATE,"repair"),plan)
+        hit=audit.scan(rows,plan,ready,role="system");receipt=dict(hit)
+        vm=NS(deadline=100,backends=[None,NS(records=rows)],fault_audit=audit,
+            transaction_serial=fixed,serial=bytearray(fixed.PANIC),service=lambda:None)
+        with patch.object(scenario.time,"monotonic",return_value=0):scenario.settle_error(vm,receipt)
+        vm.serial=bytearray()
+        with patch.object(scenario.time,"monotonic",side_effect=[0,26]):
+            with self.assertRaises(TimeoutError):scenario.settle_error(vm,receipt)
+        vm.serial=bytearray(fixed.PANIC)
+        vm.backends[1].records=rows+[dict(type="request",operation="flush",offset=0,length=0)]
+        with patch.object(scenario.time,"monotonic",return_value=0):
+            with self.assertRaises(ValueError):scenario.settle_error(vm,receipt)
+
     def test_retained_claim_mutations_fail(self):
         doc=document()
         changes=[

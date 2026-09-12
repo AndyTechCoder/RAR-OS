@@ -45,6 +45,12 @@ one System write-error event in the final joined stream. Receipt-after-reap is
 not represented as event occurrence before kill. The exact backend fault was
 observed before destruction; process joins, stream completeness and fixed command
 causality are separate requirements. Data's existing receipt policy is unchanged.
+For non-cut error/short-error effects, immediate destruction is insufficient.
+The controller continues observing for at most25seconds until the complete exact
+native UPDATE-RECONCILE fatal frame is present, checking every intervening System
+request and refusing any subsequent mutation. Missing/truncated/wrong reconcile
+fails, and the independent retained validator requires the same complete frame.
+Only then does the controller destroy the whole VM. True cut effects are immediate.
 Unexpected exits, panics, peer failures, events or generic exceptions fail closed.
 
 Each mode has at most256 cases; no caller-provided paths, offsets, devices or
