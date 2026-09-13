@@ -13,6 +13,11 @@ def run(session):
     system_bytes=session.read_regular("/artifact/modern-system.img",8388608,exact=8388608)
     boot_hashes={p:base.sha(session.read_regular("/artifact/peer-"+p+"/boot.img",16777216,exact=16777216)) for p in ("a","b")}
     fixtures=[];initial=[];pair=None;frames=[];steps=[]
+    # root was exclusively created above, inside the isolated cloud tmpfs.
+    # No caller/guest path enters the two fixed QEMU capture destinations.
+    paths={p:session.load("expansion_profile").capture_path(p) for p in ("a","b")}
+    if any(os.path.lexists(path) for path in paths.values()):
+        raise ValueError("capture destinations must be absent in fresh private root")
     def capture(vm,peer,stage,value=None):
         until=min(vm.deadline,time.monotonic()+12)
         for _ in range(24):
@@ -60,6 +65,8 @@ def run(session):
         stopped=pair.destroy()
         if stopped.get("joined") is not True or stopped.get("network_closed") is not True or len(stopped.get("guests",[]))!=2:
             raise ValueError("joined whole pair required")
+        wire={p:session.read_regular(paths[p],8192) for p in ("a","b")}
+        wire_proof=session.load("expansion_wire").validate(wire,left,right)
         proofs=[]
         for index,(peer,vm,cut) in enumerate(zip(("a","b"),pair.vms,stopped["guests"])):
             audits=[]
@@ -76,8 +83,10 @@ def run(session):
                 qmp_drained=vm.qmp_drained,serial=bytes(vm.serial).decode("ascii")))
         elapsed=time.monotonic()-started
         if not 0<elapsed<180:raise ValueError("bounded whole scenario duration")
-        return dict(schema="rar-expansion-pair-v0",status="observed",challenges=[left,right],
+        return dict(schema="rar-expansion-pair-v1",status="observed",challenges=[left,right],
             frames=frames,steps=steps,vm_proofs=proofs,pair_cleanup=stopped,
+            captured_wire={p:base64.b64encode(wire[p]).decode("ascii") for p in ("a","b")},
+            wire_proof=wire_proof,
             initial_data=[base64.b64encode(x).decode("ascii") for x in initial],
             frozen_data=[base64.b64encode(fixtures[i].freeze(pair.vms)).decode("ascii") for i in (0,2)],
             data_unchanged=True,system_sha256=base.sha(system_bytes),boot_sha256=boot_hashes,

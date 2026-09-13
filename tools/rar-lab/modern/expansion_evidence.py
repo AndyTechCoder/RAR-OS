@@ -52,8 +52,8 @@ def validate(raw,boots,system,firmware_sizes):
     value=parse(raw)
     fields={"schema","status","challenges","frames","steps","vm_proofs","pair_cleanup",
             "initial_data","frozen_data","data_unchanged","system_sha256","boot_sha256",
-            "elapsed_milliseconds","milestone_complete"}
-    if (type(value) is not dict or set(value)!=fields or value["schema"]!="rar-expansion-pair-v0" or
+            "elapsed_milliseconds","milestone_complete","captured_wire","wire_proof"}
+    if (type(value) is not dict or set(value)!=fields or value["schema"]!="rar-expansion-pair-v1" or
         value["status"]!="observed" or value["milestone_complete"] is not False or
         value["data_unchanged"] is not True):
         raise ValueError("exact nonaccepting pair envelope")
@@ -67,6 +67,11 @@ def validate(raw,boots,system,firmware_sizes):
     if type(challenges) is not list or len(challenges)!=2:raise ValueError("two fresh challenges")
     a,b=challenges;helper("visual_oracle").value_check(a);helper("visual_oracle").value_check(b)
     if a==b:raise ValueError("distinct bidirectional challenges")
+    captured=value["captured_wire"]
+    if type(captured) is not dict or set(captured)!={"a","b"}:raise ValueError("two captured wires")
+    wire={p:base.decoded(captured[p],204) for p in ("a","b")}
+    checked_wire=helper("expansion_wire").validate(wire,a,b)
+    if base.canonical(checked_wire)!=base.canonical(value["wire_proof"]):raise ValueError("independent wire proof mismatch")
     for name in ("initial_data","frozen_data"):
         if type(value[name]) is not list or len(value[name])!=2:raise ValueError("two Data images")
     initial=[base.decoded(x,99328) for x in value["initial_data"]]
@@ -134,7 +139,7 @@ def validate(raw,boots,system,firmware_sizes):
         if base.canonical(audits)!=base.canonical(proof["audit"]):raise ValueError("storage audit mismatch")
     if len(set(pids))!=2 or len(set(identities))!=6:raise ValueError("independent guests and six storage domains")
     return dict(content_validated=True,guest_network_roundtrips=2,frames=11,data_unchanged=True,
-                network_closed=True,milestone_complete=False)
+                network_closed=True,captured_wire=checked_wire,milestone_complete=False)
 
 def actual_refusals(raw,boots,system,sizes):
     """Mutate retained evidence only after the actual positive proof passes."""
@@ -142,7 +147,7 @@ def actual_refusals(raw,boots,system,sizes):
     changes=[("status","failed"),("milestone_complete",True),("data_unchanged",False),
              ("elapsed_milliseconds",0),("elapsed_milliseconds",True),("steps",[]),
              ("challenges",["a"*32,"a"*32]),("system_sha256","0"*64),("boot_sha256",{}),
-             ("frames",[]),("vm_proofs",[]),("pair_cleanup",{}),("frozen_data",[])]
+             ("captured_wire",{}),("wire_proof",{}),("frames",[]),("vm_proofs",[]),("pair_cleanup",{}),("frozen_data",[])]
     for key,replacement in changes:
         changed=dict(original);changed[key]=replacement
         try:validate(helper("runtime_evidence").canonical(changed),boots,system,sizes)

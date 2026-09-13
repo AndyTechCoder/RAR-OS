@@ -776,6 +776,7 @@ def self_test():
             fixture["network-children"]=[{"name":"rar-net-device","type":"child<ne2k_isa>"}]
             fixture["network"]=("rar-net-device: index=0,type=nic,model=ne2k_isa,macaddr="+
                 expansion_profile.MACS[mode]+"\n \\ rar-net: index=0,type=socket,socket: fd="+str(net_fd)+" unix\n")
+            fixture["network"]+=expansion_profile.fixture_filter(mode)
             line="  0000000000000300-000000000000031f (prio 0, i/o): ne2000 owner:{dev id=rar-net-device}\n"
             fixture["ports"]=fixture["ports"].replace("  0000000000000376",line+"  0000000000000376")
         selected=profile if mode is None else candidate
