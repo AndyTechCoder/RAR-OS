@@ -109,7 +109,7 @@ impl Channel {
         self.tx[self.tx_len]=Frame::EMPTY;
         match write(&frame.bytes[..frame.len]) {
             Ok(())=>{self.stats.sent=self.stats.sent.saturating_add(1);Ok(())},
-            Err(())=>{self.stats.io_failed=self.stats.io_failed.saturating_add(1);Err(Error::Io)}
+            Err(())=>{self.stats.io_failed=self.stats.io_failed.saturating_add(1);self.revoke();Err(Error::Io)}
         }
     }
     /// Charge ALL ingress, including invalid frames and padding, before parsing.
@@ -118,7 +118,7 @@ impl Channel {
         if interface!=self.interface { return Err(Error::Denied); }
         self.live(now)?;
         if let Err(error)=self.rx_budget.consume(frame.len()) {
-            self.stats.dropped=self.stats.dropped.saturating_add(1);return Err(error);
+            self.stats.dropped=self.stats.dropped.saturating_add(1);self.revoke();return Err(error);
         }
         let payload=match network::decode(frame,self.local,self.peer) {
             Ok(payload)=>payload,
@@ -201,9 +201,10 @@ mod tests {
         assert_eq!(c.transmit(1,11,|_|panic!()),Err(Error::Empty));
     }
     #[test] fn uncertain_io_consumes_frame_without_automatic_replay(){
-        let mut c=channel();c.enqueue(6,1<<40,10,b"x").unwrap();let before=c.budgets();
+        let mut c=channel();c.enqueue(6,1<<40,10,b"x").unwrap();c.enqueue(6,1<<40,10,b"second").unwrap();let before=c.budgets();
         assert_eq!(c.transmit(1,11,|_|Err(())),Err(Error::Io));
-        assert_eq!(c.transmit(1,12,|_|panic!()),Err(Error::Empty));
+        assert_eq!(c.transmit(1,12,|_|panic!()),Err(Error::Closed));
+        assert_eq!(c.pending(),(0,0));
         assert_eq!(c.budgets(),before);assert_eq!(c.stats().io_failed,1);
     }
     #[test] fn ingress_charges_invalid_padding_and_full_frames_before_parsing(){
@@ -238,6 +239,33 @@ mod tests {
         c.ingress(1,0,&f[..n]).unwrap();
         assert_eq!(c.ingress(1,0,&f[..n]),Err(Error::Budget));
         assert_eq!(c.budgets(),(Budget{packets:99,bytes:0},Budget{packets:0,bytes:0}));
+    }
+    #[test] fn ingress_budget_failure_is_sticky_even_for_smaller_later_frames(){
+        let mut c=Channel::new(6,1,1,A,B,0,100,Budget{packets:1,bytes:60},
+            Budget{packets:5,bytes:60}).unwrap();
+        let (large,n)=inbound(&[0;100]);
+        assert_eq!(c.ingress(1,0,&large[..n]),Err(Error::Budget));
+        let(small,n)=inbound(b"");
+        assert_eq!(c.ingress(1,0,&small[..n]),Err(Error::Closed));
+        assert_eq!(c.pending(),(0,0));
+    }
+    #[test] fn all_invalid_construction_boundaries_refuse(){
+        let good=Budget{packets:1,bytes:60};
+        for (principal,incarnation,interface,local,peer,now,expiry,tx,rx) in [
+            (0,1,1,A,B,0,10,good,good),(1,0,1,A,B,0,10,good,good),
+            (1,1,0,A,B,0,10,good,good),(1,1,1,A,B,10,10,good,good),
+            (1,1,1,A,B,11,10,good,good),(1,1,1,A,A,0,10,good,good),
+            (1,1,1,A,Endpoint{mac:A.mac,..B},0,10,good,good),
+            (1,1,1,A,Endpoint{ip:A.ip,..B},0,10,good,good),
+            (1,1,1,Endpoint{port:0,..A},B,0,10,good,good),
+            (1,1,1,A,Endpoint{port:0,..B},0,10,good,good),
+            (1,1,1,A,B,0,10,Budget{packets:0,..good},good),
+            (1,1,1,A,B,0,10,good,Budget{packets:0,..good}),
+            (1,1,1,A,B,0,10,Budget{bytes:59,..good},good),
+            (1,1,1,A,B,0,10,good,Budget{bytes:59,..good})
+        ]{
+            assert!(Channel::new(principal,incarnation,interface,local,peer,now,expiry,tx,rx).is_err());
+        }
     }
     #[test] fn invalid_configuration_and_oversize_have_no_partial_effect(){
         for interface in [0]{

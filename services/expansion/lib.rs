@@ -3,3 +3,4 @@
 #![forbid(unsafe_code)]
 pub mod network;
 pub mod channel;
+pub mod ne2k;

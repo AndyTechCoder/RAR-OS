@@ -87,13 +87,13 @@ It copies and encodes the exact packet before reserving budget. Both send and
 receive queues hold at most four entries. Transmit budgets count the complete
 Ethernet frame, including headers and padding. Every admitted ingress attempt,
 including malformed packets and full-queue drops, consumes its packet/wire-byte
-budget before parsing. Budget exhaustion returns Budget and never resets itself;
-the adapter must stop polling ingress on exhausted budget until a new explicitly
-authorized channel is established.
+budget before parsing. Ingress budget exhaustion returns Budget and permanently revokes the channel,
+clearing queued data. Smaller later frames cannot revive it. A new channel
+requires fresh explicit policy authorization.
 
 Driver transmission is one synchronous bounded attempt inside an exclusive
-Channel borrow. No frame slice escapes the call and failure never refunds or
-silently retries. The native driver must enforce its own deadline; a callback
+Channel borrow. No frame slice escapes the call. Any driver error revokes the entire channel,
+clears both queues and never refunds or silently retries. The native driver must enforce its own deadline; a callback
 does not itself prove hardware termination. Revocation linearizes when the
 single-owner service processes it; it clears both unsent and unread queues.
 It cannot undo already transmitted frames or already delivered application data.

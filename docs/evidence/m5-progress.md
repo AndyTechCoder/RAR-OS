@@ -33,3 +33,12 @@ The next change implements service-owned packet/grant coupling, full wire-byte
 budgets, four-entry send/receive queues, revocation/expiry cleanup, copied ingress
 and single-attempt transmission. Its native adapter and NIC remain unimplemented.
 No additional guest or host authority is activated by pure channel tests.
+
+## Native integration candidate
+
+Independent review identified physical slot7 as reserved for Settings rollback;
+networking must use an explicit distinct physical/logical task mapping.
+The NE2000 candidate now implements actual register/ring/PIO driver logic through
+an Io trait, with model tests and no native port adapter or activated profile.
+Channel remediation makes driver uncertainty and ingress exhaustion sticky,
+clearing pending traffic. Exact revised source checks/review remain required.
