@@ -138,18 +138,20 @@ mod tests{
     const B:Endpoint=Endpoint{mac:[2,0,0,0,0,2],ip:[10,42,0,2],port:4001};
     #[derive(Default)]
     struct Wire{now:u64,after_receive:Option<u64>,fail:u8,reads:usize,writes:usize,
-        clocks:usize,closed:usize,incoming:Option<std::vec::Vec<u8>>,outgoing:std::vec::Vec<u8>}
+        clocks:usize,closed:usize,closed_observer:std::rc::Rc<std::cell::Cell<usize>>,
+        bad_length:Option<usize>,incoming:Option<std::vec::Vec<u8>>,outgoing:std::vec::Vec<u8>}
     impl Link for Wire{
         fn ticks(&mut self)->Result<u64,()>{self.clocks+=1;if self.fail==1{Err(())}else{Ok(self.now)}}
         fn send(&mut self,b:&[u8])->Result<(),()>{self.writes+=1;
             if self.fail==2{return Err(());}self.outgoing=b.to_vec();Ok(())}
         fn receive(&mut self,out:&mut[u8;MAX_FRAME])->Result<Option<usize>,()>{
             self.reads+=1;if let Some(n)=self.after_receive{self.now=n;}
-            if self.fail==3{return Err(());}if self.fail==4{return Ok(Some(MAX_FRAME+1));}
+            if self.fail==3{return Err(());}if let Some(n)=self.bad_length{return Ok(Some(n));}
+            if self.fail==4{return Ok(Some(MAX_FRAME+1));}
             if let Some(b)=self.incoming.take(){out[..b.len()].copy_from_slice(&b);Ok(Some(b.len()))}
             else{Ok(None)}
         }
-        fn close(&mut self){self.closed+=1;}
+        fn close(&mut self){self.closed+=1;self.closed_observer.set(self.closed);}
     }
     fn policy()->Policy{Policy{principal:6,incarnation:1<<40,interface:1,local:A,peer:B,
         issued:0,expires:100,tx:Budget{packets:8,bytes:4096},rx:Budget{packets:8,bytes:4096}}}
@@ -217,7 +219,9 @@ mod tests{
     }
     #[test]fn every_link_failure_revokes_both_queues_and_never_retries(){
         for fault in 1..=4{
-            let mut s=service();request(&mut s,1,b"one");request(&mut s,1,b"two");
+            let mut s=service();s.link.incoming=Some(incoming(b"queued reply"));s.poll().unwrap();
+            request(&mut s,1,b"one");request(&mut s,1,b"two");
+            assert_eq!(s.channel.pending(),(2,1));
             s.link.fail=fault;assert_eq!(s.poll(),Err(Status::Io));assert_closed(&mut s);
         }
     }
@@ -236,6 +240,24 @@ mod tests{
         for (op,id,n)in [(0,1,0),(4,1,0),(1,0,0),(1,1,113),(2,1,1),(3,1,1)]{
             let mut out=[0xaa;MESSAGE];
             assert_eq!(request_bytes(op,id,&std::vec![0;n],&mut out),None);assert_eq!(out,[0;MESSAGE]);
+        }
+    }
+
+    #[test]fn every_invalid_driver_length_closes_before_slice_construction(){
+        for n in [0,1,59,MAX_FRAME+1,usize::MAX]{
+            let mut s=service();s.link.bad_length=Some(n);
+            assert_eq!(s.poll(),Err(Status::Io));assert_closed(&mut s);
+        }
+    }
+    #[test]fn invalid_policy_closes_supplied_link_exactly_once(){
+        for field in 0..5{
+            let link=Wire::default();let closed=link.closed_observer.clone();
+            let mut p=policy();match field{
+                0=>p.principal=0,1=>p.incarnation=0,2=>p.interface=0,
+                3=>p.expires=p.issued,_=>p.tx.packets=0,
+            }
+            assert!(matches!(Service::new(link,p),Err(Status::Invalid)));
+            assert_eq!(closed.get(),1);
         }
     }
 }
