@@ -18,7 +18,8 @@ impl Runtime{
     fn construct_private(&mut self,payload:&[u8],index:usize,generation:u64,stack_pages:u64,
         handoff:abi::Boot)->Result<(),Error>{
         let root=self.stage_context();
-        if self.current!=8||index>7||!self.stage_readonly||self.stage_view||
+        if self.current!=8||(handoff.role==7&&(index!=model::NETWORK_SLOT||handoff.version!=abi::EXPANSION_VERSION))||
+            (handoff.role!=7&&index>7)||!self.stage_readonly||self.stage_view||
             !matches!(stack_pages,4|16)||generation==0||!abi::valid_boot(&handoff){
             return Err(Error::Denied);
         }
@@ -223,10 +224,11 @@ impl Runtime{
         let b=support::desktop_bootstrap(&plan,5,self.processes[t.endpoint().slot as usize].entry,
             self.hardware.pitch,self.hardware.format)?;
         let result=(||->Result<(),Error>{
-            for role in [0usize,1,2,3,4,6]{
+            for &role in plan.roles(){
                 let handoff=support::desktop_bootstrap(&plan,role,layout.entry,
                     self.hardware.pitch,self.hardware.format)?;
-                self.construct_private(SERVICE,role,handoff.generation,16,handoff)?;
+                let slot=plan.binding(role).ok_or(Error::Stale)?.slot as usize;
+                self.construct_private(SERVICE,slot,handoff.generation,16,handoff)?;
             }
             Ok(())
         })();
@@ -247,11 +249,12 @@ impl Runtime{
         }
         let d=self.desktop.as_ref().unwrap_or_else(||fatal("RAR-PANIC:CODE=BOOT-RECONCILE"));
         if d.token!=token||d.seal!=seal{fatal("RAR-PANIC:CODE=BOOT-RECONCILE");}
-        for role in [0usize,1,2,3,4,6]{
+        for &role in d.plan.roles(){
             let e=d.plan.binding(role).unwrap_or_else(||fatal("RAR-PANIC:CODE=BOOT-RECONCILE"));
-            let p=self.processes[role];
-            let physical=private_region(self.arena,role);
-            if e.slot as usize!=role||p.memory!=retirement::Memory::Live||p.state!=State::Blocked||
+            let slot=if role==model::NETWORK_PRINCIPAL{model::NETWORK_SLOT}else{role};
+            let p=self.processes[slot];
+            let physical=private_region(self.arena,slot);
+            if e.slot as usize!=slot||p.memory!=retirement::Memory::Live||p.state!=State::Blocked||
                 p.generation!=e.incarnation||p.root!=physical||p.stack_end!=STACK_END||
                 p.kernel_bottom!=physical+KERNEL_BOTTOM||p.kernel_top!=physical+KERNEL_TOP||
                 p.frame%16!=0||p.frame<p.kernel_bottom||
@@ -263,7 +266,7 @@ impl Runtime{
                 fatal("RAR-PANIC:CODE=BOOT-RECONCILE");
             }
         }
-        let d=self.desktop.take().unwrap();let mut b=d.boot;
+        let d=self.desktop.take().unwrap();let mut b=d.boot;let expansion=d.plan.expansion();
         self.policy.as_mut().unwrap().publish_desktop(self.current,handle,d.plan)
             .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=BOOT-RECONCILE"));
         b.peers=self.policy.as_ref().unwrap().binding_generations();
@@ -272,6 +275,7 @@ impl Runtime{
         for role in [0usize,1,2,3,4,6,t.endpoint().slot as usize]{
             self.processes[role].state=State::Runnable;
         }
+        if expansion{self.processes[model::NETWORK_SLOT].state=State::Runnable;}
         record("RAR-MODERN:DESKTOP-PUBLISHED");
     }
 }
