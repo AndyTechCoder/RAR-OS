@@ -21,6 +21,7 @@ pub const STAGE_COPY:u64=9;
 pub const STAGE_VIEW:u64=10;
 pub const SETTINGS_BINDING:u64=11;
 pub const LAB_INPUT:u64=12;
+pub const NETWORK:u64=13;
 pub const STAGE_VIEW_ADDRESS:u64=0x1400000;
 pub const STAGE_VIEW_BYTES:usize=32;
 pub const STAGE_CAP:usize=10;
@@ -78,7 +79,6 @@ pub fn valid_boot(b:&Boot)->bool {
         !(0x400000..0x500000).contains(&b.entry)||b.reserved!=[0;4]||b.version==VERSION&&b.peers[7]!=0||
         b.kernel_probe!=0||b.peer_probe!=0 {return false;}
     let expansion=b.version==EXPANSION_VERSION;
-    if expansion&&b.phase==ACTIVE&&b.role<=7&&b.peers[7]==0{return false;}
     let mask=match b.phase {
         ACTIVE=>{
             let Some(mask)=active_mask(b.role,expansion) else{return false;};
@@ -246,7 +246,7 @@ mod tests {
         let b=fixture(4);
         for field in 0..11 {
             let mut bad=b;
-            match field {0=>bad.magic=0,1=>bad.version=2,2=>bad.bytes=176,3=>bad.generation=0,
+            match field {0=>bad.magic=0,1=>bad.version=3,2=>bad.bytes=176,3=>bad.generation=0,
                 4=>bad.reserved[0]=1,5=>bad.phase=2,6=>bad.health_token=1,
                 7=>bad.peers[7]=1,8=>bad.entry=0x500000,9=>bad.kernel_probe=0x2000000,
                 _=>bad.peer_probe=0x600000}
@@ -334,7 +334,7 @@ mod tests {
         let mut b=fixture(6);b.version=EXPANSION_VERSION;b.peers[7]=1<<42;
         b.caps[5]=(1<<32)|6;assert!(valid_boot(&b));
         let mut bad=b;bad.version=VERSION;assert!(!valid_boot(&bad));
-        let mut bad=b;bad.peers[7]=0;assert!(!valid_boot(&bad));
+        let mut offline=b;offline.peers[7]=0;assert!(valid_boot(&offline));
         let mut bad=b;bad.caps[5]=0;assert!(!valid_boot(&bad));
         let mut network=Boot{magic:MAGIC,version:EXPANSION_VERSION,bytes:BOOT_BYTES,
             role:7,generation:1<<42,entry:0x401000,..Boot::EMPTY};

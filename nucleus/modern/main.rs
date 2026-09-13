@@ -1,5 +1,7 @@
 //! Modern kernel entry: protected processes with Modern policy and fixed PIO.
 //! Compiled only by a distinct, not-yet-activated cloud Modern composition.
+#[cfg(all(rar_expansion,not(rar_signed_updates)))]
+compile_error!("Expansion requires the signed bootstrap composition");
 mod model;
 mod support;
 mod retirement;
@@ -61,12 +63,12 @@ struct NativeDesktop{plan:model::DesktopHandover,boot:abi::Boot,seal:u64,token:u
 struct Runtime{
     processes:[Process;TASKS],current:usize,arena:u64,proofs:u8,ready:bool,
     image_base:u64,image_size:u64,hardware:BootHardware,desktop:Option<NativeDesktop>,
-    policy:Option<model::Runtime>,device:Option<native_pio::Adapter>,ticks:Option<u64>,
+    policy:Option<model::Runtime>,device:Option<native_pio::Adapter>,network:Option<native_net::Adapter>,ticks:Option<u64>,
     handover:Option<(model::Handover,abi::Boot,u64)>,
     staging:Option<staging::Buffer<'static>>,bootstrap_tables:usize,stage_readonly:bool,stage_view:bool,
 }
 static mut RUNTIME:Runtime=Runtime{processes:[Process::EMPTY;TASKS],current:0,arena:0,proofs:0,ready:false,image_base:0,image_size:0,hardware:BootHardware::EMPTY,desktop:None,
-    policy:None,device:None,ticks:Some(0),handover:None,staging:None,bootstrap_tables:0,stage_readonly:false,stage_view:false};
+    policy:None,device:None,network:None,ticks:Some(0),handover:None,staging:None,bootstrap_tables:0,stage_readonly:false,stage_view:false};
 fn private_region(arena:u64,index:usize)->u64{
     retirement::region(arena,boot::ARENA_PAGES,index)
         .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=PRIVATE-GEOMETRY"))
@@ -222,6 +224,13 @@ pub unsafe fn start(info:&boot::BootInfo)->!{
     // The adapter never retries or resets; any failed initialization halts.
     runtime.device=Some(unsafe{native_pio::Adapter::initialize()}
         .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=MODERN-PIO-INIT")));
+    #[cfg(rar_expansion)]
+    {
+        // SAFETY: only a separately reviewed Expansion cloud profile may select
+        // this build flag. Exact fixed NIC/PIC ownership is verified externally.
+        runtime.network=Some(unsafe{native_net::Adapter::initialize()}
+            .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=NETWORK-PIO-INIT")));
+    }
     record("RAR-MODERN:PROCESSES-READY");
     let first=runtime.processes[runtime.current];
     unsafe{arch::activate(first.root,first.kernel_top);arch::first(first.frame)}
@@ -324,6 +333,13 @@ impl Runtime{
                 // Current is saved CPU ownership; policy and device borrow are
                 // serialized with revocation under the trap's IF=0 invariant.
                 unsafe{device.execute(policy,current,frame.rdi,frame.rsi,frame.rdx,frame.r10)}
+            }
+            abi::NETWORK if cfg!(rar_expansion)=>{
+                let policy=self.policy.as_ref().ok_or(Error::Denied)?;
+                let network=self.network.as_mut().ok_or(Error::Denied)?;
+                // SAFETY: serialized actual trapped slot and live kernel policy,
+                // fixed certified NIC, CPL0/IF=0 and sole CPU, no user pointers.
+                unsafe{network.execute(policy,current,frame.rdi,frame.rsi,frame.rdx,frame.r10)}
             }
             abi::LAB_INPUT=>{
                 self.policy.as_ref().ok_or(Error::Denied)?.stage_copy(current,frame.rdi)?;
@@ -775,6 +791,11 @@ impl Runtime{
         }
     }
     fn synchronize_revocations(&mut self){
+        if let (Some(network),Some(policy))=(&mut self.network,&self.policy){
+            // SAFETY: same exclusive IF=0 kernel context as syscall dispatch.
+            // Stop revoked hardware ownership before another user is scheduled.
+            unsafe{network.reconcile(policy);}
+        }
         if self.desktop.as_ref().is_some_and(|d|{
             let policy=self.policy.as_ref().unwrap();
             policy.trial().is_none_or(|t|t.token()!=d.token||t.image_seal()!=d.seal)||
@@ -782,7 +803,7 @@ impl Runtime{
         }){self.desktop=None;}
         if self.handover.is_some_and(|(h,_,_)|self.policy.as_ref().unwrap().trial().is_none_or(|t|t.token()!=h.token())){self.handover=None;}
         for i in 0..TASKS{
-            let prepared=self.desktop.is_some()&&[0usize,1,2,3,4,6].contains(&i);
+            let prepared=support::prepared_slot(self.desktop.as_ref().map(|d|&d.plan),i);
             if i!=15&&!prepared&&self.policy.as_ref().unwrap().state(i)==Ok(model::State::Vacant){
                 self.processes[i].state=State::Dead;
                 self.processes[i].memory=retirement::retire(self.processes[i].memory);

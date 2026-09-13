@@ -1,7 +1,9 @@
 # Candidate Expansion kernel composition v2
 
-Status: source candidate only. No native entry selects expansion_bootstrap().
-No network syscall, port adapter, service dispatch or guest profile is active.
+Status: source candidate only. The new rar_expansion build flag selects the
+composition only alongside rar_signed_updates. No existing target build or
+cloud profile enables that flag. Source CI emits Linux objects only; it does
+not link, execute or activate a guest.
 This is not authority to execute a new VM profile.
 
 ## Explicit mapping
@@ -29,7 +31,11 @@ This is a bounded initial network-app channel, not a general grant-management AP
 The private368-byte Boot layout remains fixed; version2 identifies Expansion.
 Existing version1 masks and peer7-zero rule are preserved.
 Version2 Terminal adds send slot5; version2 Network has only slots0,1,11.
-Active desktop roles0..7 require a nonzero network peer incarnation.
+Network's own active role7 requires its exact nonzero self incarnation.
+Other roles may observe peer7 absent after isolated Network failure; a stale
+named-send grant grants no destination or new authority. They continue normal
+offline work, including Settings update/rollback. Networking stays unavailable
+until a separately controlled reboot; no automatic adapter reinitialization.
 Bootstrap8/9 and idle15 may precede network publication. Settings trials retain
 their single health grant and may precede publication. Trial activation
 requires identical bootstrap version as well as identity/entry consistency.
@@ -51,11 +57,26 @@ logical capability revocation alone is not proof that hardware has stopped.
 Tests cover prepare-before-publication denial, cross-capability refusal,
 wrong physical caller, stale handles, collision/revalidation failure, explicit
 slot mapping, stamped IPC, network death, Settings update/cutover/fault while
-network messages are queued, and all version2 descriptor masks. Existing
+network messages are queued, and all version2 descriptor masks, the exact prepared-root predicate used by
+native synchronization, and successful Settings handover after Network loss. Existing
 version1/kernel/source regressions remain required. Native root/PIO/scheduling
 and causal paired-guest evidence are not replaced by these tests.
 
-The existing native entry still chooses the legacy constructor. Selecting v2
-must be coupled with the remaining reviewed Network syscall/port adapter,
-native service dispatcher and fixed closed cloud profile; do not select it
-piecemeal to produce a boot-success claim.
+Existing builds still choose the legacy constructor. Candidate flag-selected
+code supplies Network syscall13, an exclusive port leaf, revocation reconciliation
+and role7 native service loop. Prepared native roots are protected by the plan's
+explicit physical mapping, including slot10, while publication is pending.
+Native service work polls hardware before at most one client message, including
+while its single owned reply waits under bounded kernel-queue backpressure.
+Full peer identity is checked before request dispatch. All I/O crosses the
+kernel Network grant; no user-mode port instructions are introduced.
+
+The A/B compile-time peer fixture chooses two static MAC/IP/port endpoints,
+not production discovery or authenticated identity. Each profile has finite
+packet/byte budgets and60,000 delivered-tick expiry. No automatic device reset,
+grant renewal, reconnect or retransmit occurs. Service failure closes the link
+and exits; kernel revocation reconciliation stops a previously bound NIC.
+
+A fixed closed cloud profile, target linking/build closure and actual guest
+proofs are still mandatory before selecting this source in a runtime workflow.
+Do not infer native success from the object-only compile path.

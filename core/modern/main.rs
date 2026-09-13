@@ -3,7 +3,15 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 #[cfg(all(rar_signed_updates,rar_settings_only))]
 compile_error!("signed supervisor composition and standalone Settings are distinct builds");
+#[cfg(all(rar_expansion,not(rar_signed_updates)))]
+compile_error!("Expansion requires signed bootstrap");
 mod abi;
+#[cfg(rar_expansion)] #[path="../../services/expansion/network.rs"] mod network;
+#[cfg(rar_expansion)] #[path="../../services/expansion/channel.rs"] mod channel;
+#[cfg(rar_expansion)] #[path="../../services/expansion/ne2k.rs"] mod ne2k;
+#[cfg(rar_expansion)] #[path="../../services/expansion/service.rs"] mod network_service;
+#[cfg(rar_expansion)] #[path="../../sdk/expansion/rust/wire.rs"] mod sdk;
+#[cfg(rar_expansion)] mod expansion;
 #[path="../../apps/modern/settings.rs"] mod settings;
 #[path="../../apps/modern/model.rs"] mod file_ui;
 #[path="../desktop/memory.rs"] mod memory;
@@ -117,6 +125,8 @@ fn boot_snapshot()->Boot {
         0=>apps::shell(&boot),1=>drivers::storage(&boot),2=>drivers::keyboard(&boot),
         3=>drivers::compositor(&boot),4=>apps::files(&boot),5=>apps::settings(&boot),
         6=>apps::terminal(&boot),
+        #[cfg(rar_expansion)]
+        7=>expansion::network(&boot),
         8=>{
             #[cfg(rar_signed_updates)]
             {update_runtime::manager(&boot)}

@@ -187,6 +187,22 @@ printf '%s\n' 'Expansion: bounded packet/grant tests and no_std compile passed; 
     tools/rar-lab/expansion/network_conformance.rs -o "$work/focused-tests"
 /usr/bin/python3 -I -B tools/rar-lab/expansion/network_reference.py | "$work/focused-tests"
 
+# Compile both closed-peer Expansion candidates to objects only. No profile
+# activation, UEFI link, target execution, ports or network backend is permitted.
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 \
+    --crate-type lib --emit=obj -C panic=abort -C no-redzone=yes -C debuginfo=0 \
+    --cfg rar_platform --cfg rar_modern --cfg rar_modern_compile_only \
+    --cfg rar_signed_updates --cfg rar_expansion --cfg 'rar_profile="normal"' \
+    nucleus/foundation/main.rs -o "$work/focused.rlib"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 \
+    --crate-type lib --emit=obj -C panic=abort -C no-redzone=yes -C debuginfo=0 \
+    --cfg rar_signed_updates --cfg rar_expansion core/modern/main.rs -o "$work/focused.rlib"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 \
+    --crate-type lib --emit=obj -C panic=abort -C no-redzone=yes -C debuginfo=0 \
+    --cfg rar_signed_updates --cfg rar_expansion --cfg rar_network_peer_b \
+    core/modern/main.rs -o "$work/focused.rlib"
+printf '%s\n' 'Expansion native composition: object-only type checks; guest/profile activation NOT claimed'
+
 # Bound the final stripped executable, no_std library and signed codec fixture in the
 # existing cloud-only tmpfs; no owner files or retained evidence are affected.
 set -- $(/usr/bin/du -sk "$work")
