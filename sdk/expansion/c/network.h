@@ -2,6 +2,7 @@
 #define RAR_EXPANSION_NETWORK_H
 /* RAR-owned experimental wire SDK. No syscalls, allocation or device authority.
  * Caller supplies valid, non-overlapping client/output/length/response storage.
+ * Raw reply bytes must not overlap client or response-structure storage.
  * Payload may overlap the output buffer; it is copied before output clearing.
  * Reply payload is borrowed from raw for the lifetime of that caller buffer.
  */

@@ -74,6 +74,28 @@ int main(void) {
         assert(rnet_encode(RNET_SEND,UINT64_MAX,out,i,out,&n)==RNET_SUCCESS);
         assert(n==16+i && (i==0 || memcmp(out+16,payload,i)==0));
     }
+    for (op=1;op<=3;op++) for (status=0;status<=8;status++) {
+        int terminal=status==RNET_CLOSED || status==RNET_IO || (op==RNET_CLOSE && status==RNET_OK);
+        assert(rnet_init(&c,7,1)==RNET_SUCCESS);
+        assert(rnet_begin(&c,op,NULL,0,out,&n)==RNET_SUCCESS);
+        response(raw,op,status,1,0);
+        assert(rnet_accept(&c,7,1,raw,16,NULL)==RNET_E_INVALID);
+        assert(c.pending_op==op);
+        assert(rnet_accept(&c,7,1,raw,16,&r)==RNET_SUCCESS);
+        assert(c.closed==terminal);
+        assert(rnet_begin(&c,RNET_SEND,NULL,0,out,&n)==(terminal?RNET_E_CLOSED:RNET_SUCCESS));
+    }
+    assert(rnet_init(&c,6,1)==RNET_E_INVALID && c.closed && c.pending_op==0);
+    assert(rnet_init(&c,7,0)==RNET_E_INVALID && c.closed && c.pending_id==0);
+    for (i=0;i<=112;i++) {
+        uint8_t overlapping[256];
+        for (j=0;j<i;j++) overlapping[32+j]=(uint8_t)j;
+        assert(rnet_encode(RNET_SEND,1,overlapping+32,i,overlapping,&n)==RNET_SUCCESS);
+        assert(n==16+i && (i==0 || memcmp(overlapping+16,payload,i)==0));
+        for (j=0;j<i;j++) overlapping[j]=(uint8_t)j;
+        assert(rnet_encode(RNET_SEND,1,overlapping,i,overlapping+32,&n)==RNET_SUCCESS);
+        assert(n==16+i && (i==0 || memcmp(overlapping+48,payload,i)==0));
+    }
     /* 3 operations x payload lengths x 3 full-width IDs, exact length + all
        128 bytes including zero tail. The Rust consumer independently encodes. */
     for (op=1;op<=3;op++) for (i=0;i<=(op==1?112u:0u);i++) for (j=0;j<3;j++) {

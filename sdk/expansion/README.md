@@ -39,6 +39,7 @@ The caller must provide valid live storage of the documented sizes. Client,
 output, returned-length and response-structure storage must not overlap.
 The encoder supports payload/output overlap by copying the bounded payload
 before clearing output. NULL payload is valid only with zero length.
+Raw reply storage must not overlap client or response-structure storage.
 Response payload borrows the input reply buffer; its lifetime ends when that
 buffer is modified or released. Never serialize `struct rnet_client` or
 `struct rnet_response`: only the explicitly encoded bytes form a wire ABI.

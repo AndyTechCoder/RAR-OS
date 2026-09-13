@@ -1,74 +1,80 @@
 # M5 progress
 
-Baseline: main 996acacaf9ed80290ea95a4a9ac238cfe5023c33.
-M4 release: v0.4.0-modern-alpha (preserved).
+Baseline main: 996acacaf9ed80290ea95a4a9ac238cfe5023c33.
+Published M4 remains v0.4.0-modern-alpha, unchanged.
+Working branch: codex/m5-expansion; implementation PR: #204.
 
-- M5.1: candidate codec, channel, NE2000 driver and bounded service implemented in source.
-  No NIC, service or cloud peer transport is active; no guest networking proof.
-- M5.2: candidate standalone Rust protocol SDK implemented; native SDK packaging,
-  C bindings, independent apps and runtime integration remain unimplemented.
-- M5.3: agent broker, profiles and integrated Alpha acceptance not yet implemented.
-- M5 release: NOT COMPLETE; no new runtime claim or release publication.
+**M5 is incomplete. No Expansion guest profile has been activated and no
+v0.5.0 release has been published.** Source review, source CI, guest evidence,
+merge and release are separate states. Do not translate source-test success
+into a runtime acceptance claim.
 
-Next: cloud conformance for the codec, focused independent review, then concrete
-isolated NIC/service/controller integration on the same implementation branch.
-Existing M1–M4 functionality must remain reproducible. Source/model success is
-not substituted for networking, SDK, agent or profile guest evidence.
+## Implemented source
 
-## Initial source review
+- M5.1: RAR Ethernet/IPv4/UDP codec, grant/budget channel, bounded NE2000 PIO
+  driver and isolated-service logic; distinct kernel Network capability and
+  scalar PIO syscall; logical network principal7 mapped to physical slot10,
+  preserving Settings slots5/7; gated native service composition.
+- Network authority is denied after Terminal, Manager or System-service death,
+  recovery escalation, stale incarnation or revocation. Driver uncertainty
+  closes the channel; kernel reconciliation stops the device once.
+- Closed two-guest cloud profile and paired lifecycle: private UNIX datagram
+  socketpair only, exact NIC/QOM/I/O inventory, six-way image identity,
+  explicit descriptor inheritance, both-paused preflight, owner-gated pair
+  start, fair watchdog servicing and aggregate teardown. Candidate only.
+- Native Terminal network tool: NET SEND/RECV/CLOSE through the Rust SDK,
+  bounded waits, exact reply identity, one send/no automatic retry, preserved
+  keyboard input and bounded printable rendering. Guest execution unproven.
+- M5.2: first-party standalone no_std Rust and freestanding C network wire
+  SDKs, framing/ownership contracts and cross-language byte tests.
+  These are not a stable general application ABI or packaged example apps.
 
-Independent read-only review of bb4490751a2825b4fe198dacf8e6477aac6053f4
-identified one grant-expiry watermark defect. The consolidated correction retains
-expired clock observations, tests an expiry20 -> stale13 sequence with unchanged
-budgets, and adds a fixed frame, padding boundary, checksum KAT and513-length
-cross-language conformance. Revised cloud results remain pending until recorded.
-No source review result activates a network device or closes M5.1.
+## Retained exact-source cloud results
 
-## Codec checkpoint accepted for further implementation
+| Source | Specifications run | Result |
+| --- | --- | --- |
+| 0676b2906e40f3e9a1fe5a817c74c7c3ad450870 | 34745592948 | Passed codec checkpoint |
+| 287887ddc183f7d2939d3194658b87f07f4a1321 | 34760243466 | Passed channel checkpoint |
+| bc5e4221f24ff72a5694ac30c1c46393569c3914 | 34762233569 | Passed driver checkpoint |
+| 58f2290c7ba06dd950649e8eefd5f79573b6d05f | 34763120748 | Passed service/Rust SDK checkpoint |
+| eb555649927ebbdc5060d4da418cdc9a8a4c248b | 34764620665 | Passed gated kernel object integration |
+| 157ec29c39445c94f748042a4bf615d547f691f2 | 34765667196 | Passed client/control-plane revocation fix |
 
-Exact head0676b2906e40f3e9a1fe5a817c74c7c3ad450870 passed full cloud
-Specifications run34745592948. Independent source re-review found no remaining
-blocking codec finding. This is source/conformance evidence, not guest networking.
+Later pair/native-tool/C SDK commits require their own exact-head CI.
+The immutable CI receipts in PR #204 record subsequent run conclusions.
+This document intentionally does not claim its own commit was tested before
+that commit exists. No boot, UEFI linking, socket or PIO runtime claim follows
+from the table.
 
-The next change implements service-owned packet/grant coupling, full wire-byte
-budgets, four-entry send/receive queues, revocation/expiry cleanup, copied ingress
-and single-attempt transmission. Its native adapter and NIC remain unimplemented.
-No additional guest or host authority is activated by pure channel tests.
+## Independent source review
 
-## Native integration candidate
+One reused read-only reviewer checked the codec, channel, driver/service, SDK,
+kernel mapping/PIO boundary and integrated candidates. Corrections include:
+expiry watermark retention; reset-page selection; physical/logical role
+separation and unpublished-task protection; control-plane dependency loss;
+six-way disk identity; actual inert constructor-path coverage; pair-owned start
+and aggregate teardown; closed-channel acknowledgement ordering.
 
-Independent review identified physical slot7 as reserved for Settings rollback;
-networking must use an explicit distinct physical/logical task mapping.
-The NE2000 candidate now implements actual register/ring/PIO driver logic through
-an Io trait, with model tests and no native port adapter or activated profile.
-Channel remediation makes driver uncertainty and ingress exhaustion sticky,
-clearing pending traffic. Exact revised source checks/review remain required.
+Review of 93dd30de1b2a751051e3a97180871b536ea7ef60 closed the concrete cloud-pair
+findings and found no blocking native-client source issue, conditional on CI.
+Review of eee396bb3d0a398a540674909ca61c67408c8239 found no blocking C SDK source
+issue, conditional on CI. Neither review grants runtime activation or M5 closure.
 
-## Driver and service composition checkpoint
+## Remaining acceptance — not polish
 
-Driver correction bc5e4221f24ff72a5694ac30c1c46393569c3914 fixes reset register
-page selection and adds direction-aware register transcripts, per-operation
-I/O fault injection, stalled clocks/transfers and exact ring boundaries.
-Independent source review found prior findings closed. Cloud run34762233569
-passed primary validation; its full conclusion must be checked before acceptance.
+1. Finish and review the concrete outer cloud build/launch/evidence controller,
+   activate through trusted main, link both actual UEFI images, and prove paired
+   challenge exchange, runtime negatives and teardown with independent evidence.
+2. General experimental app contract, signed/installed independent Rust and C
+   examples launched from the GUI, private persistent document, useful notes
+   app and contained app-failure/data/device-denial proofs.
+3. Provider-neutral agent broker and deterministic test provider, actual guest
+   allowed/denied/revoked actions without ambient authority.
+4. Bounded portable headless node and two graphical presentation/resource
+   profiles, state-preserving transition and resource evidence.
+5. Integrated M1–M5 journey, two-build reproducibility, security-critical
+   regressions, final review, exact-main merge proof and experimental release.
 
-Candidate service841baf0e5194ebe85aa6cba76dfb9fc18e4ce239 plus test follow-up
-8661d5cd7115aa36376497b74c76834c3049fca7 connects driver and channel ownership,
-fixed128-byte IPC, bounded receive/transmit polling, idle expiry, and sticky
-failure cleanup. Independent source review found no blocker, conditional on
-exact-commit cloud checks. No kernel dispatcher or native device is activated.
-
-SDK candidate7d94e0d60c34f5b902a297bd14cc2fe68838dde7 extracts a standalone no_std
-Rust client, exact reply validation against kernel-supplied peer/incarnation,
-bounded outstanding requests and no automatic retries. Native SDK/apps and
-guest evidence remain outstanding. Source review and exact CI are pending
-until separately recorded; do not infer pass from this progress entry.
-
-### Next concrete integration boundary
-
-Implement the explicit logical principal7 -> physical slot10 composition,
-distinct Network capability and typed syscall/PIO adapter, native dispatch and
-bounded scheduler integration, plus the independently checked closed two-guest
-cloud profile. Settings physical slots5/7 and M4 Data/System formats stay intact.
-All native composition pieces must be reviewed together before activation.
-Then obtain actual causal guest exchange evidence; model tests cannot close M5.1.
+No local files, SSD activity, builds, guest execution, artifact downloads or
+cleanup are permitted. All writes remain GitHub API repository changes; actual
+target execution remains confined to separately reviewed disposable cloud VMs.

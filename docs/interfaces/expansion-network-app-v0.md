@@ -20,7 +20,7 @@ deadline. There are no automatic retries after uncertain effects. A frozen
 clock cannot loop beyond 4096 polls; a monotonic deadline is independently
 enforced. Input overflow clears pending input and asks the user to reenter.
 Missing and unrelated capabilities must receive exact Denied from the harmless
-NIC status-read syscall before the network UI is used.
+status-shaped NIC request denied before PIO before the network UI is used.
 
 The native service keeps a closed channel alive to send the CLOSE acknowledgement
 and subsequent Closed replies, without any further NIC I/O. Immediate service
