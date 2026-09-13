@@ -6,3 +6,5 @@ pub mod channel;
 pub mod ne2k;
 
 pub mod service;
+#[path="../../sdk/expansion/rust/wire.rs"]
+pub mod sdk;

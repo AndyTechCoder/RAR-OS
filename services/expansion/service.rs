@@ -121,14 +121,7 @@ fn parse(bytes:&[u8])->Option<(u8,u64)>{
     let op=bytes[5];if !(1..=3).contains(&op)||op!=1&&bytes.len()!=HEADER{return None;}
     let id=u64::from_le_bytes(bytes[8..16].try_into().ok()?);if id==0{return None;}Some((op,id))
 }
-/// Experimental Rust SDK encoder. Zeroes the entire destination on failure.
-pub fn request_bytes(operation:u8,id:u64,payload:&[u8],out:&mut[u8;MESSAGE])->Option<usize>{
-    out.fill(0);
-    if !(1..=3).contains(&operation)||id==0||payload.len()>APP_PAYLOAD||
-        operation!=1&&!payload.is_empty(){return None;}
-    out[..4].copy_from_slice(&MAGIC);out[5]=operation;out[8..16].copy_from_slice(&id.to_le_bytes());
-    out[HEADER..HEADER+payload.len()].copy_from_slice(payload);Some(HEADER+payload.len())
-}
+pub use crate::sdk::encode as request_bytes;
 
 #[cfg(test)]
 mod tests{
@@ -259,5 +252,19 @@ mod tests{
             assert!(matches!(Service::new(link,p),Err(Status::Invalid)));
             assert_eq!(closed.get(),1);
         }
+    }
+
+    #[test]fn standalone_sdk_and_service_interoperate_without_shared_state(){
+        let mut s=service();let mut client=crate::sdk::Client::new(7,1<<42).unwrap();
+        let mut bytes=[0;crate::sdk::MESSAGE];
+        let n=client.begin(crate::sdk::Operation::Send,b"from SDK",&mut bytes).unwrap();
+        let reply=s.request(6,1<<40,&bytes[..n]);
+        let result=client.accept(7,1<<42,reply.bytes()).unwrap();
+        assert_eq!(result.status,crate::sdk::Status::Ok);s.poll().unwrap();
+        assert_eq!(network::decode(&s.link.outgoing,B,A),Ok(&b"from SDK"[..]));
+        s.link.incoming=Some(incoming(b"to SDK"));s.poll().unwrap();
+        let n=client.begin(crate::sdk::Operation::Receive,b"",&mut bytes).unwrap();
+        let reply=s.request(6,1<<40,&bytes[..n]);
+        assert_eq!(client.accept(7,1<<42,reply.bytes()).unwrap().payload,b"to SDK");
     }
 }
