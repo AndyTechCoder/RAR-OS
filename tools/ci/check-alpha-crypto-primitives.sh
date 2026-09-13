@@ -212,3 +212,14 @@ printf 'Modern focused scratch KiB: %s (limit 8192)\n' "$1"
 # Pure fixed closed-pair profile and mocked lifecycle only; no socket/guest launch.
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/expansion_profile.py" --self-test
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/expansion_session.py" --self-test
+
+# C SDK is first-party freestanding source; libc is used only by this host test.
+# /usr/bin/cc and host test libraries are pinned by the existing immutable image.
+/usr/bin/cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -ffreestanding -fno-builtin \
+    tools/rar-lab/expansion/c_sdk_conformance.c -o "$work/focused-c-tests"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 \
+    -C strip=symbols -C debuginfo=0 -C opt-level=1 \
+    tools/rar-lab/expansion/c_sdk_conformance.rs -o "$work/focused-tests"
+"$work/focused-c-tests" | "$work/focused-tests"
+set -- $(/usr/bin/du -sk "$work")
+[ "$1" -le 8192 ]
