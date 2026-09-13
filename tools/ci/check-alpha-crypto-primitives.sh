@@ -223,3 +223,9 @@ printf 'Modern focused scratch KiB: %s (limit 8192)\n' "$1"
 "$work/focused-c-tests" | "$work/focused-tests"
 set -- $(/usr/bin/du -sk "$work")
 [ "$1" -le 8192 ]
+
+# Pure Expansion controller/visual/evidence tests only. Actual paired launch is
+# a separately reviewed trusted-main workflow, never a Specifications test.
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/expansion_visual.py" --self-test
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/expansion_evidence.py" --self-test
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/expansion_controller_tests.py" --self-test
