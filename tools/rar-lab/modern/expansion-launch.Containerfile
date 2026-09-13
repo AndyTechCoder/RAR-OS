@@ -7,6 +7,6 @@ RUN set -eu; \
     printf 'trusted-modern-container-v0\n' > /opt/rar-modern-container; \
     sha256sum /usr/bin/python3.11 /usr/bin/qemu-system-x86_64 /usr/share/OVMF/OVMF_CODE.fd /usr/share/OVMF/OVMF_VARS.fd > /opt/identities.sha256
 COPY system_fault_launch.py system_fault_scenario.py system_selector_fault.py signed_runtime_launch.py signed_runtime_scenario.py signed_runtime_evidence.py mounted_error_launch.py mounted_error_scenario.py unavailable_launch.py unavailable_scenario.py fault_launch.py fault_scenarios.py fault_audit.py block_disk.py block_wire.py block_process.py vm_profile.py vm_session.py persistence.py data_provision.py data_oracle.py visual_oracle.py launch.py /opt/rar-modern/
-COPY expansion_profile.py expansion_session.py expansion_scenario.py expansion_visual.py expansion_launch.py /opt/rar-modern/
+COPY expansion_wire.py expansion_profile.py expansion_session.py expansion_scenario.py expansion_visual.py expansion_launch.py /opt/rar-modern/
 USER 65532:65532
 ENTRYPOINT ["/usr/bin/python3", "-I", "-B", "/opt/rar-modern/expansion_launch.py"]
