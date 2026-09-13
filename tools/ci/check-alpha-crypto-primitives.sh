@@ -167,6 +167,16 @@ printf '%s\n' 'Modern signed bootstrap: actual kernel/service object compilation
 /usr/bin/python3 -I -B -c 'import runpy,sys; sys.stdout.buffer.write(runpy.run_path(sys.argv[1])["fixture"]())' \
     "$root/tools/rar-lab/modern/unknown_publisher.py" | "$work/focused-tests"
 
+# M5 pure protocol tests in this same reviewed network-disabled cloud sandbox.
+# This compiles no new guest entry and grants no NIC/network/runtime authority.
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --test \
+    -C strip=symbols -C debuginfo=0 -C opt-level=1 -C debug-assertions=yes -C overflow-checks=yes \
+    services/expansion/lib.rs -o "$work/focused-tests"
+"$work/focused-tests"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 \
+    --crate-type lib -D warnings services/expansion/lib.rs -o "$work/focused.rlib"
+printf '%s\n' 'Expansion: bounded packet/grant tests and no_std compile passed; guest networking NOT active'
+
 # Bound the final stripped executable, no_std library and signed codec fixture in the
 # existing cloud-only tmpfs; no owner files or retained evidence are affected.
 set -- $(/usr/bin/du -sk "$work")

@@ -117,3 +117,10 @@ permanently irreplaceable.
 - [Modern-v0 candidate System contract](interfaces/modern-system-v0.md)
 
 - [Modern-v0 candidate lifecycle contract](interfaces/modern-lifecycle-v0.md)
+
+## Active M5 implementation
+
+- [Milestone 5 acceptance and delivery](tasks/fast-track-alpha-milestone-5.md)
+- [Proposed Expansion composition (0037; no runtime authority)](proposals/0037-expansion-alpha.md)
+- [Candidate network contract](interfaces/expansion-network-v0.md)
+- [M5 measured progress](evidence/m5-progress.md)
