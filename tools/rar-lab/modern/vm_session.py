@@ -90,9 +90,28 @@ class VM:
     path, disk selector or shell enters this API.
     """
     def __init__(self,index,data_fd,system_fd,readonly_data=False,data_fault=None,
-                 reverse_flush=False,system_selector_fault=None,system_transaction_fault=None):
+                 reverse_flush=False,system_selector_fault=None,system_transaction_fault=None,
+                 _expansion=None,_companion=None):
         cloud_guard()
         self.profile,self.backend = load("vm_profile"),load("block_process")
+        self.expansion_socket=None;self.expansion_peer=None;self.companion=None
+        if _expansion is not None:
+            if (type(_expansion) is not tuple or len(_expansion)!=2 or
+                not isinstance(_expansion[1],socket.socket) or _companion is None or
+                readonly_data is not False or data_fault is not None or reverse_flush is not False or
+                system_selector_fault is not None or system_transaction_fault is not None):
+                raise ValueError("fixed paired Expansion session only, without M4 fault modes")
+            peer,endpoint=_expansion
+            fixed=load("expansion_profile")
+            fixed.identity(peer,endpoint.fileno())
+            if (endpoint.family!=socket.AF_UNIX or
+                endpoint.getsockopt(socket.SOL_SOCKET,socket.SO_TYPE)!=socket.SOCK_DGRAM or
+                endpoint.getsockname() not in ("",b"") or endpoint.getpeername() not in ("",b"")):
+                raise ValueError("connected unnamed private UNIX datagram endpoint only")
+            self.profile=fixed.Profile(self.profile,peer,endpoint.fileno())
+            self.expansion_socket=endpoint;self.expansion_peer=peer;self.companion=_companion
+        elif _companion is not None:
+            raise ValueError("no companion in legacy network-disabled session")
         self.index = index
         self.work = Path(self.profile.directory(index))
         self.readonly_data = readonly_data
@@ -167,7 +186,9 @@ class VM:
                 os.fsync(fd)
             finally:
                 os.close(fd)
-            self.boot_fd = os.open("/artifact/boot.img",os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC)
+            boot_path=("/artifact/boot.img" if self.expansion_peer is None else
+                "/artifact/peer-"+self.expansion_peer+"/boot.img")
+            self.boot_fd = os.open(boot_path,os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC)
             clients = []
             supplied = (("data",data_fd),("system",system_fd),("boot",self.boot_fd))
             for role,fd in supplied:
@@ -200,12 +221,18 @@ class VM:
                 if ready != expected:
                     raise ValueError("actual backend descriptor binding")
             self.argv = self.profile.argv(index,clients[0].fileno(),clients[1].fileno(),clients[2].fileno(),readonly_data)
+            inherited=tuple(c.fileno() for c in clients)
+            if self.expansion_socket is not None:
+                inherited+=(self.expansion_socket.fileno(),)
+                if len(set(inherited))!=4:raise ValueError("four distinct fixed child transports")
             self.child = subprocess.Popen(self.argv,stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,stderr=subprocess.PIPE,close_fds=True,
-                pass_fds=tuple(c.fileno() for c in clients),start_new_session=True,
+                pass_fds=inherited,start_new_session=True,
                 env={"PATH":"/usr/bin:/bin","LC_ALL":"C","TMPDIR":str(self.work)})
             for client in clients:
                 client.close()
+            if self.expansion_socket is not None:
+                self.expansion_socket.close()  # only this guest retains its network endpoint
             for stream,label in ((self.child.stdout,"serial"),(self.child.stderr,"stderr")):
                 os.set_blocking(stream.fileno(),False)
                 self.selector.register(stream,selectors.EVENT_READ,label)
@@ -243,6 +270,8 @@ class VM:
             ("before-cut","after-cut","torn-cut")):
             raise ValueError("planned cut requires whole-VM destruction")
         while True:
+            if getattr(self,"companion",None) is not None:
+                self.companion.service_peers(self)
             if time.monotonic()>=self.deadline:raise TimeoutError("whole VM proof deadline")
             codes=[backend.poll() for backend in self.backends]
             expected=getattr(self,"fault_plan",None)
@@ -359,7 +388,8 @@ class VM:
         if command in [value for _,value in self.profile.preflight_requests()]:
             return not self.started
         if command == {"execute":"cont"}:
-            return self.certified and not self.started
+            return (self.certified and not self.started and
+                (getattr(self,"companion",None) is None or self.companion.ready))
         if command == {"execute":"screendump","arguments":{"filename":str(self.work/"frame.ppm")}}:
             return self.started
         if (type(command) is dict and set(command)=={"execute","arguments"} and
@@ -561,6 +591,8 @@ class VM:
             except BaseException as error:
                 failures.append(type(error).__name__+": backend reap failed")
         resources = [self.selector,self.connection]+self.sockets
+        if getattr(self,"expansion_socket",None) is not None:
+            resources.append(self.expansion_socket)
         if self.child is not None:
             resources += [self.child.stdout,self.child.stderr]
         for resource in resources:

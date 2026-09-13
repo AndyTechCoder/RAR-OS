@@ -208,3 +208,7 @@ printf '%s\n' 'Expansion native composition: object-only type checks; guest/prof
 set -- $(/usr/bin/du -sk "$work")
 [ "$1" -le 8192 ]
 printf 'Modern focused scratch KiB: %s (limit 8192)\n' "$1"
+
+# Pure fixed closed-pair profile and mocked lifecycle only; no socket/guest launch.
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/expansion_profile.py" --self-test
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/expansion_session.py" --self-test
