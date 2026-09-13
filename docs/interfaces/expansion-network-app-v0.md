@@ -19,8 +19,8 @@ retires its client after malformed replies, input loss, transport errors or a
 deadline. There are no automatic retries after uncertain effects. A frozen
 clock cannot loop beyond 4096 polls; a monotonic deadline is independently
 enforced. Input overflow clears pending input and asks the user to reenter.
-Missing and unrelated capabilities must receive exact Denied from the harmless
-status-shaped NIC request denied before PIO before the network UI is used.
+Before the network UI is used, status-shaped requests made with missing or
+unrelated handles must return exact Denied before any PIO.
 
 The native service keeps a closed channel alive to send the CLOSE acknowledgement
 and subsequent Closed replies, without any further NIC I/O. Immediate service
