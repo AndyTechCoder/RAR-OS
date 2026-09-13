@@ -74,3 +74,39 @@ Python struct-based oracle independently emits every payload length0..512 for
 exact comparison with the Rust encoder and decoder. It uses only the pinned
 host Python standard library and never enters a target image. This is
 cross-language conformance, not a third-party audit or actual NIC evidence.
+
+## Service-owned channel implementation
+
+The candidate Channel owns one local interface, local endpoint, remote endpoint,
+principal and full incarnation. The native adapter must supply identity from the
+kernel envelope and ticks from the kernel clock. Neither construction nor
+revocation is an application operation. This module has no syscall or device
+authority by itself.
+
+It copies and encodes the exact packet before reserving budget. Both send and
+receive queues hold at most four entries. Transmit budgets count the complete
+Ethernet frame, including headers and padding. Every admitted ingress attempt,
+including malformed packets and full-queue drops, consumes its packet/wire-byte
+budget before parsing. Budget exhaustion returns Budget and never resets itself;
+the adapter must stop polling ingress on exhausted budget until a new explicitly
+authorized channel is established.
+
+Driver transmission is one synchronous bounded attempt inside an exclusive
+Channel borrow. No frame slice escapes the call and failure never refunds or
+silently retries. The native driver must enforce its own deadline; a callback
+does not itself prove hardware termination. Revocation linearizes when the
+single-owner service processes it; it clears both unsent and unread queues.
+It cannot undo already transmitted frames or already delivered application data.
+Expiry or backward trusted clock observation permanently closes the channel.
+
+The channel is deliberately non-Clone. Service restart cannot restore an old
+queue/counter snapshot; it requires freshly authorized construction and the
+current process incarnation. Drop clears logical buffers but is not a physical
+or cryptographic erasure claim. Kernel page retirement remains required.
+Counters are bounded/saturating and contain no payload logs.
+
+Host unit tests cover exact copied bytes/endpoints, FIFO/full queues, stale
+incarnations, wrong interfaces, clock rollback, expiry/revocation, immutable
+receive copies, uncertain device completion, malformed/full ingress charging,
+empty-packet wire accounting and invalid construction. Native runtime, driver
+and controller evidence remain separate required gates.

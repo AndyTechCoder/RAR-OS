@@ -22,3 +22,14 @@ expired clock observations, tests an expiry20 -> stale13 sequence with unchanged
 budgets, and adds a fixed frame, padding boundary, checksum KAT and513-length
 cross-language conformance. Revised cloud results remain pending until recorded.
 No source review result activates a network device or closes M5.1.
+
+## Codec checkpoint accepted for further implementation
+
+Exact head0676b2906e40f3e9a1fe5a817c74c7c3ad450870 passed full cloud
+Specifications run34745592948. Independent source re-review found no remaining
+blocking codec finding. This is source/conformance evidence, not guest networking.
+
+The next change implements service-owned packet/grant coupling, full wire-byte
+budgets, four-entry send/receive queues, revocation/expiry cleanup, copied ingress
+and single-attempt transmission. Its native adapter and NIC remain unimplemented.
+No additional guest or host authority is activated by pure channel tests.
