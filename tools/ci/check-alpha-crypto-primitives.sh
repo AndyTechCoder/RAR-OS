@@ -229,3 +229,5 @@ set -- $(/usr/bin/du -sk "$work")
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/expansion_visual.py" --self-test
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/expansion_evidence.py" --self-test
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/expansion_controller_tests.py" --self-test
+
+/usr/bin/python3 -I -B "$root/tools/rar-lab/modern/expansion_wire.py" --self-test
