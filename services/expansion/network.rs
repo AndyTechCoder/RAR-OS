@@ -120,7 +120,12 @@ impl Grant {
                    now: u64, payload_bytes: usize) -> Result<(), Error> {
         if self.revoked || principal != self.principal || incarnation != self.incarnation ||
             peer != self.peer { return Err(Error::Denied); }
-        if now < self.last_tick || now >= self.expires { return Err(Error::Expired); }
+        if now < self.last_tick || now >= self.expires {
+            // Retain even an expired observation: a later stale clock sample
+            // must never resurrect a grant after expiration was observed.
+            self.last_tick = self.last_tick.max(now);
+            return Err(Error::Expired);
+        }
         self.last_tick = now;
         if payload_bytes > MAX_PAYLOAD { return Err(Error::Invalid); }
         if self.packets == 0 || payload_bytes > self.bytes as usize {
@@ -177,6 +182,18 @@ mod tests {
             assert_eq!(oracle(&pseudo[..20+size]),0);
             assert!(f[42+size..n].iter().all(|&x|x==0));
         }
+    }
+    #[test] fn fixed_network_order_known_answer_and_padding_bound() {
+        // Manually summed network-order words: IP=1444, UDP=47fe.
+        let golden: &[u8] = &[0x02,0x00,0x00,0x00,0x00,0x02,0x02,0x00,0x00,0x00,0x00,0x01,0x08,0x00,0x45,0x00,0x00,0x1f,0x12,0x34,0x40,0x00,0x40,0x11,0x14,0x44,0x0a,0x2a,0x00,0x01,0x0a,0x2a,0x00,0x02,0x0f,0xa0,0x0f,0xa1,0x00,0x0b,0x47,0xfe,0x41,0x42,0x43];
+        let (f,n)=frame(b"ABC");
+        assert_eq!(&f[..golden.len()],golden);
+        assert_eq!(n,60);
+        assert_eq!(decode(&f[..n],B,A),Ok(&b"ABC"[..]));
+        // Maximum bounded Ethernet tail is ignored, never surfaced as payload.
+        let mut padded=f;padded[n..].fill(0xa5);
+        assert_eq!(decode(&padded,B,A),Ok(&b"ABC"[..]));
+        assert_eq!(complement(sum(&[0,1,0xf2,3,0xf4,0xf5,0xf6,0xf7])),0x220d);
     }
     #[test] fn refusal_is_non_mutating() {
         let mut output = [0xa5; MAX_FRAME];
@@ -259,6 +276,8 @@ mod tests {
         assert_eq!(g.remaining(),(2,60));
         assert_eq!(g.reserve(5,1<<40,B,11,1),Err(Error::Expired));
         assert_eq!(g.reserve(5,1<<40,B,20,1),Err(Error::Expired));
+        assert_eq!(g.reserve(5,1<<40,B,13,1),Err(Error::Expired));
+        assert_eq!(g.remaining(),(2,60));
         g.revoke();
         assert_eq!(g.reserve(5,1<<40,B,13,1),Err(Error::Denied));
     }

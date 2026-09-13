@@ -177,6 +177,12 @@ printf '%s\n' 'Modern signed bootstrap: actual kernel/service object compilation
     --crate-type lib -D warnings services/expansion/lib.rs -o "$work/focused.rlib"
 printf '%s\n' 'Expansion: bounded packet/grant tests and no_std compile passed; guest networking NOT active'
 
+# RAR host-only cross-language wire oracle, streamed within bounded cloud tmpfs.
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 \
+    -C strip=symbols -C debuginfo=0 -C opt-level=1 -C overflow-checks=yes \
+    tools/rar-lab/expansion/network_conformance.rs -o "$work/focused-tests"
+/usr/bin/python3 -I -B tools/rar-lab/expansion/network_reference.py | "$work/focused-tests"
+
 # Bound the final stripped executable, no_std library and signed codec fixture in the
 # existing cloud-only tmpfs; no owner files or retained evidence are affected.
 set -- $(/usr/bin/du -sk "$work")

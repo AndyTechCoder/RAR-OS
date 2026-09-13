@@ -1,5 +1,23 @@
 # Release Roadmap
 
+## Current owner-directed Milestone 5 (2026-09-13)
+
+M4 is published as v0.4.0-modern-alpha; its frozen release and proof assets remain
+unchanged. The owner now directs M5 Expansion under ADR0032 and
+`docs/tasks/fast-track-alpha-milestone-5.md`. The proposed composition is
+`docs/proposals/0037-expansion-alpha.md`; it does not activate new runtime,
+device or network authority. Concrete authority changes require focused review.
+Current progress and unimplemented acceptance items are in
+`docs/evidence/m5-progress.md`. M5 is not complete.
+
+All repository mutations remain GitHub-only. No Mac/SSD mutation, build,
+packaging, target/VM execution or artifact downloads. Use one writer and the
+reused read-only reviewer; no authorization-only chains or duplicate retry runs.
+The older current-scope paragraphs below are historical, not active blockers.
+The long-term consumer/self-hosting roadmap is not silently declared complete
+by the bounded Fast-Track Expansion Alpha.
+
+
 ## Current owner-directed milestone: Modern Architecture
 
 Milestone3 is released as v0.3.0-usable-alpha. Milestone4 is active under

@@ -50,3 +50,27 @@ Transport timeouts, queues and NIC lifecycle belong to a future reviewed service
 contract and are not supplied by this codec. No persisted state or migration.
 A later version may add optional protocols without silently broadening a v0
 grant. Do not claim a connected OS until actual guest packet exchange passes.
+
+## Native integration prerequisites
+
+The future service must atomically bind kernel-envelope principal/incarnation,
+its trusted clock, local interface/endpoint, exact destination and immutable
+service-owned payload to the frame actually transmitted. Caller-supplied Grant
+objects or independent reserve/encode calls grant no device access. Full wire
+bytes (including discarded padding on ingress), packets, queues and deadlines
+need separate resource ceilings, not payload-byte accounting alone.
+
+Define revocation for already queued sends: revoke and discard unsent frames.
+Destroy grants and queues on service death/restart; stale incarnation requests
+cannot reuse them. Apply separate ingress limits before expensive parsing, and
+retain malformed/drop/flood/peer-death tests. These are runtime prerequisites,
+not guarantees supplied by the current codec.
+
+## Candidate conformance sources
+
+The cloud harness tests a fixed manually summed frame and the arithmetic vector
+in [RFC1071 section3](https://www.rfc-editor.org/rfc/rfc1071). A RAR host-only
+Python struct-based oracle independently emits every payload length0..512 for
+exact comparison with the Rust encoder and decoder. It uses only the pinned
+host Python standard library and never enters a target image. This is
+cross-language conformance, not a third-party audit or actual NIC evidence.
