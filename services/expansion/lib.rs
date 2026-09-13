@@ -4,3 +4,5 @@
 pub mod network;
 pub mod channel;
 pub mod ne2k;
+
+pub mod service;

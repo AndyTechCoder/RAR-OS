@@ -71,6 +71,8 @@ impl Channel {
         self.tx.fill(Frame::EMPTY);self.rx.fill(Datagram::EMPTY);
         self.tx_len=0;self.rx_len=0;
     }
+    /// Check expiry even when there are no packets or application requests.
+    pub fn maintain(&mut self,now:u64)->Result<(),Error>{self.live(now)}
     pub fn stats(&self) -> Stats { self.stats }
     pub fn budgets(&self) -> (Budget,Budget) { (self.tx_budget,self.rx_budget) }
     pub fn pending(&self) -> (usize,usize) { (self.tx_len,self.rx_len) }

@@ -96,6 +96,11 @@ impl<I:Io> Device<I>{
         self.read_linear(address,&mut out[..first],false)?;
         if first<out.len(){self.read_linear(0x4600,&mut out[first..],false)?;}Ok(())
     }
+    /// Trusted clock access for the single-owner service; I/O failure is sticky.
+    pub fn clock(&mut self)->Result<u64,Error>{
+        if self.closed{return Err(Error::Closed);}
+        match self.io.ticks(){Ok(n)=>Ok(n),Err(())=>{self.close();Err(Error::Io)}}
+    }
     pub fn close(&mut self){
         if !self.closed {self.closed=true;let _=self.io.write(0,0x21);}
     }
@@ -408,5 +413,13 @@ mod tests{
             assert_eq!(d.receive(&mut out),Err(Error::Corrupt));
             assert_eq!(out,[0;MAX_FRAME]);closed_without_retry(&mut d);
         }
+    }
+
+    #[test]fn exported_clock_failure_stops_device_and_refuses_further_io(){
+        let mut d=Device::initialize(Fake::new(),MAC).unwrap();
+        assert_eq!(d.clock(),Ok(0));d.io.fail_at=Some(d.io.calls+1);
+        assert_eq!(d.clock(),Err(Error::Io));let calls=d.io.calls;
+        assert_eq!(d.clock(),Err(Error::Closed));assert_eq!(d.io.calls,calls);
+        closed_without_retry(&mut d);
     }
 }
