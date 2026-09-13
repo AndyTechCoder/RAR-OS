@@ -20,7 +20,12 @@ or changed composition refuses publication before changing any binding.
 Network is a distinct Object and right256; internal right storage widens to
 u16. Existing bit values and caller-local handle encoding do not change.
 Only active physical slot10 with logical principal7 and its exact current
-binding may resolve Network. Storage Device, StageCopy, Input, Framebuffer and
+binding may resolve Network. Its sole client Terminal6 and control-plane
+Manager8/System9 must also have live exact bindings, and recovery_required must
+be false. Death of any of6/8/9 therefore causes kernel synchronization to stop
+the NIC before another user is scheduled. Manager failure retains its existing
+sticky recovery condition; loss of Terminal/System denies this network grant
+without inventing a new whole-desktop recovery transition. Storage Device, StageCopy, Input, Framebuffer and
 Manager grants are not substitutes. No raw I/O is implemented by the model.
 Network gets Receive, named-send to Terminal6, and Network in local slot11.
 Terminal gains only named-send to principal7 in local slot5.
@@ -80,3 +85,14 @@ and exits; kernel revocation reconciliation stops a previously bound NIC.
 A fixed closed cloud profile, target linking/build closure and actual guest
 proofs are still mandatory before selecting this source in a runtime workflow.
 Do not infer native success from the object-only compile path.
+
+## Whole-VM teardown limitation
+
+The kernel-owned Adapter resides in static Runtime; it has no Rust Drop/global
+shutdown path. Role/client/control-plane failures reconcile and stop a bound
+NIC, but kernel fatal/whole-VM termination still relies on the trusted cloud
+controller destroying the guest/device and closing the private socketpair.
+Actual closed-peer controller code must destroy both guests and their backends
+on either peer exit/fatal/deadline and verify descriptor cleanup. No in-guest
+reboot, NIC reinitialization or device ownership handoff is authorized by this
+candidate; those require explicit shutdown semantics and focused evidence.

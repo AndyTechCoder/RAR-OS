@@ -1,7 +1,8 @@
 # Candidate fixed Network PIO leaf
 
-Status: source/compile candidate only. No syscall dispatch, initialization call,
-network-service scheduling or VM activation is added.
+Status: source/compile candidate. Gated syscall, initialization and service
+call sites exist behind rar_expansion; no existing reviewed runtime profile
+selects it. Source CI performs object compilation only, never VM activation.
 
 nucleus/modern/native_net.rs is the isolated unsafe I/O leaf for the proposed
 NE2000 ISA device. Actual instructions exist only for x86_64 UEFI. All native
@@ -16,7 +17,8 @@ registers during construction. This does not certify the VM or device topology.
 ## Typed request boundary
 
 Only Runtime.network(actual trapped caller, caller-local handle) authorizes an
-operation. The expected active principal7 is physically slot10. Every framing
+operation; it also requires live Terminal6, Manager8, System9 and no sticky
+recovery condition. The expected active principal7 is physically slot10. Every framing
 check precedes I/O. No absolute port, device ID, memory address or pointer is
 accepted. The candidate operation fields are:
 
@@ -53,3 +55,8 @@ no I/O on rejected input, sticky owner-death reconciliation and inert native
 behavior off UEFI. Full native UEFI compilation, profile certification and
 causal guest I/O tests remain required. Existing Data/System ports and profiles
 are unchanged.
+
+Static Adapter lifetime and whole-kernel fatal/teardown rely on the future
+closed-peer controller destroying both guests/devices and all socket endpoints.
+No in-guest reset/reinitialization/handoff contract is provided. This remains an
+activation gate, not a claim that object tests prove cleanup.

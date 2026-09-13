@@ -247,7 +247,10 @@ impl Runtime {
     /// Distinct capability for the explicit logical7/physical10 composition.
     /// Caller must be the actual trapped physical slot; no user identity input.
     pub fn network(&self,caller:usize,handle:u64)->Result<Endpoint,Error>{
-        if !self.expansion||caller!=NETWORK_SLOT{return Err(Error::Denied);}
+        if !self.expansion||self.recovery_required||caller!=NETWORK_SLOT||
+            [6usize,8,9].into_iter().any(|i|!self.bindings[i].is_some_and(|e|self.endpoint_alive(e))){
+            return Err(Error::Denied);
+        }
         let p=&self.processes[caller];
         let e=Endpoint{slot:caller as u8,incarnation:p.incarnation};
         if p.state!=State::Active||p.principal!=Some(NETWORK_PRINCIPAL as u8)||
@@ -1166,5 +1169,17 @@ mod tests {
         r.processes[10].state=State::Active;
         assert!(r.prepare_desktop(8,manager(&r),t.token()).is_err());
         for role in 0..8{assert!(r.bindings[role].is_none());}
+    }
+
+    #[test]fn network_authority_ends_with_lifecycle_or_recovery_plane(){
+        for principal in [6,8,9]{
+            let mut r=expanded();let h=r.handle(10,DEVICE_CAP).unwrap();
+            let settings=r.binding(5).unwrap();
+            r.fault(r.binding(principal).unwrap().unwrap()).unwrap();
+            assert_eq!(r.recovery_required(),principal==8);
+            assert!(r.network(10,h).is_err());
+            assert_eq!(r.binding(5).unwrap(),settings);
+            assert_eq!(r.state(4),Ok(State::Active));
+        }
     }
 }

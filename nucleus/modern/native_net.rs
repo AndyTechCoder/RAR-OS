@@ -1,4 +1,4 @@
-//! Candidate fixed NE2000 kernel PIO leaf. No native caller/profile selects it.
+//! Fixed NE2000 PIO leaf for gated candidate code; no existing profile selects it.
 #![deny(unsafe_op_in_unsafe_fn)]
 use super::model::{Error,Runtime,Endpoint};
 use core::marker::PhantomData;
@@ -180,5 +180,22 @@ mod tests{
         let mut io=Native{_not_send:PhantomData};
         assert_eq!(io.r8(BASE),Err(Error::Denied));assert_eq!(io.w8(BASE,0),Err(Error::Denied));
         assert_eq!(io.r16(BASE+16),Err(Error::Denied));assert_eq!(io.w16(BASE+16,0),Err(Error::Denied));
+    }
+
+    #[test]fn control_plane_death_stops_bound_nic_before_future_io(){
+        for principal in [6,8,9]{
+            let mut p=policy();let h=p.handle(10,model::DEVICE_CAP).unwrap();
+            let mut s=state();let mut io=Fake::default();
+            s.execute(&mut io,&p,10,h,0,0,0).unwrap();
+            let settings=p.binding(5).unwrap();
+            p.fault(p.binding(principal).unwrap().unwrap()).unwrap();
+            assert_eq!(p.recovery_required(),principal==8);
+            s.reconcile(&mut io,&p);s.reconcile(&mut io,&p);
+            assert!(p.network(10,h).is_err());
+            assert_eq!(io.log,[Access::R8(BASE),Access::W8(BASE,0x21)]);assert!(s.closed);
+            assert!(s.execute(&mut io,&p,10,h,0,0,0).is_err());assert_eq!(io.log.len(),2);
+            assert_eq!(p.binding(5).unwrap(),settings);
+            assert_eq!(p.state(4),Ok(model::State::Active));
+        }
     }
 }
