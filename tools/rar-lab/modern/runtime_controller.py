@@ -1,5 +1,5 @@
-"""Trusted-main cloud Modern persistence controller. Never execute locally.
-This source candidate has no workflow dispatch until independent review.
+"""Trusted-main confined cloud Modern and Expansion controller.
+Only fixed reviewed workflow-dispatch modes are exposed. Never execute locally.
 """
 import json
 import os

@@ -1,11 +1,11 @@
 # M5 progress
 
-Baseline main: 996acacaf9ed80290ea95a4a9ac238cfe5023c33.
+Controller main: a93b7e870e80a7a603a0c15dca017e5d8dd6958c.
 Published M4 remains v0.4.0-modern-alpha, unchanged.
 Working branch: codex/m5-expansion; implementation PR: #204.
 
-**M5 is incomplete. No Expansion guest profile has been activated and no
-v0.5.0 release has been published.** Source review, source CI, guest evidence,
+**M5 is incomplete. The confined paired Expansion profile is activated and its
+first actual bidirectional guest test passed. No v0.5.0 release is published.** Source review, source CI, guest evidence,
 merge and release are separate states. Do not translate source-test success
 into a runtime acceptance claim.
 
@@ -21,10 +21,10 @@ into a runtime acceptance claim.
 - Closed two-guest cloud profile and paired lifecycle: private UNIX datagram
   socketpair only, exact NIC/QOM/I/O inventory, six-way image identity,
   explicit descriptor inheritance, both-paused preflight, owner-gated pair
-  start, fair watchdog servicing and aggregate teardown. Candidate only.
+  start, fair watchdog servicing and aggregate teardown. Actual pair proven below.
 - Native Terminal network tool: NET SEND/RECV/CLOSE through the Rust SDK,
   bounded waits, exact reply identity, one send/no automatic retry, preserved
-  keyboard input and bounded printable rendering. Guest execution unproven.
+  keyboard input and bounded printable rendering. Actual guest exchange proven below.
 - M5.2: first-party standalone no_std Rust and freestanding C network wire
   SDKs, framing/ownership contracts and cross-language byte tests.
   These are not a stable general application ABI or packaged example apps.
@@ -40,7 +40,21 @@ into a runtime acceptance claim.
 | eb555649927ebbdc5060d4da418cdc9a8a4c248b | 34764620665 | Passed gated kernel object integration |
 | 157ec29c39445c94f748042a4bf615d547f691f2 | 34765667196 | Passed client/control-plane revocation fix |
 
-Later pair/native-tool/C SDK commits require their own exact-head CI.
+Additional exact-source CI: 1c4569e0d314e8e1a9ba1c26f4fd0257da5de1c9 passed
+Specifications run 34770438147. Controller-only PR #205 merged after independent
+review and exact-head CI 34770910627. Exact main a93b7e passed 34772014599.
+
+Actual paired-cloud run [34772050322](https://github.com/AndyTechCoder/RAR-OS/actions/runs/34772050322)
+passed on controller a93b7e and target 1c4569e. Both peer UEFI images rebuilt twice
+identically. Eleven actual pixel scenes proved fresh A-to-B and B-to-A messages,
+channel close/retirement and working Files; Data/System remained unchanged and
+both guests plus six backends were reaped. Artifact 10321904618, ZIP SHA256
+761d39be06f4f1f51e9022d2c1aa0fea1e6d7c63770075860bb3ae44f869b024.
+This was positive networking evidence, not runtime fault or full M5 acceptance.
+
+The next capture enhancement adds independent full Ethernet/IPv4/UDP packet
+comparison and a no-extra-transmissions check. Its code is a candidate until
+its own review, source CI and actual cloud proof pass.
 The immutable CI receipts in PR #204 record subsequent run conclusions.
 This document intentionally does not claim its own commit was tested before
 that commit exists. No boot, UEFI linking, socket or PIO runtime claim follows
@@ -62,9 +76,9 @@ issue, conditional on CI. Neither review grants runtime activation or M5 closure
 
 ## Remaining acceptance — not polish
 
-1. Finish and review the concrete outer cloud build/launch/evidence controller,
-   activate through trusted main, link both actual UEFI images, and prove paired
-   challenge exchange, runtime negatives and teardown with independent evidence.
+1. Finish captured-wire comparison and the actual malformed/flood/drop/expiry/
+   revocation/peer-death negative campaigns. Positive paired exchange, exact
+   linking/reproducibility and aggregate teardown are already proven above.
 2. General experimental app contract, signed/installed independent Rust and C
    examples launched from the GUI, private persistent document, useful notes
    app and contained app-failure/data/device-denial proofs.

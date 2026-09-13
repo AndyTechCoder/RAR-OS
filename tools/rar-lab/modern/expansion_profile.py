@@ -1,5 +1,5 @@
 """Closed two-guest Expansion profile: pure construction and evidence parsing.
-Not an activated execution profile. Legacy Modern remains network-disabled.
+Trusted cloud pair only. Legacy Modern remains network-disabled.
 """
 import re
 
@@ -8,6 +8,11 @@ NETDEV = "rar-net"
 MACS = {"a":"02:00:00:00:00:01","b":"02:00:00:00:00:02"}
 BASE = 0x300
 IRQ = 5
+CAPTURE = "/objects/rar-wire"
+
+def capture_path(peer):
+    identity(peer,3)
+    return "/tmp/rar-modern/wire-"+peer+".pcap"
 
 def identity(peer, descriptor):
     if type(peer) is not str or peer not in MACS:
@@ -33,13 +38,19 @@ class Profile:
         # ISA NIC has no bus-master DMA, host interface, port-forward or ROM.
         return args + ["-netdev", "socket,id="+NETDEV+",fd="+str(self.descriptor),
             "-device", "ne2k_isa,id="+DEVICE+",iobase="+str(BASE)+
-            ",irq="+str(IRQ)+",mac="+self.mac+",netdev="+NETDEV+",bootindex=-1"]
+            ",irq="+str(IRQ)+",mac="+self.mac+",netdev="+NETDEV+",bootindex=-1",
+            "-object","filter-dump,id=rar-wire,netdev="+NETDEV+",queue=all,status=on,file="+
+            capture_path(self.peer)+",maxlen=554"]
 
     def qom_expected(self):
         path = self.base.PREFIX+DEVICE
-        return {(path, key):value for key,value in (
+        result = {(path, key):value for key,value in (
             ("iobase",BASE),("irq",IRQ),("mac",self.mac),
             ("netdev",NETDEV),("realized",True),("bootindex",-1))}
+        result.update({(CAPTURE,key):value for key,value in (
+            ("type","filter-dump"),("netdev",NETDEV),("queue","all"),("status","on"),
+            ("file",capture_path(self.peer)),("maxlen",554),("position","tail"),("insert","behind"))})
+        return result
 
     def network_requests(self):
         result = [
@@ -59,8 +70,21 @@ class Profile:
         expected = (DEVICE+": index=0,type=nic,model=ne2k_isa,macaddr="+self.mac+"\n"+
                     " \\ "+NETDEV+": index=0,type=socket,socket: fd="+
                     str(self.descriptor)+" unix\n")
-        if type(text) is not str or text.replace("\r\n","\n") != expected:
+        if type(text) is not str or not text.replace("\r\n","\n").startswith(expected):
             raise ValueError("exact single ISA NIC and connected UNIX socket backend")
+        tail=text.replace("\r\n","\n")[len(expected):]
+        prefix="filters:\n  - rar-wire: type=filter-dump,"
+        if not tail.startswith(prefix) or not tail.endswith("\n") or tail.count("\n")!=2:
+            raise ValueError("exact single transparent capture filter")
+        fields={}
+        for item in tail[len(prefix):-1].split(","):
+            if item.count("=")!=1:raise ValueError("filter metadata framing")
+            key,value=item.split("=")
+            if key in fields:raise ValueError("duplicate filter metadata")
+            fields[key]=value
+        wanted={key:str(value) for (path,key),value in self.qom_expected().items()
+                if path==CAPTURE and key!="type"}
+        if fields!=wanted:raise ValueError("capture filter metadata mismatch")
         return {"device":DEVICE,"netdev":NETDEV,"mac":self.mac,
                 "transport":"inherited-af-unix-datagram","descriptor":self.descriptor}
 
@@ -118,6 +142,11 @@ class Profile:
         checked["network"] = network
         return checked
 
+def fixture_filter(peer):
+    # Test data only; production inventory is parsed independently.
+    return ("filters:\n  - rar-wire: type=filter-dump,maxlen=554,file="+capture_path(peer)+
+        ",netdev=rar-net,queue=all,status=on,position=tail,insert=behind\n")
+
 def self_test():
     # Load only a fixed sibling; no QEMU, socket, filesystem creation or target.
     import importlib.util
@@ -134,12 +163,14 @@ def self_test():
     for peer in ("a","b"):
         p=Profile(base,peer,19)
         command=p.argv(1,7,9,11)
-        assert command[:-4]==base.argv(1,7,9,11)
-        assert command[-4:]==["-netdev","socket,id=rar-net,fd=19","-device",
+        assert command[:-6]==base.argv(1,7,9,11)
+        assert command[-6:-2]==["-netdev","socket,id=rar-net,fd=19","-device",
             "ne2k_isa,id=rar-net-device,iobase=768,irq=5,mac="+MACS[peer]+",netdev=rar-net,bootindex=-1"]
-        assert not any(value in ("-net","-netdev","-nic") for value in command[-3:])
+        assert command[-2:]==["-object","filter-dump,id=rar-wire,netdev=rar-net,queue=all,status=on,file="+capture_path(peer)+",maxlen=554"]
+        assert not any(value in ("-net","-netdev","-nic") for value in command[-5:])
         raw=(DEVICE+": index=0,type=nic,model=ne2k_isa,macaddr="+MACS[peer]+"\n"+
              " \\ rar-net: index=0,type=socket,socket: fd=19 unix\n")
+        raw+=fixture_filter(peer)
         rows={"network":raw,"network-children":[{"name":DEVICE,"type":"child<ne2k_isa>"}]}
         for (path,key),value in p.qom_expected().items():rows[path+"#"+key]=value
         assert p.validate_network(rows)["descriptor"]==19
@@ -192,6 +223,7 @@ def self_test():
         combined["network-children"]=[{"name":DEVICE,"type":"child<ne2k_isa>"}]
         combined["network"]=(DEVICE+": index=0,type=nic,model=ne2k_isa,macaddr="+MACS[peer]+"\n"+
             " \\ rar-net: index=0,type=socket,socket: fd=19 unix\n")
+        combined["network"]+=fixture_filter(peer)
         line="  0000000000000300-000000000000031f (prio 0, i/o): ne2000 owner:{dev id=rar-net-device}\n"
         combined["ports"]=combined["ports"].replace("  0000000000000376",line+"  0000000000000376")
         checked=p.validate_preflight(combined)
