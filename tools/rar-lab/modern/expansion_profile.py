@@ -177,6 +177,32 @@ def self_test():
     for peer,fd in (("c",19),("",19),(True,19),("a",True),("a",2),("a",4096),("a","19")):
         reject(lambda peer=peer,fd=fd:Profile(base,peer,fd))
     assert len({key for key,_ in p.preflight_requests()})==len(p.preflight_requests())
+    import copy
+    from unittest.mock import patch
+    captured=[]
+    original=base.validate_preflight
+    def capture(*args,**kwargs):
+        result=original(*args,**kwargs)
+        if not captured:captured.append(copy.deepcopy(args[0]))
+        return result
+    with patch.object(base,"validate_preflight",capture):base.self_test()
+    for peer in ("a","b"):
+        p=Profile(base,peer,19);combined=copy.deepcopy(captured[0])
+        for (path,key),value in p.qom_expected().items():combined[path+"#"+key]=value
+        combined["network-children"]=[{"name":DEVICE,"type":"child<ne2k_isa>"}]
+        combined["network"]=(DEVICE+": index=0,type=nic,model=ne2k_isa,macaddr="+MACS[peer]+"\n"+
+            " \\ rar-net: index=0,type=socket,socket: fd=19 unix\n")
+        line="  0000000000000300-000000000000031f (prio 0, i/o): ne2000 owner:{dev id=rar-net-device}\n"
+        combined["ports"]=combined["ports"].replace("  0000000000000376",line+"  0000000000000376")
+        checked=p.validate_preflight(combined)
+        assert checked["guest_stopped"] and checked["network"]["mac"]==MACS[peer]
+        for key in combined:
+            bad=dict(combined);del bad[key]
+            reject(lambda bad=bad:p.validate_preflight(bad))
+        for key,value in (("status",{"running":True}),("network","wrong"),
+                          ("ports",captured[0]["ports"]),("extra",0)):
+            bad=dict(combined);bad[key]=value
+            reject(lambda bad=bad:p.validate_preflight(bad))
     return rejected
 
 if __name__=="__main__":

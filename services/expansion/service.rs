@@ -61,6 +61,7 @@ impl<L:Link> Service<L>{
         Ok(Self{link,channel,principal:p.principal,incarnation:p.incarnation,
             interface:p.interface,closed:false})
     }
+    pub fn is_closed(&self)->bool{self.closed}
     pub fn close(&mut self){
         if !self.closed{self.closed=true;self.channel.revoke();self.link.close();}
     }
@@ -267,4 +268,19 @@ mod tests{
         let reply=s.request(6,1<<40,&bytes[..n]);
         assert_eq!(client.accept(7,1<<42,reply.bytes()).unwrap().payload,b"to SDK");
     }
+    #[test]fn closed_channel_stays_reply_capable_without_any_more_device_io(){
+        let mut s=Service::new(Wire::default(),policy()).unwrap();
+        let mut bytes=[0;128];
+        let n=request_bytes(3,1,b"",&mut bytes).unwrap();
+        assert_eq!(s.request(6,1<<40,&bytes[..n]).status(),Status::Ok);
+        assert!(s.is_closed());
+        let before=(s.link.clocks,s.link.reads,s.link.writes,s.link.closed);
+        for op in 1..=3{
+            let n=request_bytes(op,op as u64+1,b"",&mut bytes).unwrap();
+            assert_eq!(s.request(6,1<<40,&bytes[..n]).status(),Status::Closed);
+        }
+        assert_eq!((s.link.clocks,s.link.reads,s.link.writes,s.link.closed),before);
+        assert_eq!(before.3,1);
+    }
+
 }

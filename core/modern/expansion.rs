@@ -37,8 +37,11 @@ pub fn network(b:&abi::Boot)->!{
     let mut service=network_service::Service::new(device,policy).unwrap_or_else(|_|fail());
     let mut reply:Option<network_service::Reply>=None;
     loop{
-        // Poll before at most one client request, even under IPC backpressure.
-        if service.poll().is_err(){service.close();fail();}
+        // Poll before at most one request, even under IPC backpressure. A closed
+        // channel performs no NIC I/O but remains alive to deliver its CLOSE
+        // acknowledgement and subsequent Closed replies. Exiting here would
+        // purge the queued reply during kernel incarnation revocation.
+        if !service.is_closed()&&service.poll().is_err(){service.close();fail();}
         if let Some(pending)=&reply{
             let bytes=pending.bytes();
             match syscall(abi::SEND,b.caps[1],bytes.as_ptr()as u64,bytes.len()as u64,0){

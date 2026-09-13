@@ -158,6 +158,7 @@ pub fn settings(boot:&Boot)->! {
 pub fn terminal(boot:&Boot)->! {
     require_device_denial(boot);
     let mut editor=Editor::new();let mut version=0;let mut pending=Io::new(boot);
+    #[cfg(rar_expansion)] let mut network=crate::network_app::App::new(boot);
     let mut update_request=0u64;
     let mut view=View::EMPTY;view.line(0,b"RAR TERMINAL");view.line(1,b"HELP LIST READ WRITE CRASH");
     view.line(2,b"CREATE + WRITE ARE SEPARATE COMMITS");
@@ -171,7 +172,13 @@ pub fn terminal(boot:&Boot)->! {
             Edit::Changed=>editor.prompt(&mut view),
             Edit::Submit=>{
                 view=View::EMPTY;view.line(0,b"RAR TERMINAL");
-                if cfg!(rar_signed_updates)&&crate::update_control::command(&editor.bytes[..editor.len]).is_some(){
+                #[cfg(rar_expansion)]
+                let network_handled=network.execute(boot,&mut pending.pending,&editor.bytes[..editor.len],&mut view);
+                #[cfg(not(rar_expansion))]
+                let network_handled=false;
+                if network_handled {
+                    // Existing prompt/input, file uncertainty and compositor path remain shared.
+                }else if cfg!(rar_signed_updates)&&crate::update_control::command(&editor.bytes[..editor.len]).is_some(){
                     let index=crate::update_control::command(&editor.bytes[..editor.len]).unwrap();
                     if update_request==0{
                         update_request=1;

@@ -389,7 +389,7 @@ class VM:
             return not self.started
         if command == {"execute":"cont"}:
             return (self.certified and not self.started and
-                (getattr(self,"companion",None) is None or self.companion.ready))
+                (getattr(self,"companion",None) is None or self.companion.permit_start(self)))
         if command == {"execute":"screendump","arguments":{"filename":str(self.work/"frame.ppm")}}:
             return self.started
         if (type(command) is dict and set(command)=={"execute","arguments"} and
@@ -534,6 +534,9 @@ class VM:
         No reset, savevm, writable overlay, graceful disk flush, retry or reuse.
         Every child must be reaped before this can return joined=True.
         """
+        companion=getattr(self,"companion",None)
+        if companion is not None and companion.owns(self) and not companion.closed:
+            return companion.destroy()  # never destroy one live pair member alone
         if self.closed:
             raise ValueError("VM already destroyed")
         # One terminal cleanup attempt, even if a proof/drain/cleanup step fails.
@@ -702,9 +705,22 @@ def self_test():
     # Run the actual constructor control flow with inert filesystem/socket/
     # process adapters. No real QEMU, process, socket or file is created here.
     from contextlib import ExitStack
-    for stage in ("blocking1","blocking2","register1","register2","register3",
-                  "connect","greeting","qmp-request"):
-        observed = {"blocking":0,"register":0,"children":[],"backends":[],"sockets":[],"fd":100}
+    expansion_profile=load("expansion_profile")
+    # Reuse the exact successful base fixture while still running its real
+    # validator. No duplicate acceptance parser or fabricated bypass.
+    import copy
+    captured=[]
+    original_validate=profile.validate_preflight
+    def capture(*args,**kwargs):
+        result=original_validate(*args,**kwargs)
+        if not captured:captured.append(copy.deepcopy(args[0]))
+        return result
+    with patch.object(profile,"validate_preflight",capture):profile.self_test()
+    for mode in (None,"a","b"):
+      for stage in ("success","blocking1","blocking2","register1","register2","register3",
+                    "connect","greeting","qmp-request","preflight"):
+        observed = {"blocking":0,"register":0,"children":[],"backends":[],"sockets":[],
+                    "clients":[],"opened":[],"closed_fds":[],"fd":100}
         class FakePath:
             def __init__(self,value): self.value=str(value)
             def __str__(self): return self.value
@@ -714,15 +730,22 @@ def self_test():
                 mode=stat.S_IFSOCK if self.value.endswith("/qmp.sock") else stat.S_IFDIR|0o700
                 return SimpleNamespace(st_mode=mode,st_uid=65532)
         class FakeSocket:
+            family=socket.AF_UNIX
             def __init__(self,*args):
                 observed["fd"]+=1;self.fd=observed["fd"];self.closed=False
                 observed["sockets"].append(self)
-            def fileno(self): return self.fd
+            def fileno(self): return -1 if self.closed else self.fd
             def close(self): self.closed=True
             def settimeout(self,value): pass
             def setblocking(self,value): pass
+            def getsockopt(self,*args):return socket.SOCK_DGRAM
+            def getsockname(self):return ""
+            def getpeername(self):return ""
             def connect(self,path):
                 if stage=="connect": raise ValueError("injected QMP connection failure")
+        def socket_pair(*args):
+            server,client=FakeSocket(),FakeSocket()
+            observed["clients"].append(client.fd);return server,client
         class FakeSelector:
             def register(self,*args):
                 observed["register"]+=1
@@ -743,12 +766,29 @@ def self_test():
             stdout=Pipe(b"")
             stderr=Pipe(b"")
             returncode=None
-        def spawn(*args,**kwargs):
-            assert kwargs["close_fds"] and len(kwargs["pass_fds"])==3
+        endpoint=FakeSocket() if mode is not None else None
+        net_fd=endpoint.fd if endpoint is not None else None
+        companion=SimpleNamespace(permit_start=lambda vm:False,owns=lambda vm:False,service_peers=lambda vm:None)
+        fixture=copy.deepcopy(captured[0])
+        if mode is not None:
+            candidate=expansion_profile.Profile(profile,mode,net_fd)
+            for (path,key),value in candidate.qom_expected().items():fixture[path+"#"+key]=value
+            fixture["network-children"]=[{"name":"rar-net-device","type":"child<ne2k_isa>"}]
+            fixture["network"]=("rar-net-device: index=0,type=nic,model=ne2k_isa,macaddr="+
+                expansion_profile.MACS[mode]+"\n \\ rar-net: index=0,type=socket,socket: fd="+str(net_fd)+" unix\n")
+            line="  0000000000000300-000000000000031f (prio 0, i/o): ne2000 owner:{dev id=rar-net-device}\n"
+            fixture["ports"]=fixture["ports"].replace("  0000000000000376",line+"  0000000000000376")
+        selected=profile if mode is None else candidate
+        def spawn(args,**kwargs):
+            wanted=tuple(observed["clients"])+(() if mode is None else (net_fd,))
+            assert kwargs["close_fds"] and kwargs["pass_fds"]==wanted
+            assert not set(wanted)&{41,42}
+            assert len(set(wanted))==(3 if mode is None else 4)
+            assert args==selected.argv(1,*observed["clients"])
             child=ConstructChild();observed["children"].append(child)
             return child
-        def opened(*args):
-            observed["fd"]+=1
+        def opened(path,*args):
+            observed["fd"]+=1;observed["opened"].append((str(path),observed["fd"],args))
             return observed["fd"]
         def blocking(*args):
             observed["blocking"]+=1
@@ -757,32 +797,55 @@ def self_test():
         def receive(self):
             return {} if stage=="greeting" else {"QMP":{}}
         def request(self,command):
-            raise ValueError("injected first QMP request failure")
+            if stage=="qmp-request":raise ValueError("injected first QMP request failure")
+            if command=={"execute":"qmp_capabilities"}:return {}
+            key=next(key for key,c in selected.preflight_requests() if command==c)
+            if stage=="preflight" and key=="status":return {"running":True}
+            return fixture[key]
+        def modules(name):
+            if name=="vm_profile":return profile
+            if name=="expansion_profile":return expansion_profile
+            if name=="block_process":return SimpleNamespace(Backend=FakeBackend)
+            raise AssertionError("unexpected fixed sibling "+name)
         adaptations = [
-            patch(__name__+".cloud_guard",lambda:None),
-            patch(__name__+".load",lambda name:profile if name=="vm_profile" else SimpleNamespace(Backend=FakeBackend)),
+            patch(__name__+".cloud_guard",lambda:None),patch(__name__+".load",modules),
             patch(__name__+".Path",FakePath),
             patch(__name__+".read_regular",lambda path,limit:bytes(131072) if "VARS" in str(path) else bytes(1966080)),
             patch.object(os,"open",opened),patch.object(os,"write",lambda fd,data:len(data)),
-            patch.object(os,"fsync",lambda fd:None),patch.object(os,"close",lambda fd:None),
+            patch.object(os,"fsync",lambda fd:None),patch.object(os,"close",lambda fd:observed["closed_fds"].append(fd)),
             patch.object(os,"fstat",lambda fd:SimpleNamespace(st_dev=1,st_ino=fd)),
-            patch.object(os,"set_blocking",blocking),
-            patch.object(socket,"socketpair",lambda *args:(FakeSocket(),FakeSocket())),
-            patch.object(socket,"socket",FakeSocket),
-            patch.object(selectors,"DefaultSelector",FakeSelector),
-            patch.object(subprocess,"Popen",spawn),
-            patch.object(VM,"service",lambda self:None),
+            patch.object(os,"set_blocking",blocking),patch.object(socket,"socketpair",socket_pair),
+            patch.object(socket,"socket",FakeSocket),patch.object(selectors,"DefaultSelector",FakeSelector),
+            patch.object(subprocess,"Popen",spawn),patch.object(VM,"service",lambda self:None),
             patch.object(VM,"receive",receive),patch.object(VM,"request",request)]
         with ExitStack() as stack:
             for adaptation in adaptations: stack.enter_context(adaptation)
-            try: VM(1,41,42)
-            except (ValueError,OSError): rejected+=1
-            else: raise AssertionError("constructor failure was accepted")
+            try:
+                vm=VM(1,41,42,**({} if mode is None else
+                    {"_expansion":(mode,endpoint),"_companion":companion}))
+            except (ValueError,OSError):
+                assert stage!="success";rejected+=1
+            else:
+                assert stage=="success" and vm.certified and not vm.started
+                assert vm.allowed({"execute":"cont"}) is (mode is None)
+                if mode is not None:
+                    assert endpoint.closed
+                    companion.permit_start=lambda target:target is vm;assert vm.allowed({"execute":"cont"})
+                assert vm.destroy()["joined"]
         assert len(observed["children"])==1 and len(observed["backends"])==3
+        boot=observed["opened"][1]
+        expected_boot="/artifact/boot.img" if mode is None else "/artifact/peer-"+mode+"/boot.img"
+        assert boot[0]==expected_boot and boot[2][0]==os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC
+        assert boot[1] in observed["closed_fds"]
         child=observed["children"][0]
         assert child.returncode==-9 and child.stdout.closed and child.stderr.closed
         assert all(b.closed for b in observed["backends"])
         assert all(s.closed for s in observed["sockets"])
+
+    aggregate=object.__new__(VM);receipt={"joined":True,"guests":[1,2]}
+    aggregate.companion=SimpleNamespace(owns=lambda vm:vm is aggregate,
+        closed=False,destroy=lambda:receipt)
+    assert aggregate.destroy() is receipt
 
     # Exact request-time stream receipts. These mocks do not open a socket.
     def event_vm():

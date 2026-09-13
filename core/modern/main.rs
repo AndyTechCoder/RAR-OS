@@ -12,6 +12,8 @@ mod abi;
 #[cfg(rar_expansion)] #[path="../../services/expansion/service.rs"] mod network_service;
 #[cfg(rar_expansion)] #[path="../../sdk/expansion/rust/wire.rs"] mod sdk;
 #[cfg(rar_expansion)] mod expansion;
+#[cfg(rar_expansion)] #[path="../../apps/expansion/network_client.rs"] mod network_client;
+#[cfg(rar_expansion)] mod network_app;
 #[path="../../apps/modern/settings.rs"] mod settings;
 #[path="../../apps/modern/model.rs"] mod file_ui;
 #[path="../desktop/memory.rs"] mod memory;

@@ -61,3 +61,19 @@ behavior is still a runtime gate, not assumed from synthetic parser fixtures.
 Relevant upstream primary source: [ISA NE2000](https://github.com/qemu/qemu/blob/v7.2.0/hw/net/ne2000-isa.c),
 [network inventory](https://github.com/qemu/qemu/blob/v7.2.0/net/net.c),
 [UNIX datagram backend](https://github.com/qemu/qemu/blob/v7.2.0/net/socket.c).
+
+## Review hardening
+
+The pair additionally checks the two retained boot descriptors as fixed-size
+read-only regular files and requires all six image inode identities to differ.
+An identical peer-a/peer-b artifact inode cannot masquerade as separate builds.
+Paired CONT requires a transient authorization for the exact member currently
+being started by Pair.start; direct member start is refused. Direct destruction
+of a registered member routes to aggregate pair teardown.
+
+The inert real-VM constructor harness now covers legacy, A and B on successful
+paused setup and every post-spawn initialization failure. It asserts exact
+argument preservation, three versus four inherited transport descriptors,
+peer-specific boot paths, parent endpoint closure, paired start gating and all
+child/descriptor cleanup. Combined preflight is exercised through both actual
+base and Expansion validators, including missing/extra evidence refusals.

@@ -48,6 +48,21 @@ def endpoint_identity(endpoint):
             raise ValueError("bounded kernel socket buffers")
     return (info.st_dev,info.st_ino)
 
+def boot_identities(disks,vms):
+    if len(vms)!=2:raise ValueError("exactly two paused boot identities")
+    identities=[]
+    for vm in vms:
+        fd=vm.boot_fd
+        if type(fd) is not int or not 3<=fd<=4095:raise ValueError("bounded retained boot descriptor")
+        info=os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_size!=32768*512 or
+            fcntl.fcntl(fd,fcntl.F_GETFL)&os.O_ACCMODE != os.O_RDONLY):
+            raise ValueError("fixed-size regular read-only boot artifact")
+        identities.append((info.st_dev,info.st_ino))
+    if len(set(disks+tuple(identities)))!=6:
+        raise ValueError("no boot/Data/System alias within or across guests")
+    return tuple(identities)
+
 class Pair:
     """Owns two guests as one failure domain; no reconnect, reset or retry.
 
@@ -58,7 +73,7 @@ class Pair:
     """
     def __init__(self,disks):
         session=sibling("vm_session");session.cloud_guard()
-        self.closed=False;self.ready=False;self.pumping=False
+        self.closed=False;self.ready=False;self.pumping=False;self.starting=None
         self.vms=[];self.endpoints=[];self.cleanup=None
         self.deadline=time.monotonic()+120
         self.disks=disk_identities(disks)
@@ -79,10 +94,17 @@ class Pair:
                 raise ValueError("both exact profiles must pass while stopped")
             if any(endpoint.fileno()!=-1 for endpoint in self.endpoints):
                 raise ValueError("parent network endpoint leaked after child inheritance")
+            self.boots=boot_identities(self.disks,self.vms)
             self.ready=True
         except BaseException:
             self.destroy()
             raise
+
+    def owns(self,vm):
+        return any(member is vm for member in self.vms)
+
+    def permit_start(self,vm):
+        return self.ready and not self.closed and self.starting is vm and self.owns(vm)
 
     def service_peers(self,requester):
         if self.closed:raise ValueError("closed pair")
@@ -107,7 +129,10 @@ class Pair:
     def start(self):
         if self.closed or not self.ready:raise ValueError("pair not ready")
         try:
-            for vm in self.vms:vm.start()
+            for vm in self.vms:
+                self.starting=vm
+                try:vm.start()
+                finally:self.starting=None
             self.service()
         except BaseException:
             self.destroy()
@@ -183,14 +208,18 @@ def self_test():
             log.append(("service",self.n));self.pair.service_peers(self)
         def destroy(self):
             self.closed=True;log.append(("destroy",self.n));return {"joined":True}
-        def start(self):log.append(("start",self.n))
+        def start(self):
+            if not self.pair.permit_start(self):raise ValueError("outside paired start")
+            log.append(("start",self.n))
     def fixture():
-        pair=object.__new__(Pair);pair.closed=False;pair.ready=True;pair.pumping=False
+        pair=object.__new__(Pair);pair.closed=False;pair.ready=True;pair.pumping=False;pair.starting=None
         pair.deadline=time.monotonic()+10;pair.cleanup=None
         pair.endpoints=[Endpoint(17),Endpoint(19)]
         pair.vms=[Guest(0,pair),Guest(1,pair)]
         return pair
-    pair=fixture();pair.service()
+    pair=fixture()
+    for vm in pair.vms:reject(vm.start)
+    pair.service()
     assert log==[("service",0),("service",1)];log.clear()
     pair.start()
     assert log==[("start",0),("start",1),("service",0),("service",1)];log.clear()
@@ -239,17 +268,19 @@ def self_test():
         def fake_vm(index,*images,**kwargs):
             if fail_at==index:raise ValueError("partial constructor")
             vm=Guest(index,kwargs["_companion"]);vm.certified=True;vm.started=False
-            vm.deadline=time.monotonic()+10
+            vm.deadline=time.monotonic()+10;vm.boot_fd=20+index
             kwargs["_expansion"][1].close()
             created.append(vm);return vm
         fake_session=SimpleNamespace(cloud_guard=lambda:None,VM=fake_vm)
         def fake_stat(fd):
             return (SimpleNamespace(st_mode=stat.S_IFSOCK,st_dev=1,st_ino=fd)
-                    if fd in (17,19) else info(fd))
+                    if fd in (17,19) else
+                    SimpleNamespace(st_mode=stat.S_IFREG|0o644,st_size=32768*512,st_dev=1,st_ino=fd)
+                    if fd in (21,22) else info(fd))
         with patch.object(sys.modules[__name__],"sibling",lambda name:fake_session), \
              patch.object(socket,"socketpair",lambda family,kind:sockets), \
              patch.object(os,"fstat",fake_stat), \
-             patch.object(fcntl,"fcntl",lambda *args:os.O_RDWR):
+             patch.object(fcntl,"fcntl",lambda fd,*args:os.O_RDONLY if fd in (21,22) else os.O_RDWR):
             if fail_at is None:
                 pair=Pair(((3,4),(5,6)))
                 assert pair.ready and len(pair.vms)==2 and all(s.closed for s in sockets)
@@ -257,6 +288,37 @@ def self_test():
             else:
                 reject(lambda:Pair(((3,4),(5,6))))
                 assert all(vm.closed for vm in created) and all(s.closed for s in sockets)
+    vms=[SimpleNamespace(boot_fd=21),SimpleNamespace(boot_fd=22)]
+    disk_ids=((1,3),(1,4),(1,5),(1,6))
+    for inode in (21,3,4,5,6):
+        def same(fd):
+            return SimpleNamespace(st_mode=stat.S_IFREG|0o644,st_size=32768*512,
+                st_dev=1,st_ino=21 if fd==21 else inode)
+        with patch.object(os,"fstat",same),patch.object(fcntl,"fcntl",lambda *args:os.O_RDONLY):
+            reject(lambda:boot_identities(disk_ids,vms))
+    for field,value in (("st_mode",stat.S_IFBLK),("st_size",1)):
+        def malformed(fd,field=field,value=value):
+            item=SimpleNamespace(st_mode=stat.S_IFREG,st_size=32768*512,st_dev=1,st_ino=fd)
+            setattr(item,field,value);return item
+        with patch.object(os,"fstat",malformed),patch.object(fcntl,"fcntl",lambda *args:os.O_RDONLY):
+            reject(lambda:boot_identities(disk_ids,vms))
+    pair=fixture();log.clear()
+    def second_fails():raise ValueError("second start failed")
+    pair.vms[1].start=second_fails
+    reject(pair.start)
+    assert pair.closed and pair.starting is None and pair.cleanup["joined"]
+    assert ("destroy",0) in log and ("destroy",1) in log
+    for failure in ("kill","socket","member"):
+        pair=fixture();log.clear()
+        def fail_cleanup():raise OSError("injected cleanup failure")
+        if failure=="kill":pair.vms[0].child.kill=fail_cleanup
+        elif failure=="socket":pair.endpoints[0].close=fail_cleanup
+        else:pair.vms[0].closed=True
+        reject(pair.destroy)
+        assert pair.closed and not pair.cleanup["joined"] and pair.cleanup["errors"]
+        assert ("destroy",1) in log
+        if failure=="socket":assert not pair.cleanup["network_closed"]
+        assert pair.destroy() is pair.cleanup
     return rejected
 
 if __name__=="__main__":
