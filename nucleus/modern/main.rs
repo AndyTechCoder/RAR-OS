@@ -8,6 +8,7 @@ mod lab_images;
 #[path="../../core/modern/lab_input.rs"] mod lab_input;
 pub(crate) mod staging;
 mod native_pio;
+mod native_net;
 #[path="../platform/arch.rs"] mod arch;
 #[path="../platform/display.rs"] pub(crate) mod display;
 #[path="../../core/modern/abi.rs"] mod abi;
