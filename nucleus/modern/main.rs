@@ -46,6 +46,12 @@ static SERVICE:&[u8]=include_bytes!("/tmp/modern-service.efi");
 // build rejects this cfg at the Foundation root. Runtime PE parsing rejects [].
 #[cfg(rar_modern_compile_only)]
 static SERVICE:&[u8]=&[];
+// Fixed role-7 payload, independently bounded by the same PE parser. It uses
+// the existing network slot and capabilities; no user-selected executable.
+#[cfg(all(rar_applications,not(rar_modern_compile_only)))]
+static NETWORK_SERVICE:&[u8]=include_bytes!("/tmp/modern-network.efi");
+#[cfg(all(rar_applications,rar_modern_compile_only))]
+static NETWORK_SERVICE:&[u8]=&[];
 #[derive(Clone,Copy)]
 struct Process{
     memory:retirement::Memory,aperture:u64,table_used:usize,

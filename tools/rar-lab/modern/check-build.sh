@@ -71,5 +71,7 @@ cd "$root"
 /usr/bin/python3 -I -B tools/rar-lab/modern/network_fault_tests.py --self-test
 /usr/bin/python3 -I -B tools/rar-lab/modern/alpha_journey_tests.py --self-test
 
-# Pure fixed M5 release API/asset authority tests; no external calls.
+/usr/bin/python3 -I -B tools/rar-lab/modern/alpha_build_images_tests.py --self-test
+/usr/bin/python3 -I -B tools/rar-lab/modern/cloud_diagnostic_tests.py --self-test
+
 /usr/bin/python3 -I -B tools/rar-lab/modern/expansion_release_evidence_tests.py

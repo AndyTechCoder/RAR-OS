@@ -237,15 +237,19 @@ impl Runtime{
         if t.token()!=token||t.image_seal()!=seal{return Err(Error::Stale);}
         self.handover_context(t)?;
         let plan=policy.prepare_desktop(self.current,handle,token)?;
-        let layout=pe::parse(SERVICE)?;
         let b=support::desktop_bootstrap(&plan,5,self.processes[t.endpoint().slot as usize].entry,
             self.hardware.pitch,self.hardware.format)?;
         let result=(||->Result<(),Error>{
             for &role in plan.roles(){
+                #[cfg(rar_applications)]
+                let payload=if role==model::NETWORK_PRINCIPAL {NETWORK_SERVICE}else{SERVICE};
+                #[cfg(not(rar_applications))]
+                let payload=SERVICE;
+                let layout=pe::parse(payload)?;
                 let handoff=support::desktop_bootstrap(&plan,role,layout.entry,
                     self.hardware.pitch,self.hardware.format)?;
                 let slot=plan.binding(role).ok_or(Error::Stale)?.slot as usize;
-                self.construct_private(SERVICE,slot,handoff.generation,16,handoff)?;
+                self.construct_private(payload,slot,handoff.generation,16,handoff)?;
             }
             Ok(())
         })();

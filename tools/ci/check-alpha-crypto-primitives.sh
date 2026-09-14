@@ -316,7 +316,7 @@ done
 /bin/sh -n tools/rar-lab/modern/build-network-case.sh
 /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --test -C strip=symbols -C debuginfo=0 -C opt-level=1 -C overflow-checks=yes tools/rar-lab/expansion/network_lab_tests.rs -o "$work/focused-tests"
 "$work/focused-tests"
-for flags in '--cfg rar_network_fault_peer' '--cfg rar_network_fault_peer --cfg rar_network_peer_b' '--cfg rar_network_expiry'; do
+for flags in '--cfg rar_network_service_only' '--cfg rar_network_service_only --cfg rar_network_fault_peer' '--cfg rar_network_service_only --cfg rar_network_fault_peer --cfg rar_network_peer_b' '--cfg rar_network_service_only --cfg rar_network_expiry'; do
     /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --crate-type lib --emit=obj -C panic=abort -C no-redzone=yes -C debuginfo=0 --cfg rar_signed_updates --cfg rar_expansion --cfg rar_applications $flags core/modern/main.rs -o "$work/focused.rlib"
 done
 set -- $(/usr/bin/du -sk "$work")
