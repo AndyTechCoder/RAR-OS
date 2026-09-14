@@ -285,6 +285,16 @@ impl Keyboard {
         assert_eq!(c.view(10).unwrap().lines[0].as_bytes(),b"");
         assert!(c.apply(10,inc,&begin).is_err());
     }
+    #[test]fn stale_sender_cannot_abort_new_incarnation_staging(){
+        use app_sdk::protocol;
+        let mut c=Compositor::new([1;10]).unwrap();
+        c.app_binding(0,10).unwrap();c.app_binding(0,0).unwrap();c.app_binding(0,20).unwrap();
+        c.apply(10,20,&protocol::begin(1,1).unwrap().encode()).unwrap();
+        c.apply(10,20,&protocol::line(1,0,b"NEW").unwrap().encode()).unwrap();
+        assert!(c.apply(10,10,&[0;128]).is_err());
+        assert_eq!(c.apply(10,20,&protocol::commit(1).unwrap().encode()),Ok(true));
+        assert_eq!(c.view(10).unwrap().lines[0].as_bytes(),b"NEW");
+    }
     #[test]fn malformed_current_app_cannot_commit_partial_frame_or_touch_other_views(){
         use app_sdk::{wire::Message,protocol};
         let mut c=Compositor::new([1;10]).unwrap();

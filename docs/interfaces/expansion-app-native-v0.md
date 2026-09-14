@@ -74,3 +74,24 @@ current staging. Current-app malformed/partial frames abort staging; a complete
 valid commit publishes all rows at once. Revocation/reuse clears private app
 pixels and retains the incarnation high-water mark. Released legacy surfaces
 and window protocol are unchanged. No native loop calls the new methods yet.
+
+## App close/relaunch transition
+
+The app-aware mount validates the fixed verified owner and reserves capacity,
+but gives no app a live grant and performs no installation/write. A trusted
+kernel-binding transition must revoke the old grant first, then rebind only the
+same owner/principal with a strictly newer full incarnation. Failed rebind does
+not change grants, sequence/high-water state or Data. Successful rebind alone
+resets the per-incarnation request sequence. Fresh boot resets volatile endpoint
+state while preserving the persisted owner/document records.
+
+A reply retains its original recipient principal/incarnation. Before SEND, the
+runtime must check Store::app_reply_current and the current kernel binding;
+revoked or old-incarnation queued replies are discarded, never sent through a
+logical handle to a replacement app. The native outbox is still pending.
+
+Rust and C now share the malformed-envelope policy: discard a dequeued malformed
+frame without state changes, but terminate on kernel receive failure. The C
+152-byte envelope parser is safe host-testable code in app.h, used by native.h;
+host tests cover short/invalid returns, zero/full-width identities and malformed
+frames. This does not substitute for native register/span/runtime evidence.

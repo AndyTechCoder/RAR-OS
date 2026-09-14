@@ -12,6 +12,11 @@ pub struct Owner([u8;32]);
 impl Owner {
     /// Trusted installer input only, derived from a verified publisher/app ID.
     /// This value is not an unforgeable capability and must never come from IPC.
+    pub fn validate_binding(self,snapshot:&Snapshot)->Result<(),Error>{
+        match inspect(snapshot)?{
+            None=>Ok(()),Some(owner)if owner==self=>Ok(()),Some(_)=>Err(Error::Denied)
+        }
+    }
     pub fn from_verified_identity(digest:[u8;32])->Result<Self,Error>{
         if digest==[0;32]{Err(Error::Invalid)}else{Ok(Self(digest))}
     }
@@ -25,11 +30,10 @@ impl Grant{
         if !(10..=13).contains(&principal)||incarnation==0{return Err(Error::Invalid);}
         Ok(Self{owner,principal,incarnation})
     }
-    pub fn validate_binding(self,snapshot:&Snapshot)->Result<(),Error>{
-        match inspect(snapshot)?{
-            None=>Ok(()),Some(owner)if owner==self.owner=>Ok(()),Some(_)=>Err(Error::Denied)
-        }
-    }
+    pub fn owner(self)->Owner{self.owner}
+    pub fn principal(self)->u32{self.principal}
+    pub fn incarnation(self)->u64{self.incarnation}
+    pub fn validate_binding(self,snapshot:&Snapshot)->Result<(),Error>{self.owner.validate_binding(snapshot)}
     pub fn installation(self,snapshot:&Snapshot)->Result<Snapshot,Error>{install(snapshot,self.owner)}
     pub fn allows(self,principal:u32,incarnation:u64)->bool{
         principal==self.principal&&incarnation==self.incarnation

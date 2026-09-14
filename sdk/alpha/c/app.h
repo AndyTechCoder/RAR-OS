@@ -78,4 +78,16 @@ static inline int rar_app_reply_to(const rar_app_message *reply,const rar_app_me
         incarnation==expected_incarnation&&reply->sequence==request->sequence&&
         reply->operation==request->operation;
 }
+
+/* Complete kernel envelope codec; caller must supply actual RECEIVE output,
+ * not bytes received from another app pretending to be a kernel envelope. */
+typedef struct{uint32_t principal;uint64_t incarnation;rar_app_message message;}rar_app_received;
+static inline int rar_app_envelope_decode(const uint8_t *raw,size_t n,int64_t returned,rar_app_received *out){
+    rar_app_received got={0};uint64_t principal;
+    if(raw==NULL||out==NULL||n!=152||returned!=128)return 0;
+    principal=rar_app_u64(raw);
+    if(principal>UINT32_MAX||rar_app_u64(raw+8)==0||rar_app_u64(raw+16)!=128||
+       !rar_app_message_decode(raw+24,128,&got.message))return 0;
+    got.principal=(uint32_t)principal;got.incarnation=rar_app_u64(raw+8);*out=got;return 1;
+}
 #endif

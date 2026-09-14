@@ -16,6 +16,7 @@ pub struct Store<B: Block> {
     terminal_generation: u64,
     private: Option<crate::app_documents::Grant>,
     app_sequence:u32,
+    private_owner:Option<crate::app_documents::Owner>,private_principal:u32,private_highest:u64,
 }
 pub(crate) fn name_ok(name: &[u8]) -> bool {
     !name.is_empty() && name.len() <= 12 && name != b"." && name != b".." &&
@@ -49,7 +50,7 @@ impl<B: Block> Store<B> {
         if vault.snapshot().entries().any(|(name, _)| !name_ok(name)) {
             return Err(Error::Invalid);
         }
-        Ok(Self { vault, unavailable: false, files_generation, terminal_generation, private: None,app_sequence:0 })
+        Ok(Self { vault, unavailable: false, files_generation, terminal_generation, private: None,app_sequence:0,private_owner:None,private_principal:0,private_highest:0 })
     }
     /// Candidate private adapter. Grant comes from trusted installer/kernel
     /// identity, never app bytes. Reads and validates; never installs on mount.
@@ -60,7 +61,39 @@ impl<B: Block> Store<B> {
         grant.validate_binding(vault.snapshot()).map_err(|_|Error::Invalid)?;
         // Check the complete future installation without publishing it.
         grant.installation(vault.snapshot()).map_err(|_|Error::Bounds)?;
-        Ok(Self{vault,unavailable:false,files_generation,terminal_generation,private:Some(grant),app_sequence:0})
+        Ok(Self{vault,unavailable:false,files_generation,terminal_generation,private:Some(grant),app_sequence:0,
+            private_owner:Some(grant.owner()),private_principal:grant.principal(),private_highest:grant.incarnation()})
+    }
+    /// App-aware native composition can mount before Notes exists. Owner is
+    /// fixed verified package identity, not an IPC field. No live app grant,
+    /// private record install, write, format or sequence reset occurs on mount.
+    pub fn mount_applications(block:B,capacity:u32,files_generation:u64,terminal_generation:u64,
+        owner:crate::app_documents::Owner)->Result<Self,Error>{
+        if files_generation==0||terminal_generation==0{return Err(Error::Invalid);}
+        let vault=Vault::mount(block,capacity)?;
+        owner.validate_binding(vault.snapshot()).map_err(|_|Error::Invalid)?;
+        crate::app_documents::install(vault.snapshot(),owner).map_err(|_|Error::Bounds)?;
+        Ok(Self{vault,unavailable:false,files_generation,terminal_generation,private:None,app_sequence:0,
+            private_owner:Some(owner),private_principal:10,private_highest:0})
+    }
+    /// Trusted kernel-binding transition only. Revoke first; validate exact
+    /// owner/principal and a strictly newer full incarnation before any mutation.
+    /// Old queued replies must be rechecked with app_reply_current before send.
+    pub fn rebind_private(&mut self,grant:crate::app_documents::Grant)->Result<(),Failure>{
+        if self.unavailable||self.private.is_some()||self.private_owner!=Some(grant.owner())||
+            self.private_principal!=grant.principal()||grant.incarnation()<=self.private_highest{
+            return Err(Failure::Unavailable);
+        }
+        grant.validate_binding(self.vault.snapshot()).map_err(|_|Failure::Unavailable)?;
+        grant.installation(self.vault.snapshot()).map_err(|_|Failure::Unavailable)?;
+        self.private=Some(grant);self.private_highest=grant.incarnation();self.app_sequence=0;Ok(())
+    }
+    /// Envelope identity must have been retained with the reply, not supplied
+    /// by its recipient. The native sender must also compare the live kernel
+    /// binding immediately before using its fixed app-send handle.
+    pub fn app_reply_current(&self,principal:u64,incarnation:u64)->bool{
+        u32::try_from(principal).ok().is_some_and(|principal|
+            self.private.is_some_and(|g|g.allows(principal,incarnation)))
     }
     /// Trusted explicit installer call; no caller-controlled owner or filesystem
     /// selector. A future IPC adapter must authenticate installer authority.
@@ -182,7 +215,7 @@ impl<B: Block> Store<B> {
                 if self.vault.is_readonly() { return Err(Failure::ReadOnly); }
                 let mut candidate: Snapshot = snapshot;
                 if candidate.put(name, value).is_err() ||
-                    self.private.is_some_and(|g|g.installation(&candidate).is_err()) ||
+                    self.private_owner.is_some_and(|owner|crate::app_documents::install(&candidate,owner).is_err()) ||
                     (snapshot.entries().any(|(n,_)|!name_ok(n))&&
                      crate::app_documents::shared(&candidate).is_err()) {
                     return Ok(status(wire::QUOTA));
@@ -549,5 +582,44 @@ mod tests {
             let reply=Message::decode(&s.process_app(10,0x1_0000_0001,&read).unwrap()).unwrap();
             assert_eq!(reply.status(),protocol::UNAVAILABLE);assert_eq!(writes.get(),count);
         }
+    }
+
+    #[test]fn application_mount_is_inactive_rebind_is_monotonic_and_preserves_pending_reply_identity(){
+        use app_sdk::wire::{Message,READ_DOCUMENT,WRITE_DOCUMENT};
+        let owner=private_grant().owner();let disk=Disk::new(8);let writes=disk.writes.clone();
+        let mut s=Store::mount_applications(disk,26,1,1,owner).unwrap();
+        assert_eq!(writes.get(),0);assert!(s.private.is_none());assert_eq!(s.private_highest,0);
+        assert!(!s.app_reply_current(10,1));
+        call(&mut s,6,wire::CREATE,b"note",b"").unwrap();
+        assert_eq!(call(&mut s,6,wire::WRITE,b"note",&[1;33]).unwrap()[0],wire::QUOTA);
+        let old=private_grant();s.rebind_private(old).unwrap();s.install_private().unwrap();
+        let write=Message::new(WRITE_DOCUMENT,0,100,b"retained").unwrap().encode();
+        let pending=s.process_app(10,old.incarnation(),&write).unwrap();
+        assert!(s.app_reply_current(10,old.incarnation()));
+        let count=writes.get();s.revoke_private();
+        assert!(!s.app_reply_current(10,old.incarnation()));
+        let next=crate::app_documents::Grant::new(owner,10,old.incarnation()+1).unwrap();
+        for bad in [
+            old,crate::app_documents::Grant::new(owner,11,old.incarnation()+1).unwrap(),
+            crate::app_documents::Grant::new(crate::app_documents::Owner::from_verified_identity([8;32]).unwrap(),
+                10,old.incarnation()+1).unwrap(),
+        ]{
+            assert!(s.rebind_private(bad).is_err());assert!(s.private.is_none());
+            assert_eq!(s.private_highest,old.incarnation());assert_eq!(s.app_sequence,100);
+            assert_eq!(writes.get(),count);
+        }
+        s.rebind_private(next).unwrap();assert_eq!(s.app_sequence,0);
+        assert!(!s.app_reply_current(10,old.incarnation()));
+        assert_eq!(Message::decode(&pending).unwrap().sequence(),100);
+        assert!(s.app_reply_current(10,next.incarnation()));
+        assert_eq!(s.process_app(10,old.incarnation(),&write),None);
+        let read=Message::new(READ_DOCUMENT,0,1,b"").unwrap().encode();
+        let reply=Message::decode(&s.process_app(10,next.incarnation(),&read).unwrap()).unwrap();
+        assert_eq!(reply.payload(),b"retained");assert_eq!(writes.get(),count);
+        assert!(s.rebind_private(crate::app_documents::Grant::new(owner,10,next.incarnation()+1).unwrap()).is_err());
+        let mut s=Store::mount_applications(s.into_block().reboot(),26,1,1,owner).unwrap();
+        assert_eq!(writes.get(),count);assert!(s.private.is_none());
+        s.rebind_private(crate::app_documents::Grant::new(owner,10,1).unwrap()).unwrap();
+        assert_eq!(s.read_private(10,1),Ok(&b"retained"[..]));
     }
 }

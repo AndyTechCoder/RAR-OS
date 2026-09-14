@@ -161,3 +161,9 @@ Candidate service endpoints now consume the same SDK payloads: private document
 dispatch with full identity and sequence replay refusal before Vault I/O; two
 separate Compositor app surfaces with atomic commits and revocation pixel erasure.
 Default native service loops still do not call these endpoints or bind apps.
+
+The follow-on lifecycle candidate adds inactive app-aware mount, checked
+same-owner/new-incarnation rebind, volatile sequence reset only on accepted new
+identity, and old-recipient reply validity checks. C envelope negative tests and
+stale-sender/new-surface staging regression close the focused source gaps.
+Native service-loop/outbox and kernel app-root activation still remain pending.

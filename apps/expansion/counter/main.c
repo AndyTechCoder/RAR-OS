@@ -59,7 +59,7 @@ __attribute__((ms_abi,noreturn)) void efi_main(void){
     if(!paint(&boot,&counter,&version))rar_native_exit();
     for(;;){
         rar_app_received received;int result=rar_native_receive(&boot,&received);
-        if(result<0)rar_native_exit();
+        if(result==-1)rar_native_exit(); /* malformed dequeued frames are ignored */
         if(result==1&&rar_native_from_peer(&boot,&received,0)&&
             rar_counter_input(&counter,&received.message)&&!paint(&boot,&counter,&version))rar_native_exit();
         rar_native_yield();
