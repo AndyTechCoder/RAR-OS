@@ -11,7 +11,7 @@ def self_test():
     for module,schema,args in (
         ("alpha_evidence","rar-native-alpha-failure-v1",({}, "0"*64,(1,1),bytes([1])*32,"first")),
         ("network_fault_evidence","rar-network-campaign-failure-v1",({},"0"*64,(1,1),"faults"))):
-        raw=json.dumps(dict(schema=schema,status="failed",reason="bounded",serial=["x"*30000])).encode()
+        raw=load("runtime_evidence").canonical(dict(schema=schema,status="failed",reason="bounded",serial=["x"*30000]))
         try:load(module).validate(raw,*args)
         except ValueError as error:
             assert str(error).startswith("actual cloud scenario failed: ") and len(str(error))<=24610
