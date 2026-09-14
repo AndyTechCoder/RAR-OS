@@ -42,6 +42,41 @@ def self_test():
     assert [i for i,(a,b) in enumerate(zip(new[0],repair_input[0])) if a!=b]==[1024,1024+load("signed_runtime_evidence").SLOT_BYTES]
     final_input,final_output=e.systems(factory,candidate,bytes(bad),"final")
     assert repair_output==final_input==final_output
+
+    import copy
+    for mode in p.MODES:
+        operations=e.operations(factory,candidate,bytes(bad),mode)
+        records=[]
+        for op in operations:
+            records.append(dict(type="request",**{k:v for k,v in op.items() if k!="payload_sha256"}))
+            records.append(dict(type="event",event=dict(op,status="completed",ordinal=1)))
+        e.check_operations(records,factory,candidate,bytes(bad),mode)
+        variants=[records+[dict(type="request",operation="write",offset=8192,length=512),
+                            dict(type="event",event=dict(operation="write",offset=8192,length=512,payload_sha256="0"*64,status="completed",ordinal=99))]]
+        if records:
+            variants.extend([records[:-2],records[2:]+records[:2]])
+            for key,replacement in (("offset",4096),("payload_sha256","0"*64)):
+                changed=copy.deepcopy(records);changed[1]["event"][key]=replacement;variants.append(changed)
+        for changed in variants:
+            try:e.check_operations(changed,factory,candidate,bytes(bad),mode)
+            except ValueError:refused+=1
+            else:raise AssertionError("extra/reordered/changed/missing System mutation accepted")
+    marker=p.marker("installed-event")
+    serial=b"boot\n"+marker.encode()+b"\n"
+    receipt=dict(peer="a",stage="installed-event",before_bytes=5,before_sha256=sha256(b"boot\n").hexdigest(),trigger_command_id=17,after_bytes=len(serial))
+    p.event_receipt(receipt,serial,"installed-event","a",17)
+    bad_serial=[b"boot\nX"+marker.encode()+b"\n",b"boot\n"+marker.encode()+b"X\n",
+                b"boot\nnothing\n",marker.encode()+b"\nboot\n",serial+marker.encode()+b"\n"]
+    for raw in bad_serial:
+        changed=dict(receipt,after_bytes=len(raw))
+        try:p.event_receipt(changed,raw,"installed-event","a",17)
+        except ValueError:refused+=1
+        else:raise AssertionError("preexisting/prefix/suffix/missing lifecycle event accepted")
+    for changed in (dict(receipt,before_bytes=6),dict(receipt,trigger_command_id=16),
+                    dict(receipt,before_sha256="0"*64),dict(receipt,after_bytes=len(serial)-1)):
+        try:p.event_receipt(changed,serial,"installed-event","a",17)
+        except ValueError:refused+=1
+        else:raise AssertionError("wrong trigger/boundary accepted")
     return refused
 if __name__=="__main__":
     import sys

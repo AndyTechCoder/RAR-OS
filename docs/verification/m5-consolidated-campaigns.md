@@ -59,3 +59,16 @@ final independent review and release acceptance pass. Local deterministic
 agent callbacks are not Pal, inference or an OS-wide autonomous agent service.
 The x86_64 Foundation node is not a microcontroller port; compact/wide GUI
 profiles are presentation profiles, not additional supported physical devices.
+
+Review corrections: each update/fallback receipt binds the serial prefix
+immediately before its last triggering key to that exact QMP command and
+requires one complete subsequent marker line. System audit acceptance compares
+every write/flush request and completed payload digest with the mode-specific
+existing transaction oracle; an out-of-scope write followed by restoration
+cannot pass merely because final bytes match.
+
+The first native cloud attempt (34828014811, target932dde9) stopped before VM
+launch because the combined service mapped140KiB exceeded the unchanged128KiB
+PE budget. Source remediation shares control decoding/query and durable
+publication code instead of enlarging that bound. Actual size and all runtime
+acceptance must pass on the corrected source before release.

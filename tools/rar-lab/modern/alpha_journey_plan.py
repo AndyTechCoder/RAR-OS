@@ -71,3 +71,19 @@ def commands(rows,index,peer,mode,challenges,profile):
             if at>=len(keys) or row!={"execute":"send-key","arguments":{"keys":[{"type":"qcode","data":keys[at]}],"hold-time":50}}:raise ValueError("unexpected input")
             at+=1
     if at!=len(keys) or any(n==0 for n in seen.values()):raise ValueError("incomplete exact Alpha journey")
+
+def marker_lines(raw,marker):
+    import re
+    if type(raw) is not bytes or type(marker) is not str:raise ValueError("typed serial")
+    return [m.start() for m in re.finditer(rb"(?m)^"+re.escape(marker.encode("ascii"))+rb"\n",raw)]
+def event_receipt(receipt,serial,stage,peer,trigger):
+    import hashlib
+    if (type(receipt) is not dict or set(receipt)!={"peer","stage","before_bytes","before_sha256","trigger_command_id","after_bytes"} or
+        receipt["peer"]!=peer or receipt["stage"]!=stage or type(receipt["trigger_command_id"]) is not int or receipt["trigger_command_id"]!=trigger):
+        raise ValueError("exact event trigger receipt")
+    before,after=receipt["before_bytes"],receipt["after_bytes"];wanted=marker(stage)
+    if wanted is None or type(before) is not int or type(after) is not int or not 0<=before<after<=len(serial):raise ValueError("event serial bounds")
+    if receipt["before_sha256"]!=hashlib.sha256(serial[:before]).hexdigest():raise ValueError("pre-trigger transcript binding")
+    matches=marker_lines(serial,wanted)
+    if len(matches)!=1 or not before<=matches[0] or matches[0]+len(wanted)+1>after or marker_lines(serial[:before],wanted):
+        raise ValueError("one exact complete event strictly after trigger")

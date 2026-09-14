@@ -14,7 +14,7 @@ def run(session,mode):
     boots={p:base.sha(session.read_regular("/artifact/peer-"+p+"/boot.img",16777216,exact=16777216)) for p in ("a","b")}
     paths={p:session.load("expansion_profile").capture_path(p) for p in ("a","b")}
     if any(os.path.lexists(p) for p in paths.values()):raise ValueError("fresh absent captures")
-    fixtures=[];initial=[];frames=[];pair=None;started=time.monotonic()
+    fixtures=[];initial=[];frames=[];transition_events=[];pair=None;started=time.monotonic()
     current={"phase":"setup"};last_difference=None
     def capture(vm,peer,stage,value,compact):
         nonlocal current,last_difference
@@ -47,15 +47,26 @@ def run(session,mode):
         steps=plan.plan(mode,challenges)
         for peer,keys,stage,value,compact in steps[2:]:
             vm=pair.vms[0 if peer=="a" else 1]
-            for key in keys:vm.key(key)
             wanted=plan.marker(stage)
             if wanted:
                 current={"phase":"event","peer":peer,"stage":stage}
+                if not keys:raise ValueError("explicit event trigger")
+                for key in keys[:-1]:vm.key(key)
+                vm.service();before=bytes(vm.serial)
+                if plan.marker_lines(before,wanted):raise ValueError("pre-existing lifecycle event")
+                vm.key(keys[-1]);trigger=vm.commands[-1]["id"]
                 until=min(vm.deadline,time.monotonic()+25)
-                while wanted.encode("ascii") not in vm.serial:
-                    vm.service()
+                while True:
+                    vm.service();after=bytes(vm.serial)
+                    matches=plan.marker_lines(after,wanted)
+                    if len(matches)==1 and matches[0]>=len(before):break
+                    if matches:raise ValueError("noncausal lifecycle event")
                     if time.monotonic()>=until:raise TimeoutError("integrated event "+stage)
-            else:capture(vm,peer,stage,value,compact)
+                transition_events.append(dict(peer=peer,stage=stage,before_bytes=len(before),
+                    before_sha256=base.sha(before),trigger_command_id=trigger,after_bytes=len(after)))
+            else:
+                for key in keys:vm.key(key)
+                capture(vm,peer,stage,value,compact)
         pair.service();stopped=pair.destroy()
         frozen=[fixtures[i].freeze(pair.vms) for i in (0,2)]
         frozen_system=[fixtures[i].freeze(pair.vms) for i in (1,3)]
@@ -75,7 +86,7 @@ def run(session,mode):
         elapsed=int((time.monotonic()-started)*1000)
         if not 0<elapsed<180000:raise ValueError("bounded Alpha duration")
         return dict(schema="rar-alpha-system-journey-v1",mode=mode,status="observed",milestone_complete=False,
-            challenges=challenges,frames=frames,vm_proofs=proofs,pair_cleanup=stopped,
+            challenges=challenges,frames=frames,transition_events=transition_events,vm_proofs=proofs,pair_cleanup=stopped,
             initial_data=[base64.b64encode(x).decode("ascii") for x in initial],
             frozen_data=[base64.b64encode(x).decode("ascii") for x in frozen],
             captured_wire={p:base64.b64encode(wire[p]).decode("ascii") for p in ("a","b")},

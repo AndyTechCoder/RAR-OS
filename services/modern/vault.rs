@@ -170,6 +170,9 @@ impl<B:Block> Vault<B> {
     }
     /// After any I/O/verification failure, no further writes this boot.
     /// An error during publication may still have committed; never assume not-applied.
+    // Share the complete durable transaction across shared/private call sites.
+    // This changes code generation only; all I/O and failure rules are identical.
+    #[cfg_attr(rar_applications,inline(never))]
     pub fn publish(&mut self,snapshot:Snapshot)->Result<u64,Error> {
         if self.readonly { return Err(Error::ReadOnly); }
         // Lock before I/O. Only completely verified success unlocks the session.

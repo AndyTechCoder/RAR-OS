@@ -1,18 +1,22 @@
 //! Trusted native service helpers. No untrusted app receives these controls.
 use crate::{abi::*,app_control as control,syscall};
+#[inline(never)]
 pub fn query(boot:&Boot,index:usize)->Option<control::Record>{
     let mut b=[0;128];
     if syscall(control::SYSCALL,boot.caps[SELF_RECV],2,index as u64,b.as_mut_ptr()as u64)!=0{return None;}
     let r=control::Record::decode(&b).ok()?;if r.index!=index{return None;}Some(r)
 }
+#[inline(never)]
 pub fn channel(boot:&Boot,destination:usize)->Option<u64>{
     let r=syscall(control::SYSCALL,boot.caps[SELF_RECV],1,destination as u64,0);
     if r<=0{None}else{Some(r as u64)}
 }
+#[inline(never)]
 pub fn peer(boot:&Boot,role:usize)->Option<u64>{
     let r=syscall(control::SYSCALL,boot.caps[SELF_RECV],6,role as u64,0);
     if r<=0{None}else{Some(r as u64)}
 }
+#[inline(never)]
 pub fn send(boot:&Boot,destination:usize,m:&[u8;128])->bool{
     channel(boot,destination).is_some_and(|h|crate::send(h,m).is_ok())
 }
@@ -82,6 +86,7 @@ impl Manager {
     }
 }
 
+#[inline(never)]
 pub fn send_app(boot:&Boot,index:usize,incarnation:u64,frame:&[u8;128])->bool{
     let mut request=[0u8;136];request[..8].copy_from_slice(&incarnation.to_le_bytes());
     request[8..].copy_from_slice(frame);

@@ -37,3 +37,19 @@ use control::*;
         for at in (0..8).chain(9..128){let mut bad=raw;bad[at]^=1;assert!(parse_profile(&bad).is_err());}
     }
 }
+
+#[test]fn direct_decoders_preserve_exact_canonical_roundtrips(){
+    let r=Record{index:0,incarnation:1<<40,generation:1,rights:3,state:2,
+        application:NOTES,owner:[7;32],digest:[9;32]};
+    let fixtures=[r.encode().unwrap(),control(1,0,0).unwrap(),control(6,1,9).unwrap(),
+        input(1,9,b'a').unwrap(),profile(true)];
+    for original in fixtures{
+        for at in 0..128{for value in [0u8,1,7,128,255]{
+            let mut bytes=original;bytes[at]=value;
+            if let Ok(record)=Record::decode(&bytes){assert_eq!(record.encode().unwrap(),bytes);}
+            if let Ok((op,index,inc))=parse(&bytes){assert_eq!(control(op,index,inc).unwrap(),bytes);}
+            if let Ok((index,inc,key))=parse_input(&bytes){assert_eq!(input(index,inc,key).unwrap(),bytes);}
+            if let Ok(compact)=parse_profile(&bytes){assert_eq!(profile(compact),bytes);}
+        }}
+    }
+}

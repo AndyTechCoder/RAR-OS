@@ -1,5 +1,35 @@
 # M5 progress
 
+## Latest consolidated status — 2026-09-14
+
+M5 remains incomplete and PR204 remains draft. Do not mistake source completion
+for actual guest proof or a published release.
+
+- Full source CI passed at 5205da4c9ced22aa65d8b0c24c327696b16daeaa
+  (34824000310) and corrected 932dde9bd9fceb5a9b8553509ef31bb0a15ba339
+  (34825748882). These include native kernel/service object checks,
+  independently linked C/signature conformance, Rust/C app tests, scoped-agent
+  tests, portable-node tests and cloud evidence refusal checks.
+- The independent reviewer closed the failure-receipt and negative-proof
+  coverage findings. Controller-only PR207 passed exact CI34825922780 and
+  merged as 807acd3a48cd59c1b8d0525ca85a1484bbcccacb. It contains no OS
+  target implementation and does not establish M5 completion.
+- Actual native first/fresh/node run34828014811 on that controller and target
+  932dde9 failed before guest launch: service mapped143360 >131072. The failed
+  receipt is retained remotely; no runtime success is claimed. The corrected
+  source deduplicates control/transaction code, keeping the PE limit unchanged.
+- The consolidated remaining source batch adds the fixed network-negative
+  campaigns and same-data install/reject/fallback/repair/fresh-boot journey.
+  See verification/m5-consolidated-campaigns.md. This batch still requires
+  exact-source CI, independent review and actual confined-cloud results.
+
+Release gates still open: actual independent-app/private-document/agent/node
+proof, complete negative and integrated campaigns, final review, evidence-gated
+implementation merge and v0.5.0-expansion-alpha release. No additional target
+hardware, production Pal or general Internet support is implied.
+
+## Historical checkpoint record (superseded where noted above)
+
 Controller main: 8787645fd82e945dcb426a8872c826ec7059c0b2.
 Published M4 remains v0.4.0-modern-alpha, unchanged.
 Working branch: codex/m5-expansion; implementation PR: #204.
