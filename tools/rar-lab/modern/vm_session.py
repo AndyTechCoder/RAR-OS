@@ -401,7 +401,8 @@ class VM:
             return (type(keys) is list and len(keys)==1 and type(keys[0]) is dict and
                 set(keys[0])=={"type","data"} and keys[0]["type"]=="qcode" and
                 keys[0]["data"] in tuple("abcdefghijklmnopqrstuvwxyz0123456789")+
-                ("spc","ret","backspace","esc","f1","f2","f3","up","down"))
+                ("spc","ret","backspace","esc","f1","f2","f3","up","down")+
+                (("f4","f5","f6","f7") if getattr(self,"expansion_peer",None) in ("a","b") else ()))
         return False
 
     def record_event(self,answer,request_id):

@@ -132,7 +132,7 @@ def cleanup(command,owned):
     return failures
 
 def main(mode="persistence"):
-    if mode not in ("persistence","fault-campaign","mounted-error","signed-runtime","system-install-faults","system-repair-faults","expansion-pair"):
+    if mode not in ("persistence","fault-campaign","mounted-error","signed-runtime","system-install-faults","system-repair-faults","expansion-pair","expansion-alpha"):
         raise ValueError("fixed Modern controller mode")
     import sys
     if (sys.argv!=[sys.argv[0]] or sys.platform!="linux" or not sys.flags.isolated or not sys.dont_write_bytecode or
@@ -160,7 +160,7 @@ def main(mode="persistence"):
     if any(re.fullmatch("[0-9]+",x) is None for x in (run_id,attempt)):
         raise ValueError("fixed run identity")
     prefix={"persistence":"modern-runtime","fault-campaign":"modern-fault","mounted-error":"modern-mounted-error","signed-runtime":"modern-signed-runtime","system-install-faults":"modern-system-install-faults",
-        "system-repair-faults":"modern-system-repair-faults","expansion-pair":"expansion-pair"}[mode]
+        "system-repair-faults":"modern-system-repair-faults","expansion-pair":"expansion-pair","expansion-alpha":"expansion-alpha"}[mode]
     evidence=workspace/(prefix+"-evidence");evidence.mkdir(exist_ok=False)
     work=workspace/(prefix+"-work");work.mkdir(mode=0o700,exist_ok=False)
     config=work/"docker-config";config.mkdir(mode=0o700,exist_ok=False)
@@ -213,7 +213,7 @@ def main(mode="persistence"):
         return container(command,args,name,identifier,entry,mounts,expected,owner,
             seconds,limit,containers,report["container_proofs"],save,inherited)
     try:
-        compiler=image("expansion-build.Containerfile" if mode=="expansion-pair" else "build.Containerfile","build")
+        compiler=image("expansion-alpha-build.Containerfile" if mode=="expansion-alpha" else "expansion-build.Containerfile" if mode=="expansion-pair" else "build.Containerfile","build")
         builds=[]
         for number in (1,2):
             raw=execute(compiler,["/bin/sh","-c",
@@ -223,6 +223,10 @@ def main(mode="persistence"):
             for name,data in binary.items(): build.binary["inspect"](data,name!="modern.efi")
             builds.append(binary)
         if builds[0]!=builds[1]: raise ValueError("two independent actual UEFI builds differ")
+        if mode=="expansion-alpha":
+            load("alpha_controller").run(load,build,execute,image,compiler,source,controller,
+                work,evidence,report,save,builds[0])
+            return
         if mode=="expansion-pair":
             load("expansion_controller").run(load,build,execute,image,compiler,source,controller,
                 work,evidence,report,save,builds[0])
