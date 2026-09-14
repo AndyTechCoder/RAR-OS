@@ -1,6 +1,6 @@
 # Experimental native app SDK and examples
 
-Status: source/object candidate only. No installer, launcher or target execution.
+Status: source/link candidate only. No installer, launcher or target execution.
 
 The app v0 frame/bootstrap from expansion-app-abi-v0.md is unchanged. The
 following payload semantics complete its first UI/document subset. These are
@@ -53,10 +53,12 @@ apps/expansion/counter is a distinct freestanding C entry. It receives UI-only
 rights, counts0..9999 and supports Plus/Space, Minus and0 reset. It cannot send to
 Storage or choose another app's document. It stages canonical Paint messages.
 
-Cloud Specifications runs only pure state/codec tests, then compiles both native
-entries to relocatable objects using already pinned compilers. It does not link,
-install or run these targets. Native image loader, Manager/Storage/Compositor
-routes, independent PE packaging and actual GUI launch remain required.
+Cloud Specifications runs pure state/codec tests and compiles both native
+entries to relocatable objects using already pinned compilers. The final-link
+candidate below additionally links and lab-signs Counter, inspecting it only as
+data. Notes final linking, native image loader/Manager/Storage/Compositor routes,
+installation and actual GUI launch remain required. Neither target runs in
+Specifications.
 
 ## Service-side candidate integration
 
@@ -119,3 +121,16 @@ rights and 64KiB stack. It uses only the already-public laboratory key; this
 confers no production trust. The actual Rust verifier checks this real linked
 payload plus identity, budget, signature, rollback and tamper refusals in cloud
 CI. No package is installed or published as a release artifact by this check.
+
+## Native activation sequencing constraint
+
+A constructed app waiting for Storage binding/installation acknowledgement must
+be explicitly unschedulable. The existing native SEND wakeup scans Blocked
+processes with Active model state; merely leaving a published app Blocked would
+not safely hold it. The activation adapter must distinguish a held app from a
+receive-blocked running app and prevent generic wakeup until the intended start.
+Do not retain a kernel AppHandover over IPC: build/publish in one trap, then use
+a separate held-native-context state while Manager awaits the authenticated
+Storage acknowledgement. Required service loss must retire held and running
+apps alike before any service reconstruction resets volatile grant watermarks.
+This is an implementation requirement, not a claim that the adapter exists.
