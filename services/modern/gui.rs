@@ -1,5 +1,7 @@
 //! Modern GUI composition: full-incarnation surfaces and bounded keyboard.
 #![forbid(unsafe_code)]
+#[path="../expansion/app_sdk.rs"]pub mod app_sdk;
+
 #[path="../../apps/desktop/model.rs"]
 pub mod apps;
 use apps::{View,Text,Windows};
@@ -35,11 +37,12 @@ impl Surface {
         }
     }
 }
-pub struct Compositor { pub windows:Windows,surfaces:[Surface;3],peers:[u64;10],settings_highest:u64 }
+pub struct Compositor { pub windows:Windows,surfaces:[Surface;3],peers:[u64;10],settings_highest:u64,
+    app_surfaces:[Surface;2],app_incarnations:[u64;2],app_highest:[u64;2] }
 impl Compositor {
     pub fn new(peers:[u64;10])->Result<Self,()> {
         if [0usize,4,5,6].iter().any(|&i|peers[i]==0){return Err(());}
-        Ok(Self{windows:Windows::new(),surfaces:[Surface::EMPTY;3],peers,settings_highest:peers[5]})
+        Ok(Self{windows:Windows::new(),surfaces:[Surface::EMPTY;3],peers,settings_highest:peers[5],app_surfaces:[Surface::EMPTY;2],app_incarnations:[0;2],app_highest:[0;2]})
     }
     /// Caller must supply the fixed kernel query result, NOT a message field.
     /// Retain last committed pixels but revoke all unfinished/version state.
@@ -50,8 +53,47 @@ impl Compositor {
         self.surfaces[1]=Surface{committed,..Surface::EMPTY};
         self.peers[5]=incarnation;if incarnation!=0{self.settings_highest=incarnation;}Ok(())
     }
-    pub fn view(&self,role:u8)->Option<&View> {self.surfaces.get(role.checked_sub(4)? as usize).map(|s|&s.committed)}
+    /// Binding comes only from the kernel's fixed trusted-service app query.
+    /// Revocation/reuse erases both staged and committed private app pixels.
+    pub fn app_binding(&mut self,index:usize,incarnation:u64)->Result<(),()>{
+        if index>=2{return Err(());}
+        if incarnation==self.app_incarnations[index]{return Ok(());}
+        if incarnation!=0&&incarnation<=self.app_highest[index]{return Err(());}
+        self.app_surfaces[index]=Surface::EMPTY;self.app_incarnations[index]=incarnation;
+        if incarnation!=0{self.app_highest[index]=incarnation;}Ok(())
+    }
+    pub fn view(&self,role:u8)->Option<&View> {
+        if matches!(role,10|11){
+            let i=(role-10)as usize;
+            return if self.app_incarnations[i]!=0{Some(&self.app_surfaces[i].committed)}else{None};
+        }
+        self.surfaces.get(role.checked_sub(4)? as usize).map(|s|&s.committed)
+    }
+    fn app_message(&mut self,index:usize,generation:u64,raw:&[u8;128])->Result<bool,()>{
+        use app_sdk::{wire::Message,protocol::{self,Paint}};
+        if generation==0||generation!=self.app_incarnations[index]{return Err(());}
+        let result=(||{
+            let m=Message::decode(raw).map_err(|_|())?;
+            let mut frame=[0u8;128];frame[4..8].copy_from_slice(&m.sequence().to_le_bytes());
+            match protocol::paint(&m).map_err(|_|())?{
+                Paint::Begin(count)=>{frame[0]=0x20;frame[1]=count;},
+                Paint::Line{row,text}=>{
+                    frame[0]=0x21;frame[1]=row;frame[2]=text.len()as u8;
+                    frame[8..8+text.len()].copy_from_slice(text);
+                },
+                Paint::Commit=>frame[0]=0x22,
+            }
+            self.app_surfaces[index].message(&frame)
+        })();
+        if result.is_err(){
+            let old=self.app_surfaces[index];
+            self.app_surfaces[index]=Surface{committed:old.committed,
+                committed_version:old.committed_version,..Surface::EMPTY};
+        }
+        result
+    }
     pub fn apply(&mut self,sender:u64,generation:u64,m:&[u8;128])->Result<bool,()> {
+        if matches!(sender,10|11){return self.app_message((sender-10)as usize,generation,m);}
         let expected=self.peers.get(usize::try_from(sender).map_err(|_|())?).ok_or(())?;
         if *expected==0||generation!=*expected{return Err(());}
         if sender==0 {
@@ -219,6 +261,47 @@ impl Keyboard {
         assert_eq!(k.feed(0x1e),None);k.feed(0x9e);assert_eq!(k.feed(0x1e),Some(b'a'));
     }
 
+
+    #[test]fn app_surfaces_require_current_kernel_binding_and_atomic_complete_frames(){
+        use app_sdk::protocol;
+        let mut c=Compositor::new([1;10]).unwrap();
+        let inc=0x1_0000_0001;
+        let begin=protocol::begin(1,2).unwrap().encode();
+        assert!(c.apply(10,inc,&begin).is_err());assert!(c.view(10).is_none());
+        c.app_binding(0,inc).unwrap();assert!(c.apply(10,1,&begin).is_err());
+        c.apply(10,inc,&begin).unwrap();
+        c.apply(10,inc,&protocol::line(1,0,b"PRIVATE").unwrap().encode()).unwrap();
+        assert_eq!(c.view(10).unwrap().lines[0].as_bytes(),b"");
+        assert!(c.apply(10,inc,&protocol::commit(1).unwrap().encode()).is_err());
+        assert!(c.apply(10,inc,&protocol::line(1,1,b"LATE").unwrap().encode()).is_err());
+        c.apply(10,inc,&begin).unwrap();
+        c.apply(10,inc,&protocol::line(1,0,b"PRIVATE").unwrap().encode()).unwrap();
+        c.apply(10,inc,&protocol::line(1,1,b"OK").unwrap().encode()).unwrap();
+        assert_eq!(c.apply(10,inc,&protocol::commit(1).unwrap().encode()),Ok(true));
+        assert_eq!(c.view(10).unwrap().lines[0].as_bytes(),b"PRIVATE");
+        assert!(c.apply(10,inc,&begin).is_err());
+        c.app_binding(0,0).unwrap();assert!(c.view(10).is_none());
+        assert!(c.app_binding(0,inc).is_err());c.app_binding(0,inc+1).unwrap();
+        assert_eq!(c.view(10).unwrap().lines[0].as_bytes(),b"");
+        assert!(c.apply(10,inc,&begin).is_err());
+    }
+    #[test]fn malformed_current_app_cannot_commit_partial_frame_or_touch_other_views(){
+        use app_sdk::{wire::Message,protocol};
+        let mut c=Compositor::new([1;10]).unwrap();
+        put(&mut c,4,1,b"FILES");c.app_binding(0,10).unwrap();c.app_binding(1,11).unwrap();
+        c.apply(11,11,&protocol::begin(1,1).unwrap().encode()).unwrap();
+        c.apply(11,11,&protocol::line(1,0,b"COUNTER").unwrap().encode()).unwrap();
+        c.apply(11,11,&protocol::commit(1).unwrap().encode()).unwrap();
+        c.apply(10,10,&protocol::begin(2,1).unwrap().encode()).unwrap();
+        c.apply(10,10,&protocol::line(2,0,b"HIDDEN").unwrap().encode()).unwrap();
+        let bad=Message::new(1,0,2,&[1,0,0]).unwrap().encode();
+        assert!(c.apply(10,10,&bad).is_err());
+        assert!(c.apply(10,10,&protocol::commit(2).unwrap().encode()).is_err());
+        assert_eq!(c.view(10).unwrap().lines[0].as_bytes(),b"");
+        assert_eq!(c.view(11).unwrap().lines[0].as_bytes(),b"COUNTER");
+        assert_eq!(c.view(4).unwrap().lines[0].as_bytes(),b"FILES");
+        for sender in [12,u32::MAX as u64,0x1_0000_000a]{
+            assert!(c.apply(sender,10,&protocol::begin(2,1).unwrap().encode()).is_err());
+        }
+    }
 }
-
-

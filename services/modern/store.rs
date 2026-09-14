@@ -1,6 +1,8 @@
 //! Modern-only durable adapter for the existing Terminal/Files request bytes.
 //! No VM activation or device authority. Runtime must provide only a Data Block.
 #![forbid(unsafe_code)]
+#[path="../expansion/app_sdk.rs"]pub mod app_sdk;
+
 use crate::vault::{Block, Error, Snapshot, Vault};
 use crate::desktop_wire as wire;
 
@@ -13,6 +15,7 @@ pub struct Store<B: Block> {
     files_generation: u64,
     terminal_generation: u64,
     private: Option<crate::app_documents::Grant>,
+    app_sequence:u32,
 }
 pub(crate) fn name_ok(name: &[u8]) -> bool {
     !name.is_empty() && name.len() <= 12 && name != b"." && name != b".." &&
@@ -46,7 +49,7 @@ impl<B: Block> Store<B> {
         if vault.snapshot().entries().any(|(name, _)| !name_ok(name)) {
             return Err(Error::Invalid);
         }
-        Ok(Self { vault, unavailable: false, files_generation, terminal_generation, private: None })
+        Ok(Self { vault, unavailable: false, files_generation, terminal_generation, private: None,app_sequence:0 })
     }
     /// Candidate private adapter. Grant comes from trusted installer/kernel
     /// identity, never app bytes. Reads and validates; never installs on mount.
@@ -57,7 +60,7 @@ impl<B: Block> Store<B> {
         grant.validate_binding(vault.snapshot()).map_err(|_|Error::Invalid)?;
         // Check the complete future installation without publishing it.
         grant.installation(vault.snapshot()).map_err(|_|Error::Bounds)?;
-        Ok(Self{vault,unavailable:false,files_generation,terminal_generation,private:Some(grant)})
+        Ok(Self{vault,unavailable:false,files_generation,terminal_generation,private:Some(grant),app_sequence:0})
     }
     /// Trusted explicit installer call; no caller-controlled owner or filesystem
     /// selector. A future IPC adapter must authenticate installer authority.
@@ -94,6 +97,32 @@ impl<B: Block> Store<B> {
             .map_err(|_|Failure::Unavailable)?;
         if candidate==*self.vault.snapshot(){return Ok(());}
         self.publish_private(candidate)
+    }
+    /// Candidate private app endpoint. The runtime must supply actual kernel
+    /// sender/incarnation, then route the returned frame using its own fixed
+    /// app-send grant. No app-selected owner, path, handle or install operation.
+    pub fn process_app(&mut self,sender:u64,incarnation:u64,request:&[u8])->Option<[u8;128]>{
+        use app_sdk::{wire::Message,protocol::{self,Document}};
+        let principal=u32::try_from(sender).ok()?;
+        if !self.private?.allows(principal,incarnation){return None;}
+        let message=Message::decode(request).ok()?;
+        let operation=protocol::document(&message).ok()?;
+        if message.sequence()<=self.app_sequence{return None;}
+        // Consume before I/O. Replays cannot repeat a possibly committed write.
+        self.app_sequence=message.sequence();
+        let mut payload=[0u8;64];let mut len=0;
+        let result=match operation{
+            Document::Read=>self.read_private(principal,incarnation).map(|bytes|{
+                len=bytes.len();payload[..len].copy_from_slice(bytes);
+            }),
+            Document::Write(value)=>self.write_private(principal,incarnation,value),
+        };
+        let status=match result{
+            Ok(())=>protocol::OK,Err(Failure::ReadOnly)=>protocol::READ_ONLY,
+            Err(Failure::Unavailable)=>protocol::UNAVAILABLE,
+            Err(Failure::Indeterminate)=>protocol::INDETERMINATE,
+        };
+        Message::new(message.operation(),status,message.sequence(),&payload[..len]).ok().map(|m|m.encode())
     }
     pub fn revoke_private(&mut self){self.private=None;}
     pub fn into_block(self) -> B { self.vault.into_block() }
@@ -467,6 +496,58 @@ mod tests {
             s.install_private().unwrap();s.write_private(10,0x1_0000_0001,b"recovered").unwrap();
             let s=Store::mount_private(s.into_block().reboot(),26,1,1,private_grant()).unwrap();
             assert_eq!(s.read_private(10,0x1_0000_0001),Ok(&b"recovered"[..]));
+        }
+    }
+
+    #[test]fn app_endpoint_authenticates_frames_prevents_replay_and_preserves_shared_data(){
+        use app_sdk::wire::{Message,READ_DOCUMENT,WRITE_DOCUMENT};
+        let disk=Disk::new(8);let writes=disk.writes.clone();
+        let mut s=Store::mount_private(disk,26,1,1,private_grant()).unwrap();
+        call(&mut s,6,wire::CREATE,b"note",b"").unwrap();
+        call(&mut s,6,wire::WRITE,b"note",b"shared").unwrap();s.install_private().unwrap();
+        let request=Message::new(WRITE_DOCUMENT,0,1,b"hello").unwrap().encode();
+        let count=writes.get();
+        for (sender,inc)in [(4,1),(11,0x1_0000_0001),(10,1),(10,0),(0x1_0000_000a,0x1_0000_0001)]{
+            assert_eq!(s.process_app(sender,inc,&request),None);
+        }
+        assert_eq!(writes.get(),count);
+        let reply=Message::decode(&s.process_app(10,0x1_0000_0001,&request).unwrap()).unwrap();
+        assert_eq!((reply.operation(),reply.sequence(),reply.status(),reply.payload()),(WRITE_DOCUMENT,1,0,&b""[..]));
+        let count=writes.get();let revision=s.revision();
+        assert_eq!(s.process_app(10,0x1_0000_0001,&request),None);
+        assert_eq!(writes.get(),count);assert_eq!(s.revision(),revision);
+        let read=Message::new(READ_DOCUMENT,0,2,b"").unwrap().encode();
+        let reply=Message::decode(&s.process_app(10,0x1_0000_0001,&read).unwrap()).unwrap();
+        assert_eq!(reply.payload(),b"hello");
+        let shared=call(&mut s,4,wire::READ,b"note",b"").unwrap();
+        assert_eq!(&shared[16..22],b"shared");
+        let mut s=Store::mount_private(s.into_block().reboot(),26,1,1,private_grant()).unwrap();
+        assert_eq!(s.read_private(10,0x1_0000_0001),Ok(&b"hello"[..]));
+        s.revoke_private();assert_eq!(s.process_app(10,0x1_0000_0001,&read),None);
+    }
+    #[test]fn app_endpoint_malformed_and_failure_paths_never_publish_or_retry(){
+        use app_sdk::{wire::{Message,WRITE_DOCUMENT,READ_DOCUMENT},protocol};
+        let disk=Disk::new(8);let writes=disk.writes.clone();
+        let mut s=Store::mount_private(disk,26,1,1,private_grant()).unwrap();s.install_private().unwrap();
+        let count=writes.get();
+        for (op,status,data)in [(WRITE_DOCUMENT,1,&b"x"[..]),(READ_DOCUMENT,0,&b"x"[..]),
+            (WRITE_DOCUMENT,0,&[1;65][..]),(1,0,&b""[..])]{
+            let raw=Message::new(op,status,u32::MAX,data).unwrap().encode();
+            assert_eq!(s.process_app(10,0x1_0000_0001,&raw),None);
+        }
+        assert_eq!(s.app_sequence,0);assert_eq!(writes.get(),count);
+        for operation in 1..=12{
+            let mut disk=Disk::new(8);disk.fail=Some(26+12+operation);
+            let writes=disk.writes.clone();
+            let mut s=Store::mount_private(disk,26,1,1,private_grant()).unwrap();s.install_private().unwrap();
+            let raw=Message::new(WRITE_DOCUMENT,0,1,b"new").unwrap().encode();
+            let reply=Message::decode(&s.process_app(10,0x1_0000_0001,&raw).unwrap()).unwrap();
+            assert!(matches!(reply.status(),protocol::UNAVAILABLE|protocol::INDETERMINATE));
+            assert!(reply.payload().is_empty());let count=writes.get();
+            assert_eq!(s.process_app(10,0x1_0000_0001,&raw),None);
+            let read=Message::new(READ_DOCUMENT,0,2,b"").unwrap().encode();
+            let reply=Message::decode(&s.process_app(10,0x1_0000_0001,&read).unwrap()).unwrap();
+            assert_eq!(reply.status(),protocol::UNAVAILABLE);assert_eq!(writes.get(),count);
         }
     }
 }

@@ -31,8 +31,11 @@ impl Grant{
         }
     }
     pub fn installation(self,snapshot:&Snapshot)->Result<Snapshot,Error>{install(snapshot,self.owner)}
+    pub fn allows(self,principal:u32,incarnation:u64)->bool{
+        principal==self.principal&&incarnation==self.incarnation
+    }
     fn authorize(self,principal:u32,incarnation:u64)->Result<Owner,Error>{
-        if principal!=self.principal||incarnation!=self.incarnation{return Err(Error::Denied);}
+        if !self.allows(principal,incarnation){return Err(Error::Denied);}
         Ok(self.owner)
     }
 }

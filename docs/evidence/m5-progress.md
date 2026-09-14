@@ -156,3 +156,8 @@ They still require independently linked/signed packages, native kernel/Manager/
 Storage/Compositor wiring and actual cloud GUI launch/isolation/persistence proof.
 No target entry is executed by Specifications. No new host tools, external target
 dependencies, VM profile, native app activation or storage format is introduced.
+
+Candidate service endpoints now consume the same SDK payloads: private document
+dispatch with full identity and sequence replay refusal before Vault I/O; two
+separate Compositor app surfaces with atomic commits and revocation pixel erasure.
+Default native service loops still do not call these endpoints or bind apps.

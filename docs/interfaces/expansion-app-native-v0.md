@@ -57,3 +57,20 @@ Cloud Specifications runs only pure state/codec tests, then compiles both native
 entries to relocatable objects using already pinned compilers. It does not link,
 install or run these targets. Native image loader, Manager/Storage/Compositor
 routes, independent PE packaging and actual GUI launch remain required.
+
+## Service-side candidate integration
+
+Store::process_app authenticates the actual full sender/incarnation against its
+configured private grant before parsing a document operation. Malformed frames
+and old/duplicate sequences are ignored. A fresh sequence is consumed before
+I/O, so an uncertain write cannot be replayed. Success is emitted only after the
+existing Vault durable acknowledgement. No request can install, choose another
+owner/path, obtain shared records or add a device handle. Existing shared
+Files/Terminal protocol remains unchanged.
+
+Compositor keeps two separate app surfaces. Only the fixed kernel binding query
+may set their current incarnations. Unknown/stale identities cannot alter
+current staging. Current-app malformed/partial frames abort staging; a complete
+valid commit publishes all rows at once. Revocation/reuse clears private app
+pixels and retains the incarnation high-water mark. Released legacy surfaces
+and window protocol are unchanged. No native loop calls the new methods yet.
