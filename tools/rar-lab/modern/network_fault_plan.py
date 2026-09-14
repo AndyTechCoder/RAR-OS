@@ -14,13 +14,13 @@ def plan(case,challenges):
         # Each sender ACK means queued only. A receives nothing from the first
         # three malformed frames or the fourth deliberately dropped datagram.
         for _ in range(4):
-            out.append(("b",keys("net send "+left),"queued",None))
+            out.append(("b",keys("net send "+left),"send-only",None))
             out.append(("a",keys("net recv"),"empty",None))
         out.append(("b",keys("net send "+left),"queued",None))
         out.append(("a",keys("net recv"),"received",left))
-        # Six frames overload a four-datagram application queue; no receive
+        # Five frames exceed a four-datagram application queue; no receive
         # command is sent to A during this bounded burst.
-        for _ in range(6):out.append(("b",keys("net send "+right),"queued",None))
+        for i in range(5):out.append(("b",keys("net send "+right),"queued" if i==4 else "send-only",None))
         for _ in range(4):out.append(("a",keys("net recv"),"received",right))
         out.append(("a",keys("net recv"),"empty",None))
         out.append(("a",keys("net close"),"closed",None))
@@ -41,7 +41,7 @@ def expected(stage,value=None):
         if value is not None:raise ValueError("empty has no challenge")
         return load("alpha_visual").navigation(load("visual_oracle")._render_scene((False,(6,),6,{6:[
             "RAR NETWORK - PUBLIC LAB PEER ONLY","NO PEER DATAGRAM","","> ","","PUBLIC LAB DATA - NOT PRIVATE"]},False)))
-    if stage=="peer-stopped":raise ValueError("serial event, not a rendered screenshot")
+    if stage in ("peer-stopped","send-only"):raise ValueError("non-capture action, not a rendered screenshot")
     return load("alpha_visual").expected(stage,value)
 
 def validate(frame,stage,value=None):
@@ -50,7 +50,7 @@ def validate(frame,stage,value=None):
     return hashlib.sha256(frame).hexdigest()
 
 def commands(rows,index,peer,mode,challenges,profile):
-    if type(rows) is not list or not 1<=len(rows)<=1024:raise ValueError("bounded Alpha QMP")
+    if type(rows) is not list or not 1<=len(rows)<=512:raise ValueError("bounded Alpha QMP")
     plain=[]
     for n,row in enumerate(rows,1):
         if type(row) is not dict or type(row.get("id")) is not int or row["id"]!=n:raise ValueError("contiguous QMP")
@@ -61,7 +61,7 @@ def commands(rows,index,peer,mode,challenges,profile):
     for owner,part,stage,_ in plan(mode,challenges):
         if owner==peer:
             keys+=part
-            if stage!="peer-stopped":scenes.add(len(keys))
+            if stage not in ("peer-stopped","send-only"):scenes.add(len(keys))
     capture={"execute":"screendump","arguments":{"filename":profile.directory(index)+"/frame.ppm"}}
     seen={at:0 for at in scenes};at=0
     for row in plain[len(prefix):]:

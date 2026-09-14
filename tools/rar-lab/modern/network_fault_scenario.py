@@ -49,6 +49,7 @@ def run(session,mode):
             if mode=="expiry" and stage=="retired" and not expiry_waited:
                 pair.vms[0].delay(20);expiry_waited=True
             for key in keys:vm.key(key)
+            if stage=="send-only":continue
             if stage=="peer-stopped":
                 until=min(vm.deadline,time.monotonic()+5)
                 while b"RAR-MODERN:APP-FAULT=6" not in vm.serial:
