@@ -285,3 +285,20 @@ done
 set -- $(/usr/bin/du -sk "$work")
 [ "$1" -le 8192 ]
 printf '%s\n' 'Independent C link reproducibility and kernel PE-parser/public-lab signature conformance passed; installation and guest execution NOT claimed'
+
+# Consolidated independent-app activation source batch. Host tests and object
+# type-checks ONLY inside this same pinned network-disabled cloud sandbox.
+for source in tools/rar-lab/expansion/app_control_tests.rs core/expansion/node.rs; do
+    /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --test -C strip=symbols -C debuginfo=0 -C opt-level=1 -C overflow-checks=yes "$source" -o "$work/focused-tests"
+    "$work/focused-tests"
+done
+/usr/bin/cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -ffreestanding -fno-builtin tools/rar-lab/expansion/agent_tests.c -o "$work/focused-c-tests"
+"$work/focused-c-tests"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --crate-type lib --emit=obj -C panic=abort -C no-redzone=yes -C debuginfo=0 --cfg rar_platform --cfg rar_modern --cfg rar_modern_compile_only --cfg rar_signed_updates --cfg rar_expansion --cfg rar_applications --cfg 'rar_profile="normal"' nucleus/foundation/main.rs -o "$work/focused.rlib"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --crate-type lib --emit=obj -C panic=abort -C no-redzone=yes -C debuginfo=0 --cfg rar_signed_updates --cfg rar_expansion --cfg rar_applications core/modern/main.rs -o "$work/focused.rlib"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --crate-type lib --emit=obj -C panic=abort -C no-redzone=yes -C debuginfo=0 --cfg rar_node --cfg 'rar_profile="normal"' nucleus/foundation/main.rs -o "$work/focused.rlib"
+/usr/bin/python3 -I -B tools/rar-lab/modern/alpha_visual.py --self-test
+/usr/bin/python3 -I -B tools/rar-lab/modern/alpha_tests.py --self-test
+set -- $(/usr/bin/du -sk "$work")
+[ "$1" -le 8192 ]
+printf '%s\n' 'Consolidated native app/agent/node source tests passed; cloud Alpha activation and M5 acceptance remain separate'
