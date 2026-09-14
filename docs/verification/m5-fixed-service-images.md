@@ -33,3 +33,32 @@ Failure receipts remain unconditional failures. Their already-bounded synthetic
 diagnostics are printed in the job log (escaped and capped); this permits remote
 diagnosis without downloading artifacts to the owner's Mac or SSD. Success
 criteria are unchanged. No user data, credential or external network is introduced.
+
+## Follow-up after the measured network split
+
+Run34834004462 (source5f97512, controller6d8c7a9) rejected the common PE at
+135168 bytes before guest launch. The standalone network split removed8192
+mapped bytes but the common image is still one page beyond its limit.
+
+A proposed regrouping of compositor/network code was NOT committed or activated:
+automated review flagged architectural coupling, and independent review agreed
+that shared build identity requires a separate decision even if process grants
+remain unchanged. No such decision is being inferred from a size failure.
+
+The selected lower-risk correction preserves the current image/role selection.
+Only native-Alpha glyph/text/rectangle rendering helper inlining is disabled,
+so repeated draws share code instead of duplicating clipped pixel-writing loops.
+The helper bodies, framebuffer validation, clipping, dimensions, glyphs and
+colors are unchanged. Non-Alpha compilation retains its previous attributes.
+Actual size and byte-for-byte framebuffer acceptance remain required. No larger
+image limit, role regrouping, or native execution is introduced.
+
+
+## Selected independent-image follow-up
+
+The rendering-only source8ff1049 passed CI34835001778 and focused review, but
+cloud run34836921130 still measured135168 bytes before guest launch. Further
+compiler guesses are not used. Proposed ADR0040 chooses a separate fixed
+compositor PE, preserving its independent identity from networking. The four
+private build files are independently inspected; the three service PEs all
+retain128KiB limits. Actual acceptance remains pending.
