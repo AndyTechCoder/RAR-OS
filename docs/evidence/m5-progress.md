@@ -167,3 +167,31 @@ same-owner/new-incarnation rebind, volatile sequence reset only on accepted new
 identity, and old-recipient reply validity checks. C envelope negative tests and
 stale-sender/new-surface staging regression close the focused source gaps.
 Native service-loop/outbox and kernel app-root activation still remain pending.
+
+## Exact continuation checkpoint — 2026-09-14
+
+- Source c90c43ea0985032e5ff9f0fb4e0136ffe8b178d6 passed the complete
+  [Specifications run34810372978](https://github.com/AndyTechCoder/RAR-OS/actions/runs/34810372978).
+  This includes native Rust/C object compilation, pure Notes/Counter state tests,
+  private-document dispatch and separate revocable Compositor surfaces.
+- Source82d5093c00485ed4744afa09ff1833264dc2178c passed the primary validation
+  phase of run34811348540; at this checkpoint the mutation-policy phase is still
+  running. Do not infer its final conclusion from this document.
+- Candidate442a4762dbb098e95debe129ab7c7c971c50ff43 has independent read-only
+  source clearance conditional on exact-head CI. It adds a fixed freestanding C
+  final link, two-link reproducibility, a bounded first-party ELF-to-private-PE
+  converter and actual RAR PE/signature verifier checks on a public-lab signed
+  Counter package. Its cloud result is not claimed before testing.
+- All candidate changes remain in draft PR204. No M5 implementation merge or
+  v0.5.0 release has occurred.
+
+The concrete next implementation boundary is independent native app activation:
+immutable verified package banks, private kernel roots and stack/ABI, Manager
+launch/close, Storage binding and recipient-checked outbox, Compositor/launcher
+routing, then actual cloud persistence, failure and authority-denial tests.
+Source endpoints and signed byte verification are not substitutes for this.
+
+M5.1 runtime negative networking campaigns, M5.3 broker/provider/profile work and
+the integrated release journey remain required. No new owner input is needed
+for safe source work. Never bypass a failing check, execute locally, or merge
+this draft before the real acceptance evidence is complete.
