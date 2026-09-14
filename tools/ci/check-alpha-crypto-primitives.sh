@@ -265,3 +265,22 @@ set -- $(/usr/bin/du -sk "$work")
 set -- $(/usr/bin/du -sk "$work")
 [ "$1" -le 8192 ]
 printf '%s\n' 'Expansion independent Rust/C app state tests and native entry OBJECT compilation passed; no linking, installation or guest app execution claimed'
+
+# Independently LINK the fixed freestanding Counter; never execute its ELF/PE.
+# Existing image-pinned cc/ld only, no startup objects, libc, libgcc or download.
+# Two independent links must produce identical bytes. Python and the actual RAR
+# PE parser inspect the result as data; these host checkers do not launch it.
+/usr/bin/python3 -I -B tools/rar-lab/expansion/c_app_pe.py --self-test
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 -C strip=symbols -C debuginfo=0 -C opt-level=1 tools/rar-lab/expansion/native_pe_conformance.rs -o "$work/focused-tests"
+/usr/bin/python3 -I -B tools/rar-lab/expansion/c_app_pe.py --fixture | "$work/focused-tests"
+for build in a b; do
+    /usr/bin/cc -std=c11 -Os -Wall -Wextra -Werror -pedantic -ffreestanding -fno-builtin \
+        -fno-stack-protector -fno-pie -mno-red-zone -fno-asynchronous-unwind-tables -fno-unwind-tables \
+        -DRAR_APP_NATIVE -nostdlib -static -no-pie -Wl,--build-id=none \
+        -Wl,-T,tools/rar-lab/expansion/c_app.ld apps/expansion/counter/main.c -o "$work/counter-$build.elf"
+done
+/usr/bin/python3 -I -B -c 'import sys; a=open(sys.argv[1],"rb").read(1048577); b=open(sys.argv[2],"rb").read(1048577); assert 64<=len(a)<=1048576 and a==b, "native C link reproducibility"' "$work/counter-a.elf" "$work/counter-b.elf"
+/usr/bin/python3 -I -B tools/rar-lab/expansion/c_app_pe.py --convert < "$work/counter-a.elf" | "$work/focused-tests"
+set -- $(/usr/bin/du -sk "$work")
+[ "$1" -le 8192 ]
+printf '%s\n' 'Independent C link reproducibility and kernel PE-parser conformance passed; signing, installation and guest execution NOT claimed'

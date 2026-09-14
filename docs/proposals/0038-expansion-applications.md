@@ -80,3 +80,19 @@ Timeouts leave uncertain saves visible without automatic accepted-write retries.
 Existing Data format, app identity, signing domain and recovery promises remain.
 Document semantics and exact source tests are in expansion-app-native-v0.md.
 This proposal must not be read as accepted native activation or M5 completion.
+
+## C final-link source continuation proposal
+
+Advance from object-only checks to a fixed Counter final link inside the same
+network-disabled, image-pinned Specifications sandbox. The existing cc driver
+uses its image-pinned linker with no startup objects/libraries, and a first-party
+bounded converter emits the unchanged private PE layout. Existing kernel parser
+conformance and two-build byte equality are required; neither executable runs.
+
+Alternative: add a PE cross-toolchain or third-party converter. Not selected:
+the fixed static image needs neither an added download nor a target dependency.
+Alternative: treat object compilation as sufficient. Rejected because unresolved
+helpers and final address/section layout would remain unverified.
+This proposal introduces no device, VM, runtime, installed app or stable format
+authority. Independent source review precedes cloud validation; actual native
+activation still requires the complete boundary evidence above.

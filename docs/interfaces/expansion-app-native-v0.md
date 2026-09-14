@@ -95,3 +95,20 @@ frame without state changes, but terminate on kernel receive failure. The C
 152-byte envelope parser is safe host-testable code in app.h, used by native.h;
 host tests cover short/invalid returns, zero/full-width identities and malformed
 frames. This does not substitute for native register/span/runtime evidence.
+
+## Independent C link candidate
+
+The fixed Counter now has a proposed cloud-only freestanding final link and
+RAR-owned ELF-to-private-PE converter. The pinned cloud cc/ld link uses no startup
+objects, target libc, libgcc or dynamic runtime. No target entry is executed.
+The converter requires bounded static x86-64 ELF, defined symbols, one exact
+entry, page-separated R/RX/RW segments, consistent allocated section bytes and
+no dynamic/relocation/TLS section. Only inert metadata sections are discarded
+by the link script. The existing kernel PE parser independently checks output.
+Two independently linked ELF byte streams must match. Pure malformed fixtures
+exercise rejection. No external packager or linked target dependency is added.
+
+This is not a generic ELF loader, Rust final-link proof, signed app installation,
+native app activation or actual GUI acceptance. Those remain required separately.
+The immutable cloud image pins the linker through the already-used cc toolchain.
+All output remains bounded ephemeral cloud scratch, never the Mac or SSD.
