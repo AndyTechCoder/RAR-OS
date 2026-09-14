@@ -1,11 +1,11 @@
-"""Pure three-image framing checks; never executes the image fixture."""
+"""Pure four-image framing checks; never executes the image fixture."""
 import base64,importlib.util
 from pathlib import Path
 def self_test():
     spec=importlib.util.spec_from_file_location("alpha_build_images",Path(__file__).with_name("alpha_build_images.py"))
     m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
-    names=("modern.efi","modern-service.efi","modern-network.efi")
-    values=(b"KERNEL"+b"NETWORK",b"SERVICE",b"NETWORK")
+    names=("modern.efi","modern-service.efi","modern-network.efi","modern-compositor.efi")
+    values=(b"KERNELNETWORKCOMPOSITOR",b"SERVICE",b"NETWORK",b"COMPOSITOR")
     def frame(values=values,names=names):
         return b"".join(b"RAR-SIGNED-FILE:"+n.encode()+b"\n"+base64.b64encode(v)+b"\n" for n,v in zip(names,values))+b"RAR-SIGNED-BUILD:END\n"
     calls=[]
@@ -13,11 +13,14 @@ def self_test():
         calls.append((value,service))
         if not value or service and len(value)>131072:raise ValueError("fixed service limit")
     assert m.unpack(frame(),inspect)==dict(zip(names,values))
-    assert calls==[(values[0],False),(values[1],True),(values[2],True)]
-    negatives=[frame()+b"\n",frame()[:-1],frame(names=names[::-1]),frame(values=(b"KERNEL",values[1],values[2])),
-        frame(values=(b"NETWORKNETWORK",values[1],values[2])),
-        frame(values=(values[0],b"X"*131073,values[2])),
-        frame(values=(b"X"*131073,values[1],b"X"*131073)),
+    assert calls==[(values[0],False),(values[1],True),(values[2],True),(values[3],True)]
+    negatives=[frame()+b"\n",frame()[:-1],frame(names=names[::-1]),frame(values=(b"KERNEL",values[1],values[2],values[3])),
+        frame(values=(b"NETWORKNETWORKCOMPOSITOR",values[1],values[2],values[3])),
+        frame(values=(values[0],b"X"*131073,values[2],values[3])),
+        frame(values=(b"X"*131073+values[3],values[1],b"X"*131073,values[3])),
+        frame(values=(values[2]+b"X"*131073,values[1],values[2],b"X"*131073)),
+        frame(values=(b"KERNELNETWORK",values[1],values[2],values[3])),
+        frame(values=(b"NETWORKCOMPOSITORCOMPOSITOR",values[1],values[2],values[3])),
         frame().replace(base64.b64encode(values[1]),b"!"),b"X"*(6*1024*1024+1)]
     for raw in negatives:
         try:m.unpack(raw,inspect)
