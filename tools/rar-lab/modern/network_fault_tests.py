@@ -11,7 +11,7 @@ def self_test():
         steps=p.plan(mode,challenges)
         for peer,keys,stage,value in steps:
             assert peer in ("a","b") and type(keys) is list
-            if stage=="peer-stopped":continue
+            if stage in ("peer-stopped","send-only"):continue
             pixels=p.expected(stage,value);p.validate(pixels,stage,value)
             try:p.validate(pixels[:-1]+bytes([pixels[-1]^1]),stage,value)
             except ValueError:refusals+=1
@@ -22,20 +22,33 @@ def self_test():
             for owner,keys,stage,value in steps:
                 if owner!=peer:continue
                 for key in keys:rows.append({"execute":"send-key","arguments":{"keys":[{"type":"qcode","data":key}],"hold-time":50}})
-                if stage!="peer-stopped":rows.append({"execute":"screendump","arguments":{"filename":profile.directory(index)+"/frame.ppm"}})
+                if stage not in ("peer-stopped","send-only"):rows.append({"execute":"screendump","arguments":{"filename":profile.directory(index)+"/frame.ppm"}})
             rows=[dict(row,id=i) for i,row in enumerate(rows,1)]
             p.commands(rows,index,peer,mode,challenges,profile)
+            assert len(rows)<=512, "fixed journey exceeds actual Vm.request limit"
+            # Three capture attempts per boundary must fit, not merely an
+            # ideal one-shot receipt. Existing runtime limit stays512.
+            delayed=[]
+            for row in rows:
+                delayed.extend([row]*(3 if row["execute"]=="screendump" else 1))
+            delayed=[dict(row,id=i) for i,row in enumerate(delayed,1)]
+            assert len(delayed)<=512, "ordinary capture settling lacks headroom"
+            p.commands(delayed,index,peer,mode,challenges,profile)
+            oversized=[dict(rows[-1],id=i) for i in range(1,514)]
+            try:p.commands(oversized,index,peer,mode,challenges,profile)
+            except ValueError:refusals+=1
+            else:raise AssertionError("receipt above actual512 limit accepted")
             for bad in ([],rows[:-1],rows+[dict(execute="cont",id=len(rows)+1)]):
                 try:p.commands(bad,index,peer,mode,challenges,profile)
                 except ValueError:refusals+=1
                 else:raise AssertionError("incomplete or extra command accepted")
     actual=e.expected_wire("faults",challenges)
-    assert len(actual)==10 and [len(x) for x in actual]==[74,60]+[74]*8
+    assert len(actual)==9 and [len(x) for x in actual]==[74,60]+[74]*7
     assert actual[0][14]==0x65
     assert actual[1]==wire.packet("b",b"a"*32,1)[:60]
     bad=bytearray(wire.packet("b",b"a"*32,2));bad[40]^=1
     assert actual[2]==bytes(bad) and actual[3]==wire.packet("b",b"a"*32,4)
-    assert actual[4:]==[wire.packet("b",b"b"*32,i) for i in range(5,11)]
+    assert actual[4:]==[wire.packet("b",b"b"*32,i) for i in range(5,10)]
     assert e.expected_wire("expiry",challenges)==[] and e.expected_wire("peer-stop",challenges)==[]
     return refusals
 if __name__=="__main__":

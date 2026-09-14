@@ -13,7 +13,7 @@ def expected_wire(mode,challenges):
     malformed=bytearray(original[0]);malformed[14]=0x65
     checksum=bytearray(original[2]);checksum[40]^=1
     return [bytes(malformed),original[1][:60],bytes(checksum),original[4]]+[
-        wire.packet("b",right.encode(),i) for i in range(5,11)]
+        wire.packet("b",right.encode(),i) for i in range(5,10)]
 def validate(raw,boots,system,firmware_sizes,mode):
     base=helper("runtime_evidence");persist=helper("persistence")
     value=helper("expansion_evidence").parse(raw)
@@ -44,7 +44,7 @@ def validate(raw,boots,system,firmware_sizes,mode):
     for peer in ("a","b"):
         wire=base.decoded(captured[peer],length)
         if helper("expansion_wire").parse(wire)!=wanted:raise ValueError("actual malformed/drop/flood wire differs")
-    scenes=[s for s in steps if s[2]!="peer-stopped"];frames=value["frames"]
+    scenes=[s for s in steps if s[2] not in ("peer-stopped","send-only")];frames=value["frames"]
     if type(frames) is not list or len(frames)!=len(scenes):raise ValueError("complete scene sequence")
     for frame,(peer,keys,stage,nonce) in zip(frames,scenes):
         if type(frame) is not dict or set(frame)!={"peer","stage","compact","sha256","actual_ppm"} or frame["peer"]!=peer or frame["stage"]!=stage or frame["compact"] is not False:raise ValueError("scene identity")
