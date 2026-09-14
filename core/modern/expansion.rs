@@ -29,8 +29,10 @@ pub fn network(b:&abi::Boot)->!{
     let(local,peer)=if cfg!(rar_network_peer_b){(z,a)}else{(a,z)};
     let mut io=Io{handle:b.caps[abi::DEVICE_CAP]};
     let now=ne2k::Io::ticks(&mut io).unwrap_or_else(|_|fail());
-    let expires=now.checked_add(60_000).unwrap_or_else(||fail());
+    let expires=now.checked_add(if cfg!(rar_network_expiry){1000}else{60_000}).unwrap_or_else(||fail());
     let device=ne2k::Device::initialize(io,local.mac).unwrap_or_else(|_|fail());
+    #[cfg(all(rar_network_fault_peer,rar_network_peer_b))]
+    let device=crate::network_lab::Peer::new(device);
     let policy=network_service::Policy{principal:6,incarnation:b.peers[6],interface:1,
         local,peer,issued:now,expires,tx:Budget{packets:1024,bytes:1_048_576},
         rx:Budget{packets:4096,bytes:2_097_152}};

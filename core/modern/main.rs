@@ -6,6 +6,9 @@ compile_error!("signed supervisor composition and standalone Settings are distin
 #[cfg(all(rar_expansion,not(rar_signed_updates)))]
 compile_error!("Expansion requires signed bootstrap");
 mod abi;
+#[cfg(all(any(rar_network_fault_peer,rar_network_expiry),not(rar_applications)))]
+compile_error!("fault/expiry fixtures require the explicit cloud Alpha composition");
+#[cfg(rar_network_fault_peer)] mod network_lab;
 #[cfg(all(rar_applications,not(rar_expansion)))] compile_error!("apps require Expansion");
 #[cfg(rar_applications)] #[path="../expansion/app_control.rs"] mod app_control;
 #[cfg(rar_applications)] #[path="../expansion/native_runtime.rs"] mod application_runtime;
