@@ -16,6 +16,7 @@ _PUBLIC_SEED = bytes.fromhex(
 PUBLIC_KEY = bytes.fromhex(
     "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a")
 _DOMAIN = b"RAR-LAYER-ALPHA-V0\0"
+_APP_DOMAIN = b"RAR-APP-ALPHA-V0\0"
 
 def _add(left, right):
     """Complete extended Edwards addition; all intermediates reduced."""
@@ -64,7 +65,8 @@ def _encode(point):
 def _public_fixture_signature(message):
     # Empty message is solely the published known-answer self-test.
     if type(message) is not bytes or not (
-        message == b"" or (len(message) == 51 and message[:19] == _DOMAIN)):
+        message == b"" or (len(message) == 51 and message[:19] == _DOMAIN) or
+        (len(message) == 49 and message[:17] == _APP_DOMAIN)):
         raise ValueError("only fixed laboratory signature domain or RFC fixture")
     expanded = sha512(_PUBLIC_SEED).digest()
     scalar_bytes = bytearray(expanded[:32])
@@ -90,6 +92,12 @@ def sign_manifest_digest(digest):
         raise ValueError("exact nonzero manifest digest bytes")
     return _public_fixture_signature(_DOMAIN + digest)
 
+
+def sign_app_manifest_digest(digest):
+    """Public laboratory application-domain fixture; no secret/key input."""
+    if type(digest) is not bytes or len(digest) != 32 or digest == bytes(32):
+        raise ValueError("exact nonzero manifest digest bytes")
+    return _public_fixture_signature(_APP_DOMAIN + digest)
 
 def codec_test_fixture():
     """Four fixed signed, non-executed codec cases, not an installable app."""
@@ -142,8 +150,13 @@ def self_test():
     assert len(first) == 64 and int.from_bytes(first[32:], "little") < _ORDER
     assert first == sign_manifest_digest(digest)
     assert first != sign_manifest_digest(bytes([1]) + digest[1:])
+    app = sign_app_manifest_digest(digest)
+    assert len(app) == 64 and app != first and app == sign_app_manifest_digest(digest)
     rejected = 0
     for invalid in (None, "", bytearray(digest), memoryview(digest), b"", bytes(31), bytes(32), bytes(33)):
+        try: sign_app_manifest_digest(invalid)
+        except ValueError: rejected += 1
+        else: raise AssertionError("invalid app digest accepted")
         try: sign_manifest_digest(invalid)
         except ValueError: rejected += 1
         else: raise AssertionError("invalid digest accepted")

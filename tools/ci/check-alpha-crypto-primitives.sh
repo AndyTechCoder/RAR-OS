@@ -231,3 +231,14 @@ set -- $(/usr/bin/du -sk "$work")
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/expansion_controller_tests.py" --self-test
 
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/expansion_wire.py" --self-test
+
+# Independent app signatures and private-document policy: pure candidate tests.
+# No new guest bootstrap, install, disk writes, runtime grants or VM activation.
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --test -C strip=symbols -C debuginfo=0 -C opt-level=1 -C debug-assertions=yes -C overflow-checks=yes core/expansion/lib.rs -o "$work/focused-tests"
+"$work/focused-tests"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --crate-type lib -D warnings core/expansion/lib.rs -o "$work/focused.rlib"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 -C strip=symbols -C debuginfo=0 -C opt-level=1 -C overflow-checks=yes tools/rar-lab/expansion/app_package_conformance.rs -o "$work/focused-tests"
+/usr/bin/python3 -I -B tools/rar-lab/expansion/app_package_fixture.py | "$work/focused-tests"
+set -- $(/usr/bin/du -sk "$work")
+[ "$1" -le 8192 ]
+printf '%s\n' 'Expansion signed app/document candidate tests passed; native app and persistence acceptance NOT claimed'

@@ -16,3 +16,5 @@ pub mod session;
 
 pub mod gui;
 #[path="../../apps/modern/model.rs"] pub mod file_ui;
+
+#[path="../expansion/documents.rs"] pub mod app_documents;

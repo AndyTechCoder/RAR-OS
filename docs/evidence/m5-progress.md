@@ -1,6 +1,6 @@
 # M5 progress
 
-Controller main: a93b7e870e80a7a603a0c15dca017e5d8dd6958c.
+Controller main: 8787645fd82e945dcb426a8872c826ec7059c0b2.
 Published M4 remains v0.4.0-modern-alpha, unchanged.
 Working branch: codex/m5-expansion; implementation PR: #204.
 
@@ -52,9 +52,24 @@ both guests plus six backends were reaped. Artifact 10321904618, ZIP SHA256
 761d39be06f4f1f51e9022d2c1aa0fea1e6d7c63770075860bb3ae44f869b024.
 This was positive networking evidence, not runtime fault or full M5 acceptance.
 
-The next capture enhancement adds independent full Ethernet/IPv4/UDP packet
-comparison and a no-extra-transmissions check. Its code is a candidate until
-its own review, source CI and actual cloud proof pass.
+Captured-wire extension passed independent review and controller PR #206.
+Exact controller 371226758e965c0c2a4e96a9b7af4030425d334f passed run 34773565172;
+source f3dc3c3b699169835e8d888476b26b0bb23716f1 passed 34773754100.
+Exact main 8787645 passed Specifications 34774701012 (confirmed 2026-09-14).
+
+Actual captured-wire paired run [34774843591](https://github.com/AndyTechCoder/RAR-OS/actions/runs/34774843591)
+passed on that controller/main and source f3dc3c3. Both peer images rebuilt twice
+identically; eleven GUI scenes, fresh bidirectional messages, two exact 74-byte
+frames in each capture, no extra post-close transmission, unchanged storage and
+complete teardown passed. Remote artifact 10322769257, ZIP SHA256
+cc93314acef029c507b66ed74f9c8b9c74ab1a6120b95f38a0a25743ad2f8885.
+Artifacts remain remote and were not downloaded. This is not the runtime
+malformed/flood/drop/expiry/revocation/peer-death campaign.
+
+New source candidate: ADR0038 app signing envelope and private-document policy,
+with bounded package fixtures and cloud CI registration. This commit's CI is not
+claimed before it runs. No independent app is installed/executed by these tests;
+native SDK, installer, Storage routing and runtime isolation remain pending.
 The immutable CI receipts in PR #204 record subsequent run conclusions.
 This document intentionally does not claim its own commit was tested before
 that commit exists. No boot, UEFI linking, socket or PIO runtime claim follows
@@ -76,7 +91,7 @@ issue, conditional on CI. Neither review grants runtime activation or M5 closure
 
 ## Remaining acceptance — not polish
 
-1. Finish captured-wire comparison and the actual malformed/flood/drop/expiry/
+1. Finish the actual malformed/flood/drop/expiry/
    revocation/peer-death negative campaigns. Positive paired exchange, exact
    linking/reproducibility and aggregate teardown are already proven above.
 2. General experimental app contract, signed/installed independent Rust and C
