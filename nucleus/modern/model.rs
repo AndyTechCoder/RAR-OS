@@ -5,6 +5,9 @@
 
 pub const TASKS:usize=16;
 pub const PRINCIPALS:usize=10;
+#[path="applications.rs"]
+pub mod applications;
+const ROUTABLE_PRINCIPALS:usize=12;
 pub const CAP_SLOTS:usize=12;
 pub const MESSAGE_BYTES:usize=128;
 pub const QUEUE_DEPTH:usize=4;
@@ -51,7 +54,7 @@ impl Caps {
     pub fn grant(&mut self,index:usize,object:Object,rights:u16)->Result<u64,Error>{
         let s=self.slots.get_mut(index).ok_or(Error::Invalid)?;
         let allowed=match object {
-            Object::NamedSend {principal} if (principal as usize)<PRINCIPALS=>SEND,
+            Object::NamedSend {principal} if (principal as usize)<ROUTABLE_PRINCIPALS=>SEND,
             Object::Receive(e) if (e.slot as usize)<TASKS&&e.incarnation!=0=>RECEIVE,
             Object::TrialHealth {endpoint:e,token} if (e.slot as usize)<TASKS&&e.incarnation!=0&&token!=0=>HEALTH,
             Object::Manager=>MANAGE,
@@ -91,7 +94,7 @@ pub struct Message {pub principal:u8,pub incarnation:u64,pub length:u8,pub bytes
 impl Message {
     const EMPTY:Self=Self {principal:0,incarnation:0,length:0,bytes:[0;MESSAGE_BYTES]};
     fn stamp(principal:u8,incarnation:u64,bytes:&[u8])->Result<Self,Error>{
-        if principal as usize>=PRINCIPALS||incarnation==0||bytes.is_empty()||bytes.len()>MESSAGE_BYTES {
+        if principal as usize>=ROUTABLE_PRINCIPALS||incarnation==0||bytes.is_empty()||bytes.len()>MESSAGE_BYTES {
             return Err(Error::Invalid);
         }
         let mut m=Self {principal,incarnation,length:bytes.len()as u8,..Self::EMPTY};
@@ -180,6 +183,7 @@ pub struct Runtime {
     processes:[Process;TASKS],bindings:[Option<Endpoint>;PRINCIPALS],
     clock:u64,next_token:u64,trial:Option<Trial>,staged:Option<StagedImage>,recovery_required:bool,
     bootstrapping:bool,expansion:bool,
+    apps:applications::Applications,
 }
 impl Runtime {
     /// Retained full graph for the accepted M4.1 composition and focused tests.
@@ -191,7 +195,7 @@ impl Runtime {
     pub fn expansion(&self)->bool{self.expansion}
     fn initial(bootstrapping:bool)->Self{
         let mut r=Self {processes:[Process::EMPTY;TASKS],bindings:[None;PRINCIPALS],
-            clock:1,next_token:1,trial:None,staged:None,recovery_required:false,bootstrapping,expansion:false};
+            clock:1,next_token:1,trial:None,staged:None,recovery_required:false,bootstrapping,expansion:false,apps:applications::Applications::new()};
         for i in [0,1,2,3,4,5,6,8,9]{
             if bootstrapping&&!matches!(i,8|9){continue;}
             let e=Endpoint {slot:i as u8,incarnation:1};
@@ -390,7 +394,8 @@ impl Runtime {
         if p.state!=State::Active{return Err(Error::Denied);}
         let Object::NamedSend {principal}=p.caps.resolve(handle,SEND)? else{return Err(Error::Denied);};
         let sender=p.principal.ok_or(Error::Denied)?;
-        let e=self.bindings[principal as usize].ok_or(Error::Stale)?;
+        let e=if (principal as usize)<PRINCIPALS {self.bindings[principal as usize]}
+            else {self.apps.binding(principal as usize)}.ok_or(Error::Stale)?;
         if !self.endpoint_alive(e){return Err(Error::Stale);}
         let m=Message::stamp(sender,p.incarnation,bytes)?;
         self.processes[e.slot as usize].queue.push(m)
@@ -453,9 +458,10 @@ impl Runtime {
     fn destroy(&mut self,index:usize){
         if let Some(principal)=self.processes[index].principal{
             let incarnation=self.processes[index].incarnation;
-            if self.bindings[principal as usize]==Some(Endpoint {slot:index as u8,incarnation}){
-                self.bindings[principal as usize]=None;
-            }
+            let endpoint=Endpoint {slot:index as u8,incarnation};
+            if (principal as usize)<PRINCIPALS {
+                if self.bindings[principal as usize]==Some(endpoint){self.bindings[principal as usize]=None;}
+            }else{self.apps.clear(principal as usize,endpoint);}
             for p in &mut self.processes{p.queue.purge(principal,incarnation);}
         }
         let p=&mut self.processes[index];
@@ -602,7 +608,9 @@ impl Runtime {
         let slot=endpoint.slot as usize;
         let process=self.processes.get(slot).ok_or(Error::Invalid)?;
         if process.state==State::Vacant||process.incarnation!=endpoint.incarnation{return Err(Error::Stale);}
-        if process.principal==Some(8) {
+        let principal=process.principal;
+        if matches!(principal,Some(0|1|3|8|9)){self.revoke_application_peers();}
+        if principal==Some(8) {
             // Manager failure is a terminal controlled-recovery condition for
             // lifecycle, not permission to strand a trial or silently grant a
             // replacement manager. Preserve the currently active Settings.

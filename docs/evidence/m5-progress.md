@@ -133,3 +133,13 @@ Consolidated adapter review additionally required reserve enforcement during the
 configured-but-uninstalled phase and an all-12-I/O failure campaign for explicit
 installation itself. Both are now source tests. C host conformance is explicitly
 not a final target undefined-symbol/link-map proof; no implicit helper-free claim.
+
+## App kernel mechanism continuation
+
+The next candidate adds a separate two-app binding table, Manager-only fixed
+control channels, prepare/publish with stale-plan and peer checks, exact SDK
+bootstrap encoding, app close/reuse and peer-loss revocation. The old ten-role
+service ABI is unchanged. The new application composition is not selected by any
+native entry. Its model tests and exact-source CI must pass before acceptance;
+private roots, native syscall/service/GUI routing and independent executables
+are still pending. See interfaces/expansion-app-lifecycle-v0.md.
