@@ -112,3 +112,10 @@ This is not a generic ELF loader, Rust final-link proof, signed app installation
 native app activation or actual GUI acceptance. Those remain required separately.
 The immutable cloud image pins the linker through the already-used cc toolchain.
 All output remains bounded ephemeral cloud scratch, never the Mac or SSD.
+
+The same bounded ELF input can be wrapped in the existing app envelope with the
+fixed experimental Counter identity `rar.counter.v000`, generation1, UI-only
+rights and 64KiB stack. It uses only the already-public laboratory key; this
+confers no production trust. The actual Rust verifier checks this real linked
+payload plus identity, budget, signature, rollback and tamper refusals in cloud
+CI. No package is installed or published as a release artifact by this check.

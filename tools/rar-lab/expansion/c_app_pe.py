@@ -126,6 +126,27 @@ def convert(data):
     struct.pack_into("<I", out, optional + 56, image_size)
     return bytes(out)
 
+def package_counter(data):
+    # Fixed public laboratory identity, not a production publisher or installer.
+    import runpy
+    from hashlib import sha256
+    from pathlib import Path
+    payload = convert(data)
+    signer = runpy.run_path(str(Path(__file__).resolve().parent.parent / "modern" / "lab_signer.py"))
+    manifest = bytearray(512)
+    manifest[:8] = b"RARAPKG0"
+    manifest[16:32] = b"rar.counter.v000"
+    manifest[32:64] = sha256(signer["PUBLIC_KEY"]).digest()
+    manifest[64:96] = sha256(payload).digest()
+    image_size = unpack("<I", payload, 88 + 56)[0]
+    for offset, size, value in ((12,4,512),(96,8,1),(104,4,len(payload)),
+                               (108,4,image_size),(112,4,65536),(116,4,1),(124,4,0x8664)):
+        manifest[offset:offset+size] = value.to_bytes(size, "little")
+    digest = sha256(manifest[:416]).digest()
+    manifest[416:448] = digest
+    manifest[448:512] = signer["sign_app_manifest_digest"](digest)
+    return bytes(manifest) + payload
+
 def fixture():
     # Synthetic machine bytes are inert test data, never executed.
     data = bytearray(0x1300)
@@ -173,7 +194,9 @@ if __name__ == "__main__":
         self_test()
     elif sys.argv[1:] == ["--convert"]:
         sys.stdout.buffer.write(convert(sys.stdin.buffer.read(INPUT_LIMIT + 1)))
+    elif sys.argv[1:] == ["--package-counter"]:
+        sys.stdout.buffer.write(package_counter(sys.stdin.buffer.read(INPUT_LIMIT + 1)))
     elif sys.argv[1:] == ["--fixture"]:
         sys.stdout.buffer.write(convert(fixture()))
     else:
-        raise SystemExit("fixed --self-test/--convert/--fixture only")
+        raise SystemExit("fixed --self-test/--convert/--fixture/--package-counter only")

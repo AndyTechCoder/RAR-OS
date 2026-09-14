@@ -281,6 +281,7 @@ for build in a b; do
 done
 /usr/bin/python3 -I -B -c 'import sys; a=open(sys.argv[1],"rb").read(1048577); b=open(sys.argv[2],"rb").read(1048577); assert 64<=len(a)<=1048576 and a==b, "native C link reproducibility"' "$work/counter-a.elf" "$work/counter-b.elf"
 /usr/bin/python3 -I -B tools/rar-lab/expansion/c_app_pe.py --convert < "$work/counter-a.elf" | "$work/focused-tests"
+/usr/bin/python3 -I -B tools/rar-lab/expansion/c_app_pe.py --package-counter < "$work/counter-a.elf" | "$work/focused-tests" --package-counter
 set -- $(/usr/bin/du -sk "$work")
 [ "$1" -le 8192 ]
-printf '%s\n' 'Independent C link reproducibility and kernel PE-parser conformance passed; signing, installation and guest execution NOT claimed'
+printf '%s\n' 'Independent C link reproducibility and kernel PE-parser/public-lab signature conformance passed; installation and guest execution NOT claimed'

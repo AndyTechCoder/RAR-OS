@@ -96,3 +96,10 @@ helpers and final address/section layout would remain unverified.
 This proposal introduces no device, VM, runtime, installed app or stable format
 authority. Independent source review precedes cloud validation; actual native
 activation still requires the complete boundary evidence above.
+
+The final-link candidate additionally exercises the existing signed app envelope
+on the real linked Counter, with fixed lab identity `rar.counter.v000`,
+generation1/UI-only/64KiB stack. This is a test-package identity, not enrollment
+or a durable anti-rollback floor. The existing RAR verifier must accept the exact
+bytes and reject tamper, insufficient rights and a higher required generation.
+No signer primitive, domain, public bytes or production key is changed.
