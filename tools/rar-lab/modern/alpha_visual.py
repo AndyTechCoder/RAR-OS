@@ -65,6 +65,21 @@ def validate(frame,stage,value=None,compact=False):
         raise ValueError("actual Alpha full pixels differ: "+stage)
     return hashlib.sha256(frame).hexdigest()
 
+def difference(frame,stage,value=None,compact=False):
+    wanted=expected(stage,value,compact);base=sibling("visual_oracle")
+    if type(frame) is not bytes or len(frame)!=len(wanted) or not frame.startswith(base.HEADER):
+        return dict(framing_valid=False)
+    a=frame[len(base.HEADER):];b=wanted[len(base.HEADER):]
+    count=0;left=640;right=0;top=480;bottom=0
+    for pixel in range(640*480):
+        at=pixel*3
+        if a[at:at+3]!=b[at:at+3]:
+            count+=1;x=pixel%640;y=pixel//640
+            left=min(left,x);right=max(right,x);top=min(top,y);bottom=max(bottom,y)
+    return dict(framing_valid=True,actual_sha256=hashlib.sha256(frame).hexdigest(),
+                expected_sha256=hashlib.sha256(wanted).hexdigest(),different_pixels=count,
+                bounds=None if count==0 else [left,top,right,bottom])
+
 def self_test():
     rejected=0
     for stage,value in (("home",None),("notes-ready",""),("notes-ready","a"*32),

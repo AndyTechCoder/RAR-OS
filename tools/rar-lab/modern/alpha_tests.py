@@ -11,7 +11,7 @@ def load(name):
 def self_test():
     # Parse fixed launch/controller sources without importing their entrypoints.
     for name in ("alpha_controller","alpha_scenario","alpha_first_launch","alpha_fresh_launch",
-                 "alpha_dispatch","alpha_evidence","native_packages","runtime_controller"):
+                 "alpha_dispatch","alpha_evidence","native_packages","runtime_controller","node_evidence"):
         ast.parse(Path(__file__).with_name(name+".py").read_text())
     plan=load("alpha_plan");profile=load("expansion_profile");vm=load("vm_profile")
     challenges=[c*32 for c in "abcd"];rejected=0

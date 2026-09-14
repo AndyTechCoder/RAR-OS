@@ -86,5 +86,6 @@ def run(load,build,execute,image,compiler,source,controller,work,evidence,report
     report["alpha_fresh"]=validator.validate(fresh,boots,build.digest(system),sizes,owner,"fresh",first)
     report["alpha_fresh_refusals"]=validator.actual_refusals(fresh,boots,build.digest(system),sizes,owner,"fresh",first)
     report["evidence_sha256"]={"first":build.digest(first),"fresh":build.digest(fresh)}
+    load("node_evidence").observe(load,build,execute,compiler,launcher,source,controller,work,evidence,report,save)
     report["status"]="observed";save()
     print("Alpha: independent native applications, private fresh-boot persistence, profiles and scoped agent example observed; M5 closure requires remaining campaigns.",flush=True)

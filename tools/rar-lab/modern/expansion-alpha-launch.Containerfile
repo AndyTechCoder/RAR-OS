@@ -9,5 +9,6 @@ RUN set -eu; \
 COPY system_fault_launch.py system_fault_scenario.py system_selector_fault.py signed_runtime_launch.py signed_runtime_scenario.py signed_runtime_evidence.py mounted_error_launch.py mounted_error_scenario.py unavailable_launch.py unavailable_scenario.py fault_launch.py fault_scenarios.py fault_audit.py block_disk.py block_wire.py block_process.py vm_profile.py vm_session.py persistence.py data_provision.py data_oracle.py visual_oracle.py launch.py /opt/rar-modern/
 COPY expansion_wire.py expansion_profile.py expansion_session.py expansion_scenario.py expansion_visual.py expansion_launch.py /opt/rar-modern/
 COPY alpha_plan.py alpha_visual.py alpha_scenario.py alpha_first_launch.py alpha_fresh_launch.py /opt/rar-modern/
+COPY node-launch.sh /opt/rar-node-launch.sh
 USER 65532:65532
 ENTRYPOINT ["/usr/bin/python3", "-I", "-B", "/opt/rar-modern/expansion_launch.py"]

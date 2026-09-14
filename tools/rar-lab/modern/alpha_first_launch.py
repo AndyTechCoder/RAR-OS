@@ -10,7 +10,11 @@ if here!=Path("/opt/rar-modern"):raise SystemExit("immutable cloud tool location
 spec=importlib.util.spec_from_file_location("vm_session",here/"vm_session.py")
 session=importlib.util.module_from_spec(spec);spec.loader.exec_module(session)
 session.cloud_guard()
-result=session.load("alpha_scenario").run(session,"first")
+try:
+    result=session.load("alpha_scenario").run(session,"first")
+except Exception as error:
+    result=dict(schema="rar-native-alpha-failure-v1",status="failed",mode="first",
+        reason=type(error).__name__+":"+str(error)[:512],milestone_complete=False)
 raw=json.dumps(result,separators=(",",":"),sort_keys=True,allow_nan=False).encode("ascii")+b"\n"
 if len(raw)>64*1024*1024:raise ValueError("bounded pair evidence")
 for offset in range(0,len(raw),65536):

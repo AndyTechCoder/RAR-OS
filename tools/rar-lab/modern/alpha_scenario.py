@@ -15,12 +15,16 @@ def run(session,mode):
     paths={p:session.load("expansion_profile").capture_path(p) for p in ("a","b")}
     if any(os.path.lexists(p) for p in paths.values()):raise ValueError("fresh absent captures")
     fixtures=[];initial=[];frames=[];pair=None;started=time.monotonic()
+    current={"phase":"setup"};last_difference=None
     def capture(vm,peer,stage,value,compact):
+        nonlocal current,last_difference
+        current={"phase":"capture","peer":peer,"stage":stage,"compact":compact}
         until=min(vm.deadline,time.monotonic()+12)
         for _ in range(24):
             vm.service();frame=vm.frame()
             try:sha=visual.validate(frame,stage,value,compact)
             except ValueError:
+                last_difference=visual.difference(frame,stage,value,compact)
                 if time.monotonic()>=until:raise
                 vm.delay(.25);continue
             frames.append(dict(peer=peer,stage=stage,compact=compact,sha256=sha,actual_ppm=base64.b64encode(frame).decode("ascii")))
@@ -73,6 +77,15 @@ def run(session,mode):
             frozen_data=[base64.b64encode(x).decode("ascii") for x in frozen],
             captured_wire={p:base64.b64encode(wire[p]).decode("ascii") for p in ("a","b")},
             boot_sha256=boots,system_sha256=base.sha(system_bytes),elapsed_milliseconds=elapsed)
+    except Exception as error:
+        # Public synthetic fixture diagnostics only. This deliberately different
+        # schema can NEVER validate as accepted runtime evidence. Teardown below
+        # must still finish; the outer controller retains this before refusing.
+        return dict(schema="rar-native-alpha-failure-v1",status="failed",mode=mode,
+            phase=current,reason=type(error).__name__+":"+str(error)[:512],
+            difference=last_difference,completed_frames=len(frames),
+            serial=[] if pair is None else [bytes(vm.serial)[-8192:].decode("ascii",errors="replace") for vm in pair.vms],
+            milestone_complete=False)
     finally:
         failures=[]
         if pair is not None and not pair.closed:

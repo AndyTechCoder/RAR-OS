@@ -302,3 +302,9 @@ done
 set -- $(/usr/bin/du -sk "$work")
 [ "$1" -le 8192 ]
 printf '%s\n' 'Consolidated native app/agent/node source tests passed; cloud Alpha activation and M5 acceptance remain separate'
+
+/usr/bin/python3 -I -B tools/rar-lab/modern/node_evidence.py --self-test
+/bin/sh -n tools/rar-lab/modern/build-applications.sh
+/bin/sh -n tools/rar-lab/modern/build-expansion-alpha.sh
+/bin/sh -n tools/rar-lab/modern/build-node.sh
+/bin/sh -n tools/rar-lab/modern/node-launch.sh

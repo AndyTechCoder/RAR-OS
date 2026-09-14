@@ -114,13 +114,66 @@ def validate(raw,boots,system,firmware_sizes,owner,mode,prior=None):
                 profiles=["wide-548x260","compact-320x260"],milestone_complete=False)
 
 def actual_refusals(raw,boots,system,sizes,owner,mode,prior=None):
-    validate(raw,boots,system,sizes,owner,mode,prior);base=helper("runtime_evidence")
-    original=helper("expansion_evidence").parse(raw);count=0
-    for field,replacement in (("mode","bad"),("status","failed"),("milestone_complete",True),
-                             ("frames",[]),("vm_proofs",[]),("pair_cleanup",{}),("frozen_data",[]),
-                             ("captured_wire",{}),("elapsed_milliseconds",True)):
-        changed=dict(original);changed[field]=replacement
-        try:validate(base.canonical(changed),boots,system,sizes,owner,mode,prior)
+    """Mutate copies of the actual successful proof, never fixtures or targets."""
+    validate(raw,boots,system,sizes,owner,mode,prior)
+    import copy
+    import base64
+    base=helper("runtime_evidence");original=helper("expansion_evidence").parse(raw);count=0
+    def rejected(changed,changed_prior=prior):
+        nonlocal count
+        try:validate(base.canonical(changed),boots,system,sizes,owner,mode,changed_prior)
         except (ValueError,KeyError,TypeError):count+=1
         else:raise AssertionError("altered actual Alpha proof accepted")
+    for field,replacement in (("mode","bad"),("status","failed"),("milestone_complete",True),
+                             ("frames",[]),("vm_proofs",[]),("pair_cleanup",{}),("frozen_data",[]),
+                             ("captured_wire",{}),("elapsed_milliseconds",True),("boot_sha256",{}),
+                             ("system_sha256","0"*64),("challenges",["a"*32]*4)):
+        changed=copy.deepcopy(original);changed[field]=replacement;rejected(changed)
+    def edit(path,replacement):
+        changed=copy.deepcopy(original);item=changed
+        for key in path[:-1]:item=item[key]
+        item[path[-1]]=replacement;rejected(changed)
+    edit(["initial_data",0],original["initial_data"][1])
+    edit(["frozen_data",0],original["frozen_data"][1])
+    edit(["frames",0,"sha256"],"0"*64)
+    pixels=bytearray(base.decoded(original["frames"][0]["actual_ppm"],len(helper("visual_oracle").HEADER)+640*480*3))
+    pixels[-1]^=1;edit(["frames",0,"actual_ppm"],base64.b64encode(pixels).decode("ascii"))
+    wire=bytearray(base.decoded(original["captured_wire"]["a"],204 if mode=="first" else 24))
+    wire[-1]^=1;edit(["captured_wire","a"],base64.b64encode(wire).decode("ascii"))
+    edit(["vm_proofs",0,"argv",0],"/unapproved/emulator")
+    edit(["vm_proofs",0,"preflight","raw"],{})
+    edit(["vm_proofs",0,"preflight","verified"],{})
+    edit(["vm_proofs",0,"commands",0,"id"],0)
+    edit(["vm_proofs",0,"commands"],original["vm_proofs"][0]["commands"][:-1])
+    edit(["vm_proofs",0,"qmp_drained"],False)
+    edit(["vm_proofs",0,"event_receipts"],[])
+    serial=original["vm_proofs"][0]["serial"]
+    edit(["vm_proofs",0,"serial"],serial.replace("RAR-EXPANSION:APP-HELD","MISSING",1))
+    edit(["vm_proofs",0,"serial"],serial+"RAR-EXPANSION:APP-FAULT\n")
+    edit(["pair_cleanup","network_closed"],False)
+    edit(["vm_proofs",0,"cut","joined"],False)
+    edit(["vm_proofs",0,"audit"],[])
+    # Keep aggregate and member copies in sync so the deeper reap/audit checks,
+    # rather than only the duplicate-receipt equality check, must reject.
+    for path,replacement in ((["vm_returncode"],0),(["backends",0,"joined"],False),
+                             (["backends",0,"records"],[]),
+                             (["backends",0,"records",0,"inode"],0)):
+        changed=copy.deepcopy(original)
+        for root in (changed["vm_proofs"][0]["cut"],changed["pair_cleanup"]["guests"][0]):
+            item=root
+            for key in path[:-1]:item=item[key]
+            item[path[-1]]=replacement
+        rejected(changed)
+    changed=copy.deepcopy(original);pid=changed["vm_proofs"][0]["cut"]["vm_pid"]
+    changed["vm_proofs"][1]["cut"]["vm_pid"]=pid;changed["pair_cleanup"]["guests"][1]["vm_pid"]=pid
+    rejected(changed)
+    changed=copy.deepcopy(original)
+    same=changed["vm_proofs"][0]["cut"]["backends"][0]["records"][0]
+    for root in (changed["vm_proofs"][1]["cut"],changed["pair_cleanup"]["guests"][1]):
+        ready=root["backends"][0]["records"][0];ready["device"]=same["device"];ready["inode"]=same["inode"]
+    rejected(changed)
+    if mode=="fresh":
+        changed_prior=copy.deepcopy(helper("expansion_evidence").parse(prior))
+        changed_prior["frozen_data"][0]=changed_prior["frozen_data"][1]
+        rejected(copy.deepcopy(original),base.canonical(changed_prior))
     return count
