@@ -12,6 +12,7 @@ COPY build-expansion.sh /opt/rar-build-expansion.sh
 COPY build-node.sh /opt/rar-build-node.sh
 COPY build-applications.sh /opt/rar-build-applications.sh
 COPY build-expansion-alpha.sh /opt/rar-build-expansion-alpha.sh
+COPY build-network-case.sh /opt/rar-build-network-case.sh
 ENV PATH=/opt/rar-toolchain/bin:/usr/bin:/bin LC_ALL=C SOURCE_DATE_EPOCH=1785715200
 USER 65532:65532
 WORKDIR /source
