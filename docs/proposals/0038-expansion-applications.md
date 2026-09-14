@@ -52,3 +52,31 @@ four-record/128-byte value budget. This is visible Alpha functionality with clea
 limits, not scalable app storage. Future storage and stable SDK expansion require
 new contracts and migration evidence. Public lab keys remain insecure for real
 secrets; isolated synthetic cloud tests only.
+
+## Native SDK/examples continuation proposal (2026-09-14)
+
+This extends the same source candidate, not the stable native application model
+and not permission to launch new code. M5.2 explicitly requires separate Rust/C
+bindings and a useful Notes app; the existing 256-byte experimental Boot and
+128-byte RAPP frame remain unchanged. Existing Modern public bytes are untouched.
+
+Proposed A: implement first-party adapters over the existing int80 Yield, Send,
+Receive, Exit and Ticks calls; define bounded UI/document payloads within the
+existing candidate operations; compile distinct Rust Notes and C Counter entries
+only as cloud relocatable objects. Notes has UI+private-document rights; Counter
+has only UI. Before runtime use, require focused review of the exact native
+adapter, operation semantics and service/loader integration. This source tree
+does not select a new constructor, link/execute an app, change the controller,
+grant devices/network, or migrate Data.
+
+Alternative B: embed example logic as more privileged built-in Modern roles.
+Rejected: that would not prove the independent language-neutral app contract.
+Alternative C: call platform/libc or another OS SDK. Rejected: unnecessary target
+dependency and incompatibility with the from-scratch/native requirement.
+
+Unsafe preconditions are limited to the fixed read-only app bootstrap and
+kernel-owned int80 ABI. No new privileged instruction/device API is added.
+Timeouts leave uncertain saves visible without automatic accepted-write retries.
+Existing Data format, app identity, signing domain and recovery promises remain.
+Document semantics and exact source tests are in expansion-app-native-v0.md.
+This proposal must not be read as accepted native activation or M5 completion.

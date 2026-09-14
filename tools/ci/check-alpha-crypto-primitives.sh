@@ -253,3 +253,15 @@ printf '%s\n' 'Expansion signed app/document candidate tests passed; native app 
 "$work/focused-c-tests" | "$work/focused-tests"
 set -- $(/usr/bin/du -sk "$work")
 [ "$1" -le 8192 ]
+
+# Independent app logic tests plus native-entry OBJECTS only, never execution.
+# Existing pinned compiler/image and cloud tmpfs only; no new linker/tool download.
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --test -C strip=symbols -C debuginfo=0 -C opt-level=1 -C overflow-checks=yes tools/rar-lab/expansion/notes_tests.rs -o "$work/focused-tests"
+"$work/focused-tests"
+/usr/bin/cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -ffreestanding -fno-builtin tools/rar-lab/expansion/counter_tests.c -o "$work/focused-c-tests"
+"$work/focused-c-tests"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --crate-type lib --emit=obj -C panic=abort -C no-redzone=yes -C debuginfo=0 -C opt-level=z --cfg rar_app_object_check apps/expansion/notes/main.rs -o "$work/focused.rlib"
+/usr/bin/cc -std=c11 -Os -Wall -Wextra -Werror -pedantic -ffreestanding -fno-builtin -fno-stack-protector -fno-pie -mno-red-zone -DRAR_APP_OBJECT_CHECK -c apps/expansion/counter/main.c -o "$work/focused-c-object.o"
+set -- $(/usr/bin/du -sk "$work")
+[ "$1" -le 8192 ]
+printf '%s\n' 'Expansion independent Rust/C app state tests and native entry OBJECT compilation passed; no linking, installation or guest app execution claimed'

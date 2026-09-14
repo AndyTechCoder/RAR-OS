@@ -143,3 +143,16 @@ service ABI is unchanged. The new application composition is not selected by any
 native entry. Its model tests and exact-source CI must pass before acceptance;
 private roots, native syscall/service/GUI routing and independent executables
 are still pending. See interfaces/expansion-app-lifecycle-v0.md.
+
+## Native SDK and independent example source
+
+The next candidate supplies Rust/C native SDK adapters over the existing int80
+mechanism, documented UI/document payloads, standalone Rust Notes and standalone
+C Counter entries, and pure state tests plus cloud object-only compilation.
+Notes preserves edits across pending reads/writes, authenticates full service
+identities and never automatically retries an accepted/uncertain write.
+Counter is UI-only. These entries are not part of the shared service executable.
+They still require independently linked/signed packages, native kernel/Manager/
+Storage/Compositor wiring and actual cloud GUI launch/isolation/persistence proof.
+No target entry is executed by Specifications. No new host tools, external target
+dependencies, VM profile, native app activation or storage format is introduced.

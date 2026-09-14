@@ -1,0 +1,59 @@
+# Experimental native app SDK and examples
+
+Status: source/object candidate only. No installer, launcher or target execution.
+
+The app v0 frame/bootstrap from expansion-app-abi-v0.md is unchanged. The
+following payload semantics complete its first UI/document subset. These are
+experimental Alpha contracts, not a stable cross-release ABI.
+
+All request statuses are0. Paint uses one nonzero frame sequence throughout:
+begin payload[0,count] with count1..6; line[1,row,printable ASCII bytes] with
+row0..5 and at most48 text bytes; commit[2]. Compositor must authenticate the
+actual app incarnation, enforce begin/line count, uniqueness and monotonically
+committed frame sequence, and publish pixels atomically only on complete commit.
+These helpers do not by themselves add a Compositor route.
+
+Input comes only from the kernel-authenticated Compositor peer in the app Boot.
+Payload is one byte: Backspace8, Enter13, Escape27 or printable ASCII32..126.
+Compositor supplies a fresh monotonically increasing nonzero sequence. Apps
+refuse duplicate/stale input and full-incarnation mismatches. No raw input grant.
+
+ReadDocument request has no payload; WriteDocument has0..64 raw document bytes.
+A successful read reply contains0..64 bytes; successful write has no payload.
+Every error reply has no payload. Statuses:0OK,1Invalid,2Denied,3Unavailable,
+4ReadOnly,5Indeterminate,6Busy,7Exhausted. Replies require matching operation,
+sequence and the full expected Storage identity. Service dispatch still must
+authenticate the actual kernel envelope and configured private grant. This
+candidate does not add the native Storage routing or select mount_private.
+
+Rust native adapter and C native.h use only int80 Yield0, Send1, Receive2, Exit5
+and Ticks6. Handles come from the separate Boot, never an app-selected service
+name. A complete152-byte kernel envelope is checked; identities are not narrowed
+before bounds checking. Nonzero high bits cannot masquerade as another principal.
+The adapter does one send; example backpressure retries ONLY explicit Full,
+meaning the kernel did not enqueue it, at most256 attempts and100 ticks.
+There is no accepted-write retry, automatic reinstall, deletion or remount.
+
+Unsafe scope: fixed initialized read-only bootstrap copy and the existing
+kernel-preserved x86-64 int80 register ABI. Examples include RAR-owned memory
+intrinsics for compiler-generated copy/zero calls. Source/object compilation
+does not prove final UEFI link closure or absence of unresolved helper symbols;
+those require the later target link map and immutable-package inspection.
+
+## Independent examples
+
+apps/expansion/notes is a distinct no_std Rust entry, not a new role in the shared
+Modern service executable. It edits one64-byte printable private document.
+Enter saves, Escape explicitly loads, Backspace edits. It authenticates replies,
+retains edits typed during a read/write, and reports uncertainty after100 ticks
+without retrying a possibly committed write. Binary/nonprintable stored content
+is refused without rewriting it. Capacity and sequence exhaustion are bounded.
+
+apps/expansion/counter is a distinct freestanding C entry. It receives UI-only
+rights, counts0..9999 and supports Plus/Space, Minus and0 reset. It cannot send to
+Storage or choose another app's document. It stages canonical Paint messages.
+
+Cloud Specifications runs only pure state/codec tests, then compiles both native
+entries to relocatable objects using already pinned compilers. It does not link,
+install or run these targets. Native image loader, Manager/Storage/Compositor
+routes, independent PE packaging and actual GUI launch remain required.
