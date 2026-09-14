@@ -65,3 +65,11 @@ cd "$root"
 /usr/bin/python3 -I -B tools/rar-lab/modern/alpha_visual.py --self-test
 /usr/bin/python3 -I -B tools/rar-lab/modern/alpha_tests.py --self-test
 /usr/bin/python3 -I -B tools/rar-lab/modern/node_evidence.py --self-test
+
+# Fixed campaign pure oracles only; never execute candidate guests in CI.
+/bin/sh -n tools/rar-lab/modern/build-network-case.sh
+/usr/bin/python3 -I -B tools/rar-lab/modern/network_fault_tests.py --self-test
+/usr/bin/python3 -I -B tools/rar-lab/modern/alpha_journey_tests.py --self-test
+
+# Pure fixed M5 release API/asset authority tests; no external calls.
+/usr/bin/python3 -I -B tools/rar-lab/modern/expansion_release_evidence_tests.py
