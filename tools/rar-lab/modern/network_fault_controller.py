@@ -21,7 +21,7 @@ def observe(load,build,execute,compiler,launcher,source,controller,work,evidence
                     raw=execute(compiler,["/bin/sh","-c",
                         '/bin/sh /opt/rar-build-network-case.sh '+peer+' '+mode+' 2>/tmp/build.log; result=$?; if [ "$result" -ne 0 ]; then tail -c 12000 /tmp/build.log; exit "$result"; fi'],
                         [(source,"/source"),(inputs,"/inputs")],300,6*1024*1024)
-                    candidate=build.composition["unpack_signed"](raw,build.binary["inspect"])
+                    candidate=load("alpha_build_images").unpack(raw,build.binary["inspect"])
                     build.composition["inspect_bank"](candidate["modern.efi"],bank,build.binary["inspect"])
                     if any(candidate["modern.efi"].count(pack)!=1 for pack in app_packages.values()):raise ValueError("exact immutable apps")
                     variants.append(candidate)

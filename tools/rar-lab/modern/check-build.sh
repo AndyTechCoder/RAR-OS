@@ -70,3 +70,6 @@ cd "$root"
 /bin/sh -n tools/rar-lab/modern/build-network-case.sh
 /usr/bin/python3 -I -B tools/rar-lab/modern/network_fault_tests.py --self-test
 /usr/bin/python3 -I -B tools/rar-lab/modern/alpha_journey_tests.py --self-test
+
+/usr/bin/python3 -I -B tools/rar-lab/modern/alpha_build_images_tests.py --self-test
+/usr/bin/python3 -I -B tools/rar-lab/modern/cloud_diagnostic_tests.py --self-test

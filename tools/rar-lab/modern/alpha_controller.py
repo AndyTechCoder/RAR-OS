@@ -39,7 +39,7 @@ def run(load,build,execute,image,compiler,source,controller,work,evidence,report
             raw=execute(compiler,["/bin/sh","-c",
                 '/bin/sh /opt/rar-build-expansion-alpha.sh '+peer+' 2>/tmp/build.log; result=$?; if [ "$result" -ne 0 ]; then tail -c 12000 /tmp/build.log; exit "$result"; fi'],
                 [(source,"/source"),(inputs,"/inputs")],300,6*1024*1024)
-            built=build.composition["unpack_signed"](raw,build.binary["inspect"])
+            built=load("alpha_build_images").unpack(raw,build.binary["inspect"])
             placement=build.composition["inspect_bank"](built["modern.efi"],bank,build.binary["inspect"])
             if any(built["modern.efi"].count(pack)!=1 for pack in app_packages.values()):raise ValueError("exact signed application bank embedded once")
             builds.append(built)

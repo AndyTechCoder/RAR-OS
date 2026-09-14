@@ -41,7 +41,12 @@ def observe(load,build,execute,compiler,launcher,source,controller,work,evidence
     signed.public_file(inputs/"boot.img",boot);signed.public_file(evidence/"node-boot.img",boot)
     raw=execute(launcher,["/bin/sh","/opt/rar-node-launch.sh"],[(inputs,"/artifact")],35,65536)
     signed.public_file(evidence/"node-serial.txt",raw)
-    report["node"]=validate(raw);report["node"]["reproducible"]=True
+    try:report["node"]=validate(raw)
+    except ValueError:
+        import json
+        print("Node cloud failure serial: "+json.dumps(raw[-16384:].decode("ascii",errors="replace")),flush=True)
+        raise
+    report["node"]["reproducible"]=True
     report["node"]["executable_bytes"]=len(outputs[0]);report["node"]["boot_sha256"]=build.digest(boot);save()
 def self_test():
     raw=b"\n".join([b"RAR-BOOT:UEFI",b"RAR-KERNEL:ENTRY",b"RAR-MEMORY:READY",b"RAR-ALLOCATOR:READY",
