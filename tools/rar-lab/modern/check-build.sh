@@ -55,3 +55,13 @@ cd "$root"
 /usr/bin/python3 -I -B -c 'import ast; from pathlib import Path; root=Path("tools/rar-lab/modern"); [ast.parse((root/n).read_text(),filename=n) for n in ("system_fault_launch.py","system_fault_scenario.py","system_fault_validate.py","system_fault_controller.py","system_fault_dispatch.py","runtime_controller.py")]'
 
 /usr/bin/python3 -I -B tools/rar-lab/modern/release_evidence_tests.py
+
+# Pure native-Alpha controller fixtures only, no target source compilation.
+# Actual native app/VM acceptance remains in the separate M5 implementation.
+/bin/sh -n tools/rar-lab/modern/build-applications.sh
+/bin/sh -n tools/rar-lab/modern/build-expansion-alpha.sh
+/bin/sh -n tools/rar-lab/modern/build-node.sh
+/bin/sh -n tools/rar-lab/modern/node-launch.sh
+/usr/bin/python3 -I -B tools/rar-lab/modern/alpha_visual.py --self-test
+/usr/bin/python3 -I -B tools/rar-lab/modern/alpha_tests.py --self-test
+/usr/bin/python3 -I -B tools/rar-lab/modern/node_evidence.py --self-test
