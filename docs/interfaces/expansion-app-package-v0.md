@@ -62,7 +62,8 @@ closed and must not be formatted, repaired, projected or overwritten.
 Only one document-owning app fits this bounded candidate. Existing quotas
 remain four records, 64 bytes per record and 128 aggregate value bytes.
 Metadata plus a full 64-byte private document leave 32 shared value bytes and
-two shared record slots. Installation fails safely if space is unavailable.
+two shared record slots. Installation fails safely if space is unavailable, including more than 32 shared
+value bytes. Subsequent shared writes cannot spend the reserved document budget.
 This is a deliberately small Alpha limit, not the future filesystem design.
 
 Installation makes one complete candidate snapshot, retaining every existing
@@ -105,6 +106,12 @@ ownership, full incarnation, quotas and malformed namespaces.
 
 The fixture PE contains synthetic bytes and is never executed. No new host tool,
 runtime dependency, syscall, device, VM profile or cloud authority is added.
+The candidate Store adapter now exercises real Vault publish/mount with mock block
+I/O: explicit installation, shared/private reads and writes, revocation, reboot,
+old-or-new recovery at all 12 publication operations, no uncertain-cache reads,
+no duplicate retries, no writes on mount, and 32/33 shared-capacity boundaries.
+The native service still does not select this adapter; these are not guest proofs.
+
 Still required: reviewed native installation/loader, Rust and C application SDK,
 GUI launch, useful Notes, fresh-boot persistence, runtime isolation/contained
 failure, revocation, rollback/recovery and integrated acceptance.

@@ -12,6 +12,7 @@ pub struct Store<B: Block> {
     unavailable: bool,
     files_generation: u64,
     terminal_generation: u64,
+    private: Option<crate::app_documents::Grant>,
 }
 pub(crate) fn name_ok(name: &[u8]) -> bool {
     !name.is_empty() && name.len() <= 12 && name != b"." && name != b".." &&
@@ -45,8 +46,54 @@ impl<B: Block> Store<B> {
         if vault.snapshot().entries().any(|(name, _)| !name_ok(name)) {
             return Err(Error::Invalid);
         }
-        Ok(Self { vault, unavailable: false, files_generation, terminal_generation })
+        Ok(Self { vault, unavailable: false, files_generation, terminal_generation, private: None })
     }
+    /// Candidate private adapter. Grant comes from trusted installer/kernel
+    /// identity, never app bytes. Reads and validates; never installs on mount.
+    pub fn mount_private(block:B,capacity:u32,files_generation:u64,terminal_generation:u64,
+        grant:crate::app_documents::Grant)->Result<Self,Error>{
+        if files_generation==0||terminal_generation==0{return Err(Error::Invalid);}
+        let vault=Vault::mount(block,capacity)?;
+        grant.validate_binding(vault.snapshot()).map_err(|_|Error::Invalid)?;
+        Ok(Self{vault,unavailable:false,files_generation,terminal_generation,private:Some(grant)})
+    }
+    /// Trusted explicit installer call; no caller-controlled owner or filesystem
+    /// selector. A future IPC adapter must authenticate installer authority.
+    pub fn install_private(&mut self)->Result<(),Failure>{
+        let grant=self.private.ok_or(Failure::Unavailable)?;
+        if self.unavailable{return Err(Failure::Unavailable);}
+        let candidate=grant.installation(self.vault.snapshot())
+            .map_err(|_|Failure::Unavailable)?;
+        if candidate==*self.vault.snapshot(){return Ok(());}
+        self.publish_private(candidate)
+    }
+    fn publish_private(&mut self,candidate:Snapshot)->Result<(),Failure>{
+        if self.unavailable{return Err(Failure::Unavailable);}
+        if self.vault.is_readonly(){return Err(Failure::ReadOnly);}
+        match self.vault.publish(candidate){
+            Ok(_)=>Ok(()),
+            Err(Error::ReadOnly)=>Err(Failure::ReadOnly),
+            Err(error)=>{
+                self.unavailable=true;
+                Err(if error==Error::Indeterminate{Failure::Indeterminate}else{Failure::Unavailable})
+            }
+        }
+    }
+    pub fn read_private(&self,principal:u32,incarnation:u64)->Result<&[u8],Failure>{
+        if self.unavailable{return Err(Failure::Unavailable);}
+        let grant=self.private.ok_or(Failure::Unavailable)?;
+        crate::app_documents::read(self.vault.snapshot(),grant,principal,incarnation)
+            .map_err(|_|Failure::Unavailable)
+    }
+    pub fn write_private(&mut self,principal:u32,incarnation:u64,value:&[u8])->Result<(),Failure>{
+        if self.unavailable{return Err(Failure::Unavailable);}
+        let grant=self.private.ok_or(Failure::Unavailable)?;
+        let candidate=crate::app_documents::write(self.vault.snapshot(),grant,principal,incarnation,value)
+            .map_err(|_|Failure::Unavailable)?;
+        if candidate==*self.vault.snapshot(){return Ok(());}
+        self.publish_private(candidate)
+    }
+    pub fn revoke_private(&mut self){self.private=None;}
     pub fn into_block(self) -> B { self.vault.into_block() }
     pub fn revision(&self) -> u64 { self.vault.revision() }
     pub(crate) fn authorized(&self,sender:u64,generation:u64)->bool {
@@ -67,9 +114,17 @@ impl<B: Block> Store<B> {
         let Some((op,name,value))=decode(request) else { return Ok(status(wire::INVALID)); };
         if self.unavailable { return Err(Failure::Unavailable); }
         let snapshot = *self.vault.snapshot();
+        let visible = if self.private.is_some(){
+            crate::app_documents::shared(&snapshot).map_err(|_|Failure::Unavailable)?
+        }else{
+            // A revoked private grant does not expose its records to Files.
+            if snapshot.entries().any(|(name,_)|!name_ok(name)){
+                crate::app_documents::shared(&snapshot).map_err(|_|Failure::Unavailable)?
+            }else{snapshot}
+        };
         match op {
             wire::READ => {
-                let Some(value) = snapshot.get(name) else { return Ok(status(wire::NOT_FOUND)); };
+                let Some(value) = visible.get(name) else { return Ok(status(wire::NOT_FOUND)); };
                 let mut reply = [0;128];
                 reply[2] = value.len() as u8;
                 reply[16..16+value.len()].copy_from_slice(value);
@@ -78,7 +133,7 @@ impl<B: Block> Store<B> {
             wire::LIST => {
                 let mut reply = [0;128];
                 let mut at = 4;
-                for (name, _) in snapshot.entries() {
+                for (name, _) in visible.entries() {
                     reply[at] = name.len() as u8; at += 1;
                     reply[at..at+name.len()].copy_from_slice(name); at += name.len();
                     reply[1] += 1;
@@ -95,7 +150,9 @@ impl<B: Block> Store<B> {
                 }
                 if self.vault.is_readonly() { return Err(Failure::ReadOnly); }
                 let mut candidate: Snapshot = snapshot;
-                if candidate.put(name, value).is_err() {
+                if candidate.put(name, value).is_err() ||
+                    (snapshot.entries().any(|(n,_)|!name_ok(n))&&
+                     crate::app_documents::shared(&candidate).is_err()) {
                     return Ok(status(wire::QUOTA));
                 }
                 match self.vault.publish(candidate) {
@@ -297,5 +354,82 @@ mod tests {
             assert!(Store::mount(disk,14,files,terminal).is_err());
             assert_eq!(writes.get(),0);
         }
+    }
+
+    fn private_grant()->crate::app_documents::Grant{
+        crate::app_documents::Grant::new(
+            crate::app_documents::Owner::from_verified_identity([7;32]).unwrap(),10,0x1_0000_0001).unwrap()
+    }
+    #[test]fn private_adapter_persists_without_exposing_to_shared_or_revoked_callers(){
+        let disk=Disk::new(8);let writes=disk.writes.clone();
+        let mut s=Store::mount_private(disk,26,1,1,private_grant()).unwrap();
+        assert_eq!(writes.get(),0);assert!(s.read_private(10,0x1_0000_0001).is_err());
+        assert_eq!(call(&mut s,6,wire::CREATE,b"note",b"").unwrap()[0],wire::OK);
+        assert_eq!(call(&mut s,6,wire::WRITE,b"note",b"shared").unwrap()[0],wire::OK);
+        s.install_private().unwrap();s.write_private(10,0x1_0000_0001,b"private").unwrap();
+        let rev=s.revision();let count=writes.get();
+        s.install_private().unwrap();s.write_private(10,0x1_0000_0001,b"private").unwrap();
+        assert_eq!(s.revision(),rev);assert_eq!(writes.get(),count);
+        assert_eq!(call(&mut s,4,wire::LIST,b"",b"").unwrap()[1],1);
+        assert_eq!(s.read_private(10,1),Err(Failure::Unavailable));
+        assert_eq!(s.write_private(4,1,b"attack"),Err(Failure::Unavailable));
+        assert_eq!(writes.get(),count);
+        let disk=s.into_block().reboot();
+        // Old implementation fails closed, without changing valid private data.
+        assert!(Store::mount(disk.clone(),26,1,1).is_err());assert_eq!(writes.get(),count);
+        let mut s=Store::mount_private(disk,26,1,1,private_grant()).unwrap();
+        assert_eq!(writes.get(),count);
+        assert_eq!(s.read_private(10,0x1_0000_0001),Ok(&b"private"[..]));
+        let got=call(&mut s,4,wire::READ,b"note",b"").unwrap();
+        assert_eq!(&got[16..22],b"shared");
+        s.revoke_private();
+        assert_eq!(s.read_private(10,0x1_0000_0001),Err(Failure::Unavailable));
+        assert_eq!(s.write_private(10,0x1_0000_0001,b"attack"),Err(Failure::Unavailable));
+        assert_eq!(s.install_private(),Err(Failure::Unavailable));
+        assert_eq!(call(&mut s,4,wire::LIST,b"",b"").unwrap()[1],1);
+        assert_eq!(call(&mut s,6,wire::WRITE,b"note",b"new shared").unwrap()[0],wire::OK);
+        let s=Store::mount_private(s.into_block().reboot(),26,1,1,private_grant()).unwrap();
+        assert_eq!(s.read_private(10,0x1_0000_0001),Ok(&b"private"[..]));
+    }
+
+    #[test]fn private_publication_failures_never_retry_or_serve_uncertain_cache(){
+        for operation in 1..=12{
+            let mut disk=Disk::new(8);disk.fail=Some(26+12+operation);
+            let writes=disk.writes.clone();
+            let mut s=Store::mount_private(disk,26,1,1,private_grant()).unwrap();
+            s.install_private().unwrap();
+            assert!(s.write_private(10,0x1_0000_0001,b"new").is_err());
+            let count=writes.get();
+            assert_eq!(s.read_private(10,0x1_0000_0001),Err(Failure::Unavailable));
+            assert_eq!(s.write_private(10,0x1_0000_0001,b"retry"),Err(Failure::Unavailable));
+            assert_eq!(call(&mut s,4,wire::LIST,b"",b""),Err(Failure::Unavailable));
+            assert_eq!(writes.get(),count);
+            let s=Store::mount_private(s.into_block().reboot(),26,1,1,private_grant()).unwrap();
+            let saved=s.read_private(10,0x1_0000_0001).unwrap();
+            assert!(saved==b""||saved==b"new");
+            assert_eq!(writes.get(),count);
+        }
+    }
+    #[test]fn private_mount_refuses_other_identity_without_modifying_disk(){
+        let disk=Disk::new(4);let writes=disk.writes.clone();
+        let mut s=Store::mount_private(disk,14,1,1,private_grant()).unwrap();
+        s.install_private().unwrap();let count=writes.get();
+        let other=crate::app_documents::Grant::new(
+            crate::app_documents::Owner::from_verified_identity([8;32]).unwrap(),10,1).unwrap();
+        assert!(Store::mount_private(s.into_block().reboot(),14,1,1,other).is_err());
+        assert_eq!(writes.get(),count);
+    }
+
+    #[test]fn shared_writes_cannot_spend_reserved_private_capacity(){
+        let mut s=Store::mount_private(Disk::new(8),26,1,1,private_grant()).unwrap();
+        s.install_private().unwrap();
+        assert_eq!(call(&mut s,6,wire::CREATE,b"note",b"").unwrap()[0],wire::OK);
+        assert_eq!(call(&mut s,6,wire::WRITE,b"note",&[1;32]).unwrap()[0],wire::OK);
+        let revision=s.revision();
+        assert_eq!(call(&mut s,6,wire::WRITE,b"note",&[1;33]).unwrap()[0],wire::QUOTA);
+        assert_eq!(s.revision(),revision);
+        s.write_private(10,0x1_0000_0001,&[2;64]).unwrap();
+        s.revoke_private();
+        assert_eq!(call(&mut s,6,wire::WRITE,b"note",&[1;33]).unwrap()[0],wire::QUOTA);
     }
 }

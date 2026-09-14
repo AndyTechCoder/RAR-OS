@@ -25,6 +25,12 @@ impl Grant{
         if !(10..=13).contains(&principal)||incarnation==0{return Err(Error::Invalid);}
         Ok(Self{owner,principal,incarnation})
     }
+    pub fn validate_binding(self,snapshot:&Snapshot)->Result<(),Error>{
+        match inspect(snapshot)?{
+            None=>Ok(()),Some(owner)if owner==self.owner=>Ok(()),Some(_)=>Err(Error::Denied)
+        }
+    }
+    pub fn installation(self,snapshot:&Snapshot)->Result<Snapshot,Error>{install(snapshot,self.owner)}
     fn authorize(self,principal:u32,incarnation:u64)->Result<Owner,Error>{
         if principal!=self.principal||incarnation!=self.incarnation{return Err(Error::Denied);}
         Ok(self.owner)
@@ -40,7 +46,8 @@ fn inspect(snapshot:&Snapshot)->Result<Option<Owner>,Error>{
     }
     match(snapshot.get(OWNER_KEY),snapshot.get(DOCUMENT_KEY)){
         (None,None)=>Ok(None),
-        (Some(raw),Some(doc))if raw.len()==32&&doc.len()<=MAX_DOCUMENT=>{
+        (Some(raw),Some(doc))if raw.len()==32&&doc.len()<=MAX_DOCUMENT&&
+            snapshot.entries().filter(|(n,_)|shared_name(n)).map(|(_,v)|v.len()).sum::<usize>()<=32=>{
             Ok(Some(Owner::from_verified_identity(raw.try_into().map_err(|_|Error::Invalid)?)?))
         },
         _=>Err(Error::Invalid),
@@ -54,6 +61,7 @@ pub fn install(snapshot:&Snapshot,owner:Owner)->Result<Snapshot,Error>{
         Some(_)=>return Err(Error::Denied),
         None=>(),
     }
+    if snapshot.entries().map(|(_,v)|v.len()).sum::<usize>()>32{return Err(Error::Quota);}
     let mut next=*snapshot;
     next.put(OWNER_KEY,&owner.0).map_err(|_|Error::Quota)?;
     next.put(DOCUMENT_KEY,b"").map_err(|_|Error::Quota)?;
@@ -134,5 +142,17 @@ mod tests{
             let mut s=Snapshot::empty();s.put(OWNER_KEY,&[7;64][..len]).unwrap();s.put(DOCUMENT_KEY,b"").unwrap();
             assert_eq!(shared(&s),Err(Error::Invalid));
         }
+    }
+
+    #[test]fn installation_reserves_the_full_document_at_shared_32_33_boundary(){
+        let mut fits=Snapshot::empty();fits.put(b"shared",&[1;32]).unwrap();
+        let installed=install(&fits,owner()).unwrap();
+        let full=write(&installed,grant(),10,0x1_0000_0001,&[2;64]).unwrap();
+        assert_eq!(shared(&full),Ok(fits));
+        let mut too_much=Snapshot::empty();too_much.put(b"shared",&[1;33]).unwrap();
+        let before=too_much;assert_eq!(install(&too_much,owner()),Err(Error::Quota));
+        assert_eq!(too_much,before);
+        let mut incompatible=installed;incompatible.put(b"shared",&[1;33]).unwrap();
+        assert_eq!(shared(&incompatible),Err(Error::Invalid));
     }
 }

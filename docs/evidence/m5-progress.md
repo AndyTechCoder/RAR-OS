@@ -107,3 +107,24 @@ issue, conditional on CI. Neither review grants runtime activation or M5 closure
 No local files, SSD activity, builds, guest execution, artifact downloads or
 cleanup are permitted. All writes remain GitHub API repository changes; actual
 target execution remains confined to separately reviewed disposable cloud VMs.
+
+## Consolidated app continuation (2026-09-14)
+
+The next source candidate fixes both review gaps: full document capacity is
+reserved at install and protected against later shared writes; signed-positive
+manifest prefix/digest mutations and short/long framing are now tested.
+The Store adapter adds explicit private install/read/write/revoke, atomic Vault
+publication, shared-data projection and fresh-mount/fault-injection tests.
+The default native Storage entry still selects the original shared-only mount.
+No new disk format or runtime authority is activated.
+
+A distinct 256-byte app bootstrap and 128-byte message contract now have first-party
+Rust/C codecs, generated constant drift checks and streamed cross-language tests.
+These are candidate bindings, not independently installed native applications.
+The exact 64-byte, one-private-document limit remains explicit.
+
+Pending before M5.2 completion: native kernel/Manager installer and app lifecycle,
+SDK native entry/syscalls and useful Rust/C examples, GUI routing, actual guest
+persistence, unrelated-device/Data denial and contained failure. M5.1 negative
+campaigns and M5.3/integrated release remain open. No completion percentage is
+inferred from this source batch.

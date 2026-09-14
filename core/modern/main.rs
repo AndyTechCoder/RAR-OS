@@ -22,6 +22,7 @@ mod abi;
 #[path="../../apps/modern/runtime.rs"] mod apps;
 #[path="../../services/modern/pio.rs"] mod pio;
 #[path="../../services/modern/vault.rs"] mod vault;
+#[path="../../services/expansion/documents.rs"] mod app_documents;
 #[path="../../services/modern/store.rs"] mod store;
 #[path="../../services/modern/transport.rs"] mod transport;
 #[path="../../services/modern/session.rs"] mod session;

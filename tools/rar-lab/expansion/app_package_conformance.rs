@@ -33,6 +33,24 @@ fn main(){
             let mut bad=manifest.to_vec();bad[at]^=1;
             assert!(matches!(verify(&bad,payload,1,15),Err(E::Signature)));negatives+=1;
         }
+        // Start from a VERIFIED signed fixture, not an already invalid signature.
+        for at in 0..448{
+            let mut bad=manifest.to_vec();bad[at]^=1;
+            assert!(verify(&bad,payload,1,15).is_err());negatives+=1;
+        }
+        // Recomputing the public digest does not re-sign changed authority.
+        for at in 16..128{
+            let mut bad=manifest.to_vec();bad[at]^=1;
+            let digest=sha256::sha256(&bad[..416]).unwrap();
+            bad[416..448].copy_from_slice(&digest);
+            assert!(verify(&bad,payload,1,15).is_err());negatives+=1;
+        }
+        assert!(verify(&manifest[..511],payload,1,15).is_err());
+        let mut extra=manifest.to_vec();extra.push(0);
+        assert!(verify(&extra,payload,1,15).is_err());
+        assert!(verify(manifest,&payload[..payload.len()-1],1,15).is_err());
+        let mut extra=payload.to_vec();extra.push(0);
+        assert!(verify(manifest,&extra,1,15).is_err());negatives+=4;
         // Hash failure follows valid signature, so every payload byte is checked.
         for at in 0..payload.len(){
             let mut bad=payload.to_vec();bad[at]^=1;
