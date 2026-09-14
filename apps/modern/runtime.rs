@@ -60,6 +60,7 @@ fn route(boot:&Boot,w:&mut Windows,role:u8,m:&[u8;128])->bool {
     }
 }
 pub fn shell(boot:&Boot)->! {
+    #[cfg(rar_applications)] {application_shell(boot)}
     let mut w=Windows::new();
     deliver(boot.caps[COMPOSITOR],&w.wire());
     loop {
@@ -239,5 +240,75 @@ pub fn terminal(boot:&Boot)->! {
             }
         }
         publish(boot,&mut version,&view);
+    }
+}
+
+#[cfg(rar_applications)]
+fn application_shell(boot:&Boot)->!{
+    use crate::{application_runtime as a,app_control as c};
+    let _=a::wait_catalog(boot);
+    let mut w=Windows::new();let mut desired:Option<(usize,u64)>=None;
+    let mut focused:Option<(usize,u64)>=None;
+    deliver(boot.caps[COMPOSITOR],&w.wire());
+    loop {
+        if let Some((index,deadline))=desired{
+            if a::now().is_none_or(|n|n>=deadline){desired=None;}
+            else if let Some(r)=a::query(boot,index){
+                if r.state==2{
+                    let m=c::control(3,index,r.incarnation).unwrap();
+                    if send(boot.caps[COMPOSITOR],&m).is_ok(){focused=Some((index,r.incarnation));}
+                    desired=None;
+                }
+            }
+        }
+        if focused.is_some_and(|(index,inc)|a::query(boot,index).is_none_or(|r|r.incarnation!=inc||r.state!=2)){
+            focused=None;deliver(boot.caps[COMPOSITOR],&w.wire());
+        }
+        let e=match crate::poll_checked(boot.caps[SELF_RECV]){
+            Ok(Some(e))if e.length==128=>e,
+            Ok(_)=>{crate::yield_now();continue;},
+            Err(())=>fail(),
+        };
+        if !matches!(e.sender,2|5){continue;}
+        let expected=if e.sender==5{crate::settings_binding(boot)}else{boot.peers[2]};
+        if expected==0||e.generation!=expected{continue;}
+        if e.sender==5&&e.bytes[0]==0x12&&e.bytes[1]<=1&&e.bytes[2..].iter().all(|b|*b==0){
+            w.light=e.bytes[1]!=0;deliver(boot.caps[COMPOSITOR],&w.wire());focused=None;continue;
+        }
+        if e.sender!=2{continue;}
+        let key=if e.bytes[0]==1&&matches!(e.bytes[1],0x86..=0x88)&&e.bytes[2..].iter().all(|b|*b==0){
+            Some(e.bytes[1])
+        }else{key_decode(&e.bytes)};
+        let Some(key)=key else{continue;};
+        match key {
+            0x86|0x87=>{
+                let index=(key-0x86)as usize;
+                if let Some(r)=a::query(boot,index){
+                    if r.state==0{let _=a::send(boot,8,&c::control(1,index,0).unwrap());}
+                    desired=a::now().and_then(|n|n.checked_add(4096)).map(|d|(index,d));
+                }
+            },
+            0x88=>{
+                let closing=focused.or_else(||desired.and_then(|(i,_)|
+                    a::query(boot,i).filter(|r|r.incarnation!=0).map(|r|(i,r.incarnation))));
+                if let Some((index,inc))=closing{let _=a::send(boot,8,&c::control(2,index,inc).unwrap());}
+                focused=None;desired=None;deliver(boot.caps[COMPOSITOR],&w.wire());
+            },
+            0x81..=0x83=>{
+                focused=None;desired=None;
+                let role=key-0x81+4;let mut activate=[0;128];activate[0]=2;
+                if route(boot,&mut w,role,&activate){w.show(role);}
+                deliver(boot.caps[COMPOSITOR],&w.wire());
+            },
+            _=>{
+                if let Some((index,inc))=focused{
+                    if let Ok(frame)=c::input(index,inc,key){let _=send(boot.caps[COMPOSITOR],&frame);}
+                }else if key==27{
+                    if let Some(role)=w.focus(){w.hide(role);deliver(boot.caps[COMPOSITOR],&w.wire());}
+                }else if let Some(role)=w.focus(){
+                    if !route(boot,&mut w,role,&e.bytes){deliver(boot.caps[COMPOSITOR],&w.wire());}
+                }
+            },
+        }
     }
 }

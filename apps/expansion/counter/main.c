@@ -23,8 +23,8 @@ static int paint_line(const rar_app_boot *boot,uint32_t seq,uint8_t row,const ui
 }
 static int paint(const rar_app_boot *boot,const rar_counter *counter,uint32_t *version){
     static const uint8_t title[]="RAR COUNTER / INDEPENDENT C APP";
-    static const uint8_t help[]="PLUS/SPACE: UP   MINUS: DOWN   0: RESET";
-    static const uint8_t boundary[]="UI ONLY / NO DOCUMENT OR DEVICE GRANT";
+    static const uint8_t help[]="PLUS/MINUS: CHANGE   0:RESET   !:FAULT";
+    static const uint8_t boundary[]="UI ONLY / DEVICE AND STORAGE ACCESS DENIED";
     const uint8_t begin[2]={0,4},commit[1]={2};uint8_t number[4];
     if(*version==UINT32_MAX){return 0;}
     (*version)++;rar_counter_text(counter,number);
@@ -56,10 +56,25 @@ int memcmp(const void *left,const void *right,size_t n){
 __attribute__((ms_abi,noreturn)) void efi_main(void){
     rar_app_boot boot;rar_counter counter={0,0};uint32_t version=0;
     if(!rar_native_bootstrap(&boot)||boot.principal!=11||boot.rights!=RAR_APP_UI)rar_native_exit();
+    /* Read-only device status, port and network probes only. No write opcode.
+     * Every unrelated handle must be denied before the normal UI is published. */
+    {
+        size_t i;uint8_t probe[128]={0};
+        for(i=0;i<5;i++){
+            if(rar_native_call(7,boot.caps[i],0,0,0)!=-2||
+               rar_native_call(3,boot.caps[i],0x64,0,0)!=-2||
+               rar_native_call(13,boot.caps[i],0,0,0)!=-2)rar_native_exit();
+        }
+        if(rar_native_call(1,boot.caps[2],(uint64_t)(uintptr_t)probe,128,0)!=-1)rar_native_exit();
+    }
     if(!paint(&boot,&counter,&version))rar_native_exit();
     for(;;){
         rar_app_received received;int result=rar_native_receive(&boot,&received);
         if(result==-1)rar_native_exit(); /* malformed dequeued frames are ignored */
+        if(result==1&&rar_native_from_peer(&boot,&received,0)&&received.message.operation==RAR_APP_INPUT&&
+            received.message.status==0&&received.message.length==1&&received.message.payload[0]=='!'){
+            __asm__ __volatile__("ud2");
+        }
         if(result==1&&rar_native_from_peer(&boot,&received,0)&&
             rar_counter_input(&counter,&received.message)&&!paint(&boot,&counter,&version))rar_native_exit();
         rar_native_yield();

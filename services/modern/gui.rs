@@ -37,12 +37,12 @@ impl Surface {
         }
     }
 }
-pub struct Compositor { pub windows:Windows,surfaces:[Surface;3],peers:[u64;10],settings_highest:u64,
+pub struct Compositor { pub windows:Windows,pub app_focus:Option<u8>,surfaces:[Surface;3],peers:[u64;10],settings_highest:u64,
     app_surfaces:[Surface;2],app_incarnations:[u64;2],app_highest:[u64;2] }
 impl Compositor {
     pub fn new(peers:[u64;10])->Result<Self,()> {
         if [0usize,4,5,6].iter().any(|&i|peers[i]==0){return Err(());}
-        Ok(Self{windows:Windows::new(),surfaces:[Surface::EMPTY;3],peers,settings_highest:peers[5],app_surfaces:[Surface::EMPTY;2],app_incarnations:[0;2],app_highest:[0;2]})
+        Ok(Self{windows:Windows::new(),app_focus:None,surfaces:[Surface::EMPTY;3],peers,settings_highest:peers[5],app_surfaces:[Surface::EMPTY;2],app_incarnations:[0;2],app_highest:[0;2]})
     }
     /// Caller must supply the fixed kernel query result, NOT a message field.
     /// Retain last committed pixels but revoke all unfinished/version state.
@@ -60,6 +60,7 @@ impl Compositor {
         if incarnation==self.app_incarnations[index]{return Ok(());}
         if incarnation!=0&&incarnation<=self.app_highest[index]{return Err(());}
         self.app_surfaces[index]=Surface::EMPTY;self.app_incarnations[index]=incarnation;
+        if self.app_focus==Some(10+index as u8){self.app_focus=None;}
         if incarnation!=0{self.app_highest[index]=incarnation;}Ok(())
     }
     pub fn view(&self,role:u8)->Option<&View> {
@@ -97,7 +98,7 @@ impl Compositor {
         let expected=self.peers.get(usize::try_from(sender).map_err(|_|())?).ok_or(())?;
         if *expected==0||generation!=*expected{return Err(());}
         if sender==0 {
-            self.windows=Windows::decode(m).ok_or(())?;return Ok(true);
+            self.windows=Windows::decode(m).ok_or(())?;self.app_focus=None;return Ok(true);
         }
         if !(4..=6).contains(&sender){return Err(());}
         self.surfaces[(sender-4) as usize].message(m)
@@ -133,6 +134,7 @@ impl Keyboard {
         let known=if ext{matches!(scan,0x48|0x50)}else{
             matches!(scan,1..=14|16..=28|30..=41|42..=54|57..=61)
         };
+        let known=known||(cfg!(rar_applications)&&!ext&&matches!(scan,62..=64));
         if !known{self.reset();return None;}
         let index=scan as usize+if ext{128}else{0};
         if byte&0x80!=0 {self.down[index]=false;return None;}
@@ -142,6 +144,9 @@ impl Keyboard {
         let shift=self.down[0x2a]||self.down[0x36];
         let byte=match scan {
             1=>27,14=>8,28=>13,57=>b' ',59=>0x81,60=>0x82,61=>0x83,
+            62 if cfg!(rar_applications)=>0x86,
+            63 if cfg!(rar_applications)=>0x87,
+            64 if cfg!(rar_applications)=>0x88,
             2..=11=>b"1234567890"[(scan-2) as usize],
             16..=25=>b"qwertyuiop"[(scan-16) as usize],
             30..=38=>b"asdfghjkl"[(scan-30) as usize],

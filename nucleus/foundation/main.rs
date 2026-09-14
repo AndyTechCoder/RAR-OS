@@ -5,6 +5,10 @@ mod model;
 mod boot;
 mod paging;
 mod interrupts;
+#[cfg(rar_applications)]
+#[path="../../core/expansion/lib.rs"] mod application_package;
+#[cfg(rar_applications)]
+pub use application_package::{sha256,sha512,ed25519,pe};
 #[cfg(all(rar_modern_compile_only,any(not(rar_modern),target_os="uefi")))]
 compile_error!("Modern compile-only fixture requires Modern and forbids UEFI");
 #[cfg(all(rar_modern,not(rar_platform)))]

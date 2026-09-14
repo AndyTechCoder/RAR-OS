@@ -7,6 +7,10 @@ mod support;
 mod retirement;
 mod loader;
 mod lab_images;
+#[cfg(all(rar_applications,not(rar_expansion)))]
+compile_error!("independent applications require Expansion");
+#[cfg(rar_applications)]
+#[path="../expansion/native_apps.rs"] mod native_apps;
 #[path="../../core/modern/lab_input.rs"] mod lab_input;
 pub(crate) mod staging;
 mod native_pio;
@@ -45,11 +49,11 @@ static SERVICE:&[u8]=&[];
 #[derive(Clone,Copy)]
 struct Process{
     memory:retirement::Memory,aperture:u64,table_used:usize,
-    state:State,generation:u64,root:u64,kernel_bottom:u64,kernel_top:u64,frame:u64,
+    state:State,held:bool,generation:u64,root:u64,kernel_bottom:u64,kernel_top:u64,frame:u64,
     ranges:[UserRange;24],range_count:usize,preemptions:u64,entry:u64,stack_end:u64,
 }
 impl Process{
-    const EMPTY:Self=Self{memory:retirement::Memory::Clean,aperture:0,table_used:0,state:State::Dead,generation:1,root:0,kernel_bottom:0,kernel_top:0,frame:0,
+    const EMPTY:Self=Self{memory:retirement::Memory::Clean,aperture:0,table_used:0,state:State::Dead,held:false,generation:1,root:0,kernel_bottom:0,kernel_top:0,frame:0,
         ranges:[EMPTY_RANGE;24],range_count:0,preemptions:0,entry:0,stack_end:0};
     fn range(&mut self,start:u64,end:u64,writable:bool,executable:bool){
         if self.range_count>=self.ranges.len()||start>=end||writable&&executable{fatal("RAR-PANIC:CODE=USER-RANGE");}
@@ -65,9 +69,11 @@ struct Runtime{
     image_base:u64,image_size:u64,hardware:BootHardware,desktop:Option<NativeDesktop>,
     policy:Option<model::Runtime>,device:Option<native_pio::Adapter>,network:Option<native_net::Adapter>,ticks:Option<u64>,
     handover:Option<(model::Handover,abi::Boot,u64)>,
+    #[cfg(rar_applications)] app_catalog:[Option<model::applications::AppImage>;2],
     staging:Option<staging::Buffer<'static>>,bootstrap_tables:usize,stage_readonly:bool,stage_view:bool,
 }
 static mut RUNTIME:Runtime=Runtime{processes:[Process::EMPTY;TASKS],current:0,arena:0,proofs:0,ready:false,image_base:0,image_size:0,hardware:BootHardware::EMPTY,desktop:None,
+    #[cfg(rar_applications)] app_catalog:[None;2],
     policy:None,device:None,network:None,ticks:Some(0),handover:None,staging:None,bootstrap_tables:0,stage_readonly:false,stage_view:false};
 fn private_region(arena:u64,index:usize)->u64{
     retirement::region(arena,boot::ARENA_PAGES,index)
@@ -259,6 +265,8 @@ impl Runtime{
             return Err(Error::Denied);
         }
         match frame.rax{
+            #[cfg(rar_applications)]
+            14=>self.application_syscall(frame),
             abi::YIELD=>Ok(0),
             abi::SEND=>{
                 let length=usize::try_from(frame.rdx).map_err(|_|Error::Invalid)?;
@@ -271,7 +279,7 @@ impl Runtime{
                 // Bounded spurious wakeups avoid a second endpoint resolution:
                 // only logically active blocked contexts may become runnable.
                 for i in 0..TASKS{
-                    if self.processes[i].state==State::Blocked &&
+                    if self.processes[i].state==State::Blocked && !self.processes[i].held &&
                         self.policy.as_ref().unwrap().state(i)?==model::State::Active{
                         self.processes[i].state=State::Runnable;
                     }

@@ -103,3 +103,40 @@ generation1/UI-only/64KiB stack. This is a test-package identity, not enrollment
 or a durable anti-rollback floor. The existing RAR verifier must accept the exact
 bytes and reject tamper, insufficient rights and a higher required generation.
 No signer primitive, domain, public bytes or production key is changed.
+
+## Native independent-app integration candidate
+
+The next source candidate uses two exact signed immutable packages embedded as
+kernel-only boot-image data. A Manager-only private control verifies both once
+before publishing the app catalog, and re-verifies the selected package in the
+launch trap. This is the same first-party app verifier/public lab key, not a new
+publisher or production root. The package IDs are fixed Notes/Counter, generation1;
+there is no app update/downgrade installer or writable package source in this
+bounded generation1 composition.
+
+This deliberately duplicates integrity enforcement in the kernel adapter instead
+of mapping arbitrary package bytes or accepting caller-supplied executable metadata.
+Alternative Manager-only verification with user-visible banks remains possible,
+but would require a separate immutable-window/identity handoff. No parsing of
+filesystem paths or untrusted service-selected physical addresses is introduced.
+Policy remains fixed by the approved composition; untrusted apps receive neither
+Manager nor this control syscall.
+
+The shared private mapper accepts only internally constructed Modern/app handoffs.
+Legacy callers retain sealed-stage checks; new app callers use verified boot-image
+bytes and preserve the current supervisor-only staging permissions. Only Modern
+Compositor bootstrap can receive the framebuffer. Apps use physical slots11/12,
+separate SDK bootstrap, W^X image pages and guarded16/64KiB stacks. Publication
+leaves a held native context; generic SEND cannot wake it. Manager starts Notes
+only after authenticated Storage acknowledgement. Failure/revocation retires held
+and running roots using existing whole-stride scrub.
+
+An expected-incarnation SEND is atomic inside the trap. This closes the scheduling
+race between a service querying an app binding and sending through a logical
+handle after close/relaunch. No raw arbitrary destination is exposed.
+
+Native service composition, F4/F5 launch, F6 close and the standalone Counter
+fault/denial demonstration are gated by rar_applications. Existing released build
+flags do not select them. Before activation require consolidated security/unsafe
+review, source integration checks, independently reproducible app packages and
+reviewed confined cloud build/launch evidence. This proposal alone activates none.

@@ -134,3 +134,44 @@ a separate held-native-context state while Manager awaits the authenticated
 Storage acknowledgement. Required service loss must retire held and running
 apps alike before any service reconstruction resets volatile grant watermarks.
 This is an implementation requirement, not a claim that the adapter exists.
+
+## Private native control candidate
+
+Only the rar_applications composition exposes syscall14 to existing trusted
+services. It is not part of the untrusted app SDK. RDI is the caller's own
+SelfReceive handle except Manager actions, which require Manager. RSI selects:
+0 enable catalog/controls (Manager, zero remaining arguments);
+1 fixed channel query (RDX destination, R10 zero);
+2 app catalog/live query (RDX index0/1, R10 complete128-byte writable output);
+3 construct/publish held app (Manager, index, R10 zero);
+4 start held app (Manager, index, R10 full incarnation);
+5 close exact app (Manager, index, R10 full incarnation);
+6 fixed service incarnation query (role0/1/3/8/9, R10 zero);
+7 conditional app SEND (index, R10 readable136-byte expected-incarnation+frame).
+
+Control Record128: RARACT00 at0; index u32 at8; logical principal u32 at12;
+incarnation u64 at16; package generation u64 at24; rights u32 at32; state u32 at36
+(0 absent,1 held,2 running); app ID16 at40; owner32 at56; payload digest32 at88;
+120..128 zero. Owner is redacted except for Storage/Manager. Complete spans,
+caller identity, index, fixed destination grants and incarnation are checked.
+
+Internal control frames use RARACM00, operation at8/index at9, incarnation u64
+at16; all other bytes zero. Operations1 launch (incarnation0),2 close,3 focus,
+4 Storage synchronize,5 Storage ready,6 Storage failure (nonzero incarnation).
+Only authenticated Kernel-stamped Shell/Manager/Storage routes interpret them.
+Input relay uses RARAKY00, index at8/key at9/incarnation at16 and zero padding.
+Compositor supplies fresh public SDK input sequence numbers and uses atomic
+conditional SEND. A replaced app cannot receive an old queued input or reply.
+
+Storage mounts app-aware with the verified catalog owner, without autoformat or
+installation. Only the authenticated Manager synchronize request can bind and
+explicitly install the held Notes record. The normal Files/Terminal protocol and
+private shared-data projection remain separate. Failed/uncertain install closes
+the app; there is no automatic accepted-write retry. Existing packages/generation1
+are fixed laboratory input, not a persistent general-purpose installer.
+
+F1/F2/F3 preserve existing apps. F4 launches Notes; F5 launches Counter; F6 closes
+the focused/pending independent app. Notes Escape remains explicit reload.
+Counter displays successful denial of disk/port/network and absent Storage
+authority, and ! deliberately executes UD2 in that app only for the contained
+failure demonstration. Public synthetic laboratory data only.

@@ -10,7 +10,8 @@ pub fn initial_roles(signed:bool)->&'static[usize]{
     if signed{&SIGNED_INITIAL}else{&INITIAL}
 }
 pub fn initial_policy(signed:bool)->model::Runtime{
-    if signed&&cfg!(rar_expansion){model::Runtime::expansion_bootstrap()}
+    if signed&&cfg!(rar_applications){model::Runtime::applications_bootstrap()}
+    else if signed&&cfg!(rar_expansion){model::Runtime::expansion_bootstrap()}
     else if signed{model::Runtime::bootstrap()}else{model::Runtime::new()}
 }
 /// Exact prepared-root predicate shared with native revocation synchronization.

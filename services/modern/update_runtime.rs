@@ -218,8 +218,10 @@ pub fn manager(boot:&Boot)->!{
     let mut requests=wire::Requests::new();
     let mut commands=crate::update_control::Requests::new();
     boot_selected(boot,&mut requests);
+    #[cfg(rar_applications)] let mut applications=crate::application_runtime::Manager::new(boot);
     let Some(mut recovery)=crate::update_control::Recovery::new(bindings(boot)[1]) else{reconcile(boot);};
     loop{
+        #[cfg(rar_applications)] applications.tick(boot);
         let current=bindings(boot);
         match recovery.observe(current[1]){
           crate::update_control::Action::Stop=>reconcile(boot),
@@ -234,6 +236,8 @@ pub fn manager(boot:&Boot)->!{
           crate::update_control::Action::Observe=>{
             match crate::poll_checked(boot.caps[SELF_RECV]){
                 Ok(Some(m))=>{
+                    #[cfg(rar_applications)]
+                    if applications.message(boot,&m){continue;}
                     if let Some(index)=commands.accept(m.sender,m.generation,current[0],m.length,&m.bytes){
                         progress(boot,16);
                         if let Ok(committed)=install(boot,&mut requests,index){

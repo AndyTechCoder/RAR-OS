@@ -6,6 +6,9 @@ compile_error!("signed supervisor composition and standalone Settings are distin
 #[cfg(all(rar_expansion,not(rar_signed_updates)))]
 compile_error!("Expansion requires signed bootstrap");
 mod abi;
+#[cfg(all(rar_applications,not(rar_expansion)))] compile_error!("apps require Expansion");
+#[cfg(rar_applications)] #[path="../expansion/app_control.rs"] mod app_control;
+#[cfg(rar_applications)] #[path="../expansion/native_runtime.rs"] mod application_runtime;
 #[cfg(rar_expansion)] #[path="../../services/expansion/network.rs"] mod network;
 #[cfg(rar_expansion)] #[path="../../services/expansion/channel.rs"] mod channel;
 #[cfg(rar_expansion)] #[path="../../services/expansion/ne2k.rs"] mod ne2k;
