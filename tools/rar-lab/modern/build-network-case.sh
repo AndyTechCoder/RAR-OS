@@ -1,7 +1,8 @@
 #!/bin/sh
 # Trusted compile-only second stage. Never run on the Mac or SSD.
 set -eu
-[ "$#" -eq 1 ]
+[ "$#" -eq 2 ]
+case "$2" in faults) case_cfg="--cfg rar_network_fault_peer" ;; expiry) case_cfg="--cfg rar_network_expiry" ;; *) exit 2 ;; esac
 case "$1" in a) peer_cfg="" ;; b) peer_cfg="--cfg rar_network_peer_b" ;; *) exit 2 ;; esac
 [ "$(id -u)" -eq 65532 ]
 [ "$(uname -s)" = Linux ]
@@ -32,7 +33,7 @@ rustc --edition 2024 --target x86_64-unknown-uefi \
   -C link-arg=/timestamp:0 -C link-arg=/DEBUG:NONE \
   -C link-arg=/base:0x400000 -C link-arg=/fixed \
   --remap-path-prefix=/source=rar-source --remap-path-prefix=/tmp=rar-build \
-  --cfg rar_network_service_only --cfg rar_signed_updates --cfg rar_expansion --cfg rar_applications $peer_cfg /source/core/modern/main.rs -o /tmp/modern-network.efi
+  --cfg rar_network_service_only --cfg rar_signed_updates --cfg rar_expansion --cfg rar_applications $peer_cfg $case_cfg /source/core/modern/main.rs -o /tmp/modern-network.efi
 rustc --edition 2024 --target x86_64-unknown-uefi \
   -C opt-level=2 -C panic=abort -C no-redzone=yes \
   -C debuginfo=0 -C strip=symbols -C link-arg=/timestamp:0 -C link-arg=/DEBUG:NONE \

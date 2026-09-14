@@ -9,6 +9,11 @@ def helper(name):
 def validate(raw,boots,system,firmware_sizes,owner,mode,prior=None):
     base=helper("runtime_evidence");persist=helper("persistence")
     value=helper("expansion_evidence").parse(raw)
+    if type(value) is dict and value.get("schema")=="rar-native-alpha-failure-v1" and value.get("status")=="failed":
+        # Public synthetic cloud diagnostics only; still an unconditional refusal.
+        # Escape and cap before exposing guest-derived serial in the job log.
+        detail=base.canonical(value)[:24576].decode("ascii",errors="replace")
+        raise ValueError("actual cloud scenario failed: "+detail)
     fields={"schema","mode","status","milestone_complete","challenges","frames","vm_proofs","pair_cleanup",
             "initial_data","frozen_data","captured_wire","boot_sha256","system_sha256","elapsed_milliseconds"}
     if (type(value) is not dict or set(value)!=fields or value["schema"]!="rar-native-alpha-v1" or
