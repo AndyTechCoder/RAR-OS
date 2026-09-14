@@ -248,7 +248,7 @@ fn application_shell(boot:&Boot)->!{
     use crate::{application_runtime as a,app_control as c};
     let _=a::wait_catalog(boot);
     let mut w=Windows::new();let mut desired:Option<(usize,u64)>=None;
-    let mut focused:Option<(usize,u64)>=None;
+    let mut focused:Option<(usize,u64)>=None;let mut compact=false;
     deliver(boot.caps[COMPOSITOR],&w.wire());
     loop {
         if let Some((index,deadline))=desired{
@@ -276,7 +276,7 @@ fn application_shell(boot:&Boot)->!{
             w.light=e.bytes[1]!=0;deliver(boot.caps[COMPOSITOR],&w.wire());focused=None;continue;
         }
         if e.sender!=2{continue;}
-        let key=if e.bytes[0]==1&&matches!(e.bytes[1],0x86..=0x88)&&e.bytes[2..].iter().all(|b|*b==0){
+        let key=if e.bytes[0]==1&&matches!(e.bytes[1],0x86..=0x89)&&e.bytes[2..].iter().all(|b|*b==0){
             Some(e.bytes[1])
         }else{key_decode(&e.bytes)};
         let Some(key)=key else{continue;};
@@ -287,6 +287,10 @@ fn application_shell(boot:&Boot)->!{
                     if r.state==0{let _=a::send(boot,8,&c::control(1,index,0).unwrap());}
                     desired=a::now().and_then(|n|n.checked_add(4096)).map(|d|(index,d));
                 }
+            },
+            0x89=>{
+                compact=!compact;
+                let _=send(boot.caps[COMPOSITOR],&c::profile(compact));
             },
             0x88=>{
                 let closing=focused.or_else(||desired.and_then(|(i,_)|

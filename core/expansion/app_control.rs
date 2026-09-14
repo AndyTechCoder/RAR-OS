@@ -56,3 +56,10 @@ pub fn parse_input(b:&[u8])->Result<(usize,u64,u8),()>{
     let v=(b[8]as usize,u64::from_le_bytes(b[16..24].try_into().unwrap()),b[9]);
     if input(v.0,v.1,v.2)?.as_slice()!=b{return Err(());}Ok(v)
 }
+
+pub fn profile(compact:bool)->[u8;128]{
+    let mut b=[0;128];b[..8].copy_from_slice(b"RARPRF00");b[8]=compact as u8;b
+}
+pub fn parse_profile(b:&[u8])->Result<bool,()>{
+    if b.len()!=128||b[8]>1||profile(b[8]!=0).as_slice()!=b{return Err(());}Ok(b[8]!=0)
+}

@@ -14,6 +14,6 @@ SECTIONS
   . = ALIGN(4096);
   .rodata : { *(.rodata .rodata.*) } :rodata
   . = ALIGN(4096);
-  .data : { *(.data .data.*) *(.bss .bss.* COMMON) } :data
+  .data : { BYTE(0); *(.data .data.*) *(.bss .bss.* COMMON) } :data
   /DISCARD/ : { *(.comment .note.GNU-stack) }
 }

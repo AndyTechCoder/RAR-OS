@@ -82,7 +82,7 @@ pub fn draw(boot:&Boot,state:&Compositor) {
     #[cfg(not(rar_applications))]
     c.text(28,104,b"KEYBOARD FIRST - CLOUD DEVELOPMENT ALPHA",ink,1);
     #[cfg(rar_applications)]
-    c.text(28,104,b"F4 NOTES   F5 COUNTER   F6 CLOSE APP",ink,1);
+    c.text(28,104,b"F4 NOTES F5 COUNTER F6 CLOSE F7 COMPACT/WIDE",ink,1);
     c.text(28,126,b"PUBLIC LAB DATA - NOT PRIVATE",ink,1);
     for &role in &state.windows.order[..state.windows.count] {
         let (x,y,title):(usize,usize,&[u8])=match role{4=>(24,152,b"FILES"),5=>(44,170,b"SETTINGS"),6=>(64,188,b"TERMINAL"),_=>continue};
@@ -97,11 +97,12 @@ pub fn draw(boot:&Boot,state:&Compositor) {
     #[cfg(rar_applications)]
     if let Some(role)=state.app_focus{
         let title=if role==10{b"NOTES / RUST".as_slice()}else{b"COUNTER / C".as_slice()};
-        c.rect(48,166,548,260,(8,12,20));c.rect(44,162,548,260,content);
-        c.rect(44,162,548,30,accent);c.text(56,170,title,white,2);
-        c.text(456,173,b"F6 CLOSE",white,1);
+        let (x,width)=if state.compact{(160,320)}else{(44,548)};
+        c.rect(x+4,166,width,260,(8,12,20));c.rect(x,162,width,260,content);
+        c.rect(x,162,width,30,accent);c.text(x+12,170,title,white,if state.compact{1}else{2});
+        c.text(x+width-70,173,b"F6 CLOSE",white,1);
         if let Some(view)=state.view(role){
-            for(row,line)in view.lines.iter().enumerate(){c.text(58,210+row*30,line.as_bytes(),ink,1);}
+            for(row,line)in view.lines.iter().enumerate(){c.text(x+14,210+row*30,line.as_bytes(),ink,1);}
         }
     }
     c.rect(0,440,640,40,panel);

@@ -870,6 +870,8 @@ pub extern "sysv64" fn trap(frame:*mut arch::Trap,saved:u64)->u64{
             }else if f.vector==6&&f.error==0&&
                 state.policy.as_ref().is_some_and(|p|support::active_settings_fault(p,current)){
                 record("RAR-MODERN:SETTINGS-ACTIVE-FAULT");
+            }else if cfg!(rar_applications)&&(current==11||current==12){
+                record("RAR-EXPANSION:APP-FAULT");
             }else{record("RAR-MODERN:UNEXPECTED-USER-FAULT");}
             state.kill(current);
         }

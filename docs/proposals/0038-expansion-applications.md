@@ -140,3 +140,25 @@ fault/denial demonstration are gated by rar_applications. Existing released buil
 flags do not select them. Before activation require consolidated security/unsafe
 review, source integration checks, independently reproducible app packages and
 reviewed confined cloud build/launch evidence. This proposal alone activates none.
+
+
+## Consolidated Alpha cloud candidate
+The concrete expansion-alpha controller is a separate trusted-main mode and
+fixed workflow. Existing released modes are not redirected. Both independent
+applications are reproducibly linked in the existing pinned compiler image.
+The only VM input allowance added is F4-F7 within the already closed paired
+profile. No new device, ambient network, owner path or target dependency is added.
+Exact first/fresh scenarios use new disposable cloud fixtures and retain full
+independent evidence. Adoption/activation still requires final focused review
+and passing source checks; source inclusion is not acceptance evidence.
+
+The portable node engine is Foundation-only, bounded64-byte programs/64 steps,
+eight registers/four outputs and no allocation or I/O. Its proposed boot demo
+reads actual delivered timer state and executes sample+7. The4MiB Foundation
+arena and256MiB firmware VM are explicitly distinct resource facts, not a claim
+of MCU support. This source stage does not activate a node cloud profile.
+
+Counter's provider-neutral local broker grants one counter increment on explicit
+G input, rejects document access, then revokes. It uses a deterministic labeled
+provider, not Pal inference or OS-wide agent authority. Future integrations must
+not inherit ambient privileges from this test interface.

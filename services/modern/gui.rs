@@ -37,12 +37,12 @@ impl Surface {
         }
     }
 }
-pub struct Compositor { pub windows:Windows,pub app_focus:Option<u8>,surfaces:[Surface;3],peers:[u64;10],settings_highest:u64,
+pub struct Compositor { pub windows:Windows,pub app_focus:Option<u8>,pub compact:bool,surfaces:[Surface;3],peers:[u64;10],settings_highest:u64,
     app_surfaces:[Surface;2],app_incarnations:[u64;2],app_highest:[u64;2] }
 impl Compositor {
     pub fn new(peers:[u64;10])->Result<Self,()> {
         if [0usize,4,5,6].iter().any(|&i|peers[i]==0){return Err(());}
-        Ok(Self{windows:Windows::new(),app_focus:None,surfaces:[Surface::EMPTY;3],peers,settings_highest:peers[5],app_surfaces:[Surface::EMPTY;2],app_incarnations:[0;2],app_highest:[0;2]})
+        Ok(Self{windows:Windows::new(),app_focus:None,compact:false,surfaces:[Surface::EMPTY;3],peers,settings_highest:peers[5],app_surfaces:[Surface::EMPTY;2],app_incarnations:[0;2],app_highest:[0;2]})
     }
     /// Caller must supply the fixed kernel query result, NOT a message field.
     /// Retain last committed pixels but revoke all unfinished/version state.
@@ -134,7 +134,7 @@ impl Keyboard {
         let known=if ext{matches!(scan,0x48|0x50)}else{
             matches!(scan,1..=14|16..=28|30..=41|42..=54|57..=61)
         };
-        let known=known||(cfg!(rar_applications)&&!ext&&matches!(scan,62..=64));
+        let known=known||(cfg!(rar_applications)&&!ext&&matches!(scan,62..=65));
         if !known{self.reset();return None;}
         let index=scan as usize+if ext{128}else{0};
         if byte&0x80!=0 {self.down[index]=false;return None;}
@@ -147,6 +147,7 @@ impl Keyboard {
             62 if cfg!(rar_applications)=>0x86,
             63 if cfg!(rar_applications)=>0x87,
             64 if cfg!(rar_applications)=>0x88,
+            65 if cfg!(rar_applications)=>0x89,
             2..=11=>b"1234567890"[(scan-2) as usize],
             16..=25=>b"qwertyuiop"[(scan-16) as usize],
             30..=38=>b"asdfghjkl"[(scan-30) as usize],

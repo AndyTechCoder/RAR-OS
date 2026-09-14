@@ -78,7 +78,7 @@ pub fn keyboard(boot:&Boot)->!{
             let byte=syscall(PORT_READ,boot.caps[INPUT],0x60,0,0);check((0..=255).contains(&byte));
             if let Some(key)=decoder.feed_status(status as u8,byte as u8){
                 #[cfg(rar_applications)]
-                if matches!(key,0x86..=0x88){
+                if matches!(key,0x86..=0x89){
                     let mut m=[0;128];m[0]=1;m[1]=key;deliver(boot.caps[SHELL],&m);continue;
                 }
                 if let Some(m)=services::apps::key_wire(key){deliver(boot.caps[SHELL],&m);}
@@ -210,7 +210,9 @@ fn application_compositor(boot:&Boot)->!{
         match crate::poll_checked(boot.caps[SELF_RECV]){
             Ok(Some(e))if e.length==128=>{
                 if e.sender==0&&e.generation==boot.peers[0]{
-                    if let Ok((3,index,inc))=c::parse(&e.bytes){
+                    if let Ok(compact)=c::parse_profile(&e.bytes){
+                        state.compact=compact;dirty=true;
+                    }else if let Ok((3,index,inc))=c::parse(&e.bytes){
                         if incarnations[index]==inc&&inc!=0{state.app_focus=Some(10+index as u8);dirty=true;}
                     }else if let Ok((index,inc,key))=c::parse_input(&e.bytes){
                         if state.app_focus==Some(10+index as u8)&&incarnations[index]==inc{

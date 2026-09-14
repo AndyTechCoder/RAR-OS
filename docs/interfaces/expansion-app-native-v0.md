@@ -173,5 +173,25 @@ are fixed laboratory input, not a persistent general-purpose installer.
 F1/F2/F3 preserve existing apps. F4 launches Notes; F5 launches Counter; F6 closes
 the focused/pending independent app. Notes Escape remains explicit reload.
 Counter displays successful denial of disk/port/network and absent Storage
-authority, and ! deliberately executes UD2 in that app only for the contained
+authority, and Q deliberately executes UD2 in that app only for the contained
 failure demonstration. Public synthetic laboratory data only.
+
+
+## Compact/wide presentation and cloud evidence
+F7 toggles a320x260 or548x260 native-app surface in the fixed640x480 framebuffer.
+It does not relaunch the app, change its identity, discard its document or claim
+a physical-phone port. RARPRF00 is a private Shell-to-Compositor frame: byte8 is
+the canonical boolean and all remaining padding is zero. Existing app payloads
+and public SDK bytes are unchanged.
+
+The proposed expansion-alpha workflow builds Notes and Counter independently
+twice, signs fixed public-lab envelopes, embeds exact immutable kernel banks and
+builds each closed peer twice. A new cloud-only first-use journey exercises
+private Notes saves/relaunch, both profile sizes, the C app, scoped deterministic
+agent and contained C fault, then the established paired network and shared file.
+A separate fresh-container journey receives only exact independently validated
+frozen Data bytes and tests persistence without injecting the document again.
+Full screenshots, exact QMP keyboard plans, actual wire captures, authenticated
+frozen Data and reaped process/backend receipts are independently checked.
+This candidate is not activated and does not establish M5 completion. Network
+negative campaigns and integrated signed-update/recovery remain separate gates.
