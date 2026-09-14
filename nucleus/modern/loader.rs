@@ -242,7 +242,8 @@ impl Runtime{
         let result=(||->Result<(),Error>{
             for &role in plan.roles(){
                 #[cfg(rar_applications)]
-                let payload=if role==model::NETWORK_PRINCIPAL {NETWORK_SERVICE}else{SERVICE};
+                let payload=if role==model::NETWORK_PRINCIPAL {NETWORK_SERVICE}
+                    else if role==3 {COMPOSITOR_SERVICE}else{SERVICE};
                 #[cfg(not(rar_applications))]
                 let payload=SERVICE;
                 let layout=pe::parse(payload)?;

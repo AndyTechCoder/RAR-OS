@@ -241,3 +241,12 @@ of unchanged rendering primitives to reduce duplicate code. The draft integrates
 the reviewed main controller without changing image/role ownership. Actual
 native apps, persistence, network/node/System journeys, final review and release
 proof still gate M5 completion. No Mac/SSD activity or artifact download occurred.
+
+
+Source8ff1049 CI34835001778 passed, with review confirming the rejected role
+grouping absent. Actual run34836921130 still refused135168-byte common mapping
+before guest launch. Proposed ADR0040 selects an independently built compositor
+PE (not a combined network/compositor image), with unchanged private role grants
+and full existing runtime gates. M5 is still incomplete.
+
+Owner explicitly accepted ADR0040 on2026-09-14 in this task. Resume the separate compositor implementation, retaining exact CI, focused review and cloud-only runtime gates. Approval does not itself establish runtime success.

@@ -52,3 +52,13 @@ The helper bodies, framebuffer validation, clipping, dimensions, glyphs and
 colors are unchanged. Non-Alpha compilation retains its previous attributes.
 Actual size and byte-for-byte framebuffer acceptance remain required. No larger
 image limit, role regrouping, or native execution is introduced.
+
+
+## Selected independent-image follow-up
+
+The rendering-only source8ff1049 passed CI34835001778 and focused review, but
+cloud run34836921130 still measured135168 bytes before guest launch. Further
+compiler guesses are not used. Proposed ADR0040 chooses a separate fixed
+compositor PE, preserving its independent identity from networking. The four
+private build files are independently inspected; the three service PEs all
+retain128KiB limits. Actual acceptance remains pending.

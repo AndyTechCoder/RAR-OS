@@ -52,6 +52,12 @@ static SERVICE:&[u8]=&[];
 static NETWORK_SERVICE:&[u8]=include_bytes!("/tmp/modern-network.efi");
 #[cfg(all(rar_applications,rar_modern_compile_only))]
 static NETWORK_SERVICE:&[u8]=&[];
+// Independently replaceable compositor payload: fixed role3, unchanged private
+// root and framebuffer grant. Never shares writable pages with another role.
+#[cfg(all(rar_applications,not(rar_modern_compile_only)))]
+static COMPOSITOR_SERVICE:&[u8]=include_bytes!("/tmp/modern-compositor.efi");
+#[cfg(all(rar_applications,rar_modern_compile_only))]
+static COMPOSITOR_SERVICE:&[u8]=&[];
 #[derive(Clone,Copy)]
 struct Process{
     memory:retirement::Memory,aperture:u64,table_used:usize,

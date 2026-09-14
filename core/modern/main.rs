@@ -7,6 +7,8 @@ compile_error!("signed supervisor composition and standalone Settings are distin
 compile_error!("Expansion requires signed bootstrap");
 #[cfg(all(rar_network_service_only,any(not(rar_applications),rar_settings_only)))]
 compile_error!("fixed network-only image requires native Alpha");
+#[cfg(all(rar_compositor_service_only,any(not(rar_applications),rar_settings_only,rar_network_service_only)))]
+compile_error!("fixed compositor-only image requires native Alpha and a distinct build");
 mod abi;
 #[cfg(all(any(rar_network_fault_peer,rar_network_expiry),not(rar_applications)))]
 compile_error!("fault/expiry fixtures require the explicit cloud Alpha composition");
@@ -129,14 +131,18 @@ fn boot_snapshot()->Boot {
         check(valid_trial_activation(&initial,&active));
         active
     }else{initial};
+    #[cfg(rar_compositor_service_only)]
+    {check(boot.role==3 && boot.phase!=TRIAL); drivers::compositor(&boot)}
     #[cfg(rar_network_service_only)]
     {check(boot.role==7 && boot.phase!=TRIAL); expansion::network(&boot)}
     #[cfg(rar_settings_only)]
     {check(boot.role==5);apps::settings(&boot)}
-    #[cfg(not(any(rar_settings_only,rar_network_service_only)))]
+    #[cfg(not(any(rar_settings_only,rar_network_service_only,rar_compositor_service_only)))]
     match boot.role {
         0=>apps::shell(&boot),1=>drivers::storage(&boot),2=>drivers::keyboard(&boot),
-        3=>drivers::compositor(&boot),4=>apps::files(&boot),5=>apps::settings(&boot),
+        #[cfg(not(rar_applications))]
+        3=>drivers::compositor(&boot),
+        4=>apps::files(&boot),5=>apps::settings(&boot),
         6=>apps::terminal(&boot),
         #[cfg(all(rar_expansion,not(rar_applications)))]
         7=>expansion::network(&boot),
