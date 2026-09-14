@@ -225,3 +225,19 @@ M5.1 runtime negative networking campaigns, M5.3 broker/provider/profile work an
 the integrated release journey remain required. No new owner input is needed
 for safe source work. Never bypass a failing check, execute locally, or merge
 this draft before the real acceptance evidence is complete.
+
+
+### Fixed-image completion checkpoint (2026-09-14)
+
+Source5f97512 CI34832036107 and controllerd9118fa CI34831996275 passed.
+Focused independent review cleared the network-image split and controller-only
+PR208 merged as6d8c7a93c4a56149e633a2650fb39446d86c2e7c. Actual native run
+34834004462 stopped before guest launch because the common image mapped135168
+bytes against the unchanged131072 limit. This is not M5 runtime acceptance.
+
+Compositor/network regrouping was rejected by automated review and remains
+uncommitted/unactivated. The smaller source-only alternative disables inlining
+of unchanged rendering primitives to reduce duplicate code. The draft integrates
+the reviewed main controller without changing image/role ownership. Actual
+native apps, persistence, network/node/System journeys, final review and release
+proof still gate M5 completion. No Mac/SSD activity or artifact download occurred.

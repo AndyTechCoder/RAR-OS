@@ -1,6 +1,7 @@
 //! RAR-owned provisional bitmap compositor. Only role 3 owns this mapping.
 use crate::{abi::Boot,check};
 use crate::services::Compositor;
+#[cfg_attr(rar_applications,inline(never))]
 fn glyph(byte:u8)->[u8;7] {match byte.to_ascii_uppercase(){48=>[14,17,19,21,25,17,14],
 49=>[4,12,4,4,4,4,14],
 50=>[14,17,1,2,4,8,31],
@@ -48,6 +49,7 @@ _=>[14,17,1,2,4,0,4]}}
 type Color=(u32,u32,u32);
 struct Canvas<'a>{boot:&'a Boot}
 impl Canvas<'_> {
+    #[cfg_attr(rar_applications,inline(never))]
     fn rect(&self,x:usize,y:usize,w:usize,h:usize,c:Color) {
         // All primitive callers are compositor policy. Still clip every write.
         let end_x=x.saturating_add(w).min(640);let end_y=y.saturating_add(h).min(480);
@@ -58,6 +60,7 @@ impl Canvas<'_> {
             unsafe{((self.boot.framebuffer as usize+(yy*self.boot.pitch as usize+xx)*4) as *mut u32).write_volatile(pixel);}
         }}
     }
+    #[cfg_attr(rar_applications,inline(never))]
     fn text(&self,x:usize,y:usize,value:&[u8],c:Color,scale:usize) {
         for (i,&byte) in value.iter().take(48).enumerate() {
             for (yy,row) in glyph(byte).iter().enumerate() {for xx in 0..5 {
