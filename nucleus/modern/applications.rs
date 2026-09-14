@@ -34,10 +34,10 @@ impl AppImage{
 pub struct AppRecord{pub endpoint:Endpoint,pub image:AppImage}
 #[derive(Clone,Copy)]
 pub(super) struct Applications{
-    enabled:bool,controls:bool,records:[Option<AppRecord>;APP_COUNT],
+    enabled:bool,controls:bool,epoch:u64,records:[Option<AppRecord>;APP_COUNT],
 }
 impl Applications{
-    pub(super) const fn new()->Self{Self{enabled:false,controls:false,records:[None;APP_COUNT]}}
+    pub(super) const fn new()->Self{Self{enabled:false,controls:false,epoch:0,records:[None;APP_COUNT]}}
     pub(super) fn binding(&self,principal:usize)->Option<Endpoint>{
         principal.checked_sub(APP_FIRST).and_then(|i|self.records.get(i))
             .copied().flatten().map(|r|r.endpoint)
@@ -52,7 +52,7 @@ impl Applications{
 /// non-runnable root from the verified immutable image, then publish immediately.
 /// Do not hold this over IPC or disk I/O; do not copy unrelated Runtime state.
 pub struct AppHandover{
-    index:usize,record:AppRecord,caps:Caps,clock:u64,peers:[Endpoint;5],
+    index:usize,record:AppRecord,caps:Caps,clock:u64,epoch:u64,peers:[Endpoint;5],
 }
 impl AppHandover{
     /// Exact separate app bootstrap from precomputed kernel authority. This is
@@ -98,6 +98,7 @@ impl Runtime{
     pub fn enable_application_controls(&mut self,caller:usize,handle:u64)->Result<(),Error>{
         self.manager(caller,handle)?;self.application_peers()?;
         if self.apps.controls{return Ok(());}
+        let epoch=self.apps.epoch.checked_add(1).ok_or(Error::Exhausted)?;
         let mut caps=[Caps::new();5];
         for(n,role)in PEERS.into_iter().enumerate(){caps[n]=self.processes[role].caps;}
         for(role,slot,destination)in CHANNELS{
@@ -105,7 +106,7 @@ impl Runtime{
             caps[n].grant(slot,Object::NamedSend{principal:destination},SEND)?;
         }
         for(n,role)in PEERS.into_iter().enumerate(){self.processes[role].caps=caps[n];}
-        self.apps.controls=true;Ok(())
+        self.apps.controls=true;self.apps.epoch=epoch;Ok(())
     }
     fn application_query(&self,caller:usize,handle:u64)->Result<usize,Error>{
         self.application_peers()?;
@@ -155,13 +156,13 @@ impl Runtime{
         caps.grant(0,Object::Receive(endpoint),RECEIVE)?;
         caps.grant(1,Object::NamedSend{principal:3},SEND)?;
         if image.rights&2!=0{caps.grant(2,Object::NamedSend{principal:1},SEND)?;}
-        Ok(AppHandover{index,record:AppRecord{endpoint,image},caps,clock:self.clock,peers})
+        Ok(AppHandover{index,record:AppRecord{endpoint,image},caps,clock:self.clock,epoch:self.apps.epoch,peers})
     }
     /// Same-trap publication after successful private construction. All refusal
     /// precedes mutation. Native scheduling must happen only after success.
     pub fn publish_application(&mut self,caller:usize,handle:u64,plan:AppHandover)->Result<(),Error>{
         self.manager(caller,handle)?;
-        if self.application_peers()?!=plan.peers||!self.apps.controls||self.clock!=plan.clock{
+        if self.application_peers()?!=plan.peers||!self.apps.controls||self.clock!=plan.clock||self.apps.epoch!=plan.epoch{
             return Err(Error::Stale);
         }
         let slot=APP_SLOTS[plan.index];
@@ -174,9 +175,7 @@ impl Runtime{
         current.grant(0,Object::Receive(plan.record.endpoint),RECEIVE)?;
         current.grant(1,Object::NamedSend{principal:3},SEND)?;
         if plan.record.image.rights&2!=0{current.grant(2,Object::NamedSend{principal:1},SEND)?;}
-        for i in 0..CAP_SLOTS{
-            if current.handle(i)!=plan.caps.handle(i){return Err(Error::Stale);}
-        }
+        if current!=plan.caps{return Err(Error::Stale);}
         self.clock=plan.record.endpoint.incarnation;
         self.processes[slot]=Process{state:State::Active,principal:Some((APP_FIRST+plan.index)as u8),
             incarnation:self.clock,caps:plan.caps,queue:Queue::new()};
@@ -324,6 +323,30 @@ mod tests{
             assert!(r.publish_application(8,h,p).is_err());
             assert_eq!(r.application_binding(10),Ok(None));
         }
+    }
+    #[test]fn every_prepared_cap_generation_including_empty_slots_is_revalidated(){
+        for slot in 0..CAP_SLOTS{
+            let mut r=runtime();let h=r.handle(8,MANAGER_CAP).unwrap();
+            let p=r.prepare_application(8,h,0,image(0)).unwrap();
+            r.processes[11].caps.revoke(slot).unwrap();
+            assert!(r.publish_application(8,h,p).is_err(),"{slot}");
+            assert_eq!(r.application_binding(10),Ok(None));
+        }
+    }
+    #[test]fn revoked_control_epoch_cannot_revive_a_prepared_app(){
+        let mut r=runtime();let h=r.handle(8,MANAGER_CAP).unwrap();
+        let p=r.prepare_application(8,h,0,image(0)).unwrap();
+        r.revoke_application_peers();r.enable_application_controls(8,h).unwrap();
+        assert_eq!(r.publish_application(8,h,p),Err(Error::Stale));
+        r.revoke_application_peers();
+        r.processes[3].caps.slots[10].retired=true;
+        assert!(r.enable_application_controls(8,h).is_err());
+        for(role,slot,_)in CHANNELS{assert!(r.handle(role,slot).is_err());}
+        assert!(!r.apps.controls);
+        let mut r=runtime();let h=r.handle(8,MANAGER_CAP).unwrap();
+        r.revoke_application_peers();r.apps.epoch=u64::MAX;
+        assert_eq!(r.enable_application_controls(8,h),Err(Error::Exhausted));
+        assert!(!r.apps.controls);
     }
     #[test]fn independent_sender_queue_budget_and_handle_exhaustion_fail_closed(){
         let mut r=runtime();launch(&mut r,0);launch(&mut r,1);

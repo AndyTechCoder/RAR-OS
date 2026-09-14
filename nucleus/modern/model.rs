@@ -44,10 +44,10 @@ pub enum Object {
     TrialHealth {endpoint:Endpoint,token:u64}, Manager,
     Device(Device), Input, Framebuffer, StageCopy, Network,
 }
-#[derive(Clone,Copy)]
+#[derive(Clone,Copy,PartialEq,Eq)]
 struct Cap {generation:u32,rights:u16,object:Object,retired:bool}
 impl Cap {const EMPTY:Self=Self {generation:1,rights:0,object:Object::None,retired:false};}
-#[derive(Clone,Copy)]
+#[derive(Clone,Copy,PartialEq,Eq)]
 pub struct Caps {slots:[Cap;CAP_SLOTS]}
 impl Caps {
     pub const fn new()->Self {Self {slots:[Cap::EMPTY;CAP_SLOTS]}}
