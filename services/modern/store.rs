@@ -55,6 +55,8 @@ impl<B: Block> Store<B> {
         if files_generation==0||terminal_generation==0{return Err(Error::Invalid);}
         let vault=Vault::mount(block,capacity)?;
         grant.validate_binding(vault.snapshot()).map_err(|_|Error::Invalid)?;
+        // Check the complete future installation without publishing it.
+        grant.installation(vault.snapshot()).map_err(|_|Error::Bounds)?;
         Ok(Self{vault,unavailable:false,files_generation,terminal_generation,private:Some(grant)})
     }
     /// Trusted explicit installer call; no caller-controlled owner or filesystem
@@ -151,6 +153,7 @@ impl<B: Block> Store<B> {
                 if self.vault.is_readonly() { return Err(Failure::ReadOnly); }
                 let mut candidate: Snapshot = snapshot;
                 if candidate.put(name, value).is_err() ||
+                    self.private.is_some_and(|g|g.installation(&candidate).is_err()) ||
                     (snapshot.entries().any(|(n,_)|!name_ok(n))&&
                      crate::app_documents::shared(&candidate).is_err()) {
                     return Ok(status(wire::QUOTA));
@@ -431,5 +434,39 @@ mod tests {
         s.write_private(10,0x1_0000_0001,&[2;64]).unwrap();
         s.revoke_private();
         assert_eq!(call(&mut s,6,wire::WRITE,b"note",&[1;33]).unwrap()[0],wire::QUOTA);
+    }
+
+    #[test]fn pending_private_install_reserves_slots_and_values_without_writing_metadata(){
+        let mut s=Store::mount_private(Disk::new(8),26,1,1,private_grant()).unwrap();
+        assert_eq!(s.vault.snapshot().entries().count(),0);
+        for name in [b"a",b"b"]{assert_eq!(call(&mut s,6,wire::CREATE,name,b"").unwrap()[0],wire::OK);}
+        let revision=s.revision();
+        assert_eq!(call(&mut s,6,wire::CREATE,b"c",b"").unwrap()[0],wire::QUOTA);
+        assert_eq!(call(&mut s,6,wire::WRITE,b"a",&[1;33]).unwrap()[0],wire::QUOTA);
+        assert_eq!(s.revision(),revision);
+        assert_eq!(s.vault.snapshot().entries().count(),2);
+        s.install_private().unwrap();s.write_private(10,0x1_0000_0001,&[7;64]).unwrap();
+        assert_eq!(s.read_private(10,0x1_0000_0001),Ok(&[7;64][..]));
+    }
+    #[test]fn private_install_faults_are_atomic_sticky_and_recoverable(){
+        for operation in 1..=12{
+            let mut disk=Disk::new(8);disk.fail=Some(26+operation);
+            let writes=disk.writes.clone();
+            let mut s=Store::mount_private(disk,26,1,1,private_grant()).unwrap();
+            assert!(s.install_private().is_err());let count=writes.get();
+            assert_eq!(s.install_private(),Err(Failure::Unavailable));
+            assert_eq!(s.write_private(10,0x1_0000_0001,b"retry"),Err(Failure::Unavailable));
+            assert_eq!(s.read_private(10,0x1_0000_0001),Err(Failure::Unavailable));
+            assert_eq!(call(&mut s,4,wire::LIST,b"",b""),Err(Failure::Unavailable));
+            assert_eq!(writes.get(),count);
+            let mut s=Store::mount_private(s.into_block().reboot(),26,1,1,private_grant()).unwrap();
+            let entries=s.vault.snapshot().entries().count();
+            assert!(entries==0||entries==2);
+            assert_eq!(entries==2,s.revision()==1);
+            assert_eq!(writes.get(),count);
+            s.install_private().unwrap();s.write_private(10,0x1_0000_0001,b"recovered").unwrap();
+            let s=Store::mount_private(s.into_block().reboot(),26,1,1,private_grant()).unwrap();
+            assert_eq!(s.read_private(10,0x1_0000_0001),Ok(&b"recovered"[..]));
+        }
     }
 }

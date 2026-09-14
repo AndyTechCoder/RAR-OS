@@ -70,6 +70,9 @@ Installation makes one complete candidate snapshot, retaining every existing
 shared record. Its publisher must use one existing Vault transaction, not publish
 metadata and document separately. Mount never installs, writes or autoformats.
 Repeated install of the same owner is idempotent; a different owner is denied.
+The private adapter's read-only mount verifies that a full installation fits.
+While configured but not yet installed it reserves two records and 96 value
+bytes against shared mutations, without publishing or auto-creating records.
 
 A grant binds owner ID to full kernel-stamped principal/incarnation. Principal
 IDs 10..13 are reserved for proposed app/broker roles; zero incarnation is refused.

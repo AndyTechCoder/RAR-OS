@@ -128,3 +128,8 @@ SDK native entry/syscalls and useful Rust/C examples, GUI routing, actual guest
 persistence, unrelated-device/Data denial and contained failure. M5.1 negative
 campaigns and M5.3/integrated release remain open. No completion percentage is
 inferred from this source batch.
+
+Consolidated adapter review additionally required reserve enforcement during the
+configured-but-uninstalled phase and an all-12-I/O failure campaign for explicit
+installation itself. Both are now source tests. C host conformance is explicitly
+not a final target undefined-symbol/link-map proof; no implicit helper-free claim.

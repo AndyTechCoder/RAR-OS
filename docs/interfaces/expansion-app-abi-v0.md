@@ -60,8 +60,12 @@ constants.h are deterministically derived and checked by the read-only
 tools/rar-lab/expansion/app_bindings.py --check path. Its fixed semantic guard
 requires explicit review/conformance changes for contract evolution.
 
-Rust is no_std safe code with owned bounded messages. C is freestanding, uses
-no allocator, libc runtime, or syscalls; callers provide valid memory spans.
+Rust is no_std safe code with owned bounded messages. C source uses no explicit
+allocator, libc-runtime API or syscall; callers provide valid memory spans.
+Host conformance links libc for its test harness and does NOT establish final
+target runtime closure. Compiler-emitted helpers (for example memset from
+aggregate initialization) require an undefined-symbol/link-map audit when the
+native C example is linked. That target proof remains pending.
 The C codecs stage output locally, so invalid input never partially overwrites
 the output. Neither structure's memory layout is public.
 
