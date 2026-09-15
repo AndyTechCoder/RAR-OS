@@ -1,15 +1,30 @@
-# ADR0041: retain M4 regressions in the M5 release archive
+# ADR 0041: Expansion regression archive
 
-Status: Accepted by explicit owner approval on 2026-09-15.
-Scope: release evidence only; no OS behavior, target execution or owner-device authority change.
+Status: Accepted — 2026-09-15
+
+## Context
+M5 changes shared Modern code. Historical M4 results alone cannot establish current-source regressions. The owner explicitly approved retaining the five M4 regression bundles in the M5 archive on 2026-09-15.
+
+## Decision drivers
+Retain complete, exact-source release proof without owner-device access, extra execution authority or larger archive byte limits.
+
+## Considered options
+Keep only historical M4 proof (insufficient for changed code); retain temporary workflow links (expiry risk); use a separate archive (fragmented provenance); include the five fixed bundles in the existing M5 record (selected).
 
 ## Decision
-Include the five existing M4 regression bundles (signed runtime, cryptographic comparison, Data faults, System install faults, System repair faults) alongside the four existing Alpha/Foundation/Platform/Desktop bundles. Require all nine at the same frozen main source and preserve their identities in the canonical release record.
+Include signed runtime, crypto comparison, Data faults, System install faults and System repair faults alongside Alpha, Foundation, Platform and Desktop. All nine bundles must bind to the same frozen main source. System install and repair can share a workflow run but require distinct role-named artifact IDs.
 
-Retain the existing128MiB per ZIP and256MiB aggregate limits, exact workflow/source/attempt/artifact/digest checks, cloud-only opaque copy, fixed asset names, no extraction or execution, no deletion or overwrite, and separate final publication gate. The archive consists of nine ZIPs and one record. System install and repair may share a workflow run but must have distinct correctly named artifact identities. M4 release assets remain untouched.
+## Consequences
+The archive has nine ZIPs and one canonical record. Every ZIP remains at most128MiB; aggregate ZIP bytes remain at most256MiB. Missing, oversized or mismatched proof fails closed. This decision does not establish M5 completion.
 
-## Alternatives and consequences
-Keeping only historical M4 evidence does not prove current shared-code regressions. Ephemeral workflow links expire. A separate archive would fragment the release record. The chosen extension adds five fixed categories without increasing byte limits or permissions. If the unchanged total limit cannot hold the evidence, fail closed and seek a separate decision; do not silently raise it.
+## Security and data impact
+Preserve fixed asset names, complete pre-upload validation, exact digests/source/workflow/attempt checks, cloud-only opaque copying, no extraction or execution, no overwrite/deletion and the separate final publication gate. No Mac/SSD access or new network authority. Existing M4 release assets remain untouched.
+
+## Compatibility and migration
+No target, disk, SDK or OS behavior changes. This is an extension of the unreleased experimental M5 evidence record, not a migration of existing user data or published M4 assets.
 
 ## Validation
-Require pure missing-category, wrong-role, size/digest/source, upload interruption and idempotence tests, focused independent review, exact CI, actual successful runtime results and final release verification. Approval is not evidence of milestone completion.
+Pure tests require all nine roles, reject wrong-role artifacts, enforce unchanged byte caps, and exercise every upload interruption and digest-identical resume. Exact CI, independent review, successful frozen-main runtime proofs and final archive verification remain required.
+
+## Replacement path
+Future archive changes require a separately reviewed decision. If the fixed total cannot hold the evidence, stop rather than raise limits implicitly.

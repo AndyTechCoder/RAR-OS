@@ -4,6 +4,23 @@ import os
 from pathlib import Path
 import time
 
+def cleanup(pair,fixtures):
+    """Attempt every owned cleanup and retain bounded diagnostics; never acceptance."""
+    failures=[]
+    if pair is not None and not pair.closed:
+        try:pair.destroy()
+        except BaseException as error:failures.append("pair:"+type(error).__name__+":"+str(error)[:512])
+    for fixture in reversed(fixtures):
+        try:fixture.close()
+        except BaseException as error:failures.append("fixture:"+type(error).__name__+":"+str(error)[:512])
+    return failures
+
+def failure(mode,current,frames,pair,reason,difference=None):
+    return dict(schema="rar-alpha-system-journey-failure-v1",status="failed",mode=mode,
+        phase=current,reason=reason[:512],difference=difference,completed_frames=len(frames),
+        serial=[] if pair is None else [bytes(vm.serial)[-8192:].decode("ascii",errors="replace") for vm in pair.vms],
+        milestone_complete=False)
+
 def run(session,mode):
     session.cloud_guard()
     if mode not in ("install","reject","fallback","repair","final"):raise ValueError("fixed Alpha phase")
@@ -15,7 +32,7 @@ def run(session,mode):
     paths={p:session.load("expansion_profile").capture_path(p) for p in ("a","b")}
     if any(os.path.lexists(p) for p in paths.values()):raise ValueError("fresh absent captures")
     fixtures=[];initial=[];frames=[];transition_events=[];pair=None;started=time.monotonic()
-    current={"phase":"setup"};last_difference=None
+    current={"phase":"setup"};last_difference=None;result=None
     def capture(vm,peer,stage,value,compact):
         nonlocal current,last_difference
         current={"phase":"capture","peer":peer,"stage":stage,"compact":compact}
@@ -85,7 +102,7 @@ def run(session,mode):
                 qmp_drained=vm.qmp_drained,serial=bytes(vm.serial).decode("ascii")))
         elapsed=int((time.monotonic()-started)*1000)
         if not 0<elapsed<180000:raise ValueError("bounded Alpha duration")
-        return dict(schema="rar-alpha-system-journey-v1",mode=mode,status="observed",milestone_complete=False,
+        result=dict(schema="rar-alpha-system-journey-v1",mode=mode,status="observed",milestone_complete=False,
             challenges=challenges,frames=frames,transition_events=transition_events,vm_proofs=proofs,pair_cleanup=stopped,
             initial_data=[base64.b64encode(x).decode("ascii") for x in initial],
             frozen_data=[base64.b64encode(x).decode("ascii") for x in frozen],
@@ -93,20 +110,11 @@ def run(session,mode):
             boot_sha256=boots,system_sha256=[base.sha(b) for b in system_bytes],
             frozen_system=[base64.b64encode(b).decode("ascii") for b in frozen_system],elapsed_milliseconds=elapsed)
     except Exception as error:
-        # Public synthetic fixture diagnostics only. This deliberately different
-        # schema can NEVER validate as accepted runtime evidence. Teardown below
-        # must still finish; the outer controller retains this before refusing.
-        return dict(schema="rar-alpha-system-journey-failure-v1",status="failed",mode=mode,
-            phase=current,reason=type(error).__name__+":"+str(error)[:512],
-            difference=last_difference,completed_frames=len(frames),
-            serial=[] if pair is None else [bytes(vm.serial)[-8192:].decode("ascii",errors="replace") for vm in pair.vms],
-            milestone_complete=False)
+        result=failure(mode,current,frames,pair,type(error).__name__+":"+str(error),last_difference)
     finally:
-        failures=[]
-        if pair is not None and not pair.closed:
-            try:pair.destroy()
-            except BaseException:failures.append("pair")
-        for fixture in reversed(fixtures):
-            try:fixture.close()
-            except BaseException:failures.append("fixture")
-        if failures:raise RuntimeError("Alpha cleanup failed: "+",".join(failures))
+        failures=cleanup(pair,fixtures)
+        if failures:
+            if result is None or result.get("status")!="failed":
+                result=failure(mode,current,frames,pair,"Alpha cleanup failed",last_difference)
+            result["cleanup_errors"]=failures
+    return result

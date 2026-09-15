@@ -721,7 +721,19 @@ modern_repair_count absent 34 || fail "base ADR count refused"
 modern_repair_count present 35 || fail "repair ADR count refused"
 if modern_repair_count present 34; then fail "repair replacing an existing ADR accepted"; fi
 if modern_repair_count absent 35; then fail "extra ADR without repair accepted"; fi
-modern_repair_count "$modern_repair_presence" "$adr_count" || fail "unexpected indexed ADR count"
+# ADR0041 is the separately owner-approved fixed M5 evidence archive.
+archive_file=docs/adr/0041-expansion-regression-archive.md
+archive_index='- [ADR 0041: Expansion regression archive](adr/0041-expansion-regression-archive.md)'
+archive_count=0
+if [ -e "$archive_file" ]; then
+    [ -f "$archive_file" ] && [ ! -L "$archive_file" ] || fail "archive ADR must be regular"
+    [ "$(sed -n '/^- \[ADR 0041:/p' docs/README.md)" = "$archive_index" ] || fail "archive ADR index mismatch"
+    [ "$(sed -n '/^Status:/p' "$archive_file")" = 'Status: Accepted — 2026-09-15' ] || fail "archive ADR approval mismatch"
+    archive_count=1
+else
+    [ -z "$(sed -n '/^- \[ADR 0041:/p' docs/README.md)" ] || fail "archive ADR index without decision"
+fi
+modern_repair_count "$modern_repair_presence" "$((adr_count - archive_count))" || fail "unexpected indexed ADR count"
 
 # Pure registration/status drift fixtures; no files, launches or approval grants.
 modern_ide_registration() {
@@ -825,6 +837,7 @@ printf '%s\n' "$adr_files" | while IFS= read -r adr; do
         docs/adr/0031-*) adr_approval_date=2026-08-31 ;;
         docs/adr/0032-*) adr_approval_date=2026-09-04 ;;
         docs/adr/0033-*) adr_approval_date=2026-09-05 ;;
+        docs/adr/0041-*) adr_approval_date=2026-09-15 ;;
         *) adr_approval_date=$approval_date ;;
     esac
     grep -qx "Status: Accepted — $adr_approval_date" "$adr" || fail "ADR status mismatch: $adr"

@@ -89,6 +89,8 @@ Status: Gate 0 approved on 2026-07-16
 - [ADR 0035: Proposed Immutable IDE Inputs](adr/0035-immutable-ide-inputs.md)
 - [ADR 0036: Proposed System-only Factory Repair](adr/0036-system-only-factory-repair.md)
 
+- [ADR 0041: Expansion regression archive](adr/0041-expansion-regression-archive.md)
+
 Gate 0 approval covers ADRs 0001–0016 and the Release 0 task packet. Later
 indexed ADRs are authoritative only through their separately recorded approval
 dates. No approval prevents ADR-governed evolution or makes an implementation

@@ -9,6 +9,24 @@ def self_test():
     for name in ("alpha_journey_controller","alpha_journey_scenario","alpha_journey_evidence"):
         ast.parse(Path(__file__).with_name(name+".py").read_text())
     challenges=[c*32 for c in "abcd"];refused=0
+    from types import SimpleNamespace
+    scenario=load("alpha_journey_scenario");attempted=[]
+    def broken_pair():
+        attempted.append("pair");raise RuntimeError("original teardown failure")
+    def broken_fixture():
+        attempted.append("fixture");raise OSError("fixture failure")
+    pair=SimpleNamespace(closed=False,destroy=broken_pair,vms=[SimpleNamespace(serial=b"RAR-PANIC:original")])
+    failures=scenario.cleanup(pair,[SimpleNamespace(close=lambda:attempted.append("last")),SimpleNamespace(close=broken_fixture)])
+    assert attempted==["pair","fixture","last"] and len(failures)==2
+    assert "original teardown failure" in failures[0]
+    result=scenario.failure("fallback",{"phase":"event"},[1,2],pair,"initial failure")
+    result["cleanup_errors"]=failures
+    assert result["status"]=="failed" and result["milestone_complete"] is False
+    assert result["completed_frames"]==2 and result["serial"]==["RAR-PANIC:original"]
+    try:e.validate(load("runtime_evidence").canonical(result),None,None,None,None,"fallback",None,None,None)
+    except ValueError:refused+=1
+    else:raise AssertionError("cleanup failure accepted")
+    assert scenario.cleanup(None,[])==[]
     for mode in p.MODES:
         steps=p.plan(mode,challenges)
         assert sum(1 for s in steps if s[2]=="notes-ready")==4
