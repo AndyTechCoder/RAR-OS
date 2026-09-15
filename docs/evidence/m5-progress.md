@@ -1,3 +1,39 @@
+# Integrated M5 runtime acceptance — 2026-09-15
+
+The complete scoped Alpha journey passed at source `901d3c20fb95cc771e420e2b98c6e50ba3017d84`
+under trusted controller `0d14279b5a68c01676b537a074c5fb1f6a4de10e`.
+This checkpoint supersedes the historical entries below. Runtime acceptance is
+not publication: M5 remains incomplete until the exact-main release proof and
+experimental release are preserved and published.
+
+- Specifications34965348207, Foundation34965348382, Platform34965348252 and Desktop34965348422 passed.
+- Complete Alpha run34967325971, attempt1, passed native independent Rust/C apps,
+  private-document fresh boot, compact/wide state preservation, scoped deterministic
+  agent actions, bounded node execution, all closed-peer negative campaigns and
+  every integrated install/reject/fallback/repair/final journey.
+- Live remote Alpha artifact10395928599:2117431 bytes,
+  SHA256`c63f93e74cbfdb34f8652336cc9f006084fb8cb036d433385c4ae5dd2ade2285`.
+  Its Actions head is the controller, not the input target source; it is premerge
+  evidence, not a substitute for final frozen-main archive proof.
+- Signed runtime34966730022, crypto34966739684 and Data faults34966748341 passed.
+- The cold-boot defect was fixed by carrying verified prior-version eligibility
+  into Recovery separately from the one-install-per-boot budget. Signature,
+  health, publication acknowledgement, one-fallback limit and data boundaries
+  remain enforced. See verification/m5-cold-boot-fallback.md.
+- The reused independent reviewer found no new source/security blocker in this
+  exact candidate and verified the complete Alpha result. System regression
+  completion, final-head validation and publication remain separate gates.
+- ADR0041's nine-proof archive retains128MiB per bundle/256MiB total and cloud-only
+  opaque transfer. The owner approved the extension on2026-09-15.
+
+No target execution, local file activity or artifact download occurred on the
+owner Mac/SSD. The product remains an experimental x86 cloud-VM Alpha: closed
+unencrypted UDP, one64-byte private Notes document, deterministic test provider,
+bounded x86 node and two presentation profiles. General Internet/TLS, production
+Pal, MCU/ARM and the broader multi-year ecosystem remain future work.
+
+---
+
 # Current M5 acceptance checkpoint — 2026-09-15
 
 M5 remains incomplete; PR204 stays draft until the complete integrated cloud journey, final review and release evidence pass. Historical checkpoints below are superseded by this section.

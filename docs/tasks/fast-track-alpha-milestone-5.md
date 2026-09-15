@@ -1,6 +1,6 @@
 # Fast-Track Alpha Milestone 5: Expansion
 
-Status: IN PROGRESS — owner directed 2026-09-13.
+Status: RUNTIME JOURNEY PASSED — 2026-09-15. Final System regressions, exact-main proof and publication remain required.
 Process: ADR0032. Proposed composition: ADR0037.
 Baseline: main 996acacaf9ed80290ea95a4a9ac238cfe5023c33; preserve the published
 v0.4.0-modern-alpha OS and proof assets unchanged.
