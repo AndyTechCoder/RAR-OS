@@ -117,4 +117,5 @@ def run(session,mode):
             if result is None or result.get("status")!="failed":
                 result=failure(mode,current,frames,pair,"Alpha cleanup failed",last_difference)
             result["cleanup_errors"]=failures
+            result["serial"]=failure(mode,current,frames,pair,"cleanup")["serial"]
     return result
