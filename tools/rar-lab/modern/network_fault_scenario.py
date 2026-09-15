@@ -4,6 +4,11 @@ import os
 from pathlib import Path
 import time
 
+def wait_expiry(vm):
+    """Twenty monitored seconds, each call within the unchanged five-second API."""
+    for _ in range(4):
+        vm.delay(5)
+
 def run(session,mode):
     session.cloud_guard()
     if mode not in ("faults","expiry","peer-stop"):raise ValueError("fixed network case")
@@ -47,7 +52,7 @@ def run(session,mode):
         for peer,keys,stage,value in steps[2:]:
             vm=pair.vms[0 if peer=="a" else 1]
             if mode=="expiry" and stage=="retired" and not expiry_waited:
-                pair.vms[0].delay(20);expiry_waited=True
+                wait_expiry(pair.vms[0]);expiry_waited=True
             for key in keys:vm.key(key)
             if stage=="send-only":continue
             if stage=="peer-stopped":
