@@ -162,7 +162,7 @@ class Pair:
                 receipt=vm.destroy()
                 if receipt.get("joined") is not True:raise ValueError("member not reaped")
                 self.cleanup["guests"].append(receipt)
-            except BaseException:errors.append("guest/backend teardown failed")
+            except BaseException as error:errors.append("guest/backend teardown failed:"+type(error).__name__+":"+str(error)[:512])
         if errors:
             self.cleanup["errors"]=errors
             raise RuntimeError("; ".join(errors))
