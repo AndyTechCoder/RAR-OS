@@ -11,7 +11,7 @@ Peer B's test-only Link adapter changes three already-authorized frames
 (malformed IP version, truncated IP/UDP and bad UDP checksum), drops exactly
 one send, then passes subsequent frames unchanged. The actual captures must
 contain exactly the planned bytes; screenshots distinguish no delivery from
-the next valid delivery. Six subsequent datagrams exercise the four-entry
+the next valid delivery. Five subsequent datagrams exercise the four-entry
 application receive queue. This is bounded queue-overload coverage, not a
 claim about line-rate NIC stress or all network attacks.
 

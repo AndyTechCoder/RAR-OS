@@ -49,6 +49,7 @@ pub fn update_system(boot:&Boot,input:fn(u64)->Option<&'static[u8]>)->!{
     crate::update_runtime::system(boot,volume,input)
 }
 pub fn storage(boot:&Boot)->!{
+    #[cfg(rar_applications)] {application_storage(boot)}
     // One identify/mount only. Never seed, format, remount or retry on failure.
     let mut server=identify(boot).ok().and_then(|device|{
         store::Store::mount(device,boot.device_sectors as u32,boot.peers[4],boot.peers[6]).ok()
@@ -76,6 +77,10 @@ pub fn keyboard(boot:&Boot)->!{
         if status&1!=0{
             let byte=syscall(PORT_READ,boot.caps[INPUT],0x60,0,0);check((0..=255).contains(&byte));
             if let Some(key)=decoder.feed_status(status as u8,byte as u8){
+                #[cfg(rar_applications)]
+                if matches!(key,0x86..=0x89){
+                    let mut m=[0;128];m[0]=1;m[1]=key;deliver(boot.caps[SHELL],&m);continue;
+                }
                 if let Some(m)=services::apps::key_wire(key){deliver(boot.caps[SHELL],&m);}
             }
         }
@@ -83,6 +88,7 @@ pub fn keyboard(boot:&Boot)->!{
     }
 }
 pub fn compositor(boot:&Boot)->!{
+    #[cfg(rar_applications)] {application_compositor(boot)}
     let mut state=services::Compositor::new(boot.peers).unwrap_or_else(|_|crate::fail());
     render::draw(boot,&state);report(2);
     loop{
@@ -121,5 +127,109 @@ impl session::Runtime for FileRuntime<'_>{
     }
     fn yield_now(&mut self)->Result<(),()>{
         if syscall(YIELD,0,0,0,0)==0{Ok(())}else{Err(())}
+    }
+}
+
+#[cfg(rar_applications)]
+fn application_storage(boot:&Boot)->!{
+    use crate::{application_runtime as a,app_control as c,app_documents::{Owner,Grant}};
+    let catalog=a::wait_catalog(boot);
+    let owner=Owner::from_verified_identity(catalog.owner).unwrap_or_else(|_|crate::fail());
+    let mut server=identify(boot).ok().and_then(|device|
+        store::Store::mount_applications(device,boot.device_sectors as u32,boot.peers[4],boot.peers[6],owner).ok()
+    ).map(transport::Server::new);
+    let mut incarnation=0u64;
+    loop {
+        let binding=a::query(boot,0);
+        if binding.is_none_or(|r|r.incarnation!=incarnation){
+            if let Some(s)=&mut server{s.app_store().revoke_private();}
+            incarnation=0;
+        }
+        let e=match crate::poll_checked(boot.caps[SELF_RECV]){
+            Ok(Some(e))if e.length==128=>e,
+            Ok(_)=>{crate::yield_now();continue;},
+            Err(())=>crate::fail(),
+        };
+        if e.sender==8&&Some(e.generation)==a::peer(boot,8){
+            if let Ok((4,0,inc))=c::parse(&e.bytes){
+                let current=a::query(boot,0);
+                if current.is_some_and(|r|r.incarnation==inc&&r.state==1&&r.owner==catalog.owner){
+                    let ok=if let Some(s)=&mut server{
+                        if incarnation==0{
+                            let result=Grant::new(owner,10,inc).ok().and_then(|g|s.app_store().rebind_private(g).ok());
+                            if result.is_some(){incarnation=inc;}
+                        }
+                        incarnation==inc&&s.app_store().install_private().is_ok()
+                    }else{false};
+                    let response=c::control(if ok{5}else{6},0,inc).unwrap();
+                    // An uncertain install is never retried automatically.
+                    let _=a::send(boot,8,&response);
+                }
+            }continue;
+        }
+        if e.sender==10&&e.generation==incarnation&&
+            a::query(boot,0).is_some_and(|r|r.incarnation==e.generation&&r.state==2){
+            if let Some(s)=&mut server{
+                if let Some(reply)=s.app_store().process_app(e.sender,e.generation,&e.bytes){
+                    if s.app_store().app_reply_current(e.sender,e.generation){
+                        // Expected recipient is checked atomically with SEND in
+                        // kernel op7; a query-before-SEND alone would race reuse.
+                        let _=a::send_app(boot,0,e.generation,&reply);
+                    }
+                }
+            }continue;
+        }
+        if !matches!(e.sender,4|6)||e.generation!=boot.peers[e.sender as usize]{continue;}
+        let reply=match &mut server {
+            Some(s)=>s.handle(e.sender,e.generation,&e.bytes),
+            None=>transport::unavailable_response(&e.bytes),
+        };
+        if let Some(reply)=reply{
+            let slot=if e.sender==4{FILES}else{TERMINAL};
+            match syscall(SEND,boot.caps[slot],reply.as_ptr()as u64,128,0){0|-3|-4=>{},_=>crate::fail()}
+        }
+    }
+}
+#[cfg(rar_applications)]
+fn application_compositor(boot:&Boot)->!{
+    use crate::{application_runtime as a,app_control as c};
+    let _=a::wait_catalog(boot);
+    let mut state=services::Compositor::new(boot.peers).unwrap_or_else(|_|crate::fail());
+    let mut incarnations=[0u64;2];let mut sequences=[0u32;2];
+    render::draw(boot,&state);report(2);
+    loop{
+        let mut dirty=false;
+        for index in 0..2{
+            let inc=a::query(boot,index).map_or(0,|r|r.incarnation);
+            if inc!=incarnations[index]{
+                state.app_binding(index,inc).unwrap_or_else(|_|crate::fail());
+                incarnations[index]=inc;sequences[index]=0;dirty=true;
+            }
+        }
+        if state.settings_binding(crate::settings_binding(boot)).is_err(){crate::fail();}
+        match crate::poll_checked(boot.caps[SELF_RECV]){
+            Ok(Some(e))if e.length==128=>{
+                if e.sender==0&&e.generation==boot.peers[0]{
+                    if let Ok(compact)=c::parse_profile(&e.bytes){
+                        state.compact=compact;dirty=true;
+                    }else if let Ok((3,index,inc))=c::parse(&e.bytes){
+                        if incarnations[index]==inc&&inc!=0{state.app_focus=Some(10+index as u8);dirty=true;}
+                    }else if let Ok((index,inc,key))=c::parse_input(&e.bytes){
+                        if state.app_focus==Some(10+index as u8)&&incarnations[index]==inc{
+                            if let Some(sequence)=sequences[index].checked_add(1){
+                                sequences[index]=sequence;
+                                if let Ok(m)=services::app_sdk::protocol::input(sequence,key){
+                                    let _=a::send_app(boot,index,inc,&m.encode());
+                                }
+                            }
+                        }
+                    }else if state.apply(e.sender,e.generation,&e.bytes)==Ok(true){dirty=true;}
+                }else if state.apply(e.sender,e.generation,&e.bytes)==Ok(true){dirty=true;}
+            },
+            Ok(_)=>{},
+            Err(())=>crate::fail(),
+        }
+        if dirty{render::draw(boot,&state);}
+        crate::yield_now();
     }
 }

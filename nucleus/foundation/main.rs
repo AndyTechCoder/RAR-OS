@@ -5,6 +5,12 @@ mod model;
 mod boot;
 mod paging;
 mod interrupts;
+#[cfg(all(rar_node,rar_platform))] compile_error!("headless node is Foundation-only, not GUI-off Desktop");
+#[cfg(rar_node)] #[path="../../core/expansion/node.rs"] mod ecosystem_node;
+#[cfg(rar_applications)]
+#[path="../../core/expansion/lib.rs"] mod application_package;
+#[cfg(rar_applications)]
+pub use application_package::{sha256,sha512,ed25519,pe};
 #[cfg(all(rar_modern_compile_only,any(not(rar_modern),target_os="uefi")))]
 compile_error!("Modern compile-only fixture requires Modern and forbids UEFI");
 #[cfg(all(rar_modern,not(rar_platform)))]
@@ -118,6 +124,7 @@ extern "sysv64" fn kernel_entry(info:*const boot::BootInfo)->! {
     if interrupts::ticks()<3 {fatal("RAR-PANIC:CODE=TIMER");}
     record("RAR-TIMER:READY");
     record("RAR-FOUNDATION-READY");
+    #[cfg(rar_node)] {node_demonstration();}
     #[cfg(rar_platform)]
     unsafe {platform::start(info)}
     #[cfg(not(rar_platform))]
@@ -153,4 +160,25 @@ pub unsafe extern "C" fn memcmp(a:*const u8,b:*const u8,n:usize)->i32 {
         if x!=y {return x as i32-y as i32;}
     }
     0
+}
+
+#[cfg(rar_node)]
+fn node_demonstration(){
+    // Delivered hardware timer state is read at runtime, not a precomputed
+    // demonstration result. The portable engine has no device/OS dependency.
+    let sample=u32::try_from(interrupts::ticks()).unwrap_or_else(|_|fatal("RAR-PANIC:CODE=NODE-TICKS"));
+    let m=ecosystem_node::Machine::run(&ecosystem_node::DEMO,[sample,0,0,0])
+        .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=NODE-SCRIPT"));
+    if m.count!=1||m.steps!=5||m.output[0]!=sample.checked_add(7).unwrap()||
+        core::mem::size_of::<ecosystem_node::Machine>()>128{fatal("RAR-PANIC:CODE=NODE-RESULT");}
+    fn value(prefix:&str,n:u32){
+        let mut bytes=[b'0';96];let p=prefix.as_bytes();bytes[..p.len()].copy_from_slice(p);
+        for i in 0..8{bytes[p.len()+i]=b"0123456789abcdef"[((n>>(28-i*4))&15)as usize];}
+        let text=core::str::from_utf8(&bytes[..p.len()+8]).unwrap();record(text);
+    }
+    value("RAR-NODE:SAMPLE=",sample);value("RAR-NODE:RESULT=",m.output[0]);
+    value("RAR-NODE:STEPS=",m.steps);
+    value("RAR-NODE:STATE-BYTES=",core::mem::size_of::<ecosystem_node::Machine>()as u32);
+    value("RAR-NODE:ARENA-BYTES=",(boot::ARENA_PAGES*4096)as u32);
+    record("RAR-NODE:COMPLETE");
 }

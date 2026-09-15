@@ -4,8 +4,10 @@ use crate::{journal::Record,manifest::{self,VerifiedLayer},sha256::sha256,
     update_wire::{Transfer,Mode,Kind}};
 #[derive(Debug,PartialEq,Eq)]
 pub enum Reject{Identity,Record,Package,Signature,Transition}
-pub struct Verified<'a>{layer:VerifiedLayer<'a>,next:Option<Record>,transfer:Transfer}
+pub struct Verified<'a>{layer:VerifiedLayer<'a>,next:Option<Record>,transfer:Transfer,boot_prior:bool}
 impl<'a> Verified<'a>{
+    /// Structural availability only, never authority to skip prior verification.
+    pub fn boot_prior(&self)->bool{self.boot_prior}
     pub fn layer(&self)->&VerifiedLayer<'a>{&self.layer}
     pub fn next(&self)->Option<Record>{self.next}
     pub fn expected_ack(&self)->Result<[u8;128],Reject>{
@@ -57,7 +59,11 @@ pub fn verify<'a>(t:Transfer,current:Record,package:&'a[u8])->Result<Verified<'a
         if (record.active().slot(),record.active().generation(),record.active().digest())!=
             (id.slot,id.generation,id.digest){return Err(Reject::Identity);}
     }
-    let verified=Verified{layer,next,transfer:t};verified.expected_ack()?;Ok(verified)
+    let verified=Verified{layer,next,transfer:t,boot_prior:boot_prior(t.mode,current)};verified.expected_ack()?;Ok(verified)
+}
+
+fn boot_prior(mode:Mode,current:Record)->bool{
+    mode==Mode::Boot&&current.fallback().is_ok()
 }
 
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
@@ -80,6 +86,35 @@ pub fn release_action(status:i64,attempt:usize)->ReleaseAction{
 }
 #[cfg(test)]mod lifecycle_tests{
     use super::*;
+    fn record(kind:u8,sequence:u64)->Record{
+        let mut b=[0u8;512];b[..8].copy_from_slice(b"RARSYS00");
+        b[10..12].copy_from_slice(&512u16.to_le_bytes());b[12]=kind;
+        b[13]=if kind==1||kind==3{1}else{0};b[14]=if kind==1{0}else{255};
+        let active=if kind==1{2u64}else{1u64};
+        let highest=if kind==0{1u64}else{2u64};
+        for(offset,value)in [(16,sequence),(24,highest),(32,1),(40,active),
+            (48,if kind==1{1}else{0}),(56,if kind==0{0}else{sequence-1})]{
+            b[offset..offset+8].copy_from_slice(&value.to_le_bytes());
+        }
+        b[64..96].fill(active as u8);
+        if kind==1{b[96..128].fill(1);}
+        if kind!=0{b[128..160].fill(3);}
+        let sum=sha256(&b[..480]).unwrap();b[480..].copy_from_slice(&sum);
+        Record::decode(&b).unwrap()
+    }
+    #[test]fn boot_hint_requires_available_nonexhausted_prior_transition(){
+        for(kind,sequence,wanted)in [(0,1,false),(1,2,true),(1,u64::MAX,false),(2,3,false),(3,2,false)]{
+            let r=record(kind,sequence);
+            assert_eq!(boot_prior(Mode::Boot,r),wanted);
+            for mode in [Mode::Install,Mode::Fallback,Mode::Repair]{assert!(!boot_prior(mode,r));}
+        }
+        let mut corrupt=record(1,2).encode();corrupt[96..128].fill(0);
+        let sum=sha256(&corrupt[..480]).unwrap();corrupt[480..].copy_from_slice(&sum);
+        assert!(Record::decode(&corrupt).is_err());
+        let prior=record(1,2).fallback().unwrap();
+        assert!(prior.previous().is_none());assert_eq!(prior.highest_committed_generation(),2);
+        assert!(!boot_prior(Mode::Boot,prior));
+    }
     #[test]fn only_clean_boot_rejection_can_request_exact_prior_once(){
         for prior in [false,true]{
             assert_eq!(boot_action(Ok(()),prior),BootAction::Active);

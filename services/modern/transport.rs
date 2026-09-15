@@ -68,6 +68,7 @@ pub struct Server<B:Block> {store:Store<B>,last:[u64;2]}
 impl<B:Block> Server<B> {
     pub fn new(store:Store<B>)->Self {Self{store,last:[0;2]}}
     pub fn into_store(self)->Store<B> {self.store}
+    #[cfg(rar_applications)] pub(crate) fn app_store(&mut self)->&mut Store<B>{&mut self.store}
     pub fn handle(&mut self,sender:u64,generation:u64,frame:&[u8])->Option<[u8;128]> {
         if !self.store.authorized(sender,generation) {return None;}
         let role=if sender==4 {0}else{1};

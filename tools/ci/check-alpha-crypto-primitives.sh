@@ -167,18 +167,158 @@ printf '%s\n' 'Modern signed bootstrap: actual kernel/service object compilation
 /usr/bin/python3 -I -B -c 'import runpy,sys; sys.stdout.buffer.write(runpy.run_path(sys.argv[1])["fixture"]())' \
     "$root/tools/rar-lab/modern/unknown_publisher.py" | "$work/focused-tests"
 
+# Independently compile the experimental app SDK as a no_std library.
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 \
+    --crate-type lib -D warnings sdk/expansion/rust/lib.rs -o "$work/focused.rlib"
+
+# M5 pure protocol tests in this same reviewed network-disabled cloud sandbox.
+# This compiles no new guest entry and grants no NIC/network/runtime authority.
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --test \
+    -C strip=symbols -C debuginfo=0 -C opt-level=1 -C debug-assertions=yes -C overflow-checks=yes \
+    services/expansion/lib.rs -o "$work/focused-tests"
+"$work/focused-tests"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 \
+    --crate-type lib -D warnings services/expansion/lib.rs -o "$work/focused.rlib"
+printf '%s\n' 'Expansion: bounded packet/grant tests and no_std compile passed; guest networking NOT active'
+
+# RAR host-only cross-language wire oracle, streamed within bounded cloud tmpfs.
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 \
+    -C strip=symbols -C debuginfo=0 -C opt-level=1 -C overflow-checks=yes \
+    tools/rar-lab/expansion/network_conformance.rs -o "$work/focused-tests"
+/usr/bin/python3 -I -B tools/rar-lab/expansion/network_reference.py | "$work/focused-tests"
+
+# Compile both closed-peer Expansion candidates to objects only. No profile
+# activation, UEFI link, target execution, ports or network backend is permitted.
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 \
+    --crate-type lib --emit=obj -C panic=abort -C no-redzone=yes -C debuginfo=0 \
+    --cfg rar_platform --cfg rar_modern --cfg rar_modern_compile_only \
+    --cfg rar_signed_updates --cfg rar_expansion --cfg 'rar_profile="normal"' \
+    nucleus/foundation/main.rs -o "$work/focused.rlib"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 \
+    --crate-type lib --emit=obj -C panic=abort -C no-redzone=yes -C debuginfo=0 \
+    --cfg rar_signed_updates --cfg rar_expansion core/modern/main.rs -o "$work/focused.rlib"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 \
+    --crate-type lib --emit=obj -C panic=abort -C no-redzone=yes -C debuginfo=0 \
+    --cfg rar_signed_updates --cfg rar_expansion --cfg rar_network_peer_b \
+    core/modern/main.rs -o "$work/focused.rlib"
+printf '%s\n' 'Expansion native composition: object-only type checks; guest/profile activation NOT claimed'
+
 # Bound the final stripped executable, no_std library and signed codec fixture in the
 # existing cloud-only tmpfs; no owner files or retained evidence are affected.
 set -- $(/usr/bin/du -sk "$work")
 [ "$1" -le 8192 ]
 printf 'Modern focused scratch KiB: %s (limit 8192)\n' "$1"
 
-# Reviewed concrete closed-pair controller dependency tests. Inert only;
-# the workflow is a separate trusted-main dispatch, not a test-side launch.
+# Pure fixed closed-pair profile and mocked lifecycle only; no socket/guest launch.
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/expansion_profile.py" --self-test
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/expansion_session.py" --self-test
+
+# C SDK is first-party freestanding source; libc is used only by this host test.
+# /usr/bin/cc and host test libraries are pinned by the existing immutable image.
+/usr/bin/cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -ffreestanding -fno-builtin \
+    tools/rar-lab/expansion/c_sdk_conformance.c -o "$work/focused-c-tests"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 \
+    -C strip=symbols -C debuginfo=0 -C opt-level=1 \
+    tools/rar-lab/expansion/c_sdk_conformance.rs -o "$work/focused-tests"
+"$work/focused-c-tests" | "$work/focused-tests"
+set -- $(/usr/bin/du -sk "$work")
+[ "$1" -le 8192 ]
+
+# Pure Expansion controller/visual/evidence tests only. Actual paired launch is
+# a separately reviewed trusted-main workflow, never a Specifications test.
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/expansion_visual.py" --self-test
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/expansion_evidence.py" --self-test
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/expansion_controller_tests.py" --self-test
 
 /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/expansion_wire.py" --self-test
+
+# Independent app signatures and private-document policy: pure candidate tests.
+# No new guest bootstrap, install, disk writes, runtime grants or VM activation.
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --test -C strip=symbols -C debuginfo=0 -C opt-level=1 -C debug-assertions=yes -C overflow-checks=yes core/expansion/lib.rs -o "$work/focused-tests"
+"$work/focused-tests"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --crate-type lib -D warnings core/expansion/lib.rs -o "$work/focused.rlib"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 -C strip=symbols -C debuginfo=0 -C opt-level=1 -C overflow-checks=yes tools/rar-lab/expansion/app_package_conformance.rs -o "$work/focused-tests"
+/usr/bin/python3 -I -B tools/rar-lab/expansion/app_package_fixture.py | "$work/focused-tests"
+set -- $(/usr/bin/du -sk "$work")
+[ "$1" -le 8192 ]
+printf '%s\n' 'Expansion signed app/document candidate tests passed; native app and persistence acceptance NOT claimed'
+
+# Experimental app bootstrap/wire bindings; no trap, install or guest execution.
+/usr/bin/python3 -I -B tools/rar-lab/expansion/app_bindings.py --check
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --test -C strip=symbols -C debuginfo=0 -C opt-level=1 -C overflow-checks=yes sdk/alpha/rust/lib.rs -o "$work/focused-tests"
+"$work/focused-tests"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --crate-type lib -D warnings sdk/alpha/rust/lib.rs -o "$work/focused.rlib"
+/usr/bin/cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -ffreestanding -fno-builtin tools/rar-lab/expansion/app_sdk_conformance.c -o "$work/focused-c-tests"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 -C strip=symbols -C debuginfo=0 -C opt-level=1 -C overflow-checks=yes tools/rar-lab/expansion/app_sdk_conformance.rs -o "$work/focused-tests"
+"$work/focused-c-tests" | "$work/focused-tests"
+set -- $(/usr/bin/du -sk "$work")
+[ "$1" -le 8192 ]
+
+# Independent app logic tests plus native-entry OBJECTS only, never execution.
+# Existing pinned compiler/image and cloud tmpfs only; no new linker/tool download.
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --test -C strip=symbols -C debuginfo=0 -C opt-level=1 -C overflow-checks=yes tools/rar-lab/expansion/notes_tests.rs -o "$work/focused-tests"
+"$work/focused-tests"
+/usr/bin/cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -ffreestanding -fno-builtin tools/rar-lab/expansion/counter_tests.c -o "$work/focused-c-tests"
+"$work/focused-c-tests"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --crate-type lib --emit=obj -C panic=abort -C no-redzone=yes -C debuginfo=0 -C opt-level=z --cfg rar_app_object_check apps/expansion/notes/main.rs -o "$work/focused.rlib"
+/usr/bin/cc -std=c11 -Os -Wall -Wextra -Werror -pedantic -ffreestanding -fno-builtin -fno-stack-protector -fno-pie -mno-red-zone -DRAR_APP_OBJECT_CHECK -c apps/expansion/counter/main.c -o "$work/focused-c-object.o"
+set -- $(/usr/bin/du -sk "$work")
+[ "$1" -le 8192 ]
+printf '%s\n' 'Expansion independent Rust/C app state tests and native entry OBJECT compilation passed; no linking, installation or guest app execution claimed'
+
+# Independently LINK the fixed freestanding Counter; never execute its ELF/PE.
+# Existing image-pinned cc/ld only, no startup objects, libc, libgcc or download.
+# Two independent links must produce identical bytes. Python and the actual RAR
+# PE parser inspect the result as data; these host checkers do not launch it.
+/usr/bin/python3 -I -B tools/rar-lab/expansion/c_app_pe.py --self-test
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 -C strip=symbols -C debuginfo=0 -C opt-level=1 tools/rar-lab/expansion/native_pe_conformance.rs -o "$work/focused-tests"
+/usr/bin/python3 -I -B tools/rar-lab/expansion/c_app_pe.py --fixture | "$work/focused-tests"
+for build in a b; do
+    /usr/bin/cc -std=c11 -Os -Wall -Wextra -Werror -pedantic -ffreestanding -fno-builtin \
+        -fno-stack-protector -fno-pie -mno-red-zone -fno-asynchronous-unwind-tables -fno-unwind-tables \
+        -DRAR_APP_NATIVE -nostdlib -static -no-pie -Wl,--build-id=none \
+        -Wl,-T,tools/rar-lab/expansion/c_app.ld apps/expansion/counter/main.c -o "$work/counter-$build.elf"
+done
+/usr/bin/python3 -I -B -c 'import sys; a=open(sys.argv[1],"rb").read(1048577); b=open(sys.argv[2],"rb").read(1048577); assert 64<=len(a)<=1048576 and a==b, "native C link reproducibility"' "$work/counter-a.elf" "$work/counter-b.elf"
+/usr/bin/python3 -I -B tools/rar-lab/expansion/c_app_pe.py --convert < "$work/counter-a.elf" | "$work/focused-tests"
+/usr/bin/python3 -I -B tools/rar-lab/expansion/c_app_pe.py --package-counter < "$work/counter-a.elf" | "$work/focused-tests" --package-counter
+set -- $(/usr/bin/du -sk "$work")
+[ "$1" -le 8192 ]
+printf '%s\n' 'Independent C link reproducibility and kernel PE-parser/public-lab signature conformance passed; installation and guest execution NOT claimed'
+
+# Consolidated independent-app activation source batch. Host tests and object
+# type-checks ONLY inside this same pinned network-disabled cloud sandbox.
+for source in tools/rar-lab/expansion/app_control_tests.rs core/expansion/node.rs; do
+    /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --test -C strip=symbols -C debuginfo=0 -C opt-level=1 -C overflow-checks=yes "$source" -o "$work/focused-tests"
+    "$work/focused-tests"
+done
+/usr/bin/cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -ffreestanding -fno-builtin tools/rar-lab/expansion/agent_tests.c -o "$work/focused-c-tests"
+"$work/focused-c-tests"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --crate-type lib --emit=obj -C panic=abort -C no-redzone=yes -C debuginfo=0 --cfg rar_platform --cfg rar_modern --cfg rar_modern_compile_only --cfg rar_signed_updates --cfg rar_expansion --cfg rar_applications --cfg 'rar_profile="normal"' nucleus/foundation/main.rs -o "$work/focused.rlib"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --crate-type lib --emit=obj -C panic=abort -C no-redzone=yes -C debuginfo=0 --cfg rar_signed_updates --cfg rar_expansion --cfg rar_applications core/modern/main.rs -o "$work/focused.rlib"
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --crate-type lib --emit=obj -C panic=abort -C no-redzone=yes -C debuginfo=0 --cfg rar_node --cfg 'rar_profile="normal"' nucleus/foundation/main.rs -o "$work/focused.rlib"
+/usr/bin/python3 -I -B tools/rar-lab/modern/alpha_visual.py --self-test
+/usr/bin/python3 -I -B tools/rar-lab/modern/alpha_tests.py --self-test
+set -- $(/usr/bin/du -sk "$work")
+[ "$1" -le 8192 ]
+printf '%s\n' 'Consolidated native app/agent/node source tests passed; cloud Alpha activation and M5 acceptance remain separate'
+
+/usr/bin/python3 -I -B tools/rar-lab/modern/node_evidence.py --self-test
+/bin/sh -n tools/rar-lab/modern/build-applications.sh
+/bin/sh -n tools/rar-lab/modern/build-expansion-alpha.sh
+/bin/sh -n tools/rar-lab/modern/build-node.sh
+/bin/sh -n tools/rar-lab/modern/node-launch.sh
+
+# Final fixed negative/integrated campaign source checks, no guest activation.
+for helper in network_fault_tests alpha_journey_tests; do
+    /usr/bin/python3 -I -B "$root/tools/rar-lab/modern/$helper.py" --self-test
+done
+/bin/sh -n tools/rar-lab/modern/build-network-case.sh
+/usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --test -C strip=symbols -C debuginfo=0 -C opt-level=1 -C overflow-checks=yes tools/rar-lab/expansion/network_lab_tests.rs -o "$work/focused-tests"
+"$work/focused-tests"
+for flags in '--cfg rar_compositor_service_only' '--cfg rar_network_service_only' '--cfg rar_network_service_only --cfg rar_network_fault_peer' '--cfg rar_network_service_only --cfg rar_network_fault_peer --cfg rar_network_peer_b' '--cfg rar_network_service_only --cfg rar_network_expiry'; do
+    /usr/local/rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc --edition 2024 --crate-type lib --emit=obj -C panic=abort -C no-redzone=yes -C debuginfo=0 --cfg rar_signed_updates --cfg rar_expansion --cfg rar_applications $flags core/modern/main.rs -o "$work/focused.rlib"
+done
+set -- $(/usr/bin/du -sk "$work")
+[ "$1" -le 8192 ]
+printf '%s\n' 'Fixed closed-peer fault/expiry adapters and integrated journey helpers checked; runtime acceptance still required'

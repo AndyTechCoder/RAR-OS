@@ -2,6 +2,10 @@
 //! Runs only on the sole certified cloud guest CPU with IF=0. Source tests do
 //! not execute this unsafe mapping/copy/TLB boundary; VM evidence is required.
 use super::*;
+pub(super) enum NativeBoot {
+    Modern(abi::Boot),
+    #[cfg(rar_applications)] Application([u8;256]),
+}
 impl Runtime{
     pub(super) fn construct_trial(&mut self,payload:&[u8],trial:model::Trial)->Result<(),Error>{
         let index=trial.endpoint().slot as usize;
@@ -17,17 +21,27 @@ impl Runtime{
     /// A fully built context stays Blocked until its caller publishes authority.
     fn construct_private(&mut self,payload:&[u8],index:usize,generation:u64,stack_pages:u64,
         handoff:abi::Boot)->Result<(),Error>{
-        let root=self.stage_context();
-        if self.current!=8||index>7||!self.stage_readonly||self.stage_view||
+        if self.current!=8||(handoff.role==7&&(index!=model::NETWORK_SLOT||handoff.version!=abi::EXPANSION_VERSION))||
+            (handoff.role!=7&&index>7)||!self.stage_readonly||self.stage_view||
             !matches!(stack_pages,4|16)||generation==0||!abi::valid_boot(&handoff){
             return Err(Error::Denied);
         }
+        let layout=pe::parse(payload)?;
+        if layout.entry!=handoff.entry||generation!=handoff.generation{return Err(Error::Invalid);}
+        self.construct_context(payload,index,generation,stack_pages,NativeBoot::Modern(handoff))
+    }
+    /// Shared private mapping mechanism. Callers authenticate immutable payload
+    /// and matching handoff before entry. No caller-supplied device selector.
+    pub(super) fn construct_context(&mut self,payload:&[u8],index:usize,generation:u64,
+        stack_pages:u64,handoff:NativeBoot)->Result<(),Error>{
+        let root=self.stage_context();
+        if self.current!=8||index>=TASKS||index==8||self.stage_view||
+            !matches!(stack_pages,4|16)||generation==0{return Err(Error::Denied);}
         let victim=self.processes[index];let owner=self.processes[self.current];
         if victim.memory!=retirement::Memory::Clean||victim.state!=State::Dead||victim.root!=0||
             owner.root!=root||owner.memory!=retirement::Memory::Live||
             !(1..=256).contains(&owner.table_used){return Err(Error::Busy);}
         let layout=pe::parse(payload)?;
-        if layout.entry!=handoff.entry||generation!=handoff.generation{return Err(Error::Invalid);}
         let physical=private_region(self.arena,index);
         let mut current=unsafe{Tables::resume(owner.root,owner.table_used)};
         if unsafe{current.modern_aperture()}!=Ok(owner.aperture){return Err(Error::Denied);}
@@ -61,7 +75,11 @@ impl Runtime{
                 ptr::copy_nonoverlapping(payload.as_ptr().add(section.file_offset),
                     (retirement::APERTURE+IMAGE+section.virtual_offset as u64)as *mut u8,section.file_size);
             }
-            ((retirement::APERTURE+BOOT)as *mut abi::Boot).write(handoff);
+            match &handoff {
+                NativeBoot::Modern(b)=>((retirement::APERTURE+BOOT)as *mut abi::Boot).write(*b),
+                #[cfg(rar_applications)]
+                NativeBoot::Application(b)=>ptr::copy_nonoverlapping(b.as_ptr(),(retirement::APERTURE+BOOT)as *mut u8,256),
+            }
             let frame=retirement::APERTURE+KERNEL_TOP-720;
             ptr::write_bytes(frame as *mut u8,0,720);
             (frame as *mut u16).write(0x37f);((frame+24)as *mut u32).write(0x1f80);
@@ -85,7 +103,7 @@ impl Runtime{
             for page in 0..boot::ARENA_PAGES{
                 let address=self.arena+page as u64*4096;
                 if omit(self.arena,address){continue;}
-                let writable=!(region.start..region.start+staging::BUFFER_BYTES as u64).contains(&address);
+                let writable=!self.stage_readonly||!(region.start..region.start+staging::BUFFER_BYTES as u64).contains(&address);
                 unsafe{tables.map(mapping(address,address,1,writable,false),self.arena,
                     self.arena+boot::ARENA_PAGES as u64*4096)}.map_err(|_|Error::Invalid)?;
             }
@@ -106,14 +124,14 @@ impl Runtime{
             }
             user(STACK_VA,physical+USER_STACK,stack_pages,true,false)?;
             user(abi::BOOT_ADDRESS as u64,physical+BOOT,1,false,false)?;
-            if handoff.role==3{
+            if matches!(&handoff,NativeBoot::Modern(b) if b.role==3){
                 let h=self.hardware;
                 unsafe{tables.map_user(mapping(0x800000,h.framebuffer,h.framebuffer_bytes/4096,true,false),
                     h.framebuffer,h.framebuffer+h.framebuffer_bytes,true)}.map_err(|_|Error::Invalid)?;
                 p.range(0x800000,0x800000+h.framebuffer_bytes,true,false);
             }
             p.aperture=unsafe{tables.reserve_modern_aperture()}.map_err(|_|Error::Invalid)?;
-            unsafe{tables.check_modern_staging(region.start,false)}.map_err(|_|Error::Invalid)?;
+            unsafe{tables.check_modern_staging(region.start,!self.stage_readonly)}.map_err(|_|Error::Invalid)?;
             Ok(())
         })();
         self.processes[index].table_used=tables.used();
@@ -219,14 +237,20 @@ impl Runtime{
         if t.token()!=token||t.image_seal()!=seal{return Err(Error::Stale);}
         self.handover_context(t)?;
         let plan=policy.prepare_desktop(self.current,handle,token)?;
-        let layout=pe::parse(SERVICE)?;
         let b=support::desktop_bootstrap(&plan,5,self.processes[t.endpoint().slot as usize].entry,
             self.hardware.pitch,self.hardware.format)?;
         let result=(||->Result<(),Error>{
-            for role in [0usize,1,2,3,4,6]{
+            for &role in plan.roles(){
+                #[cfg(rar_applications)]
+                let payload=if role==model::NETWORK_PRINCIPAL {NETWORK_SERVICE}
+                    else if role==3 {COMPOSITOR_SERVICE}else{SERVICE};
+                #[cfg(not(rar_applications))]
+                let payload=SERVICE;
+                let layout=pe::parse(payload)?;
                 let handoff=support::desktop_bootstrap(&plan,role,layout.entry,
                     self.hardware.pitch,self.hardware.format)?;
-                self.construct_private(SERVICE,role,handoff.generation,16,handoff)?;
+                let slot=plan.binding(role).ok_or(Error::Stale)?.slot as usize;
+                self.construct_private(payload,slot,handoff.generation,16,handoff)?;
             }
             Ok(())
         })();
@@ -247,11 +271,12 @@ impl Runtime{
         }
         let d=self.desktop.as_ref().unwrap_or_else(||fatal("RAR-PANIC:CODE=BOOT-RECONCILE"));
         if d.token!=token||d.seal!=seal{fatal("RAR-PANIC:CODE=BOOT-RECONCILE");}
-        for role in [0usize,1,2,3,4,6]{
+        for &role in d.plan.roles(){
             let e=d.plan.binding(role).unwrap_or_else(||fatal("RAR-PANIC:CODE=BOOT-RECONCILE"));
-            let p=self.processes[role];
-            let physical=private_region(self.arena,role);
-            if e.slot as usize!=role||p.memory!=retirement::Memory::Live||p.state!=State::Blocked||
+            let slot=if role==model::NETWORK_PRINCIPAL{model::NETWORK_SLOT}else{role};
+            let p=self.processes[slot];
+            let physical=private_region(self.arena,slot);
+            if e.slot as usize!=slot||p.memory!=retirement::Memory::Live||p.state!=State::Blocked||
                 p.generation!=e.incarnation||p.root!=physical||p.stack_end!=STACK_END||
                 p.kernel_bottom!=physical+KERNEL_BOTTOM||p.kernel_top!=physical+KERNEL_TOP||
                 p.frame%16!=0||p.frame<p.kernel_bottom||
@@ -263,7 +288,7 @@ impl Runtime{
                 fatal("RAR-PANIC:CODE=BOOT-RECONCILE");
             }
         }
-        let d=self.desktop.take().unwrap();let mut b=d.boot;
+        let d=self.desktop.take().unwrap();let mut b=d.boot;let expansion=d.plan.expansion();
         self.policy.as_mut().unwrap().publish_desktop(self.current,handle,d.plan)
             .unwrap_or_else(|_|fatal("RAR-PANIC:CODE=BOOT-RECONCILE"));
         b.peers=self.policy.as_ref().unwrap().binding_generations();
@@ -272,6 +297,7 @@ impl Runtime{
         for role in [0usize,1,2,3,4,6,t.endpoint().slot as usize]{
             self.processes[role].state=State::Runnable;
         }
+        if expansion{self.processes[model::NETWORK_SLOT].state=State::Runnable;}
         record("RAR-MODERN:DESKTOP-PUBLISHED");
     }
 }

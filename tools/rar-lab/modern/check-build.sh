@@ -73,3 +73,5 @@ cd "$root"
 
 /usr/bin/python3 -I -B tools/rar-lab/modern/alpha_build_images_tests.py --self-test
 /usr/bin/python3 -I -B tools/rar-lab/modern/cloud_diagnostic_tests.py --self-test
+
+/usr/bin/python3 -I -B tools/rar-lab/modern/expansion_release_evidence_tests.py

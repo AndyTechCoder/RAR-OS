@@ -5,17 +5,23 @@
 
 pub const TASKS:usize=16;
 pub const PRINCIPALS:usize=10;
+#[path="applications.rs"]
+pub mod applications;
+const ROUTABLE_PRINCIPALS:usize=12;
 pub const CAP_SLOTS:usize=12;
 pub const MESSAGE_BYTES:usize=128;
 pub const QUEUE_DEPTH:usize=4;
-pub const SEND:u8=1;
-pub const RECEIVE:u8=2;
-pub const HEALTH:u8=4;
-pub const MANAGE:u8=8;
-pub const DEVICE:u8=16;
-pub const INPUT:u8=32;
-pub const DRAW:u8=64;
-pub const COPY_STAGE:u8=128;
+pub const SEND:u16=1;
+pub const RECEIVE:u16=2;
+pub const HEALTH:u16=4;
+pub const MANAGE:u16=8;
+pub const DEVICE:u16=16;
+pub const INPUT:u16=32;
+pub const DRAW:u16=64;
+pub const COPY_STAGE:u16=128;
+pub const NETWORK:u16=256;
+pub const NETWORK_SLOT:usize=10;
+pub const NETWORK_PRINCIPAL:usize=7;
 pub const STAGE_CAP:usize=10;
 pub const INPUT_CAP:usize=7;
 pub const FRAMEBUFFER_CAP:usize=8;
@@ -36,19 +42,19 @@ pub enum Device {Data,System}
 pub enum Object {
     None, NamedSend {principal:u8}, Receive(Endpoint),
     TrialHealth {endpoint:Endpoint,token:u64}, Manager,
-    Device(Device), Input, Framebuffer, StageCopy,
+    Device(Device), Input, Framebuffer, StageCopy, Network,
 }
-#[derive(Clone,Copy)]
-struct Cap {generation:u32,rights:u8,object:Object,retired:bool}
+#[derive(Clone,Copy,PartialEq,Eq)]
+struct Cap {generation:u32,rights:u16,object:Object,retired:bool}
 impl Cap {const EMPTY:Self=Self {generation:1,rights:0,object:Object::None,retired:false};}
-#[derive(Clone,Copy)]
+#[derive(Clone,Copy,PartialEq,Eq)]
 pub struct Caps {slots:[Cap;CAP_SLOTS]}
 impl Caps {
     pub const fn new()->Self {Self {slots:[Cap::EMPTY;CAP_SLOTS]}}
-    pub fn grant(&mut self,index:usize,object:Object,rights:u8)->Result<u64,Error>{
+    pub fn grant(&mut self,index:usize,object:Object,rights:u16)->Result<u64,Error>{
         let s=self.slots.get_mut(index).ok_or(Error::Invalid)?;
         let allowed=match object {
-            Object::NamedSend {principal} if (principal as usize)<PRINCIPALS=>SEND,
+            Object::NamedSend {principal} if (principal as usize)<ROUTABLE_PRINCIPALS=>SEND,
             Object::Receive(e) if (e.slot as usize)<TASKS&&e.incarnation!=0=>RECEIVE,
             Object::TrialHealth {endpoint:e,token} if (e.slot as usize)<TASKS&&e.incarnation!=0&&token!=0=>HEALTH,
             Object::Manager=>MANAGE,
@@ -56,13 +62,14 @@ impl Caps {
             Object::Input=>INPUT,
             Object::Framebuffer=>DRAW,
             Object::StageCopy=>COPY_STAGE,
+            Object::Network=>NETWORK,
             _=>return Err(Error::Invalid),
         };
         if rights!=allowed||s.retired||s.object!=Object::None {return Err(Error::Denied);}
         s.object=object;s.rights=rights;
         Ok((s.generation as u64)<<32 | (index as u64+1))
     }
-    pub fn resolve(&self,handle:u64,right:u8)->Result<Object,Error>{
+    pub fn resolve(&self,handle:u64,right:u16)->Result<Object,Error>{
         let i=(handle as u32).checked_sub(1).ok_or(Error::Invalid)? as usize;
         let s=self.slots.get(i).ok_or(Error::Invalid)?;
         if s.retired||s.object==Object::None||s.generation!=(handle>>32)as u32{return Err(Error::Stale);}
@@ -87,7 +94,7 @@ pub struct Message {pub principal:u8,pub incarnation:u64,pub length:u8,pub bytes
 impl Message {
     const EMPTY:Self=Self {principal:0,incarnation:0,length:0,bytes:[0;MESSAGE_BYTES]};
     fn stamp(principal:u8,incarnation:u64,bytes:&[u8])->Result<Self,Error>{
-        if principal as usize>=PRINCIPALS||incarnation==0||bytes.is_empty()||bytes.len()>MESSAGE_BYTES {
+        if principal as usize>=ROUTABLE_PRINCIPALS||incarnation==0||bytes.is_empty()||bytes.len()>MESSAGE_BYTES {
             return Err(Error::Invalid);
         }
         let mut m=Self {principal,incarnation,length:bytes.len()as u8,..Self::EMPTY};
@@ -143,12 +150,14 @@ pub struct Cutover {pub previous:Option<Endpoint>,pub current:Endpoint}
 pub struct Handover {trial:Trial,caps:Caps}
 /// Complete prepared desktop authority, still unpublished. Bootstrap services
 /// remain live in Runtime, never copied/restored from this plan.
-pub struct DesktopHandover{candidate:Handover,caps:[Caps;7],bindings:[Option<Endpoint>;PRINCIPALS],clock:u64}
+pub struct DesktopHandover{candidate:Handover,caps:[Caps;8],bindings:[Option<Endpoint>;PRINCIPALS],clock:u64,expansion:bool}
 impl DesktopHandover{
+    pub fn expansion(&self)->bool{self.expansion}
+    pub fn roles(&self)->&'static[usize]{if self.expansion{&[0,1,2,3,4,6,7]}else{&[0,1,2,3,4,6]}}
     pub fn binding(&self,role:usize)->Option<Endpoint>{self.bindings.get(role).copied().flatten()}
     pub fn handle(&self,slot:usize,index:usize)->Result<u64,Error>{
-        let role=if slot==self.candidate.endpoint().slot as usize{5}
-            else if [0,1,2,3,4,6].contains(&slot){slot}else{return Err(Error::Invalid);};
+        let role=self.bindings.iter().position(|e|e.is_some_and(|e|e.slot as usize==slot))
+            .filter(|&role|role<self.caps.len()).ok_or(Error::Invalid)?;
         self.caps[role].handle(index)
     }
 }
@@ -173,16 +182,20 @@ pub struct StaleProbe {endpoint:Endpoint,handle:u64}
 pub struct Runtime {
     processes:[Process;TASKS],bindings:[Option<Endpoint>;PRINCIPALS],
     clock:u64,next_token:u64,trial:Option<Trial>,staged:Option<StagedImage>,recovery_required:bool,
-    bootstrapping:bool,
+    bootstrapping:bool,expansion:bool,
+    apps:applications::Applications,
 }
 impl Runtime {
     /// Retained full graph for the accepted M4.1 composition and focused tests.
     pub fn new()->Self{Self::initial(false)}
     /// Construct only bootstrap services. Never grant then revoke desktop state.
     pub fn bootstrap()->Self{Self::initial(true)}
+    /// Explicit candidate composition; no native entry selects it yet.
+    pub fn expansion_bootstrap()->Self{let mut r=Self::initial(true);r.expansion=true;r}
+    pub fn expansion(&self)->bool{self.expansion}
     fn initial(bootstrapping:bool)->Self{
         let mut r=Self {processes:[Process::EMPTY;TASKS],bindings:[None;PRINCIPALS],
-            clock:1,next_token:1,trial:None,staged:None,recovery_required:false,bootstrapping};
+            clock:1,next_token:1,trial:None,staged:None,recovery_required:false,bootstrapping,expansion:false,apps:applications::Applications::new()};
         for i in [0,1,2,3,4,5,6,8,9]{
             if bootstrapping&&!matches!(i,8|9){continue;}
             let e=Endpoint {slot:i as u8,incarnation:1};
@@ -234,6 +247,20 @@ impl Runtime {
             _=>return Err(Error::Denied)};
         if p.caps.resolve(handle,DEVICE)?!=Object::Device(expected) {return Err(Error::Denied);}
         Ok(expected)
+    }
+    /// Distinct capability for the explicit logical7/physical10 composition.
+    /// Caller must be the actual trapped physical slot; no user identity input.
+    pub fn network(&self,caller:usize,handle:u64)->Result<Endpoint,Error>{
+        if !self.expansion||self.recovery_required||caller!=NETWORK_SLOT||
+            [6usize,8,9].into_iter().any(|i|!self.bindings[i].is_some_and(|e|self.endpoint_alive(e))){
+            return Err(Error::Denied);
+        }
+        let p=&self.processes[caller];
+        let e=Endpoint{slot:caller as u8,incarnation:p.incarnation};
+        if p.state!=State::Active||p.principal!=Some(NETWORK_PRINCIPAL as u8)||
+            self.bindings[NETWORK_PRINCIPAL]!=Some(e)||
+            p.caps.resolve(handle,NETWORK)?!=Object::Network{return Err(Error::Denied);}
+        Ok(e)
     }
     pub fn input(&self,caller:usize,handle:u64)->Result<(),Error> {
         let p=self.processes.get(caller).ok_or(Error::Invalid)?;
@@ -367,7 +394,8 @@ impl Runtime {
         if p.state!=State::Active{return Err(Error::Denied);}
         let Object::NamedSend {principal}=p.caps.resolve(handle,SEND)? else{return Err(Error::Denied);};
         let sender=p.principal.ok_or(Error::Denied)?;
-        let e=self.bindings[principal as usize].ok_or(Error::Stale)?;
+        let e=if (principal as usize)<PRINCIPALS {self.bindings[principal as usize]}
+            else {self.apps.binding(principal as usize)}.ok_or(Error::Stale)?;
         if !self.endpoint_alive(e){return Err(Error::Stale);}
         let m=Message::stamp(sender,p.incarnation,bytes)?;
         self.processes[e.slot as usize].queue.push(m)
@@ -430,9 +458,10 @@ impl Runtime {
     fn destroy(&mut self,index:usize){
         if let Some(principal)=self.processes[index].principal{
             let incarnation=self.processes[index].incarnation;
-            if self.bindings[principal as usize]==Some(Endpoint {slot:index as u8,incarnation}){
-                self.bindings[principal as usize]=None;
-            }
+            let endpoint=Endpoint {slot:index as u8,incarnation};
+            if (principal as usize)<PRINCIPALS {
+                if self.bindings[principal as usize]==Some(endpoint){self.bindings[principal as usize]=None;}
+            }else{self.apps.clear(principal as usize,endpoint);}
             for p in &mut self.processes{p.queue.purge(principal,incarnation);}
         }
         let p=&mut self.processes[index];
@@ -487,9 +516,11 @@ impl Runtime {
             [0usize,1,2,3,4,6].iter().any(|&i|self.bindings[i].is_some()||self.processes[i].state!=State::Vacant)||
             self.bindings[5].is_some(){return Err(Error::Stale);}
         if !self.bindings[9].is_some_and(|e|self.endpoint_alive(e)){return Err(Error::Denied);}
+        if self.expansion&&(self.bindings[NETWORK_PRINCIPAL].is_some()||
+            self.processes[NETWORK_SLOT].state!=State::Vacant){return Err(Error::Stale);}
         let clock=self.clock.checked_add(1).ok_or(Error::Exhausted)?;
-        let mut plan=DesktopHandover{candidate,caps:[Caps::new();7],
-            bindings:self.bindings,clock};
+        let mut plan=DesktopHandover{candidate,caps:[Caps::new();8],
+            bindings:self.bindings,clock,expansion:self.expansion};
         for i in [0usize,1,2,3,4,6]{
             let e=Endpoint{slot:i as u8,incarnation:clock};plan.bindings[i]=Some(e);
             let mut caps=self.processes[i].caps;
@@ -503,6 +534,15 @@ impl Runtime {
         plan.caps[1].grant(DEVICE_CAP,Object::Device(Device::Data),DEVICE)?;
         plan.caps[2].grant(INPUT_CAP,Object::Input,INPUT)?;
         plan.caps[3].grant(FRAMEBUFFER_CAP,Object::Framebuffer,DRAW)?;
+        if self.expansion{
+            let e=Endpoint{slot:NETWORK_SLOT as u8,incarnation:clock};
+            let mut caps=self.processes[NETWORK_SLOT].caps;
+            caps.grant(SELF_CAP,Object::Receive(e),RECEIVE)?;
+            caps.grant(SHELL_CAP,Object::NamedSend{principal:6},SEND)?;
+            caps.grant(DEVICE_CAP,Object::Network,NETWORK)?;
+            plan.caps[NETWORK_PRINCIPAL]=caps;plan.bindings[NETWORK_PRINCIPAL]=Some(e);
+            plan.caps[6].grant(5,Object::NamedSend{principal:NETWORK_PRINCIPAL as u8},SEND)?;
+        }
         let e=candidate.endpoint();
         plan.caps[5]=candidate.caps;
         plan.bindings[5]=Some(e);Ok(plan)
@@ -512,12 +552,14 @@ impl Runtime {
     pub fn publish_desktop(&mut self,caller:usize,handle:u64,plan:DesktopHandover)->Result<(),Error>{
         self.stage_view(caller,handle)?;
         let t=plan.candidate.trial;
-        if !self.bootstrapping||self.trial!=Some(t)||self.clock.checked_add(1)!=Some(plan.clock)||
+        if !self.bootstrapping||self.expansion!=plan.expansion||self.trial!=Some(t)||self.clock.checked_add(1)!=Some(plan.clock)||
             t.previous.is_some()||self.processes[t.endpoint.slot as usize].state!=State::Healthy||
             self.bindings[5].is_some(){return Err(Error::Stale);}
         for i in [0usize,1,2,3,4,6]{
             if self.bindings[i].is_some()||self.processes[i].state!=State::Vacant{return Err(Error::Stale);}
         }
+        if self.expansion&&(self.bindings[NETWORK_PRINCIPAL].is_some()||
+            self.processes[NETWORK_SLOT].state!=State::Vacant){return Err(Error::Stale);}
         for i in [8usize,9]{
             if self.bindings[i]!=plan.bindings[i]||
                 !self.bindings[i].is_some_and(|e|self.endpoint_alive(e)){return Err(Error::Denied);}
@@ -528,7 +570,11 @@ impl Runtime {
         }
         self.processes[t.endpoint.slot as usize]=Process{state:State::Active,principal:Some(5),
             incarnation:t.endpoint.incarnation,caps:plan.caps[5],queue:Queue::new()};
-        for i in 0..7{self.bindings[i]=plan.bindings[i];}
+        if self.expansion{
+            self.processes[NETWORK_SLOT]=Process{state:State::Active,principal:Some(NETWORK_PRINCIPAL as u8),
+                incarnation:plan.clock,caps:plan.caps[NETWORK_PRINCIPAL],queue:Queue::new()};
+        }
+        for i in 0..(if self.expansion{8}else{7}){self.bindings[i]=plan.bindings[i];}
         self.clock=plan.clock;self.trial=None;self.bootstrapping=false;Ok(())
     }
     /// Convenience for the mechanism tests; not durable runtime authority.
@@ -562,7 +608,9 @@ impl Runtime {
         let slot=endpoint.slot as usize;
         let process=self.processes.get(slot).ok_or(Error::Invalid)?;
         if process.state==State::Vacant||process.incarnation!=endpoint.incarnation{return Err(Error::Stale);}
-        if process.principal==Some(8) {
+        let principal=process.principal;
+        if matches!(principal,Some(0|1|3|8|9)){self.revoke_application_peers();}
+        if principal==Some(8) {
             // Manager failure is a terminal controlled-recovery condition for
             // lifecycle, not permission to strand a trial or silently grant a
             // replacement manager. Preserve the currently active Settings.
@@ -1056,5 +1104,90 @@ mod tests {
         assert_eq!(r.update_bindings(8,manager(&r)),Ok([0,0]));
         assert!(r.send(6,h,b"stale").is_err());
         let b=Runtime::bootstrap();assert_eq!(b.update_bindings(8,manager(&b)),Err(Error::Busy));
+    }
+
+    fn expanded()->Runtime{
+        let mut r=Runtime::expansion_bootstrap();let t=healthy(&mut r);let h=manager(&r);
+        let plan=r.prepare_desktop(8,h,t.token()).unwrap();
+        assert!(plan.expansion());assert_eq!(plan.roles(),&[0,1,2,3,4,6,7]);
+        assert_eq!(plan.binding(7).unwrap().slot,10);
+        assert!(r.network(10,plan.handle(10,DEVICE_CAP).unwrap()).is_err());
+        r.publish_desktop(8,h,plan).unwrap();r
+    }
+    #[test]fn expansion_capability_is_distinct_and_only_physical_ten_owns_it(){
+        let mut caps=Caps::new();
+        for right in [DEVICE,SEND,NETWORK|DEVICE,0]{
+            assert!(caps.grant(11,Object::Network,right).is_err());
+        }
+        let h=caps.grant(11,Object::Network,NETWORK).unwrap();
+        assert_eq!(caps.resolve(h,NETWORK),Ok(Object::Network));
+        assert!(caps.resolve(h,DEVICE).is_err());
+        let r=expanded();let h=r.handle(10,DEVICE_CAP).unwrap();
+        assert_eq!(r.network(10,h),Ok(r.binding(7).unwrap().unwrap()));
+        for caller in 0..=TASKS{if caller!=10{assert!(r.network(caller,h).is_err());}}
+        for cap in [0,h^1,h^(1<<32),r.handle(10,SELF_CAP).unwrap()]{
+            assert!(r.network(10,cap).is_err());
+        }
+        assert!(r.device(10,h).is_err());assert!(r.stage_copy(10,h).is_err());
+        assert!(r.input(10,h).is_err());assert!(r.framebuffer(10,h).is_err());
+        assert!(Runtime::new().network(10,h).is_err());
+        assert!(Runtime::bootstrap().network(10,h).is_err());
+    }
+    #[test]fn logical_network_identity_is_not_the_settings_trial_slot(){
+        let mut r=expanded();let network=r.binding(7).unwrap().unwrap();
+        let network_cap=r.handle(10,DEVICE_CAP).unwrap();
+        r.send(10,r.handle(10,1).unwrap(),b"network before update").unwrap();
+        let t=healthy(&mut r);assert_eq!(t.endpoint().slot,7);
+        assert!(r.network(7,network_cap).is_err());
+        r.cutover(8,manager(&r),t.token()).unwrap();
+        assert_eq!(r.binding(7),Ok(Some(network)));
+        assert_eq!(r.network(10,network_cap),Ok(network));
+        let msg=r.receive(6,r.handle(6,SELF_CAP).unwrap()).unwrap();
+        assert_eq!((msg.principal,msg.incarnation),(7,network.incarnation));
+        assert_eq!(&msg.bytes[..msg.length as usize],b"network before update");
+        r.fault(t.endpoint()).unwrap();
+        assert_eq!(r.binding(5),Ok(None));assert_eq!(r.binding(7),Ok(Some(network)));
+        assert_eq!(r.network(10,network_cap),Ok(network));
+    }
+    #[test]fn network_death_purges_stamped_messages_without_touching_settings(){
+        let mut r=expanded();let network=r.binding(7).unwrap().unwrap();
+        let settings=r.binding(5).unwrap();let h=r.handle(10,DEVICE_CAP).unwrap();
+        r.send(10,r.handle(10,1).unwrap(),b"stale network").unwrap();
+        r.send(6,r.handle(6,5).unwrap(),b"queued request").unwrap();
+        r.fault(network).unwrap();
+        assert_eq!(r.binding(7),Ok(None));assert_eq!(r.binding(5).unwrap(),settings);
+        assert!(r.network(10,h).is_err());assert_eq!(r.state(10),Ok(State::Vacant));
+        assert_eq!(r.receive(6,r.handle(6,SELF_CAP).unwrap()),Err(Error::Empty));
+        assert!(r.send(6,r.handle(6,5).unwrap(),b"later").is_err());
+    }
+    #[test]fn expansion_plan_revalidates_slot_ten_and_composition_before_publication(){
+        for change in 0..3{
+            let mut r=Runtime::expansion_bootstrap();let t=healthy(&mut r);let h=manager(&r);
+            let plan=r.prepare_desktop(8,h,t.token()).unwrap();
+            match change{
+                0=>r.processes[10].state=State::Active,
+                1=>r.bindings[7]=Some(Endpoint{slot:10,incarnation:99}),
+                _=>r.expansion=false,
+            }
+            assert!(r.publish_desktop(8,h,plan).is_err());
+            for role in 0..7{assert!(r.bindings[role].is_none());}
+            assert_eq!(r.state(t.endpoint().slot as usize),Ok(State::Healthy));
+        }
+        let mut r=Runtime::expansion_bootstrap();let t=healthy(&mut r);
+        r.processes[10].state=State::Active;
+        assert!(r.prepare_desktop(8,manager(&r),t.token()).is_err());
+        for role in 0..8{assert!(r.bindings[role].is_none());}
+    }
+
+    #[test]fn network_authority_ends_with_lifecycle_or_recovery_plane(){
+        for principal in [6,8,9]{
+            let mut r=expanded();let h=r.handle(10,DEVICE_CAP).unwrap();
+            let settings=r.binding(5).unwrap();
+            r.fault(r.binding(principal).unwrap().unwrap()).unwrap();
+            assert_eq!(r.recovery_required(),principal==8);
+            assert!(r.network(10,h).is_err());
+            assert_eq!(r.binding(5).unwrap(),settings);
+            assert_eq!(r.state(4),Ok(State::Active));
+        }
     }
 }

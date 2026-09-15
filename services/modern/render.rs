@@ -1,6 +1,7 @@
 //! RAR-owned provisional bitmap compositor. Only role 3 owns this mapping.
 use crate::{abi::Boot,check};
 use crate::services::Compositor;
+#[cfg_attr(rar_applications,inline(never))]
 fn glyph(byte:u8)->[u8;7] {match byte.to_ascii_uppercase(){48=>[14,17,19,21,25,17,14],
 49=>[4,12,4,4,4,4,14],
 50=>[14,17,1,2,4,8,31],
@@ -48,6 +49,7 @@ _=>[14,17,1,2,4,0,4]}}
 type Color=(u32,u32,u32);
 struct Canvas<'a>{boot:&'a Boot}
 impl Canvas<'_> {
+    #[cfg_attr(rar_applications,inline(never))]
     fn rect(&self,x:usize,y:usize,w:usize,h:usize,c:Color) {
         // All primitive callers are compositor policy. Still clip every write.
         let end_x=x.saturating_add(w).min(640);let end_y=y.saturating_add(h).min(480);
@@ -58,6 +60,7 @@ impl Canvas<'_> {
             unsafe{((self.boot.framebuffer as usize+(yy*self.boot.pitch as usize+xx)*4) as *mut u32).write_volatile(pixel);}
         }}
     }
+    #[cfg_attr(rar_applications,inline(never))]
     fn text(&self,x:usize,y:usize,value:&[u8],c:Color,scale:usize) {
         for (i,&byte) in value.iter().take(48).enumerate() {
             for (yy,row) in glyph(byte).iter().enumerate() {for xx in 0..5 {
@@ -79,7 +82,10 @@ pub fn draw(boot:&Boot,state:&Compositor) {
     c.text(16,12,b"RAR OS",ink,2);c.text(454,16,b"MODERN ALPHA",ink,1);
     c.text(28,60,b"YOUR RAR WORKSPACE",ink,2);
     c.text(28,86,b"F1 FILES   F2 SETTINGS   F3 TERMINAL",ink,1);
+    #[cfg(not(rar_applications))]
     c.text(28,104,b"KEYBOARD FIRST - CLOUD DEVELOPMENT ALPHA",ink,1);
+    #[cfg(rar_applications)]
+    c.text(28,104,b"F4 NOTES F5 COUNTER F6 CLOSE F7 COMPACT/WIDE",ink,1);
     c.text(28,126,b"PUBLIC LAB DATA - NOT PRIVATE",ink,1);
     for &role in &state.windows.order[..state.windows.count] {
         let (x,y,title):(usize,usize,&[u8])=match role{4=>(24,152,b"FILES"),5=>(44,170,b"SETTINGS"),6=>(64,188,b"TERMINAL"),_=>continue};
@@ -90,6 +96,17 @@ pub fn draw(boot:&Boot,state:&Compositor) {
         if let Some(view)=state.view(role) {for (row,line) in view.lines.iter().enumerate(){
             c.text(x+14,y+48+row*28,line.as_bytes(),ink,1);
         }}
+    }
+    #[cfg(rar_applications)]
+    if let Some(role)=state.app_focus{
+        let title=if role==10{b"NOTES / RUST".as_slice()}else{b"COUNTER / C".as_slice()};
+        let (x,width)=if state.compact{(160,320)}else{(44,548)};
+        c.rect(x+4,166,width,260,(8,12,20));c.rect(x,162,width,260,content);
+        c.rect(x,162,width,30,accent);c.text(x+12,170,title,white,if state.compact{1}else{2});
+        c.text(x+width-70,173,b"F6 CLOSE",white,1);
+        if let Some(view)=state.view(role){
+            for(row,line)in view.lines.iter().enumerate(){c.text(x+14,210+row*30,line.as_bytes(),ink,1);}
+        }
     }
     c.rect(0,440,640,40,panel);
     for (x,label,role) in [(16,b"F1 FILES".as_slice(),4),(224,b"F2 SETTINGS".as_slice(),5),(432,b"F3 TERMINAL".as_slice(),6)] {

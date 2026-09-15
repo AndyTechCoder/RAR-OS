@@ -10,7 +10,15 @@ pub fn initial_roles(signed:bool)->&'static[usize]{
     if signed{&SIGNED_INITIAL}else{&INITIAL}
 }
 pub fn initial_policy(signed:bool)->model::Runtime{
-    if signed{model::Runtime::bootstrap()}else{model::Runtime::new()}
+    if signed&&cfg!(rar_applications){model::Runtime::applications_bootstrap()}
+    else if signed&&cfg!(rar_expansion){model::Runtime::expansion_bootstrap()}
+    else if signed{model::Runtime::bootstrap()}else{model::Runtime::new()}
+}
+/// Exact prepared-root predicate shared with native revocation synchronization.
+/// Plan roles are logical; every protected root is resolved to a physical slot.
+pub fn prepared_slot(plan:Option<&model::DesktopHandover>,slot:usize)->bool{
+    plan.is_some_and(|p|p.roles().iter().any(|&role|
+        p.binding(role).is_some_and(|e|e.slot as usize==slot)))
 }
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 pub enum CpuState {Runnable,Blocked,Dead}
@@ -117,7 +125,7 @@ pub fn bootstrap(policy:&model::Runtime,role:usize,entry:u64,pitch:u64,format:u6
         if endpoint.slot as usize!=role||policy.state(role)?!=model::State::Active{return Err(Error::Denied);}
         endpoint.incarnation
     };
-    let mut b=abi::Boot{magic:abi::MAGIC,version:abi::VERSION,bytes:abi::BOOT_BYTES,
+    let mut b=abi::Boot{magic:abi::MAGIC,version:if policy.expansion(){abi::EXPANSION_VERSION}else{abi::VERSION},bytes:abi::BOOT_BYTES,
         role:role as u64,phase:abi::ACTIVE,generation,entry,..abi::Boot::EMPTY};
     for i in 0..model::PRINCIPALS {b.peers[i]=policy.binding(i)?.map_or(0,|e|e.incarnation);}
     if role!=15 {
@@ -150,9 +158,9 @@ pub fn stage_metadata(bytes:&[u8])->Result<StageMetadata,Error>{
 /// No native process may run until every descriptor/root is ready and published.
 pub fn desktop_bootstrap(plan:&model::DesktopHandover,role:usize,entry:u64,pitch:u64,format:u64)
     ->Result<abi::Boot,Error>{
-    if role>6{return Err(Error::Invalid);}
+    if role>(if plan.expansion(){7}else{6}){return Err(Error::Invalid);}
     let e=plan.binding(role).ok_or(Error::Stale)?;
-    let mut b=abi::Boot{magic:abi::MAGIC,version:abi::VERSION,bytes:abi::BOOT_BYTES,
+    let mut b=abi::Boot{magic:abi::MAGIC,version:if plan.expansion(){abi::EXPANSION_VERSION}else{abi::VERSION},bytes:abi::BOOT_BYTES,
         role:role as u64,phase:abi::ACTIVE,generation:e.incarnation,entry,..abi::Boot::EMPTY};
     for i in 0..model::PRINCIPALS{b.peers[i]=plan.binding(i).map_or(0,|e|e.incarnation);}
     for i in 0..model::CAP_SLOTS{b.caps[i]=plan.handle(e.slot as usize,i).unwrap_or(0);}
@@ -165,7 +173,7 @@ pub fn handover_bootstrap(policy:&model::Runtime,h:&model::Handover,entry:u64)->
     let t=policy.trial().ok_or(Error::Stale)?;
     if t.endpoint()!=h.endpoint()||t.token()!=h.token()||
         policy.state(h.endpoint().slot as usize)?!=model::State::Healthy{return Err(Error::Stale);}
-    let mut b=abi::Boot{magic:abi::MAGIC,version:abi::VERSION,bytes:abi::BOOT_BYTES,
+    let mut b=abi::Boot{magic:abi::MAGIC,version:if policy.expansion(){abi::EXPANSION_VERSION}else{abi::VERSION},bytes:abi::BOOT_BYTES,
         role:5,phase:abi::ACTIVE,generation:h.endpoint().incarnation,entry,..abi::Boot::EMPTY};
     for i in 0..model::PRINCIPALS{b.peers[i]=policy.binding(i)?.map_or(0,|e|e.incarnation);}
     b.peers[5]=h.endpoint().incarnation;
@@ -178,7 +186,7 @@ pub fn trial_bootstrap(policy:&model::Runtime,trial:model::Trial,entry:u64)->Res
     if policy.trial()!=Some(trial)||policy.state(endpoint.slot as usize)?!=model::State::Trial{
         return Err(Error::Stale);
     }
-    let mut b=abi::Boot{magic:abi::MAGIC,version:abi::VERSION,bytes:abi::BOOT_BYTES,
+    let mut b=abi::Boot{magic:abi::MAGIC,version:if policy.expansion(){abi::EXPANSION_VERSION}else{abi::VERSION},bytes:abi::BOOT_BYTES,
         role:5,phase:abi::TRIAL,generation:endpoint.incarnation,entry,
         health_token:trial.token(),..abi::Boot::EMPTY};
     b.caps[model::HEALTH_CAP]=policy.handle(endpoint.slot as usize,model::HEALTH_CAP)?;
@@ -429,5 +437,80 @@ mod tests{
         for caller in 0..TASKS{assert_eq!(active_settings_fault(&p,caller),caller==5);}
         p.fault(p.binding(5).unwrap().unwrap()).unwrap();
         assert!(!active_settings_fault(&p,5));
+    }
+
+    #[test]fn expansion_descriptors_match_atomic_plan_without_settings_slot_alias(){
+        let mut r=model::Runtime::expansion_bootstrap();
+        for role in [8,9,15]{
+            let b=bootstrap(&r,role,0x401000,640,0).unwrap();
+            assert_eq!(b.version,abi::EXPANSION_VERSION);assert!(abi::valid_boot(&b));
+        }
+        let h=r.handle(8,model::MANAGER_CAP).unwrap();
+        r.authenticated_stage(8,h,1,5,[1;32],1,10).unwrap();
+        let t=r.begin_trial(8,h,1).unwrap();
+        let trial=trial_bootstrap(&r,t,0x401000).unwrap();
+        assert_eq!(trial.version,abi::EXPANSION_VERSION);assert!(abi::valid_boot(&trial));
+        r.ready(5,r.handle(5,model::HEALTH_CAP).unwrap(),t.token()).unwrap();
+        let plan=r.prepare_desktop(8,h,t.token()).unwrap();
+        for role in [0,1,2,3,4,5,6,7]{
+            let b=desktop_bootstrap(&plan,role,0x401000,640,0).unwrap();
+            assert_eq!(b.version,abi::EXPANSION_VERSION);assert!(abi::valid_boot(&b));
+            let e=plan.binding(role).unwrap();
+            assert_eq!(e.slot as usize,if role==7{10}else{role});
+            assert_eq!(b.generation,e.incarnation);
+            for cap in 0..12{assert_eq!(b.caps[cap],plan.handle(e.slot as usize,cap).unwrap_or(0));}
+        }
+        assert!(desktop_bootstrap(&plan,10,0x401000,640,0).is_err());
+        r.publish_desktop(8,h,plan).unwrap();
+        r.authenticated_stage(8,h,2,7,[2;32],2,10).unwrap();
+        let next=r.begin_trial(8,h,2).unwrap();assert_eq!(next.endpoint().slot,7);
+        let trial=trial_bootstrap(&r,next,0x401000).unwrap();
+        assert!(abi::valid_boot(&trial));assert_eq!(trial.role,5);
+        r.ready(7,r.handle(7,model::HEALTH_CAP).unwrap(),next.token()).unwrap();
+        let cut=r.prepare_cutover(8,h,next.token()).unwrap();
+        let active=handover_bootstrap(&r,&cut,0x401000).unwrap();
+        assert!(abi::valid_trial_activation(&trial,&active));
+        let mut wrong=active;wrong.version=abi::VERSION;
+        assert!(!abi::valid_trial_activation(&trial,&wrong));
+        assert_eq!(r.binding(7).unwrap().unwrap().slot,10);
+    }
+
+    #[test]fn prepared_root_predicate_survives_unpublished_slot_ten_and_drops_with_plan(){
+        let mut r=model::Runtime::expansion_bootstrap();let h=r.handle(8,model::MANAGER_CAP).unwrap();
+        r.authenticated_stage(8,h,1,5,[1;32],1,10).unwrap();
+        let t=r.begin_trial(8,h,1).unwrap();
+        r.ready(5,r.handle(5,model::HEALTH_CAP).unwrap(),t.token()).unwrap();
+        let plan=r.prepare_desktop(8,h,t.token()).unwrap();
+        for slot in 0..model::TASKS{
+            let expected=[0,1,2,3,4,6,10].contains(&slot);
+            assert_eq!(prepared_slot(Some(&plan),slot),expected);
+            if expected{assert_eq!(r.state(slot),Ok(model::State::Vacant));}
+            assert!(!prepared_slot(None,slot));
+        }
+        assert!(!prepared_slot(Some(&plan),usize::MAX));
+        // The exact native predicate keeps prepared roots despite vacant model
+        // state, then removes that protection when a plan is discarded.
+        let mut states=[CpuState::Blocked;TASKS];
+        for slot in 0..TASKS{
+            if !prepared_slot(Some(&plan),slot)&&r.state(slot)==Ok(model::State::Vacant){
+                states[slot]=CpuState::Dead;
+            }
+        }
+        assert_eq!(states[10],CpuState::Blocked);assert_eq!(states[7],CpuState::Dead);
+    }
+    #[test]fn settings_update_remains_valid_after_isolated_network_loss(){
+        let mut r=model::Runtime::expansion_bootstrap();let h=r.handle(8,model::MANAGER_CAP).unwrap();
+        r.authenticated_stage(8,h,1,5,[1;32],1,10).unwrap();let t=r.begin_trial(8,h,1).unwrap();
+        r.ready(5,r.handle(5,model::HEALTH_CAP).unwrap(),t.token()).unwrap();
+        let plan=r.prepare_desktop(8,h,t.token()).unwrap();r.publish_desktop(8,h,plan).unwrap();
+        r.fault(r.binding(7).unwrap().unwrap()).unwrap();assert!(!r.recovery_required());
+        r.authenticated_stage(8,h,2,7,[2;32],2,10).unwrap();let t=r.begin_trial(8,h,2).unwrap();
+        let trial=trial_bootstrap(&r,t,0x401000).unwrap();
+        r.ready(7,r.handle(7,model::HEALTH_CAP).unwrap(),t.token()).unwrap();
+        let cut=r.prepare_cutover(8,h,t.token()).unwrap();
+        let active=handover_bootstrap(&r,&cut,0x401000).unwrap();
+        assert_eq!(active.peers[7],0);assert!(abi::valid_trial_activation(&trial,&active));
+        r.cutover_prepared(8,h,cut).unwrap();
+        assert_eq!(r.binding(5).unwrap().unwrap().slot,7);assert_eq!(r.binding(7),Ok(None));
     }
 }

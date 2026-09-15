@@ -89,6 +89,8 @@ Status: Gate 0 approved on 2026-07-16
 - [ADR 0035: Proposed Immutable IDE Inputs](adr/0035-immutable-ide-inputs.md)
 - [ADR 0036: Proposed System-only Factory Repair](adr/0036-system-only-factory-repair.md)
 
+- [ADR 0041: Expansion regression archive](adr/0041-expansion-regression-archive.md)
+
 Gate 0 approval covers ADRs 0001–0016 and the Release 0 task packet. Later
 indexed ADRs are authoritative only through their separately recorded approval
 dates. No approval prevents ADR-governed evolution or makes an implementation
@@ -117,3 +119,10 @@ permanently irreplaceable.
 - [Modern-v0 candidate System contract](interfaces/modern-system-v0.md)
 
 - [Modern-v0 candidate lifecycle contract](interfaces/modern-lifecycle-v0.md)
+
+## Active M5 implementation
+
+- [Milestone 5 acceptance and delivery](tasks/fast-track-alpha-milestone-5.md)
+- [Proposed Expansion composition (0037; no runtime authority)](proposals/0037-expansion-alpha.md)
+- [Candidate network contract](interfaces/expansion-network-v0.md)
+- [M5 measured progress](evidence/m5-progress.md)

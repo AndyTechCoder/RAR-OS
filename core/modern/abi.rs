@@ -3,6 +3,7 @@
 pub const BOOT_ADDRESS:usize=0x700000;
 pub const MAGIC:u64=u64::from_le_bytes(*b"RARMOD01");
 pub const VERSION:u64=1;
+pub const EXPANSION_VERSION:u64=2;
 pub const BOOT_BYTES:u64=368;
 pub const ENVELOPE_BYTES:u64=152;
 pub const ACTIVE:u64=0;
@@ -20,6 +21,7 @@ pub const STAGE_COPY:u64=9;
 pub const STAGE_VIEW:u64=10;
 pub const SETTINGS_BINDING:u64=11;
 pub const LAB_INPUT:u64=12;
+pub const NETWORK:u64=13;
 pub const STAGE_VIEW_ADDRESS:u64=0x1400000;
 pub const STAGE_VIEW_BYTES:usize=32;
 pub const STAGE_CAP:usize=10;
@@ -62,9 +64,10 @@ impl Envelope {
 }
 const _: [();BOOT_BYTES as usize]=[();core::mem::size_of::<Boot>()];
 const _: [();ENVELOPE_BYTES as usize]=[();core::mem::size_of::<Envelope>()];
-fn active_mask(role:u64)->Option<u16> {
+fn active_mask(role:u64,expansion:bool)->Option<u16> {
     match role {0=>Some(0x75),1=>Some(0x851),2=>Some(0x82),3=>Some(0x101),
-        4=>Some(0x0d),6=>Some(0x1d),5=>Some(7),8=>Some(0x403),9=>Some(0xc03),15=>Some(0),_=>None}
+        4=>Some(0x0d),6=>Some(if expansion{0x3d}else{0x1d}),
+        7 if expansion=>Some(0x803),5=>Some(7),8=>Some(0x403),9=>Some(0xc03),15=>Some(0),_=>None}
 }
 fn text(value:&[u8])->bool {
     value.iter().all(|b|(0x20..=0x7e).contains(b))&&value.iter().any(|b|*b!=b' ')
@@ -72,12 +75,13 @@ fn text(value:&[u8])->bool {
 /// Redundant receiver-side shape checks, not authentication. The kernel alone
 /// writes this read-only mapping and derives grants, identities and expectations.
 pub fn valid_boot(b:&Boot)->bool {
-    if b.magic!=MAGIC||b.version!=VERSION||b.bytes!=BOOT_BYTES||b.generation==0||
-        !(0x400000..0x500000).contains(&b.entry)||b.reserved!=[0;4]||b.peers[7]!=0||
+    if b.magic!=MAGIC||!matches!(b.version,VERSION|EXPANSION_VERSION)||b.bytes!=BOOT_BYTES||b.generation==0||
+        !(0x400000..0x500000).contains(&b.entry)||b.reserved!=[0;4]||b.version==VERSION&&b.peers[7]!=0||
         b.kernel_probe!=0||b.peer_probe!=0 {return false;}
+    let expansion=b.version==EXPANSION_VERSION;
     let mask=match b.phase {
         ACTIVE=>{
-            let Some(mask)=active_mask(b.role) else{return false;};
+            let Some(mask)=active_mask(b.role,expansion) else{return false;};
             if b.health_token!=0||(b.role!=15&&b.peers[b.role as usize]!=b.generation) {return false;}
             mask
         },
@@ -104,7 +108,7 @@ pub fn valid_boot(b:&Boot)->bool {
 /// The kernel publishes ACTIVE while the healthy candidate is unscheduled.
 pub fn valid_trial_activation(trial:&Boot,active:&Boot)->bool {
     valid_boot(trial)&&trial.phase==TRIAL&&valid_boot(active)&&active.phase==ACTIVE&&
-        active.role==5&&active.generation==trial.generation&&active.entry==trial.entry
+        active.role==5&&active.version==trial.version&&active.generation==trial.generation&&active.entry==trial.entry
 }
 /// DEVICE args: caller-local handle, operation, value, zero. No port or device ID.
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
@@ -242,7 +246,7 @@ mod tests {
         let b=fixture(4);
         for field in 0..11 {
             let mut bad=b;
-            match field {0=>bad.magic=0,1=>bad.version=2,2=>bad.bytes=176,3=>bad.generation=0,
+            match field {0=>bad.magic=0,1=>bad.version=3,2=>bad.bytes=176,3=>bad.generation=0,
                 4=>bad.reserved[0]=1,5=>bad.phase=2,6=>bad.health_token=1,
                 7=>bad.peers[7]=1,8=>bad.entry=0x500000,9=>bad.kernel_probe=0x2000000,
                 _=>bad.peer_probe=0x600000}
@@ -325,4 +329,22 @@ mod tests {
         assert_eq!(stage_request(&stage_words([1,1,2_097_153,0x600000,512,0x600100])),None);
     }
 
+
+    #[test]fn expansion_boot_has_distinct_shape_and_no_role_slot_alias(){
+        let mut b=fixture(6);b.version=EXPANSION_VERSION;b.peers[7]=1<<42;
+        b.caps[5]=(1<<32)|6;assert!(valid_boot(&b));
+        let mut bad=b;bad.version=VERSION;assert!(!valid_boot(&bad));
+        let mut offline=b;offline.peers[7]=0;assert!(valid_boot(&offline));
+        let mut bad=b;bad.caps[5]=0;assert!(!valid_boot(&bad));
+        let mut network=Boot{magic:MAGIC,version:EXPANSION_VERSION,bytes:BOOT_BYTES,
+            role:7,generation:1<<42,entry:0x401000,..Boot::EMPTY};
+        network.peers=b.peers;network.peers[7]=network.generation;
+        for slot in [0,1,11]{network.caps[slot]=(1<<32)|(slot as u64+1);}
+        assert!(valid_boot(&network));
+        let mut bad=network;bad.role=10;assert!(!valid_boot(&bad));
+        let mut bad=network;bad.version=VERSION;assert!(!valid_boot(&bad));
+        let mut bad=network;bad.device_sectors=1;assert!(!valid_boot(&bad));
+        let mut bad=network;bad.framebuffer=0x800000;assert!(!valid_boot(&bad));
+        let mut bad=network;bad.peers[7]=network.generation as u32 as u64;assert!(!valid_boot(&bad));
+    }
 }

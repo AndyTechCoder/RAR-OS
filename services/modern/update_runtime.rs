@@ -91,17 +91,25 @@ fn cancel(boot:&Boot,t:Transfer)->Result<(),Failure>{
 /// authorize only the boot coordinator\'s single exact-prior attempt. They do not
 /// authorize generic retries. Channel/native/indeterminate errors halt
 /// the manager; no automatic retransmission or remount can hide an unknown ACK.
+pub struct BootOutcome{incarnation:u64,eligible_prior:bool}
 fn transaction(boot:&Boot,requests:&mut wire::Requests,mode:Mode,index:u64)->Result<u64,Failure>{
+    transaction_outcome(boot,requests,mode,index).map(|outcome|outcome.incarnation)
+}
+fn transaction_outcome(boot:&Boot,requests:&mut wire::Requests,mode:Mode,index:u64)->Result<BootOutcome,Failure>{
     let id=requests.next().map_err(|_|Failure::Native)?;
     requests.accept(id).map_err(|_|Failure::Native)?;
     let first=exchange(boot,&wire::request(Kind::Start,mode,id,index).map_err(|_|Failure::Native)?)?;
     if wire::parse_request(&first,Kind::Rejected)==Ok((mode,id,index)){return Err(Failure::Rejected);}
     let t=Transfer::parse(&first,Kind::Offer).map_err(|_|Failure::Channel)?;
     if (t.mode,t.request)!=(mode,id){return Err(Failure::Channel);}
-    complete_transaction(boot,t,|record,bytes|{
+    let mut eligible_prior=false;
+    let incarnation=complete_transaction(boot,t,|record,bytes|{
         let verified=update_manager::verify(t,record,bytes).map_err(|_|())?;
+        eligible_prior=verified.boot_prior();
         Ok((verified.next(),verified.expected_ack().map_err(|_|())?))
-    })
+    })?;
+    // Publish the owned hint only after exact ACK, cutover and seal release.
+    Ok(BootOutcome{incarnation,eligible_prior})
 }
 /// Shared sealed readback, health, durable publication and cutover barrier.
 /// Verification returns owned values only; no staged borrow survives trial.
@@ -217,9 +225,11 @@ pub fn manager(boot:&Boot)->!{
     if boot.role!=8{crate::fail();}
     let mut requests=wire::Requests::new();
     let mut commands=crate::update_control::Requests::new();
-    boot_selected(boot,&mut requests);
-    let Some(mut recovery)=crate::update_control::Recovery::new(bindings(boot)[1]) else{reconcile(boot);};
+    let selected=boot_selected(boot,&mut requests);
+    #[cfg(rar_applications)] let mut applications=crate::application_runtime::Manager::new(boot);
+    let Some(mut recovery)=crate::update_control::Recovery::from_boot(selected.incarnation,bindings(boot)[1],selected.eligible_prior) else{reconcile(boot);};
     loop{
+        #[cfg(rar_applications)] applications.tick(boot);
         let current=bindings(boot);
         match recovery.observe(current[1]){
           crate::update_control::Action::Stop=>reconcile(boot),
@@ -234,6 +244,8 @@ pub fn manager(boot:&Boot)->!{
           crate::update_control::Action::Observe=>{
             match crate::poll_checked(boot.caps[SELF_RECV]){
                 Ok(Some(m))=>{
+                    #[cfg(rar_applications)]
+                    if applications.message(boot,&m){continue;}
                     if let Some(index)=commands.accept(m.sender,m.generation,current[0],m.length,&m.bytes){
                         progress(boot,16);
                         if let Ok(committed)=install(boot,&mut requests,index){
@@ -250,22 +262,22 @@ pub fn manager(boot:&Boot)->!{
         crate::yield_now();
     }
 }
-pub fn boot_selected(boot:&Boot,requests:&mut wire::Requests){
-    let first=transaction(boot,requests,Mode::Boot,0).map(|_|());
-    match update_manager::boot_action(first,false){
-        BootAction::Active=>return,
+pub fn boot_selected(boot:&Boot,requests:&mut wire::Requests)->BootOutcome{
+    let first=transaction_outcome(boot,requests,Mode::Boot,0);
+    match update_manager::boot_action(first.as_ref().map(|_|()).map_err(|error|*error),false){
+        BootAction::Active=>return first.unwrap_or_else(|_|reconcile(boot)),
         BootAction::PriorOnce=>{},
         _=>reconcile(boot),
     }
     match transaction(boot,requests,Mode::Fallback,0){
-        Ok(_)=>return,
+        Ok(incarnation)=>return BootOutcome{incarnation,eligible_prior:false},
         Err(Failure::Rejected|Failure::Verify|Failure::Trial)=>{},
         Err(_)=>reconcile(boot),
     }
     // Health rejection alone is insufficient: the repair planner independently
     // rejects intact active/prior bytes before the first repair write.
     #[cfg(rar_signed_updates)]
-    if repair_transaction(boot,requests).is_ok(){return;}
+    if let Ok(incarnation)=repair_transaction(boot,requests){return BootOutcome{incarnation,eligible_prior:false};}
     reconcile(boot)
 }
 /// Future native callers must use this terminal wrapper, never handle an

@@ -3,7 +3,27 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 #[cfg(all(rar_signed_updates,rar_settings_only))]
 compile_error!("signed supervisor composition and standalone Settings are distinct builds");
+#[cfg(all(rar_expansion,not(rar_signed_updates)))]
+compile_error!("Expansion requires signed bootstrap");
+#[cfg(all(rar_network_service_only,any(not(rar_applications),rar_settings_only)))]
+compile_error!("fixed network-only image requires native Alpha");
+#[cfg(all(rar_compositor_service_only,any(not(rar_applications),rar_settings_only,rar_network_service_only)))]
+compile_error!("fixed compositor-only image requires native Alpha and a distinct build");
 mod abi;
+#[cfg(all(any(rar_network_fault_peer,rar_network_expiry),not(rar_applications)))]
+compile_error!("fault/expiry fixtures require the explicit cloud Alpha composition");
+#[cfg(rar_network_fault_peer)] mod network_lab;
+#[cfg(all(rar_applications,not(rar_expansion)))] compile_error!("apps require Expansion");
+#[cfg(rar_applications)] #[path="../expansion/app_control.rs"] mod app_control;
+#[cfg(rar_applications)] #[path="../expansion/native_runtime.rs"] mod application_runtime;
+#[cfg(rar_expansion)] #[path="../../services/expansion/network.rs"] mod network;
+#[cfg(rar_expansion)] #[path="../../services/expansion/channel.rs"] mod channel;
+#[cfg(rar_expansion)] #[path="../../services/expansion/ne2k.rs"] mod ne2k;
+#[cfg(rar_expansion)] #[path="../../services/expansion/service.rs"] mod network_service;
+#[cfg(rar_expansion)] #[path="../../sdk/expansion/rust/wire.rs"] mod sdk;
+#[cfg(rar_expansion)] mod expansion;
+#[cfg(rar_expansion)] #[path="../../apps/expansion/network_client.rs"] mod network_client;
+#[cfg(rar_expansion)] mod network_app;
 #[path="../../apps/modern/settings.rs"] mod settings;
 #[path="../../apps/modern/model.rs"] mod file_ui;
 #[path="../desktop/memory.rs"] mod memory;
@@ -12,6 +32,7 @@ mod abi;
 #[path="../../apps/modern/runtime.rs"] mod apps;
 #[path="../../services/modern/pio.rs"] mod pio;
 #[path="../../services/modern/vault.rs"] mod vault;
+#[path="../../services/expansion/documents.rs"] mod app_documents;
 #[path="../../services/modern/store.rs"] mod store;
 #[path="../../services/modern/transport.rs"] mod transport;
 #[path="../../services/modern/session.rs"] mod session;
@@ -110,13 +131,21 @@ fn boot_snapshot()->Boot {
         check(valid_trial_activation(&initial,&active));
         active
     }else{initial};
+    #[cfg(rar_compositor_service_only)]
+    {check(boot.role==3 && boot.phase!=TRIAL); drivers::compositor(&boot)}
+    #[cfg(rar_network_service_only)]
+    {check(boot.role==7 && boot.phase!=TRIAL); expansion::network(&boot)}
     #[cfg(rar_settings_only)]
     {check(boot.role==5);apps::settings(&boot)}
-    #[cfg(not(rar_settings_only))]
+    #[cfg(not(any(rar_settings_only,rar_network_service_only,rar_compositor_service_only)))]
     match boot.role {
         0=>apps::shell(&boot),1=>drivers::storage(&boot),2=>drivers::keyboard(&boot),
-        3=>drivers::compositor(&boot),4=>apps::files(&boot),5=>apps::settings(&boot),
+        #[cfg(not(rar_applications))]
+        3=>drivers::compositor(&boot),
+        4=>apps::files(&boot),5=>apps::settings(&boot),
         6=>apps::terminal(&boot),
+        #[cfg(all(rar_expansion,not(rar_applications)))]
+        7=>expansion::network(&boot),
         8=>{
             #[cfg(rar_signed_updates)]
             {update_runtime::manager(&boot)}
