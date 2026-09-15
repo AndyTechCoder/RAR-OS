@@ -8,7 +8,15 @@ KINDS={
  "alpha":("expansion-alpha.yml","Expansion native Alpha "),
  "foundation":("foundation.yml","Foundation "),
  "platform":("platform.yml","Platform "),
- "desktop":("desktop.yml","Desktop ")}
+ "desktop":("desktop.yml","Desktop "),
+ "signed":("modern-signed-runtime.yml","Modern signed runtime "),
+ "crypto":("modern-crypto.yml","Modern crypto handoff "),
+ "data":("modern-data-faults.yml","Modern Data faults "),
+ "system-install":("modern-system-faults.yml","Modern System fault matrix "),
+ "system-repair":("modern-system-faults.yml","Modern System fault matrix ")}
+PREFIXES={"alpha":"expansion-alpha","foundation":"foundation","platform":"platform","desktop":"desktop",
+ "signed":"modern-signed-runtime","crypto":"modern-crypto","data":"modern-data-faults",
+ "system-install":"modern-system-install-faults","system-repair":"modern-system-repair-faults"}
 
 def exact_int(value,maximum=1<<63):
     if type(value) is not int or not 0<value<maximum:raise ValueError("positive bounded integer")
@@ -18,7 +26,7 @@ def selection(value):
         raise ValueError("exact release evidence plan")
     exact_int(value["specifications_run"])
     rows=value["artifacts"]
-    if type(rows) is not list or len(rows)!=len(KINDS):raise ValueError("complete four proof categories")
+    if type(rows) is not list or len(rows)!=len(KINDS):raise ValueError("complete nine proof categories")
     kinds=set();ids=set();total=0
     for row in rows:
         if type(row) is not dict or set(row)!={"kind","artifact_id","run_id","size","sha256"}:
@@ -58,7 +66,7 @@ def artifact_check(value,row,source,attempt):
         value.get("workflow_run",{}).get("id")!=row["run_id"] or
         value.get("workflow_run",{}).get("head_sha")!=source):
         raise ValueError("exact live artifact metadata and source binding")
-    prefix={"alpha":"expansion-alpha","foundation":"foundation","platform":"platform","desktop":"desktop"}[row["kind"]]
+    prefix=PREFIXES[row["kind"]]
     if value.get("name")!=prefix+"-"+str(row["run_id"])+"-"+str(attempt):
         raise ValueError("exact workflow artifact role and successful attempt")
 def asset_check(value,name,raw,sha):
@@ -70,7 +78,7 @@ def asset_check(value,name,raw,sha):
 def api_url(method,path,release_id,source,raw):
     root="/releases/"+str(release_id)
     upload=(method=="POST" and type(raw) is bytes and 1<=len(raw)<=128*1024**2 and
-        re.fullmatch(re.escape(root)+r"/assets\?name=(m5-(alpha|foundation|platform|desktop)-"+
+        re.fullmatch(re.escape(root)+r"/assets\?name=(m5-(alpha|foundation|platform|desktop|signed|crypto|data|system-install|system-repair)-"+
             source[:12]+r"-proof\.zip|release-record\.json)",path) is not None)
     if not (method=="GET" and path==root and raw is None) and not upload:
         raise ValueError("fixed draft/asset API only")
@@ -85,7 +93,7 @@ def promote(github,api,release_id,source,plan,sha,canonical,publisher_source=Non
     release_check(release,release_id,source)
     assets=release.get("assets")
     names={"m5-"+kind+"-"+source[:12]+"-proof.zip" for kind in KINDS}|{"release-record.json"}
-    if type(assets) is not list or len(assets)>5:raise ValueError("bounded draft assets")
+    if type(assets) is not list or len(assets)>len(KINDS)+1:raise ValueError("bounded draft assets")
     existing={}
     for asset in assets:
         if type(asset) is not dict or asset.get("name") not in names or asset["name"] in existing:

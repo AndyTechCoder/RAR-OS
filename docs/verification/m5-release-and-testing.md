@@ -43,15 +43,16 @@ pass physical devices through or launch a local emulator under these permissions
 The M5 preservation workflow reuses the reviewed M4 opaque-copy design in a
 separate helper; M4 publication code and assets are unchanged. It accepts one
 existing draft v0.5.0-expansion-alpha at the frozen tested main revision, a
-successful exact-main Specifications push, and four successful exact-main
+successful exact-main Specifications push, and nine successful exact-main
 workflow-dispatch artifacts: complete Expansion native Alpha, Foundation,
-Platform and Desktop. The Alpha artifact includes both actual native source
+Platform, Desktop, original-profile signed runtime, crypto comparison, Data
+faults and both System install/repair fault matrices. The Alpha artifact includes both actual native source
 acceptance and integrated System/negative/network/node cases, not a screenshot
-alone. The preserved M4 release still supplies historical exhaustive M4 fault
-evidence; it is not relabeled as new-source evidence.
+alone. The preserved M4 release remains historical evidence; it is not relabeled as
+new-source proof. All new regression artifacts must match the frozen new main source.
 
 Every run path/title/source/attempt and artifact ID/size/digest is checked before
-the first upload. Four opaque ZIPs are each bounded128MiB and256MiB total.
+the first upload. Nine opaque ZIPs are each bounded128MiB and remain bounded256MiB total.
 Only fixed M5 asset names plus release-record.json may be added. No ZIP
 extraction, target execution, tag changes, publication, deletion or overwriting
 is available in the helper. Exact existing assets can resume after interruption;

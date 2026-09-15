@@ -21,7 +21,7 @@ def fixture():
             repository=dict(full_name=subject.REPO),head_repository=dict(full_name=subject.REPO),
             display_title=(title+SOURCE if title else kind+" "+SOURCE),html_url="https://github.com/"+subject.REPO+"/actions/runs/"+str(run))
         metadata[aid]=dict(id=aid,size_in_bytes=len(raw),expired=False,digest="sha256:"+sha(raw),
-            workflow_run=dict(id=run,head_sha=SOURCE),name=({"alpha":"expansion-alpha","foundation":"foundation","platform":"platform","desktop":"desktop"}[kind])+"-"+str(run)+"-1")
+            workflow_run=dict(id=run,head_sha=SOURCE),name=subject.PREFIXES[kind]+"-"+str(run)+"-1")
     runs[999]=dict(id=999,run_attempt=1,status="completed",conclusion="success",head_sha=SOURCE,head_branch="main",event="push",
         path=".github/workflows/specifications.yml",repository=dict(full_name=subject.REPO),
         head_repository=dict(full_name=subject.REPO),display_title="Specifications source "+SOURCE,
@@ -30,7 +30,7 @@ def fixture():
     return dict(specifications_run=999,artifacts=rows),raws,runs,metadata,release
 class Tests(unittest.TestCase):
     def test_complete_exact_selection_and_mutations(self):
-        plan,*_=fixture();self.assertEqual(len(subject.selection(plan)),4)
+        plan,*_=fixture();self.assertEqual(len(subject.selection(plan)),len(subject.KINDS))
         for field,value in (("artifact_id",True),("run_id",0),("size",0),("size",128*1024**2+1),
                             ("sha256","A"*64),("kind","other")):
             bad=copy.deepcopy(plan);bad["artifacts"][0][field]=value
@@ -43,6 +43,17 @@ class Tests(unittest.TestCase):
         bad=copy.deepcopy(plan)
         for row in bad["artifacts"]:row["size"]=128*1024**2
         with self.assertRaises(ValueError):subject.selection(bad)
+    def test_each_regression_is_required_and_role_bound(self):
+        plan,raws,runs,metadata,release=fixture()
+        for kind in ("signed","crypto","data","system-install","system-repair"):
+            row=next(r for r in plan["artifacts"] if r["kind"]==kind)
+            bad=copy.deepcopy(plan)
+            bad["artifacts"]=[r for r in bad["artifacts"] if r["kind"]!=kind]
+            with self.assertRaises(ValueError):subject.selection(bad)
+            changed=copy.deepcopy(metadata[row["artifact_id"]])
+            changed["name"]="wrong-role-"+str(row["run_id"])+"-1"
+            with self.assertRaises(ValueError):subject.artifact_check(changed,row,SOURCE,1)
+        self.assertEqual(set(subject.PREFIXES),set(subject.KINDS))
     def test_fixed_api_only(self):
         root="/releases/"+str(RID)
         self.assertEqual(subject.api_url("GET",root,RID,SOURCE,None),
@@ -111,16 +122,16 @@ class Tests(unittest.TestCase):
             retained=copy.deepcopy(release["assets"]);calls.clear();downloads.clear()
             result=run()
             self.assertEqual(release["assets"][:len(retained)],retained)
-            self.assertEqual(sum(method=="POST" for method,path in calls),5-len(retained))
-            self.assertEqual(len(downloads),4-min(len(retained),4))
+            self.assertEqual(sum(method=="POST" for method,path in calls),len(subject.KINDS)+1-len(retained))
+            self.assertEqual(len(downloads),len(subject.KINDS)-min(len(retained),len(subject.KINDS)))
             self.assertEqual(uploaded_raw["release-record.json"],canonical(result))
             calls.clear();downloads.clear();self.assertEqual(run(),result)
             self.assertFalse(any(method=="POST" for method,path in calls));self.assertEqual(downloads,[])
             return
-        result=run();self.assertEqual(len(result["artifacts"]),4);self.assertEqual(len(release["assets"]),5)
+        result=run();self.assertEqual(len(result["artifacts"]),len(subject.KINDS));self.assertEqual(len(release["assets"]),len(subject.KINDS)+1)
         self.assertEqual(result["source"],SOURCE);self.assertEqual(result["publisher_source"],publisher_source)
         self.assertTrue(all(set(row["asset"])=={"id","name","size","digest"} for row in result["artifacts"]))
-        self.assertEqual(len(downloads),4);self.assertTrue(release["draft"])
+        self.assertEqual(len(downloads),len(subject.KINDS));self.assertTrue(release["draft"])
         self.assertTrue(all(method in ("GET","POST") for method,path in calls))
         if resume:
             calls.clear();downloads.clear();self.assertEqual(run(),result)
@@ -129,10 +140,10 @@ class Tests(unittest.TestCase):
             with self.assertRaises(ValueError):run()
             self.assertFalse(any(method=="POST" for method,path in calls))
     def test_external_publication_stops_further_uploads(self):
-        for read in (2,4,6,7):
+        for read in (2,4,len(subject.KINDS)+2,len(subject.KINDS)+3):
             with self.subTest(read=read):self.exercise(publish_at=read)
     def test_partial_upload_and_lost_response_resume(self):
-        for index in range(5):
+        for index in range(len(subject.KINDS)+1):
             for phase in ("before","after"):
                 with self.subTest(index=index,phase=phase):self.exercise(interrupt=(index,phase))
     def test_malformed_asset_responses(self):

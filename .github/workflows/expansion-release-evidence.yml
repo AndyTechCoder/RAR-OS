@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       proofs:
-        description: Exact bounded JSON of four successful frozen-main artifact identities and Specifications run
+        description: Exact bounded JSON of nine successful frozen-main artifact identities and Specifications run
         required: true
         type: string
 permissions:
