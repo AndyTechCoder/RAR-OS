@@ -1,0 +1,9 @@
+# Cold-boot fallback correction
+
+The integrated test cold-boots a successfully installed System and then faults Settings. The old Manager discarded boot record metadata and constructed Recovery with installed=false. Its loss observer therefore reconciled/halted rather than attempting the saved previous version. The same-boot signed-runtime test did not expose this because installation had already set its volatile installed flag.
+
+The verified Boot transaction now carries an owned committed incarnation and structural prior-availability hint. The hint is computed only after active package verification from a checksummed journal record that can plan a nonexhausted fallback. It is returned only after exact ACK, cutover and seal release. This is not proof of previous package content or a hardware rollback anchor. The existing fallback transaction still verifies exact previous identity, signature, PE, health, selector publication and ACK before execution/publication.
+
+Recovery separates previous-version eligibility from the one-install-per-boot budget, so a legitimate install after an eligible cold boot remains possible. The prior attempt is consumed before starting it and is never rearmed after restoration/failure. Factory, already-fallback, repaired and sequence-exhausted boot states get no automatic prior attempt. Current binding must exactly match the committed nonzero incarnation. No disk/SDK format, grants, signing policy, data mutation promise or retry limit changes.
+
+Pure tests cover those boot states, malformed prior metadata, stale bindings, repeated loss and installation after cold boot. Actual full Alpha and original-profile regressions remain required. Diagnostics retain the original failure if cleanup also fails; no failed cleanup grants frozen-image or release authority.

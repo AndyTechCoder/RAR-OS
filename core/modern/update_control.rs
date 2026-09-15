@@ -28,22 +28,29 @@ impl Requests{
         self.used=true;Some(index)
     }
 }
-/// One successful install may authorize one exact-prior automatic recovery.
+/// A verified boot hint or one successful install permits one exact-prior recovery.
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 pub enum Action{Observe,Fallback,Stop}
-pub struct Recovery{expected:u64,installed:bool,used:bool,pending:bool}
+pub struct Recovery{expected:u64,installed:bool,eligible_prior:bool,used:bool,pending:bool}
 impl Recovery{
     pub fn new(expected:u64)->Option<Self>{
-        if expected==0{return None;}Some(Self{expected,installed:false,used:false,pending:false})
+        if expected==0{return None;}Some(Self{expected,installed:false,eligible_prior:false,used:false,pending:false})
+    }
+    /// Only the trusted boot adapter may provide this hint after verified boot
+    /// commit/cutover/release. It permits one fully reverified prior attempt.
+    pub fn from_boot(committed:u64,current:u64,eligible_prior:bool)->Option<Self>{
+        if committed!=current{return None;}
+        let mut recovery=Self::new(committed)?;
+        recovery.eligible_prior=eligible_prior;Some(recovery)
     }
     pub fn observe(&mut self,current:u64)->Action{
         if current==self.expected{return Action::Observe;}
-        if current!=0||!self.installed||self.used{return Action::Stop;}
-        self.used=true;self.pending=true;Action::Fallback
+        if current!=0||!self.eligible_prior||self.used{return Action::Stop;}
+        self.used=true;self.eligible_prior=false;self.pending=true;Action::Fallback
     }
     pub fn installed(&mut self,committed:u64,current:u64)->bool{
         if current!=committed||self.installed||committed<=self.expected{return false;}
-        self.expected=current;self.installed=true;true
+        self.expected=current;self.installed=true;self.eligible_prior=true;true
     }
     pub fn restored(&mut self,committed:u64,current:u64)->bool{
         if current!=committed||!self.pending||committed<=self.expected{return false;}
@@ -68,6 +75,29 @@ impl Recovery{
         for current in [0,9,10,12,u64::MAX]{assert!(!r.restored(11,current));}
         assert!(r.restored(11,11));assert!(!r.restored(12,12));assert_eq!(r.observe(11),Action::Observe);
         assert_eq!(r.observe(0),Action::Stop);
+    }
+    #[test]fn cold_boot_prior_is_one_shot_and_distinct_from_install_budget(){
+        assert!(Recovery::from_boot(0,0,true).is_none());
+        assert!(Recovery::from_boot(9,10,true).is_none());
+        for eligible in [false,true]{
+            let mut r=Recovery::from_boot(9,9,eligible).unwrap();
+            assert_eq!(r.observe(9),Action::Observe);
+            assert_eq!(r.observe(10),Action::Stop);
+            assert_eq!(r.observe(0),if eligible{Action::Fallback}else{Action::Stop});
+            if eligible{
+                assert_eq!(r.observe(0),Action::Stop);
+                assert!(!r.restored(9,9));assert!(r.restored(10,10));
+                assert_eq!(r.observe(0),Action::Stop);
+            }
+        }
+        let mut r=Recovery::from_boot(9,9,true).unwrap();
+        assert!(r.installed(10,10));assert!(!r.installed(11,11));
+        assert_eq!(r.observe(0),Action::Fallback);
+        assert!(r.restored(11,11));assert_eq!(r.observe(0),Action::Stop);
+        // No-prior factory/fallback/repaired boot requires a new successful install.
+        let mut r=Recovery::from_boot(9,9,false).unwrap();
+        assert_eq!(r.observe(0),Action::Stop);assert!(r.installed(10,10));
+        assert_eq!(r.observe(0),Action::Fallback);
     }
     #[test]fn fixed_commands_and_canonical_frames(){
         for (command,index)in [(b"update".as_slice(),0),(b"update badhealth",1),
