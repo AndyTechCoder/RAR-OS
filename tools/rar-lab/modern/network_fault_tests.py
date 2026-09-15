@@ -7,6 +7,20 @@ def load(name):
 def self_test():
     p=load("network_fault_plan");e=load("network_fault_evidence");wire=load("expansion_wire")
     challenges=["a"*32,"b"*32];refusals=0
+    scenario=load("network_fault_scenario")
+    class Monitored:
+        def __init__(self,fail=False):self.calls=[];self.fail=fail
+        def delay(self,seconds):
+            assert type(seconds) is int and 0<=seconds<=5
+            self.calls.append(seconds)
+            if self.fail and len(self.calls)==2:raise TimeoutError("VM deadline")
+    vm=Monitored();scenario.wait_expiry(vm)
+    assert vm.calls==[5,5,5,5] and sum(vm.calls)==20
+    vm=Monitored(True)
+    try:scenario.wait_expiry(vm)
+    except TimeoutError:refusals+=1
+    else:raise AssertionError("watchdog refusal ignored")
+    assert vm.calls==[5,5]
     for mode in ("faults","expiry","peer-stop"):
         steps=p.plan(mode,challenges)
         for peer,keys,stage,value in steps:
