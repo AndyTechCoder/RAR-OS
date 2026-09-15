@@ -18,6 +18,12 @@ def systems(factory,candidate,badsig,mode):
     raise ValueError("fixed integrated transition")
 def validate(raw,boots,firmware_sizes,owner,bank,mode,first,installed=None,repaired=None):
     base=helper("runtime_evidence");persist=helper("persistence");plan=helper("alpha_journey_plan")
+    value=helper("expansion_evidence").parse(raw)
+    if type(value) is dict and value.get("schema")=="rar-alpha-system-journey-failure-v1" and value.get("status")=="failed":
+        # Public synthetic cloud diagnostics only; still an unconditional refusal.
+        # Escape and cap before exposing guest-derived serial in the job log.
+        detail=base.canonical(value)[:24576].decode("ascii",errors="replace")
+        raise ValueError("actual cloud scenario failed: "+detail)
     factory,candidate,badsig=[bank["modern-settings-"+n+".layer"] for n in ("factory","update","bad-signature")]
     initial_system,expected_system=systems(factory,candidate,badsig,mode)
     factory_system=systems(factory,candidate,badsig,"install")[0][0]
@@ -38,12 +44,6 @@ def validate(raw,boots,firmware_sizes,owner,bank,mode,first,installed=None,repai
         validate(repaired,boots,firmware_sizes,owner,bank,"repair",first,installed)
         actual=helper("expansion_evidence").parse(repaired)["frozen_system"]
         if [base.decoded(x,8388608) for x in actual]!=initial_system:raise ValueError("actual repair continuity")
-    value=helper("expansion_evidence").parse(raw)
-    if type(value) is dict and value.get("schema")=="rar-alpha-system-journey-failure-v1" and value.get("status")=="failed":
-        # Public synthetic cloud diagnostics only; still an unconditional refusal.
-        # Escape and cap before exposing guest-derived serial in the job log.
-        detail=base.canonical(value)[:24576].decode("ascii",errors="replace")
-        raise ValueError("actual cloud scenario failed: "+detail)
     fields={"schema","mode","status","milestone_complete","challenges","frames","vm_proofs","pair_cleanup",
             "initial_data","frozen_data","captured_wire","boot_sha256","system_sha256","frozen_system","transition_events","elapsed_milliseconds"}
     if (type(value) is not dict or set(value)!=fields or value["schema"]!="rar-alpha-system-journey-v1" or
