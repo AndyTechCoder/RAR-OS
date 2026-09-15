@@ -1,3 +1,21 @@
+# Current M5 acceptance checkpoint — 2026-09-15
+
+M5 remains incomplete; PR204 stays draft until the complete integrated cloud journey, final review and release evidence pass. Historical checkpoints below are superseded by this section.
+
+- Frozen target source: `48db9c1dcdd237ae516961186a056dfcba8570cd`.
+- Specifications34843462981, Foundation34843462875, Platform34843462934 and Desktop34843462945 passed.
+- Native run34851403232 passed independent app/peer builds, unchanged PE limits, GUI/app/agent first use, private-document fresh boot, node execution, and the complete malformed/drop/overflow network campaign.
+- That run failed in the expiry harness because delay(20) exceeded the existing five-second monitored-delay API. Reviewed PR211 changes only the harness to four monitored five-second waits with error-propagation tests; CI34852375035 passed and PR211 merged as af7dc23913957dfd1e479d6b4cce18c19c370451.
+- Complete corrected native run34956814745 is pending at this checkpoint. No expiry, peer-stop or integrated System success is claimed yet.
+- Exact frozen-source original-profile regressions all passed: signed runtime34852092756, cryptographic comparison34852100895, Data faults34852108990 and both System fault transactions34852117007.
+- Owner approved ADR0041 on2026-09-15: add those five regression proof bundles to the existing four M5 bundles, preserving the128MiB per-artifact and256MiB total archive limits and cloud-only safeguards. The preservation implementation still requires its exact CI and focused review.
+
+Implemented scope is the experimental closed-peer x86 VM Alpha: independent Rust Notes/C Counter,64-byte private document, deterministic scoped provider, compact/wide presentation and a bounded portable node example. This is not production Pal, general Internet, MCU/ARM or consumer-OS completion.
+
+Remaining: full corrected integrated run, evidence-gated implementation merge, exact-main proof, durable archive and publication. Source code, tested behavior, review and release are separate states. No owner-device execution or artifact download.
+
+---
+
 # M5 progress
 
 ## Latest consolidated status — 2026-09-14
